@@ -32,7 +32,7 @@ class Learner(nn.Module):
         self.names = []
 
         for i, (name, param, extra_name) in enumerate(self.config):
-            if name is 'conv2d':
+            if name == 'conv2d':
                 # [ch_out, ch_in, kernelsz, kernelsz]                
                 if(self.args.xav_init):
                     w = nn.Parameter(torch.ones(*param[:4]))
@@ -49,7 +49,7 @@ class Learner(nn.Module):
                     # [ch_out]
                     self.vars.append(nn.Parameter(torch.zeros(param[0])))
 
-            elif name is 'convt2d':
+            elif name == 'convt2d':
                 # [ch_in, ch_out, kernelsz, kernelsz, stride, padding]
                 w = nn.Parameter(torch.ones(*param[:4]))
                 # gain=1 according to cbfin's implementation
@@ -58,7 +58,7 @@ class Learner(nn.Module):
                 # [ch_in, ch_out]
                 self.vars.append(nn.Parameter(torch.zeros(param[1])))
 
-            elif name is 'linear':
+            elif name == 'linear':
                 # layer += 1
                 if(self.args.xav_init):
                     w = nn.Parameter(torch.ones(*param))
@@ -76,15 +76,15 @@ class Learner(nn.Module):
                 # [ch_out]
                 self.vars.append(nn.Parameter(torch.zeros(param[0])))
 
-            elif name is 'cat':
+            elif name == 'cat':
                 pass
-            elif name is 'cat_start':
+            elif name == 'cat_start':
                 pass
-            elif name is "rep":
+            elif name == "rep":
                 pass
             elif name in ["residual3", "residual5", "in"]:
                 pass
-            elif name is 'bn':
+            elif name == 'bn':
                 # [ch_out]
                 w = nn.Parameter(torch.ones(param[0]))
                 self.vars.append(w)
@@ -108,40 +108,40 @@ class Learner(nn.Module):
         info = ''
 
         for name, param, extra_name in self.config:
-            if name is 'conv2d':
+            if name == 'conv2d':
                 tmp = 'conv2d:(ch_in:%d, ch_out:%d, k:%dx%d, stride:%d, padding:%d)' \
                       % (param[1], param[0], param[2], param[3], param[4], param[5],)
                 info += tmp + '\n'
 
-            elif name is 'convt2d':
+            elif name == 'convt2d':
                 tmp = 'convTranspose2d:(ch_in:%d, ch_out:%d, k:%dx%d, stride:%d, padding:%d)' \
                       % (param[0], param[1], param[2], param[3], param[4], param[5],)
                 info += tmp + '\n'
 
-            elif name is 'linear':
+            elif name == 'linear':
                 tmp = 'linear:(in:%d, out:%d)' % (param[1], param[0])
                 info += tmp + '\n'
 
-            elif name is 'leakyrelu':
+            elif name == 'leakyrelu':
                 tmp = 'leakyrelu:(slope:%f)' % (param[0])
                 info += tmp + '\n'
 
-            elif name is 'cat':
+            elif name == 'cat':
                 tmp = 'cat'
                 info += tmp + "\n"
-            elif name is 'cat_start':
+            elif name == 'cat_start':
                 tmp = 'cat_start'
                 info += tmp + "\n"
 
-            elif name is 'rep':
+            elif name == 'rep':
                 tmp = 'rep'
                 info += tmp + "\n"
 
 
-            elif name is 'avg_pool2d':
+            elif name == 'avg_pool2d':
                 tmp = 'avg_pool2d:(k:%d, stride:%d, padding:%d)' % (param[0], param[1], param[2])
                 info += tmp + '\n'
-            elif name is 'max_pool2d':
+            elif name == 'max_pool2d':
                 tmp = 'max_pool2d:(k:%d, stride:%d, padding:%d)' % (param[0], param[1], param[2])
                 info += tmp + '\n'
             elif name in ['flatten', 'tanh', 'relu', 'upsample', 'reshape', 'sigmoid', 'use_logits', 'bn']:
@@ -169,7 +169,6 @@ class Learner(nn.Module):
 
         if vars is None:
             vars = self.vars
-
         idx = 0
         bn_idx = 0
 
@@ -177,11 +176,66 @@ class Learner(nn.Module):
 
             for (name, param, extra_name) in self.config:
                 # assert(name == "conv2d")
+                # print(name, x.shape)
                 if name == 'conv2d':
+                    # print(name)
                     w, b = vars[idx], vars[idx + 1]
+                    # # --- debug + guardrails ---
+                    # # Same device?
+                    # assert x.device == w.device, f"device mismatch: x:{x.device} w:{w.device}"
+                    # assert (b is None) or (b.device == x.device), f"bias device mismatch: b:{b.device} x:{x.device}"
+
+                    # # Dtypes (prefer fp32 here)
+                    # if x.dtype != torch.float32: x = x.float()
+                    # if w.dtype != torch.float32: w = w.float()
+                    # if (b is not None) and (b.dtype != torch.float32): b = b.float()
+
+                    # # Contiguity (SGEMM can choke on non-contiguous views in old stacks)
+                    # if not x.is_contiguous(): x = x.contiguous()
+                    # if not w.is_contiguous(): w = w.contiguous()
+
+                    # # Shapes
+                    # assert x.dim() == 4, f"x must be NCHW, got {tuple(x.shape)}"
+                    # assert w.dim() == 4, f"w must be [Cout,Cin,Kh,Kw], got {tuple(w.shape)}"
+                    # assert x.shape[1] == w.shape[1], f"Cin mismatch: x:{x.shape[1]} vs w:{w.shape[1]}"
+                    # if b is not None:
+                    #     assert b.numel() == w.shape[0], f"bias/Cout mismatch: b:{b.numel()} vs Cout:{w.shape[0]}"
+
+                    # # Stride/pad as ints or 2-tuples of ints
+                    # s = param[4]; p = param[5]
+                    # if isinstance(s, (list, tuple)): s = tuple(int(v) for v in s)
+                    # else: s = int(s)
+                    # if isinstance(p, (list, tuple)): p = tuple(int(v) for v in p)
+                    # else: p = int(p)
+
+                    # # Output size sanity (dilation=1, groups=1)
+                    # Kh, Kw = int(w.shape[2]), int(w.shape[3])
+                    # H, W = int(x.shape[2]), int(x.shape[3])
+                    # def _dim(out, in_, k, pad, stride):
+                    #     return (in_ + 2*pad - (k - 1) - 1)//stride + 1
+                    # ph = p if isinstance(p, int) else p[0]
+                    # pw = p if isinstance(p, int) else p[1]
+                    # sh = s if isinstance(s, int) else s[0]
+                    # sw = s if isinstance(s, int) else s[1]
+                    # Hout = _dim(None, H, Kh, ph, sh); Wout = _dim(None, W, Kw, pw, sw)
+                    # assert Hout > 0 and Wout > 0, f"negative/zero output: Hout={Hout}, Wout={Wout}, from H={H},W={W},K=({Kh},{Kw}),stride={s},pad={p}"
+
+                    # # NaN/Inf guard
+                    # assert torch.isfinite(x).all(), "x has NaN/Inf"
+                    # assert torch.isfinite(w).all(), "w has NaN/Inf"
+                    # if b is not None: assert torch.isfinite(b).all(), "b has NaN/Inf"
+
+                    # # (optional) print once
+                    # print('[conv2d]', tuple(x.shape), tuple(w.shape), 'stride', s, 'pad', p, flush=True)
+                    # torch.cuda.synchronize()
+                    # x = F.conv2d(x.detach().cpu().float(),
+                    # w.detach().cpu().float(),
+                    # b.detach().cpu().float() if b is not None else None,
+                    # stride=s, padding=p)
+
                     x = F.conv2d(x, w, b, stride=param[4], padding=param[5])
                     idx += 2
-
+                    # print(idx)
                     # print(name, param, '\tout:', x.shape)
                 elif name == 'convt2d':
                     w, b = vars[idx], vars[idx + 1]
@@ -250,13 +304,12 @@ class Learner(nn.Module):
                     x = F.avg_pool2d(x, param[0], param[1], param[2])
 
                 else:
-                    print(name)
                     raise NotImplementedError
 
         except:
             traceback.print_exc(file=sys.stdout)
-            ipdb.set_trace()
-
+            # ipdb.set_trace()
+        # print(idx, len(vars), bn_idx, len(self.vars_bn))
         # make sure variable is used properly
         assert idx == len(vars)
         assert bn_idx == len(self.vars_bn)
