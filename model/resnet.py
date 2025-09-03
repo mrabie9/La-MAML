@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torchvision.models import resnet18
+from torch.nn.utils import stateless
 
 
 class ResNet18(nn.Module):
@@ -18,8 +19,28 @@ class ResNet18(nn.Module):
 
         self.model.fc = nn.Linear(self.model.fc.in_features, num_classes)
 
-    def forward(self, x):
-        return self.model(x)
+        # Cache parameter names to align with fast-weight lists
+        self.param_names = [name for name, _ in self.model.named_parameters()]
+
+    def forward(self, x, params=None):
+        """Forward with optional fast weights.
+
+        Args:
+            x: input tensor
+            params: list or iterable of tensors matching model parameters
+        """
+        if params is None:
+            return self.model(x)
+        # Map provided tensors to parameter names and run stateless functional call
+        param_dict = {n: p for n, p in zip(self.param_names, params)}
+        return stateless.functional_call(self.model, param_dict, (x,), strict=False)
+
+    # Expose only the underlying model parameters, excluding alpha lrs
+    def parameters(self, recurse: bool = True):
+        return self.model.parameters(recurse=recurse)
+
+    def named_parameters(self, prefix: str = "", recurse: bool = True):
+        return self.model.named_parameters(prefix=prefix, recurse=recurse)
 
     def define_task_lr_params(self, alpha_init=1e-3):
         self.alpha_lr = nn.ParameterList([])
