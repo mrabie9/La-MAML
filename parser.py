@@ -1,6 +1,7 @@
 # coding=utf-8
 import os
 import argparse
+import yaml
 
 def get_parser():
     parser = argparse.ArgumentParser(description='Continual learning')
@@ -8,7 +9,7 @@ def get_parser():
                     help='name of the experiment')
     
     # model details
-    parser.add_argument('--model', type=str, default='single',
+    parser.add_argument('--model', type=str, default='lamaml_cifar',
                         help='algo to train')
     parser.add_argument('--arch', type=str, default='linear', 
                         help='arch to use for training', choices = ['linear', 'pc_cnn'])
@@ -38,11 +39,11 @@ def get_parser():
 
     
     # experiment parameters
-    parser.add_argument('--cuda', default=False , action='store_true',
+    parser.add_argument('--cuda', default=True , action='store_false',
                         help='Use GPU')
     parser.add_argument('--seed', type=int, default=0,
                         help='random seed of model')
-    parser.add_argument('--log_every', type=int, default=1000,
+    parser.add_argument('--log_every', type=int, default=100,
                         help='frequency of checking the validation accuracy, in minibatches')
     parser.add_argument('--log_dir', type=str, default='logs/',
                         help='the directory where the logs will be saved')
@@ -52,7 +53,7 @@ def get_parser():
                         help='Calculate test accuracy along with val accuracy')
 
     # data parameters
-    parser.add_argument('--data_path', default='data/',
+    parser.add_argument('--data_path', default='data/tiny-imagenet-200/',
                         help='path where data is located')
     parser.add_argument('--loader', type=str, default='task_incremental_loader',
                         help='data loader to use')
@@ -64,7 +65,7 @@ def get_parser():
                         help='number of classes in every batch')
     parser.add_argument('--iterations', type=int, default=5000,
                         help='number of classes in every batch')
-    parser.add_argument("--dataset", default="mnist_rotations", type=str,
+    parser.add_argument("--dataset", default="tinyimagenet", type=str,
                     help="Dataset to train and test on.")
     parser.add_argument("--workers", default=3, type=int,
                         help="Number of workers preprocessing the data.")
@@ -137,3 +138,27 @@ def get_parser():
                         help='')
 
     return parser
+
+def parse_args_from_yaml(yaml_path):
+    """
+    Load arguments from a YAML configuration file.
+
+    Parameters
+    ----------
+    yaml_path : str
+        Path to the YAML file containing argument values.
+
+    Returns
+    -------
+    argparse.Namespace
+        Namespace populated with the defaults from `get_parser` and
+        any values specified in the YAML file.
+    """
+    parser = get_parser()
+    args = parser.parse_args([])
+    with open(yaml_path, "r") as f:
+        data = yaml.safe_load(f) or {}
+    for key, value in data.items():
+        if hasattr(args, key):
+            setattr(args, key, value)
+    return args

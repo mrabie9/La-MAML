@@ -1,0 +1,33 @@
+# tinyimagenet_lamaml.yaml
+
+data_path: data/tiny-imagenet-200/
+dataset: tinyimagenet
+cuda: true
+log_dir: logs/
+log_every: 3125
+
+model: lamaml_cifar
+expt_name: lamaml
+
+memories: 400
+batch_size: 10
+replay_batch_size: 10
+n_epochs: 1
+
+opt_lr: 0.4
+alpha_init: 0.1
+opt_wt: 0.1
+glances: 2
+
+loader: class_incremental_loader
+increment: 5 # number of classes in every task
+arch: pc_cnn
+cifar_batches: 5
+
+learn_lr: true
+second_order: true
+class_order: random
+seed: 0
+grad_clip_norm: 1.0
+calc_test_accuracy: true
+validation: 0.1

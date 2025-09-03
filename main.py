@@ -1,3 +1,8 @@
+# TODO: run resnet18 with tinyimagenet
+# TODO: make sure config options make sense
+# TODO: combine resnet181d and lps dataloader with this repo
+# TODO: run resnet181d with La-MAML on drone dataset
+
 import importlib
 import datetime
 import argparse
@@ -148,9 +153,12 @@ def save_results(args, result_val_t, result_val_a, result_test_t, result_test_a,
     return val_stats, test_stats
 
 def main():
-    parser = file_parser.get_parser()
+    base_path = ''
+    yaml_file = 'config.yaml'
+    args = file_parser.parse_args_from_yaml(yaml_file)
+    # parser = file_parser.get_parser()
 
-    args = parser.parse_args()
+    # args = parser.parse_args()
 
     # initialize seeds
     misc_utils.init_seed(args.seed)
