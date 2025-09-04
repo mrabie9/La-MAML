@@ -8,6 +8,7 @@ from torch.autograd import Variable
 import torch.nn as nn
 import model.meta.learner as Learner
 import model.meta.modelfactory as mf
+from model.resnet import ResNet18
 from scipy.stats import pearsonr
 import datetime
 
@@ -23,13 +24,17 @@ class BaseNet(torch.nn.Module):
         self.args = args
         nl, nh = args.n_layers, args.n_hiddens
 
-        config = mf.ModelFactory.get_model(model_type = args.arch, sizes = [n_inputs] + [nh] * nl + [n_outputs],
+        if args.arch == 'resnet18':
+            self.net = ResNet18(n_outputs, args)
+            self.net.define_task_lr_params(alpha_init = args.alpha_init)
+        else:
+            config = mf.ModelFactory.get_model(model_type = args.arch, sizes = [n_inputs] + [nh] * nl + [n_outputs],
                                                 dataset = args.dataset, args=args)
 
-        self.net = Learner.Learner(config, args)
+            self.net = Learner.Learner(config, args)
 
-        # define the lr params
-        self.net.define_task_lr_params(alpha_init = args.alpha_init)
+            # define the lr params
+            self.net.define_task_lr_params(alpha_init = args.alpha_init)
 
         self.opt_wt = torch.optim.SGD(list(self.net.parameters()), lr=args.opt_wt)     
         self.opt_lr = torch.optim.SGD(list(self.net.alpha_lr.parameters()), lr=args.opt_lr) 
