@@ -7,7 +7,7 @@ log_dir: logs/
 log_every: 3125
 
 model: lamaml_cifar
-expt_name: lamaml
+expt_name: lamaml_tinyimagenet_resnet18
 
 memories: 400
 batch_size: 10
@@ -21,7 +21,7 @@ glances: 2
 
 loader: class_incremental_loader
 increment: 5 # number of classes in every task
-arch: pc_cnn
+arch: resnet18
 cifar_batches: 5
 
 learn_lr: true

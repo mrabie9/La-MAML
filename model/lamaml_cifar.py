@@ -63,27 +63,36 @@ class Net(BaseNet):
         return loss_q, logits
 
     def inner_update(self, x, fast_weights, y, t):
-        """
-        Update the fast weights using the current samples and return the updated fast
-        """
+        offset1, offset2 = self.compute_offsets(t)
 
-        offset1, offset2 = self.compute_offsets(t)            
+        # Ensure we have a concrete, non-empty list of tensors
+        if not fast_weights:  # handles None or []
+            fast_weights = [p for p in self.net.parameters()]
+        else:
+            # if it might be an iterator, force-list it once
+            fast_weights = list(fast_weights)
 
-        logits = self.net.forward(x, fast_weights)[:, :offset2]
+        # Forward using fast weights
+        logits = self.net.forward(x, vars=fast_weights)[:, :offset2]
         loss = self.take_loss(t, logits, y)
 
-        if fast_weights is None:
-            fast_weights = self.net.parameters()
+        graph_required = bool(self.args.second_order)
 
-        # NOTE if we want higher order grads to be allowed, change create_graph=False to True
-        graph_required = self.args.second_order
-        grads = list(torch.autograd.grad(loss, fast_weights, create_graph=graph_required, retain_graph=graph_required))
+        # All inputs to grad must require grad and be used in loss
+        for p in fast_weights:
+            p.requires_grad_(True)
 
-        for i in range(len(grads)):
-            grads[i] = torch.clamp(grads[i], min = -self.args.grad_clip_norm, max = self.args.grad_clip_norm)
+        grads = torch.autograd.grad(
+            loss, fast_weights, create_graph=graph_required, retain_graph=graph_required
+            # , allow_unused=True  # only if you truly have gated/unused params
+        )
 
-        fast_weights = list(
-            map(lambda p: p[1][0] - p[0] * p[1][1], zip(grads, zip(fast_weights, self.net.alpha_lr))))
+        # Clip
+        grads = [g.clamp(min=-self.args.grad_clip_norm, max=self.args.grad_clip_norm) for g in grads]
+
+        # Inner step: w' = w - alpha * g
+        # (zip three lists directly; avoid nested zip to prevent iterator surprises)
+        fast_weights = [w - a * g for (g, w, a) in zip(grads, fast_weights, self.net.alpha_lr)]
 
         return fast_weights
 

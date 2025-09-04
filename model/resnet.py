@@ -1,39 +1,50 @@
+import math
 import torch
 import torch.nn as nn
 from torchvision.models import resnet18
 from torch.nn.utils import stateless
 
 
-class ResNet18(nn.Module):
-    """Wrapper around torchvision's ResNet18 with per-parameter learning rates."""
+import torch
+import torch.nn as nn
+from torchvision.models import resnet18
+from torch.nn.utils.stateless import functional_call  # use this on torch 1.12.x
 
+class ResNet18(nn.Module):
     def __init__(self, num_classes, args):
         super().__init__()
         self.args = args
         self.model = resnet18(pretrained=False)
 
-        # Adjust the first layers for smaller images if needed
-        if args.dataset in ["cifar100", "tinyimagenet"]:
+        if getattr(args, "dataset", None) in ["cifar100", "tinyimagenet"]:
             self.model.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
             self.model.maxpool = nn.Identity()
 
         self.model.fc = nn.Linear(self.model.fc.in_features, num_classes)
 
-        # Cache parameter names to align with fast-weight lists
-        self.param_names = [name for name, _ in self.model.named_parameters()]
+        # Ordered names for mapping fast weights:
+        self.param_names = [n for n, _ in self.model.named_parameters()]
+        # Learner-compat convenience (list, not registered):
+        self.vars = list(self.model.parameters())
+        # per-parameter inner LRs (if you use them)
+        self.alpha_lr = nn.ParameterList([nn.Parameter(torch.ones_like(p) * getattr(args, "alpha_init", 1e-3))
+                                          for p in self.model.parameters()])
 
-    def forward(self, x, params=None):
-        """Forward with optional fast weights.
+    def forward(self, x, vars=None, bn_training=True, feature=False):
+        prev = self.model.training
+        self.model.train(bn_training)
+        try:
+            if vars is None:
+                out = self.model(x)
+            else:
+                assert len(vars) == len(self.param_names), \
+                    f"len(vars)={len(vars)} vs params={len(self.param_names)}"
+                param_dict = {n: p for n, p in zip(self.param_names, vars)}
+                out = functional_call(self.model, param_dict, (x,))
+        finally:
+            self.model.train(prev)
+        return out
 
-        Args:
-            x: input tensor
-            params: list or iterable of tensors matching model parameters
-        """
-        if params is None:
-            return self.model(x)
-        # Map provided tensors to parameter names and run stateless functional call
-        param_dict = {n: p for n, p in zip(self.param_names, params)}
-        return stateless.functional_call(self.model, param_dict, (x,), strict=False)
 
     # Expose only the underlying model parameters, excluding alpha lrs
     def parameters(self, recurse: bool = True):
@@ -44,6 +55,6 @@ class ResNet18(nn.Module):
 
     def define_task_lr_params(self, alpha_init=1e-3):
         self.alpha_lr = nn.ParameterList([])
-        for p in self.parameters():
+        for p in self.model.parameters():
             self.alpha_lr.append(nn.Parameter(torch.ones_like(p) * alpha_init))
 
