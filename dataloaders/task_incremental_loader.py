@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 from torchvision import datasets
 
 from dataloaders.idataset import DummyArrayDataset
+from dataloaders.iq_data_loader import IQDataGenerator
 import os
 
 
@@ -79,13 +80,22 @@ class IncrementalLoader:
             raise NotImplementedError("Unknown mode {}.".format(dataset_type))
 
     def get_dataset_info(self):
-        n_inputs = self.train_dataset[0][1].size(1)
-        n_outputs = 0
-        for i in range(len(self.train_dataset)):
-            n_outputs = max(n_outputs, self.train_dataset[i][2].max())
-            n_outputs = max(n_outputs, self.test_dataset[i][2].max())
-        self.n_outputs = n_outputs
-        return n_inputs, n_outputs.item()+1, self.n_tasks
+        if isinstance(self.train_dataset[0][1], np.ndarray):
+            n_inputs = self.train_dataset[0][1].shape[1] * (2 if np.iscomplexobj(self.train_dataset[0][1]) else 1)
+            n_outputs = 0
+            for i in range(len(self.train_dataset)):
+                n_outputs = max(n_outputs, int(self.train_dataset[i][2].max()))
+                n_outputs = max(n_outputs, int(self.test_dataset[i][2].max()))
+            self.n_outputs = n_outputs
+            return n_inputs, n_outputs + 1, self.n_tasks
+        else:
+            n_inputs = self.train_dataset[0][1].size(1)
+            n_outputs = 0
+            for i in range(len(self.train_dataset)):
+                n_outputs = max(n_outputs, self.train_dataset[i][2].max())
+                n_outputs = max(n_outputs, self.test_dataset[i][2].max())
+            self.n_outputs = n_outputs
+            return n_inputs, n_outputs.item()+1, self.n_tasks
 
 
     def _get_loader(self, x, y, shuffle=True, mode="train"):
@@ -96,8 +106,12 @@ class IncrementalLoader:
         else:
             raise NotImplementedError("Unknown mode {}.".format(mode))
 
+        if isinstance(x, np.ndarray):
+            dataset = IQDataGenerator(x, y)
+        else:
+            dataset = DummyArrayDataset(x, y)
         return DataLoader(
-            DummyArrayDataset(x, y),
+            dataset,
             batch_size=batch_size,
             shuffle=shuffle,
             num_workers=self._workers
@@ -108,18 +122,48 @@ class IncrementalLoader:
         # FIXME: handles online loading of images
         torch.manual_seed(seed)
 
-        self.train_dataset, self.test_dataset = torch.load(os.path.join(self._opt.data_path, self._opt.dataset + ".pt"))
+        data_files = [f for f in os.listdir(self._opt.data_path) if f.endswith('.npz')]
+        if data_files and self._opt.dataset.lower() == 'iq':
+            data_files.sort()
+            self.train_dataset, self.test_dataset = [], []
+            for fname in data_files:
+                data = np.load(os.path.join(self._opt.data_path, fname))
 
-        self.sample_permutations = []
+                def _get(keys):
+                    for k in keys:
+                        if k in data:
+                            return data[k]
+                    return None
 
-        # for every task, accumulate a shuffled set of samples_per_task
-        for t in range(len(self.train_dataset)):
-            N = self.train_dataset[t][1].size(0)
-            if self._opt.samples_per_task <= 0:
-                n = N
-            else:
-                n = min(self._opt.samples_per_task, N)
+                x_train = _get(['x_train', 'X_train', 'Xtr', 'X'])
+                y_train = _get(['y_train', 'Y_train', 'ytr', 'y'])
+                x_test = _get(['x_test', 'X_test', 'Xte', 'X'])
+                y_test = _get(['y_test', 'Y_test', 'yte', 'y'])
 
+                self.train_dataset.append((None, x_train, y_train))
+                self.test_dataset.append((None, x_test, y_test))
 
-            p = torch.randperm(N)[0:n]
-            self.sample_permutations.append(p)
+            self.sample_permutations = []
+            for t in range(len(self.train_dataset)):
+                N = self.train_dataset[t][1].shape[0]
+                if self._opt.samples_per_task <= 0:
+                    n = N
+                else:
+                    n = min(self._opt.samples_per_task, N)
+                p = np.random.permutation(N)[:n]
+                self.sample_permutations.append(p)
+        else:
+            self.train_dataset, self.test_dataset = torch.load(os.path.join(self._opt.data_path, self._opt.dataset + ".pt"))
+
+            self.sample_permutations = []
+
+            # for every task, accumulate a shuffled set of samples_per_task
+            for t in range(len(self.train_dataset)):
+                N = self.train_dataset[t][1].size(0)
+                if self._opt.samples_per_task <= 0:
+                    n = N
+                else:
+                    n = min(self._opt.samples_per_task, N)
+
+                p = torch.randperm(N)[0:n]
+                self.sample_permutations.append(p)
