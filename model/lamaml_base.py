@@ -9,6 +9,7 @@ import torch.nn as nn
 import model.meta.learner as Learner
 import model.meta.modelfactory as mf
 from model.resnet import ResNet18
+from model.resnet1d import ResNet1D
 from scipy.stats import pearsonr
 import datetime
 
@@ -26,15 +27,20 @@ class BaseNet(torch.nn.Module):
 
         if args.arch == 'resnet18':
             self.net = ResNet18(n_outputs, args)
-            self.net.define_task_lr_params(alpha_init = args.alpha_init)
+            self.net.define_task_lr_params(alpha_init=args.alpha_init)
+        elif args.arch == 'resnet1d':
+            self.net = ResNet1D(n_outputs, args)
+            self.net.define_task_lr_params(alpha_init=args.alpha_init)
         else:
-            config = mf.ModelFactory.get_model(model_type = args.arch, sizes = [n_inputs] + [nh] * nl + [n_outputs],
-                                                dataset = args.dataset, args=args)
-
+            config = mf.ModelFactory.get_model(
+                model_type=args.arch,
+                sizes=[n_inputs] + [nh] * nl + [n_outputs],
+                dataset=args.dataset,
+                args=args,
+            )
             self.net = Learner.Learner(config, args)
-
             # define the lr params
-            self.net.define_task_lr_params(alpha_init = args.alpha_init)
+            self.net.define_task_lr_params(alpha_init=args.alpha_init)
 
         self.opt_wt = torch.optim.SGD(list(self.net.parameters()), lr=args.opt_wt)     
         self.opt_lr = torch.optim.SGD(list(self.net.alpha_lr.parameters()), lr=args.opt_lr) 
@@ -154,3 +160,4 @@ class BaseNet(torch.nn.Module):
         self.opt_wt.zero_grad()
         self.net.zero_grad()
         self.net.alpha_lr.zero_grad()
+        
