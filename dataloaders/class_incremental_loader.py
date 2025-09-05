@@ -8,8 +8,9 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision import datasets, transforms
 
 from dataloaders.idataset import _get_datasets, DummyDataset
+from dataloaders.iq_data_loader import IQDataGenerator
+import os
 
-import random
 import ipdb
 
 # --------
@@ -29,18 +30,25 @@ class IncrementalLoader:
         validation_split=opt.validation
         self.increment=opt.increment
 
-        datasets = _get_datasets(dataset_name)
-        self._setup_data(
-            datasets,
-            class_order_type=opt.class_order,
-            seed=seed,
-            increment=self.increment,
-            validation_split=validation_split
-        )
+        self._iq = dataset_name.lower() == 'iq'
+        if self._iq:
+            self._setup_iq_tasks(opt.data_path, validation_split)
+            self.train_transforms = []
+            self.common_transforms = []
+            self.top_transforms = []
+        else:
+            datasets = _get_datasets(dataset_name)
+            self._setup_data(
+                datasets,
+                class_order_type=opt.class_order,
+                seed=seed,
+                increment=self.increment,
+                validation_split=validation_split
+            )
+            self.train_transforms = datasets[0].train_transforms
+            self.common_transforms = datasets[0].common_transforms
+            self.top_transforms = datasets[0].top_transforms
         self.validation_split = validation_split
-        self.train_transforms = datasets[0].train_transforms
-        self.common_transforms = datasets[0].common_transforms
-        self.top_transforms = datasets[0].top_transforms
 
         self._current_task = 0
 
@@ -49,7 +57,10 @@ class IncrementalLoader:
         self._workers = opt.workers
         self._shuffle = shuffle
 
-        self._setup_test_tasks(validation_split)
+        if self._iq:
+            self._setup_iq_test_tasks(validation_split)
+        else:
+            self._setup_test_tasks(validation_split)
 
     @property
     def n_tasks(self):
@@ -61,13 +72,23 @@ class IncrementalLoader:
 
         min_class = sum(self.increments[:self._current_task])
         max_class = sum(self.increments[:self._current_task + 1])
-        x_train, y_train = self._select(
-            self.data_train, self.targets_train, low_range=min_class, high_range=max_class
-        )
-        x_val, y_val = self._select(
-            self.data_val, self.targets_val, low_range=min_class, high_range=max_class
-        )
-        x_test, y_test = self._select(self.data_test, self.targets_test, high_range=max_class)
+
+        if self._iq:
+            x_train, y_train = self.iq_train[self._current_task]
+            val_pair = self.iq_val[self._current_task]
+            if val_pair is not None:
+                x_val, y_val = val_pair
+            else:
+                x_val, y_val = np.array([]), np.array([])
+            x_test, y_test = self.iq_test[self._current_task]
+        else:
+            x_train, y_train = self._select(
+                self.data_train, self.targets_train, low_range=min_class, high_range=max_class
+            )
+            x_val, y_val = self._select(
+                self.data_val, self.targets_val, low_range=min_class, high_range=max_class
+            )
+            x_test, y_test = self._select(self.data_test, self.targets_test, high_range=max_class)
 
         if memory is not None:
             data_memory, targets_memory = memory
@@ -107,6 +128,16 @@ class IncrementalLoader:
                 x_val, y_val = self._select(self.data_val, self.targets_val, low_range=min_class, high_range=max_class)
                 self.val_tasks.append(self._get_loader(x_val, y_val, mode="test"))
 
+    def _setup_iq_test_tasks(self, validation_split):
+        self.test_tasks = []
+        self.val_tasks = []
+        for i in range(len(self.increments)):
+            x_test, y_test = self.iq_test[i]
+            self.test_tasks.append(self._get_loader(x_test, y_test, mode="test"))
+            if validation_split > 0.0 and self.iq_val[i] is not None:
+                x_val, y_val = self.iq_val[i]
+                self.val_tasks.append(self._get_loader(x_val, y_val, mode="test"))
+
     def get_tasks(self, dataset_type='test'):
         if dataset_type == 'val':
             if self.validation_split > 0.0:
@@ -119,13 +150,19 @@ class IncrementalLoader:
             raise NotImplementedError("Unknown mode {}.".format(dataset_type))
 
     def get_dataset_info(self):
-        if(self._opt.dataset == 'tinyimagenet'):
-            n_inputs = 3*64*64        
+        if self._iq:
+            n_inputs = self.iq_train[0][0].shape[1] * (2 if np.iscomplexobj(self.iq_train[0][0]) else 1)
+            n_outputs = sum(self.increments)
+            n_task = len(self.increments)
+            return n_inputs, n_outputs, n_task
         else:
-            n_inputs = self.data_train.shape[3]*self.data_train.shape[1]*self.data_train.shape[2]
-        n_outputs = self._opt.increment * len(self.increments)
-        n_task = len(self.increments)
-        return n_inputs, n_outputs, n_task
+            if(self._opt.dataset == 'tinyimagenet'):
+                n_inputs = 3*64*64
+            else:
+                n_inputs = self.data_train.shape[3]*self.data_train.shape[1]*self.data_train.shape[2]
+            n_outputs = self._opt.increment * len(self.increments)
+            n_task = len(self.increments)
+            return n_inputs, n_outputs, n_task
   
     def _select(self, x, y, low_range=0, high_range=0):
         idxes = np.where(np.logical_and(y >= low_range, y < high_range))[0]
@@ -148,12 +185,21 @@ class IncrementalLoader:
         else:
             raise NotImplementedError("Unknown mode {}.".format(mode))
 
-        return DataLoader(
-            DummyDataset(x, y, trsf, pretrsf, self._opt.dataset=='tinyimagenet'),
-            batch_size=batch_size,
-            shuffle=shuffle,
-            num_workers=self._workers
-        )
+        if self._iq:
+            dataset = IQDataGenerator(x, y)
+            return DataLoader(
+                dataset,
+                batch_size=batch_size,
+                shuffle=shuffle,
+                num_workers=self._workers
+            )
+        else:
+            return DataLoader(
+                DummyDataset(x, y, trsf, pretrsf, self._opt.dataset=='tinyimagenet'),
+                batch_size=batch_size,
+                shuffle=shuffle,
+                num_workers=self._workers
+            )
 
 
     def _setup_data(self, datasets, class_order_type=False, seed=1, increment=10, validation_split=0.):
@@ -278,6 +324,34 @@ class IncrementalLoader:
         x_train, y_train = np.concatenate(x_train), np.concatenate(y_train)
 
         return x_val, y_val, x_train, y_train
+
+    def _setup_iq_tasks(self, data_path, validation_split=0.):
+        self.iq_train = []
+        self.iq_val = []
+        self.iq_test = []
+        self.increments = []
+        self.class_order = []
+        files = sorted([f for f in os.listdir(data_path) if f.endswith('.npz')])
+        for fname in files:
+            data = np.load(os.path.join(data_path, fname))
+
+            def _get(keys):
+                for k in keys:
+                    if k in data:
+                        return data[k]
+                return None
+
+            x_train = _get(['x_train', 'X_train', 'Xtr', 'X'])
+            y_train = _get(['y_train', 'Y_train', 'ytr', 'y'])
+            x_test = _get(['x_test', 'X_test', 'Xte', 'X'])
+            y_test = _get(['y_test', 'Y_test', 'yte', 'y'])
+            x_val = _get(['x_val', 'X_val', 'Xva'])
+            y_val = _get(['y_val', 'Y_val', 'yva'])
+
+            self.iq_train.append((x_train, y_train))
+            self.iq_test.append((x_test, y_test))
+            self.iq_val.append((x_val, y_val) if x_val is not None and y_val is not None else None)
+            self.increments.append(len(np.unique(y_train)))
 
     @staticmethod
     def _list_split_per_class(x, y, validation_split=0.):
