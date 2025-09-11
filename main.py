@@ -1,7 +1,6 @@
-# TODO: run resnet18 with tinyimagenet
-# TODO: make sure config options make sense
 # TODO: combine resnet181d and lps dataloader with this repo
-# TODO: run resnet181d with La-MAML on drone dataset
+# TODO: make sure config options make sense
+# TODO: run resnet181d with La-MAML on lora dataset
 
 import importlib
 import datetime
@@ -35,34 +34,68 @@ def eval_class_tasks(model, tasks, args):
         result.append(rt / len(task_loader.dataset))
     return result
 
-def eval_tasks(model, tasks, args):
-
+def eval_tasks(model, tasks, args, batch_size=64):
     model.eval()
-    result = []
+    device = torch.device('cuda' if getattr(args, 'cuda', False) and torch.cuda.is_available() else 'cpu')
+    results = []
+
     for i, task in enumerate(tasks):
         t = i
-        x = task[1]
-        y = task[2]
-        rt = 0
+        # x: (N, F), y: (N,)
+        x = torch.as_tensor(task[1], dtype=torch.float32)
+        y = torch.as_tensor(task[2], dtype=torch.long)
+
+        # Expect 2 channels -> reshape feature dim F to (2, L)
+        assert x.shape[1] % 2 == 0, f"Feature dim {x.shape[1]} not divisible by 2 for (2, L) reshape."
+        L = x.shape[1] // 2 # slice size per channel (I/Q)
+        x = x.view(x.shape[0], 2, L)     # (N, 2, L)
+
+        correct = 0
+        N = x.size(0)
+
+        for b_from in range(0, N, batch_size):
+            b_to = min(b_from + batch_size, N)   # exclusive upper bound
+            xb = x[b_from:b_to].to(device)       # (B, 2, L)
+            yb = y[b_from:b_to].to(device)       # (B,)
+
+            logits = model(xb, t)                # (B, C)
+            pb = torch.argmax(logits, dim=1)     # (B,)
+            correct += (pb == yb).sum().item()
+
+        results.append(correct / N)
+
+    return results
+    
+# def eval_tasks(model, tasks, args):
+
+#     model.eval()
+#     result = []
+#     for i, task in enumerate(tasks):
+#         t = i
+#         x = task[1] # (8400, 4096)
+#         y = task[2] # (8400, )
+#         rt = 0
         
-        eval_bs = x.size(0)
+#         x = torch.tensor(x)
+#         y = torch.tensor(y)
+#         eval_bs = 256 #x.size(0)
 
-        for b_from in range(0, x.size(0), eval_bs):
-            b_to = min(b_from + eval_bs, x.size(0) - 1)
-            if b_from == b_to:
-                xb = x[b_from].view(1, -1)
-                yb = torch.LongTensor([y[b_to]]).view(1, -1)
-            else:
-                xb = x[b_from:b_to]
-                yb = y[b_from:b_to]
-            if args.cuda:
-                xb = xb.cuda()
-            _, pb = torch.max(model(xb, t).data.cpu(), 1, keepdim=False)
-            rt += (pb == yb).float().sum()
+#         for b_from in range(0, x.size(0), eval_bs):
+#             b_to = min(b_from + eval_bs, x.size(0) - 1)
+#             if b_from == b_to:
+#                 xb = x[b_from].view(1, -1)
+#                 yb = torch.LongTensor([y[b_to]]).view(1, -1)
+#             else:
+#                 xb = x[b_from:b_to]
+#                 yb = y[b_from:b_to]
+#             if args.cuda:
+#                 xb = xb.cuda()
+#             _, pb = torch.max(model(xb, t).data.cpu(), 1, keepdim=False)
+#             rt += (pb == yb).float().sum()
 
-        result.append(rt / x.size(0))
+#         result.append(rt / x.size(0))
 
-    return result
+#     return result
 
 def life_experience(model, inc_loader, args):
     result_val_a = []
@@ -107,7 +140,7 @@ def life_experience(model, inc_loader, args):
                 prog_bar.set_description(
                     "Task: {} | Epoch: {}/{} | Iter: {} | Loss: {} | Acc: Total: {} Current Task: {} ".format(
                         task_info["task"], ep+1, args.n_epochs, i%(1000*args.n_epochs), round(loss, 3),
-                        round(sum(result_val_a[-1]).item()/len(result_val_a[-1]), 5), round(result_val_a[-1][task_info["task"]].item(), 5)
+                        round(sum(result_val_a[-1])/len(result_val_a[-1]), 5), round(result_val_a[-1][task_info["task"]], 5)
                     )
                 )
 

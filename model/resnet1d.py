@@ -58,7 +58,7 @@ class _ResNet1D(nn.Module):
         self.inplanes = 64
 
         self.conv1 = nn.Conv1d(
-            in_channels, 64, kernel_size=7, stride=2, padding=3, bias=False
+            in_channels, 64, kernel_size=7, stride=2, padding=1, bias=False
         )
         self.bn1 = nn.BatchNorm1d(64)
         self.relu = nn.ReLU(inplace=True)

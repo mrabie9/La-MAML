@@ -114,7 +114,7 @@ class IncrementalLoader:
             dataset,
             batch_size=batch_size,
             shuffle=shuffle,
-            num_workers=self._workers
+            num_workers=0#self._workers
         )
 
 

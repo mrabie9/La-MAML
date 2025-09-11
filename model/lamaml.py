@@ -42,7 +42,7 @@ class Net(BaseNet):
         loss = self.loss(logits, y)   
 
         if fast_weights is None:
-            fast_weights = self.net.parameters() 
+            fast_weights = list(self.net.parameters())
 
         # NOTE if we want higher order grads to be allowed, change create_graph=False to True
         graph_required = self.args.second_order
