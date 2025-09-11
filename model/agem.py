@@ -14,6 +14,8 @@ import model.meta.modelfactory as mf
 import numpy as np
 import random
 
+from model.resnet import ResNet18
+from model.resnet1d import ResNet1D
 # Auxiliary functions useful for AGEM's inner optimization.
 
 def compute_offsets(task, nc_per_task, is_cifar):
@@ -113,11 +115,25 @@ class Net(nn.Module):
         nl, nh = args.n_layers, args.n_hiddens
         self.margin = args.memory_strength
         self.is_cifar = ((args.dataset == 'cifar100') or (args.dataset == 'tinyimagenet'))
+        
+        # --- IQ mode toggle ---
+        self.input_channels = getattr(args, "input_channels", 1)
+        self.is_iq = (getattr(args, "dataset", "") == "iq") or (self.input_channels == 2)
 
         nl, nh = args.n_layers, args.n_hiddens
-        config = mf.ModelFactory.get_model(model_type = args.arch, sizes = [n_inputs] + [nh] * nl + [n_outputs],
-                                                dataset = args.dataset, args=args)
-        self.net = Learner.Learner(config, args)
+
+        if args.arch == 'resnet18':
+            self.net = ResNet18(n_outputs, args)
+            self.net.define_task_lr_params(alpha_init=args.alpha_init)
+        elif args.arch == 'resnet1d':
+            self.net = ResNet1D(n_outputs, args)
+            self.net.define_task_lr_params(alpha_init=args.alpha_init)
+        else:
+            config = mf.ModelFactory.get_model(
+                model_type = args.arch, 
+                sizes = [n_inputs] + [nh] * nl + [n_outputs],
+                dataset = args.dataset, args=args)
+            self.net = Learner.Learner(config, args)
 
         self.ce = nn.CrossEntropyLoss()
         self.bce = torch.nn.CrossEntropyLoss()
@@ -136,9 +152,16 @@ class Net(nn.Module):
         self.grad_task_align = {}
         self.current_task = 0
 
-        # allocate episodic memory
-        self.memory_data = torch.FloatTensor(
-            n_tasks, self.n_memories, n_inputs)
+        # --- Episodic memory allocation ---
+        if self.is_iq:
+            assert n_inputs % 2 == 0, f"n_inputs={n_inputs} must be 2*L for IQ."
+            self.seq_len = n_inputs // 2
+            # (task, mem, C=2, L)
+            self.memory_data = torch.FloatTensor(n_tasks, self.n_memories, 2, self.seq_len)
+        else:
+            # (task, mem, F)
+            self.memory_data = torch.FloatTensor(n_tasks, self.n_memories, n_inputs)
+
         self.memory_labs = torch.LongTensor(n_tasks, self.n_memories)
         if args.cuda:
             self.memory_data = self.memory_data.cuda()
@@ -165,12 +188,33 @@ class Net(nn.Module):
 
         self.iter = 0
 
+    def _ensure_iq_shape(self, x):
+        """
+        Ensure x is (B, 2, L) for IQ mode.
+        Accepts (B, 2, L) or (B, 2L).
+        """
+        if x.dim() == 3:
+            # (B, 2, L) already
+            return x
+        elif x.dim() == 2:
+            # (B, 2L) -> (B, 2, L)
+            B, F = x.shape
+            assert F % 2 == 0, f"Feature dim {F} not divisible by 2 for (2, L) reshape."
+            L = F // 2
+            return x.view(B, 2, L)
+        else:
+            raise ValueError(f"Unexpected IQ input shape {tuple(x.shape)}; expected (B, 2, L) or (B, 2L).")
+    
     def forward(self, x, t):
         if self.args.dataset == 'tinyimagenet':
             x = x.view(-1, 3, 64, 64)
         elif self.args.dataset == 'cifar100':
             x = x.view(-1, 3, 32, 32)
+        elif self.is_iq:
+            x = self._ensure_iq_shape(x) # (B, 2, L)
+
         output = self.net.forward(x)
+
         if self.is_cifar:
             # make sure we predict classes within the current task
             offset1 = int(t * self.nc_per_task)
@@ -184,7 +228,15 @@ class Net(nn.Module):
     def observe(self, x, y, t):
 
         self.iter +=1
-        x = x.view(x.size(0), -1)
+        
+        # --- shape handling ---
+        if self.is_iq:
+            # keep (B, 2, L)
+            x = self._ensure_iq_shape(x)
+        else:
+            # legacy: flatten non-IQ inputs
+            x = x.view(x.size(0), -1)
+
         # update memory
         if t != self.current_task:
             self.observed_tasks.append(t)
@@ -192,22 +244,39 @@ class Net(nn.Module):
             self.grad_align.append([])
 
         for pass_itr in range(self.glances):
-
+# copy x into memory with matching shape
+                
             if(pass_itr==0):
                 # Update ring buffer storing examples from current task
                 bsz = y.data.size(0)
                 endcnt = min(self.mem_cnt + bsz, self.n_memories)
                 effbsz = endcnt - self.mem_cnt
-                self.memory_data[t, self.mem_cnt: endcnt].copy_(
-                    x.data[: effbsz])
-                if bsz == 1:
-                    self.memory_labs[t, self.mem_cnt] = y.data[0]
-                else:
-                    self.memory_labs[t, self.mem_cnt: endcnt].copy_(
-                        y.data[: effbsz])
-                self.mem_cnt += effbsz
-                if self.mem_cnt == self.n_memories:
-                    self.mem_cnt = 0
+                # self.memory_data[t, self.mem_cnt: endcnt].copy_(
+                #     x.data[: effbsz])
+                # if bsz == 1:
+                #     self.memory_labs[t, self.mem_cnt] = y.data[0]
+                # else:
+                #     self.memory_labs[t, self.mem_cnt: endcnt].copy_(
+                #         y.data[: effbsz])
+                # self.mem_cnt += effbsz
+                # if self.mem_cnt == self.n_memories:
+                #     self.mem_cnt = 0
+
+                if effbsz > 0:
+                    if self.is_iq:
+                        # shapes: mem slice (effbsz, 2, L) <- x[:effbsz]
+                        self.memory_data[t, self.mem_cnt:endcnt].copy_(x.data[:effbsz])
+                    else:
+                        self.memory_data[t, self.mem_cnt:endcnt].copy_(x.data[:effbsz])
+
+                    if bsz == 1:
+                        self.memory_labs[t, self.mem_cnt] = y.data[0]
+                    else:
+                        self.memory_labs[t, self.mem_cnt:endcnt].copy_(y.data[:effbsz])
+
+                    self.mem_cnt += effbsz
+                    if self.mem_cnt == self.n_memories:
+                        self.mem_cnt = 0
 
             # compute gradient on previous tasks
             if len(self.observed_tasks) > 1:
