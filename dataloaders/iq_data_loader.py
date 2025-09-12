@@ -43,10 +43,18 @@ class IQDataGenerator(Dataset):
     def __getitem__(self, index: int) -> Tuple[np.ndarray, int]:
         iq_sample = self.x[index, :]
 
-        # Represent complex input as two channels: I and Q
-        iq_sample = np.stack([iq_sample.real, iq_sample.imag], axis=0).astype(
-            np.float32
-        )
+        # Support IQ samples stored either as complex numbers or as
+        # interleaved real values ``[I1, Q1, I2, Q2, ...]``.
+        if np.iscomplexobj(iq_sample):
+            i = iq_sample.real
+            q = iq_sample.imag
+        else:
+            # Assume real-valued interleaved representation
+            i = iq_sample[0::2]
+            q = iq_sample[1::2]
+
+        iq_sample = np.stack([i, q], axis=0).astype(np.float32)
+
 
         label = self.y[index]
 
