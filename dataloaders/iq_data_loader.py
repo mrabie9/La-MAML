@@ -42,11 +42,16 @@ class IQDataGenerator(Dataset):
 
     def __getitem__(self, index: int) -> Tuple[np.ndarray, int]:
         iq_sample = self.x[index, :]
-
+        
         # Represent complex input as two channels: I and Q
-        iq_sample = np.stack([iq_sample.real, iq_sample.imag], axis=0).astype(
-            np.float32
-        )
+        if np.iscomplexobj(iq_sample):
+            i = iq_sample.real
+            q = iq_sample.imag
+        else:
+            i = iq_sample[0::2]
+            q = iq_sample[1::2]
+        
+        iq_sample = np.stack([i, q], axis=0).astype(np.float32)
 
         label = self.y[index]
 
@@ -94,8 +99,8 @@ def load_data_iq(base_path: str, batch_size: int, args=None):
     elif "rfmls" in base_path.lower():
         train = np.load(os.path.join(base_path, "train.npz"))
         test = np.load(os.path.join(base_path, "test.npz"))
-        x_train, y_train = train["X"], train["y"] - 30
-        x_test, y_test = test["X"], test["y"] - 30
+        x_train, y_train = train["X"], train["y"]
+        x_test, y_test = test["X"], test["y"]
 
     else:
         train = np.load(os.path.join(base_path, "train.npz"))
