@@ -125,7 +125,9 @@ class IncrementalLoader:
         data_files = [f for f in os.listdir(self._opt.data_path) if f.endswith('.npz')]
         if data_files and self._opt.dataset.lower() == 'iq':
             data_files.sort()
-            self.train_dataset, self.test_dataset = [], []
+            raw_datasets = []
+            all_labels = []
+
             for fname in data_files:
                 data = np.load(os.path.join(self._opt.data_path, fname))
 
@@ -140,8 +142,30 @@ class IncrementalLoader:
                 x_test = _get(['x_test', 'X_test', 'Xte', 'X'])
                 y_test = _get(['y_test', 'Y_test', 'yte', 'y'])
 
-                self.train_dataset.append((None, x_train, y_train))
-                self.test_dataset.append((None, x_test, y_test))
+                if y_train is None or y_test is None:
+                    raise ValueError(f"Labels not found in {fname}")
+
+                y_train = np.asarray(y_train, dtype=np.int64)
+                y_test = np.asarray(y_test, dtype=np.int64)
+
+                raw_datasets.append((x_train, y_train, x_test, y_test))
+                all_labels.append(y_train.reshape(-1))
+                all_labels.append(y_test.reshape(-1))
+
+            if not raw_datasets:
+                raise ValueError("No IQ datasets were loaded. Please check the data path.")
+
+            unique_labels = np.unique(np.concatenate(all_labels))
+            needs_remap = not np.array_equal(unique_labels, np.arange(unique_labels.size))
+
+            self.train_dataset, self.test_dataset = [], []
+            for x_train, y_train, x_test, y_test in raw_datasets:
+                if needs_remap:
+                    y_train = unique_labels.searchsorted(y_train)
+                    y_test = unique_labels.searchsorted(y_test)
+
+                self.train_dataset.append((None, x_train, y_train.astype(np.int64)))
+                self.test_dataset.append((None, x_test, y_test.astype(np.int64)))
 
             self.sample_permutations = []
             for t in range(len(self.train_dataset)):

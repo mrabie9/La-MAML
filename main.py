@@ -10,6 +10,7 @@ import os
 import ipdb
 from tqdm import tqdm
 
+import numpy as np
 import torch
 from torch.autograd import Variable
 
@@ -17,6 +18,7 @@ import parser as file_parser
 from metrics.metrics import confusion_matrix
 from utils import misc_utils
 from main_multi_task import life_experience_iid, eval_iid_tasks
+from dataloaders.iq_data_loader import ensure_iq_two_channel
 
 def eval_class_tasks(model, tasks, args):
 
@@ -38,28 +40,41 @@ def eval_tasks(model, tasks, args, batch_size=64):
     model.eval()
     device = torch.device('cuda' if getattr(args, 'cuda', False) and torch.cuda.is_available() else 'cpu')
     results = []
+    is_iq = getattr(args, 'dataset', '').lower() == 'iq'
 
     for i, task in enumerate(tasks):
         t = i
-        # x: (N, F), y: (N,)
-        x = torch.as_tensor(task[1], dtype=torch.float32)
+        x_data = task[1]
         y = torch.as_tensor(task[2], dtype=torch.long)
 
-        # Expect 2 channels -> reshape feature dim F to (2, L)
-        assert x.shape[1] % 2 == 0, f"Feature dim {x.shape[1]} not divisible by 2 for (2, L) reshape."
-        L = x.shape[1] // 2 # slice size per channel (I/Q)
-        x = x.view(x.shape[0], 2, L)     # (N, 2, L)
+        if isinstance(x_data, torch.Tensor):
+            x_data_cpu = x_data.detach().cpu()
+            if is_iq:
+                x_np = ensure_iq_two_channel(x_data_cpu.numpy())
+                x = torch.from_numpy(x_np)
+            else:
+                x = x_data_cpu.float()
+        else:
+            if is_iq:
+                x_np = ensure_iq_two_channel(x_data)
+                x = torch.from_numpy(x_np)
+            else:
+                x = torch.from_numpy(np.asarray(x_data, dtype=np.float32))
+
+        x = x.float()
 
         correct = 0
         N = x.size(0)
 
         for b_from in range(0, N, batch_size):
-            b_to = min(b_from + batch_size, N)   # exclusive upper bound
-            xb = x[b_from:b_to].to(device)       # (B, 2, L)
-            yb = y[b_from:b_to].to(device)       # (B,)
+            b_to = min(b_from + batch_size, N)
+            xb = x[b_from:b_to].to(device)
+            if getattr(args, 'arch', '').lower() == 'linear':
+                xb = xb.view(xb.size(0), -1)
+            yb = y[b_from:b_to].to(device)
 
-            logits = model(xb, t)                # (B, C)
-            pb = torch.argmax(logits, dim=1)     # (B,)
+            logits = model(xb, t)
+            pb = torch.argmax(logits, dim=1)
             correct += (pb == yb).sum().item()
 
         results.append(correct / N)

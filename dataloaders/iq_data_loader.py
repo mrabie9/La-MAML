@@ -7,6 +7,54 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 
 
+def ensure_iq_two_channel(iq_array: np.ndarray) -> np.ndarray:
+    """Convert raw IQ samples into a ``(…, 2, L)`` float32 array.
+
+    The datasets we consume may store IQ data in a variety of layouts:
+
+    * complex-valued arrays with shape ``(…, L)``
+    * real-valued arrays where I/Q are interleaved along the last axis
+      (``[…, 2 * L]``)
+    * already separated channel-first or channel-last representations
+      (``[…, 2, L]`` or ``[…, L, 2]``)
+
+    This helper normalises the array to the channel-first convention used by
+    the models: ``(…, 2, L)`` with ``float32`` dtype.  The function is fully
+    vectorised and supports batched inputs directly.
+    """
+
+    arr = np.asarray(iq_array)
+
+    if arr.ndim == 0:
+        raise ValueError("IQ sample must have at least one dimension")
+
+    if np.iscomplexobj(arr):
+        stacked = np.stack((arr.real, arr.imag), axis=-2)
+        return np.ascontiguousarray(stacked.astype(np.float32, copy=False))
+
+    arr = arr.astype(np.float32, copy=False)
+
+    # Already channel-first: (..., 2, L)
+    if arr.ndim >= 2 and arr.shape[-2] == 2:
+        return np.ascontiguousarray(arr)
+
+    # Channel-last: (..., L, 2) -> (..., 2, L)
+    if arr.ndim >= 2 and arr.shape[-1] == 2:
+        return np.ascontiguousarray(np.swapaxes(arr, -1, -2))
+
+    last_dim = arr.shape[-1]
+    if last_dim % 2 != 0:
+        raise ValueError(
+            "Expected an even number of features to split interleaved IQ data; "
+            f"got shape {arr.shape}"
+        )
+
+    new_shape = arr.shape[:-1] + (last_dim // 2, 2)
+    arr = arr.reshape(new_shape)
+    arr = np.swapaxes(arr, -1, -2)
+    return np.ascontiguousarray(arr)
+
+
 class IQDataGenerator(Dataset):
     """Dataset for raw in-phase/quadrature (IQ) samples.
 
@@ -41,12 +89,8 @@ class IQDataGenerator(Dataset):
         return self.x.shape[0]
 
     def __getitem__(self, index: int) -> Tuple[np.ndarray, int]:
-        iq_sample = self.x[index, :]
-
-        # Represent complex input as two channels: I and Q
-        iq_sample = np.stack([iq_sample.real, iq_sample.imag], axis=0).astype(
-            np.float32
-        )
+        iq_sample = self.x[index]
+        iq_sample = ensure_iq_two_channel(iq_sample)
 
         label = self.y[index]
 
