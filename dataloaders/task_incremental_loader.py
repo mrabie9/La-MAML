@@ -13,16 +13,16 @@ class IncrementalLoader:
 
     def __init__(
         self,
-        opt,
+        args,
         shuffle=True,
         seed=1,
     ):
-        self._opt = opt
-        validation_split=opt.validation
-        increment=opt.increment
+        self._args = args
+        validation_split=args.validation
+        increment=args.increment
 
         self._setup_data(
-            class_order_type=opt.class_order,
+            class_order_type=args.class_order,
             seed=seed,
             increment=increment,
             validation_split=validation_split
@@ -30,9 +30,9 @@ class IncrementalLoader:
 
         self._current_task = 0
 
-        self._batch_size = opt.batch_size
-        self._test_batch_size = opt.test_batch_size        
-        self._workers = opt.workers
+        self._batch_size = args.batch_size
+        self._test_batch_size = args.test_batch_size        
+        self._workers = args.workers
         self._shuffle = shuffle
 
         self._setup_test_tasks()
@@ -47,7 +47,7 @@ class IncrementalLoader:
 
         p = self.sample_permutations[self._current_task]
         x_train, y_train = self.train_dataset[self._current_task][1][p], self.train_dataset[self._current_task][2][p]
-        x_test, y_test = self.test_dataset[self._current_task][1], self.test_dataset[self._current_task][2]
+        x_test, y_test = self.test_dataset[self._current_task][1][p], self.test_dataset[self._current_task][2][p]
 
         train_loader = self._get_loader(x_train, y_train, mode="train")
         test_loader = self._get_loader(x_test, y_test, mode="test")
@@ -69,6 +69,7 @@ class IncrementalLoader:
     def _setup_test_tasks(self):
         self.test_tasks = []
         for i in range(len(self.test_dataset)):
+            # .append(x, y, mode="test")
             self.test_tasks.append(self._get_loader(self.test_dataset[i][1], self.test_dataset[i][2], mode="test"))
 
     def get_tasks(self, dataset_type='test'):
@@ -122,14 +123,16 @@ class IncrementalLoader:
         # FIXME: handles online loading of images
         torch.manual_seed(seed)
 
-        data_files = [f for f in os.listdir(self._opt.data_path) if f.endswith('.npz')]
-        if data_files and self._opt.dataset.lower() == 'iq':
+        data_files = [f for f in os.listdir(self._args.data_path) if f.endswith('.npz')]
+        if data_files and self._args.dataset.lower() == 'iq':
             data_files.sort()
             raw_datasets = []
             all_labels = []
+            labels_offset = 0
 
+            # Load npz files and concatenate datasets
             for fname in data_files:
-                data = np.load(os.path.join(self._opt.data_path, fname))
+                data = np.load(os.path.join(self._args.data_path, fname))
 
                 def _get(keys):
                     for k in keys:
@@ -148,6 +151,15 @@ class IncrementalLoader:
                 y_train = np.asarray(y_train, dtype=np.int64)
                 y_test = np.asarray(y_test, dtype=np.int64)
 
+                # Remap labels to a contiguous range starting from 0
+                unique_labels = np.unique(y_train)
+                needs_remap = not np.array_equal(unique_labels, np.arange(unique_labels.size))
+                if needs_remap:
+                    y_train = unique_labels.searchsorted(y_train) + labels_offset
+                    y_test = unique_labels.searchsorted(y_test) + labels_offset
+                    labels_offset += unique_labels.size
+
+                # 3D array[task, split (xtr/yte/xte/yte), data]
                 raw_datasets.append((x_train, y_train, x_test, y_test))
                 all_labels.append(y_train.reshape(-1))
                 all_labels.append(y_test.reshape(-1))
@@ -155,39 +167,33 @@ class IncrementalLoader:
             if not raw_datasets:
                 raise ValueError("No IQ datasets were loaded. Please check the data path.")
 
-            unique_labels = np.unique(np.concatenate(all_labels))
-            needs_remap = not np.array_equal(unique_labels, np.arange(unique_labels.size))
-
             self.train_dataset, self.test_dataset = [], []
             for x_train, y_train, x_test, y_test in raw_datasets:
-                if needs_remap:
-                    y_train = unique_labels.searchsorted(y_train)
-                    y_test = unique_labels.searchsorted(y_test)
-
                 self.train_dataset.append((None, x_train, y_train.astype(np.int64)))
                 self.test_dataset.append((None, x_test, y_test.astype(np.int64)))
 
             self.sample_permutations = []
             for t in range(len(self.train_dataset)):
-                N = self.train_dataset[t][1].shape[0]
-                if self._opt.samples_per_task <= 0:
+                N = self.train_dataset[t][1].shape[0] # number of samples in task t
+                if self._args.samples_per_task <= 0:
                     n = N
                 else:
-                    n = min(self._opt.samples_per_task, N)
+                    n = min(self._args.samples_per_task, N)
+                # randomly shuffle data
                 p = np.random.permutation(N)[:n]
                 self.sample_permutations.append(p)
         else:
-            self.train_dataset, self.test_dataset = torch.load(os.path.join(self._opt.data_path, self._opt.dataset + ".pt"))
+            self.train_dataset, self.test_dataset = torch.load(os.path.join(self._args.data_path, self._args.dataset + ".pt"))
 
             self.sample_permutations = []
 
             # for every task, accumulate a shuffled set of samples_per_task
             for t in range(len(self.train_dataset)):
                 N = self.train_dataset[t][1].size(0)
-                if self._opt.samples_per_task <= 0:
+                if self._args.samples_per_task <= 0:
                     n = N
                 else:
-                    n = min(self._opt.samples_per_task, N)
+                    n = min(self._args.samples_per_task, N)
 
                 p = torch.randperm(N)[0:n]
                 self.sample_permutations.append(p)
