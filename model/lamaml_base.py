@@ -116,10 +116,13 @@ class BaseNet(torch.nn.Module):
 
         batch_size = self.batchSize if batch_size is None else batch_size
 
+        # Sample from memory buffer if not empty
         if len(MEM) > 0:
             order = [i for i in range(0,len(MEM))]
             osize = min(batch_size,len(MEM))
             for j in range(0,osize):
+
+                # randomly sample from self.M_new memory buffer
                 shuffle(order)
                 k = order[j]
                 x,y,t = MEM[k]
@@ -131,6 +134,7 @@ class BaseNet(torch.nn.Module):
                 bys.append(yi)
                 bts.append(ti)
 
+        # add new data points - ratio of old to new becomes up to 1:1
         for j in range(len(myi)):
             bxs.append(mxi[j])
             bys.append(myi[j])
