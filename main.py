@@ -25,15 +25,15 @@ def eval_class_tasks(model, tasks, args):
     model.eval()
     result = []
     for t, task_loader in enumerate(tasks):
-        rt = 0
+        correct = 0.0
 
         for (i, (x, y)) in enumerate(task_loader):
             if args.cuda:
                 x = x.cuda()
             _, p = torch.max(model(x, t).data.cpu(), 1, keepdim=False)
-            rt += (p == y).float().sum()
+            correct += (p == y).float().sum().item()
 
-        result.append(rt / len(task_loader.dataset))
+        result.append(correct / len(task_loader.dataset))
     return result
 
 def eval_tasks(model, tasks, args, batch_size=64):
@@ -159,6 +159,13 @@ def life_experience(model, inc_loader, args):
                     )
                 )
 
+                # prog_bar.set_description(
+                #     "Task: {} | Epoch: {}/{} | Iter: {} | Loss: {} | Acc: Total: {} Current Task: {} ".format(
+                #         task_info["task"], ep+1, args.n_epochs, i%(1000*args.n_epochs), round(loss, 3),
+                #         round(sum(result_val_a[-1]).item()/len(result_val_a[-1]), 5), round(result_val_a[-1][task_info["task"]].item(), 5)
+                #     )
+                # )
+
         result_val_a.append(evaluator(model, val_tasks, args))
         result_val_t.append(task_info["task"])
 
@@ -205,7 +212,6 @@ def main():
     yaml_file = 'config.yaml'
     args = file_parser.parse_args_from_yaml(yaml_file)
     # parser = file_parser.get_parser()
-
     # args = parser.parse_args()
 
     # initialize seeds
