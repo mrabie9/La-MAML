@@ -33,8 +33,8 @@ def compute_offsets(task, nc_per_task, is_cifar):
         offset1 = task * nc_per_task
         offset2 = (task + 1) * nc_per_task
     else:
-        offset1 = 0
-        offset2 = nc_per_task
+        offset1 = task * nc_per_task
+        offset2 = (task + 1) * nc_per_task
     return offset1, offset2
 
 
@@ -168,7 +168,7 @@ class Net(nn.Module):
         if self.is_cifar:
             self.nc_per_task = int(n_outputs / n_tasks)
         else:
-            self.nc_per_task = n_outputs
+            self.nc_per_task = int(n_outputs / n_tasks)
 
         if args.cuda:
             self.cuda()
