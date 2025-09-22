@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
-from torch.nn.utils.stateless import functional_call
+from torch.func import functional_call
 
 
 class BasicBlock1D(nn.Module):

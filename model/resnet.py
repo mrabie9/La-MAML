@@ -8,7 +8,7 @@ from torch.nn.utils import stateless
 import torch
 import torch.nn as nn
 from torchvision.models import resnet18
-from torch.nn.utils.stateless import functional_call  # use this on torch 1.12.x
+from torch.func import functional_call  # use this on torch 1.12.x
 
 class ResNet18(nn.Module):
     def __init__(self, num_classes, args):
