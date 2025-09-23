@@ -57,7 +57,7 @@ class Net(BaseNet):
         fast_weights = [
             w.detach() - g.detach() * nn.functional.relu(a)   # depends on a
             for (g, (w, a)) in zip(grads, zip(fast_weights, self.net.alpha_lr))
-]
+            ]
 
         # fast_weights = [w.detach() for w in fast_weights]
         return fast_weights
