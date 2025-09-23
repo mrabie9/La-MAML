@@ -35,11 +35,11 @@ def ensure_iq_two_channel(iq_array: np.ndarray) -> np.ndarray:
     arr = arr.astype(np.float32, copy=False)
 
     # Already channel-first: (..., 2, L)
-    if arr.ndim >= 2 and arr.shape[-2] == 2:
+    if arr.ndim > 2 and arr.shape[-2] == 2:
         return np.ascontiguousarray(arr)
 
     # Channel-last: (..., L, 2) -> (..., 2, L)
-    if arr.ndim >= 2 and arr.shape[-1] == 2:
+    if arr.ndim > 2 and arr.shape[-1] == 2:
         return np.ascontiguousarray(np.swapaxes(arr, -1, -2))
 
     last_dim = arr.shape[-1]
