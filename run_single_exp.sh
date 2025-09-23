@@ -9,7 +9,12 @@ SEED=0
 
 ########## TinyImageNet Dataset Single-Pass ##########
 ##### La-MAML #####
-python3 main.py $IMGNET --model lamaml_cifar --expt_name lamaml --memories 400 --batch_size 10 --replay_batch_size 10 --n_epochs 1 \
-                    --opt_lr 0.4 --alpha_init 0.1 --opt_wt 0.1 --glances 2 --loader class_incremental_loader --increment 5 \
-                    --arch "pc_cnn" --cifar_batches 5 --learn_lr --log_every 3125 --second_order --class_order random \
-                    --seed $SEED --grad_clip_norm 1.0 --calc_test_accuracy --validation 0.1
+# python3 main.py $IMGNET --model lamaml_cifar --expt_name lamaml --memories 400 --batch_size 10 --replay_batch_size 10 --n_epochs 1 \
+#                     --opt_lr 0.4 --alpha_init 0.1 --opt_wt 0.1 --glances 2 --loader class_incremental_loader --increment 5 \
+#                     --arch "pc_cnn" --cifar_batches 5 --learn_lr --log_every 3125 --second_order --class_order random \
+#                     --seed $SEED --grad_clip_norm 1.0 --calc_test_accuracy --validation 0.1
+
+python3 main.py $IMGNET --model icarl --expt_name icarl --n_memories 400 --batch_size 10 --n_epochs 3 \
+                     --lr 0.01 --glances 1 --memory_strength 1.0 --loader class_incremental_loader --increment 5 \
+                     --arch "pc_cnn" --log_every 3125 --class_order random  --samples_per_task 2500 \
+                     --seed $SEED --calc_test_accuracy --validation 0.1

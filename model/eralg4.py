@@ -20,6 +20,9 @@ import sys
 import warnings
 import math
 
+from model.resnet import ResNet18
+from model.resnet1d import ResNet1D
+
 import model.meta.modelfactory as mf
 import model.meta.learner as Learner
 warnings.filterwarnings("ignore")
@@ -35,9 +38,17 @@ class Net(nn.Module):
         self.args = args
         nl, nh = args.n_layers, args.n_hiddens
 
-        config = mf.ModelFactory.get_model(model_type = args.arch, sizes = [n_inputs] + [nh] * nl + [n_outputs],
-                                                dataset = args.dataset, args=args)
-        self.net = Learner.Learner(config, args)
+        if args.arch == 'resnet18':
+            self.net = ResNet18(n_outputs, args)
+            self.net.define_task_lr_params(alpha_init=args.alpha_init)
+        elif args.arch == 'resnet1d':
+            self.net = ResNet1D(n_outputs, args)
+            self.net.define_task_lr_params(alpha_init=args.alpha_init)
+        else:
+
+            config = mf.ModelFactory.get_model(model_type = args.arch, sizes = [n_inputs] + [nh] * nl + [n_outputs],
+                                                    dataset = args.dataset, args=args)
+            self.net = Learner.Learner(config, args)
 
         self.opt_wt = optim.SGD(self.parameters(), lr=args.lr)
 
@@ -63,10 +74,11 @@ class Net(nn.Module):
             self.net = self.net.cuda()
 
         self.n_outputs = n_outputs
-        if self.is_cifar:
-            self.nc_per_task = int(n_outputs / n_tasks)
-        else:
-            self.nc_per_task = n_outputs
+        self.nc_per_task = int(n_outputs / n_tasks)
+        # if self.is_cifar:
+        #     self.nc_per_task = int(n_outputs / n_tasks)
+        # else:
+        #     self.nc_per_task = n_outputs
 
 
     def compute_offsets(self, task):
@@ -83,7 +95,7 @@ class Net(nn.Module):
 
     def forward(self, x, t):
         output = self.net.forward(x)
-        if self.is_cifar:
+        if True: #self.is_cifar:
             # make sure we predict classes within the current task
             offset1, offset2 = self.compute_offsets(t)
             if offset1 > 0:
@@ -190,16 +202,21 @@ class Net(nn.Module):
         Update the fast weights using the current samples and return the updated fast
         """
 
-        if self.is_cifar:
-            offset1, offset2 = self.compute_offsets(t)            
-            logits = self.net.forward(x, fast_weights)[:, :offset2]
-            loss = self.loss(logits[:, offset1:offset2], y-offset1)
-        else:
-            logits = self.net.forward(x, fast_weights)
-            loss = self.loss(logits, y)   
+        # if self.is_cifar:
+        #     offset1, offset2 = self.compute_offsets(t)            
+        #     logits = self.net.forward(x, fast_weights)[:, :offset2]
+        #     loss = self.loss(logits[:, offset1:offset2], y-offset1)
+        # else:
+        #     logits = self.net.forward(x, fast_weights)
+        #     loss = self.loss(logits, y)
+
+        offset1, offset2 = self.compute_offsets(t)            
+        logits = self.net.forward(x, fast_weights)[:, :offset2]
+        loss = self.loss(logits[:, offset1:offset2], y-offset1)
 
         if fast_weights is None:
-            fast_weights = self.net.parameters()
+            # fast_weights = self.net.parameters()
+            fast_weights = list(self.net.parameters())
 
         graph_required = self.args.second_order
         grads = list(torch.autograd.grad(loss, fast_weights, create_graph=graph_required, retain_graph=graph_required))
