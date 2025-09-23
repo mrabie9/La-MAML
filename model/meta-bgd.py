@@ -12,6 +12,8 @@ import model.meta.modelfactory as mf
 
 from model.optimizers_lib import optimizers_lib
 from ast import literal_eval
+from model.resnet1d import ResNet1D
+from model.resnet import ResNet18
 
 """
 This baseline/ablation is constructed by merging C-MAML and BGD
@@ -37,10 +39,17 @@ class Net(torch.nn.Module):
         self.args = args
         nl, nh = args.n_layers, args.n_hiddens
 
-        config = mf.ModelFactory.get_model(model_type = args.arch, sizes = [n_inputs] + [nh] * nl + [n_outputs],
-                                                dataset = args.dataset, args=args)
+        if args.arch == 'resnet18':
+            self.net = ResNet18(n_outputs, args)
+            self.net.define_task_lr_params(alpha_init=args.alpha_init)
+        elif args.arch == 'resnet1d':
+            self.net = ResNet1D(n_outputs, args)
+            self.net.define_task_lr_params(alpha_init=args.alpha_init)
+        else:
+            config = mf.ModelFactory.get_model(model_type = args.arch, sizes = [n_inputs] + [nh] * nl + [n_outputs],
+                                                    dataset = args.dataset, args=args)
 
-        self.net = Learner.Learner(config, args)
+            self.net = Learner.Learner(config, args)
 
         # define the lr params
         self.net.define_task_lr_params(alpha_init = args.alpha_init)
@@ -50,6 +59,7 @@ class Net(torch.nn.Module):
             self.net = self.net.cuda()
 
         # optimizer model
+        self.bgd_optimizer = args.bgd_optimizer
         optimizer_model = optimizers_lib.__dict__[args.bgd_optimizer]
         # params used to instantiate the BGD optimiser
         optimizer_params = dict({ #"logger": logger,
@@ -77,10 +87,11 @@ class Net(torch.nn.Module):
         self.memories = args.memories
         self.batchSize = int(args.replay_batch_size)
 
-        if self.is_cifar:
-            self.nc_per_task = n_outputs / n_tasks
-        else:
-            self.nc_per_task = n_outputs
+        self.nc_per_task = n_outputs / n_tasks
+        # if self.is_cifar:
+        #     self.nc_per_task = n_outputs / n_tasks
+        # else:
+        #     self.nc_per_task = n_outputs
         self.n_outputs = n_outputs
 
         self.obseve_itr = 0
@@ -95,7 +106,8 @@ class Net(torch.nn.Module):
 
 
     def forward(self, x, t, fast_weights=None):
-        self.optimizer.randomize_weights(force_std=0)  
+        if self.bgd_optimizer == 'sgd':
+            self.optimizer.randomize_weights(force_std=0)  
         output = self.net.forward(x, vars=fast_weights)
         if self.is_cifar:
             # make sure we predict classes within the current task
@@ -123,12 +135,14 @@ class Net(torch.nn.Module):
         return loss_q, logits
 
     def compute_offsets(self, task):
-        if self.is_cifar:
-            offset1 = task * self.nc_per_task
-            offset2 = (task + 1) * self.nc_per_task
-        else:
-            offset1 = 0
-            offset2 = self.n_outputs
+        offset1 = task * self.nc_per_task
+        offset2 = (task + 1) * self.nc_per_task
+        # if self.is_cifar:
+        #     offset1 = task * self.nc_per_task
+        #     offset2 = (task + 1) * self.nc_per_task
+        # else:
+        #     offset1 = 0
+        #     offset2 = self.n_outputs
         return int(offset1), int(offset2)
 
     def push_to_mem(self, batch_x, batch_y, t):
@@ -229,7 +243,9 @@ class Net(torch.nn.Module):
             loss = self.loss(logits, y)   
 
         if fast_weights is None:
-            fast_weights = self.net.parameters()      
+            fast_weights = [p for p in self.net.parameters()]
+        else:
+            fast_weights = list(fast_weights)
 
         # NOTE if we want higher order grads to be allowed, change create_graph=False to True
         graph_required = True
@@ -248,7 +264,10 @@ class Net(torch.nn.Module):
         self.net.train()             
         self.obseve_itr += 1
                                                 
-        num_of_mc_iters = self.optimizer.get_mc_iters()
+        if self.bgd_optimizer == 'bgd':
+            num_of_mc_iters = self.optimizer.get_mc_iters()
+        else:
+            num_of_mc_iters = 1
 
         for glance_itr in range(self.glances):
 
@@ -256,7 +275,8 @@ class Net(torch.nn.Module):
 
             # running C-MAML num_of_mc_iters times to get montecarlo samples of meta-loss
             for pass_itr in range(num_of_mc_iters):
-                self.optimizer.randomize_weights()                                                          
+                if self.bgd_optimizer == 'bgd':
+                    self.optimizer.randomize_weights()                                                          
 
                 self.pass_itr = pass_itr
                 self.epoch += 1
@@ -308,12 +328,16 @@ class Net(torch.nn.Module):
                 meta_loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.args.grad_clip_norm)
                 mc_meta_losses[pass_itr] = meta_loss
-                self.optimizer.aggregate_grads(batch_size=batch_sz)           
-             
+                if self.bgd_optimizer == 'bgd':
+                    self.optimizer.aggregate_grads(batch_size=batch_sz)           
+            
             print_std = False                        
             if(self.obseve_itr%220==0):
                 print_std = True                                                         
-            self.optimizer.step(print_std = print_std)
+            if self.bgd_optimizer == 'bgd':
+                self.optimizer.step(print_std = print_std)
+            else:
+                self.optimizer.step()
 
         meta_loss_return = sum(mc_meta_losses)/len(mc_meta_losses)
 

@@ -23,6 +23,8 @@ import warnings
 import model.meta.learner as Learner
 import model.meta.modelfactory as mf
 warnings.filterwarnings("ignore")
+from model.resnet import ResNet18
+from model.resnet1d import ResNet1D
 
 class Net(nn.Module):
     def __init__(self,
@@ -33,20 +35,34 @@ class Net(nn.Module):
         super(Net, self).__init__()
         self.args = args
         nl, nh = args.n_layers, args.n_hiddens
-
         self.is_cifar = (args.dataset == 'cifar100' or args.dataset == 'tinyimagenet')
-        config = mf.ModelFactory.get_model(args.arch, sizes=[n_inputs] + [nh] * nl + [n_outputs], dataset=args.dataset, args=args)
-        self.net = Learner.Learner(config, args=args)
+
+        # --- IQ mode toggle ---
+        self.input_channels = getattr(args, "input_channels", 1)
+        self.is_iq = (getattr(args, "dataset", "") == "iq") or (self.input_channels == 2)
+
+        nl, nh = args.n_layers, args.n_hiddens
+
+        if args.arch == 'resnet18':
+            self.net = ResNet18(n_outputs, args)
+            self.net.define_task_lr_params(alpha_init=args.alpha_init)
+        elif args.arch == 'resnet1d':
+            self.net = ResNet1D(n_outputs, args)
+            self.net.define_task_lr_params(alpha_init=args.alpha_init)
+        else:
+            config = mf.ModelFactory.get_model(args.arch, sizes=[n_inputs] + [nh] * nl + [n_outputs], dataset=args.dataset, args=args)
+            self.net = Learner.Learner(config, args=args)
 
         self.netforward = self.net.forward
 
         self.bce = torch.nn.CrossEntropyLoss()
 
         self.n_outputs = n_outputs
-        if self.is_cifar:
-            self.nc_per_task = n_outputs / n_tasks
-        else:
-            self.nc_per_task = n_outputs
+        self.nc_per_task = n_outputs / n_tasks
+        # if self.is_cifar:
+        #     self.nc_per_task = n_outputs / n_tasks
+        # else:
+        #     self.nc_per_task = n_outputs
 
         self.opt = optim.SGD(self.parameters(), args.lr)
         self.batchSize = int(args.replay_batch_size)
@@ -77,12 +93,14 @@ class Net(nn.Module):
         return output
     
     def compute_offsets(self, task):
-        if self.is_cifar:
-            offset1 = task * self.nc_per_task
-            offset2 = (task + 1) * self.nc_per_task
-        else:
-            offset1 = 0
-            offset2 = self.n_outputs
+        offset1 = task * self.nc_per_task
+        offset2 = (task + 1) * self.nc_per_task
+        # if self.is_cifar:
+        #     offset1 = task * self.nc_per_task
+        #     offset2 = (task + 1) * self.nc_per_task
+        # else:
+        #     offset1 = 0
+        #     offset2 = self.n_outputs
         return int(offset1), int(offset2)
 
     def getBatch(self,x,y,t):
