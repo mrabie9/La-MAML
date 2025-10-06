@@ -44,7 +44,7 @@ def get_parser():
 
     
     # experiment parameters
-    parser.add_argument('--cuda', default=True , action='store_false',
+    parser.add_argument('--cuda', default=True , action='store_true',
                         help='Use GPU')
     parser.add_argument('--seed', type=int, default=0,
                         help='random seed of model')
@@ -141,6 +141,36 @@ def get_parser():
                         help='Eta for mean step (default 1)')
     parser.add_argument('--fisher_gamma', default=0.95, type=float,
                         help='')
+    
+    ## ANML parameters
+    parser.add_argument('--rln', type=int, default=7,
+                        help='number of hidden neurons in the representation layer')
+    parser.add_argument('--update_steps', type=int, default=10,
+                        help='number of inner updates during training')
+    parser.add_argument('--meta_lr', type=float, default=0.001,
+                        help='outer learning rate')
+    parser.add_argument('--update_lr', type=float, default=0.1,
+                        help='inner learning rate')
+    
+    # CTN parameters
+    parser.add_argument('--ctn_lr', type=float, default=0.01,
+                        help='learning rate for CTN')
+    parser.add_argument('--ctn_beta', type=float, default=0.05,
+                        help='Beta parameter for CTN')
+    parser.add_argument('--ctn_n_meta', type=int, default=2,
+                        help='Number of meta-updates for CTN')
+    parser.add_argument('--ctn_inner_steps', type=int, default=2,
+                        help='Number of inner updates for CTN')
+    parser.add_argument('--ctn_temperature', type=float, default=5,
+                        help='Temperature for CTN')
+    parser.add_argument('--ctn_n_memories', type=int, default=50,
+                        help='Number of memories for CTN')
+    parser.add_argument('--ctn_alpha_init', type=float, default=0.1,
+                        help='Initial learning rate for CTN')
+    parser.add_argument('--ctn_memory_strength', type=float, default=0.5,
+                        help='Memory strength for CTN')
+    parser.add_argument('--ctn_task_emb', type=int, default=64,
+                        help='Task embedding dimension for CTN')
 
     return parser
 

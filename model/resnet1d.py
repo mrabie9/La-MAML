@@ -90,7 +90,7 @@ class _ResNet1D(nn.Module):
             layers.append(block(self.inplanes, planes))
         return nn.Sequential(*layers)
 
-    def forward(self, x: torch.Tensor, return_features=False, classify_feats=False) -> torch.Tensor:  # pragma: no cover -
+    def forward(self, x: torch.Tensor, return_features=False, classify_feats=False, return_h4=False) -> torch.Tensor:  # pragma: no cover -
         
         if classify_feats:
             return self.fc(x)
@@ -104,6 +104,9 @@ class _ResNet1D(nn.Module):
             x = self.layer2(x)
             x = self.layer3(x)
             x = self.layer4(x)
+
+            if return_h4:
+                return x
 
             x = self.avgpool(x)
             x = torch.flatten(x, 1)

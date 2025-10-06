@@ -71,7 +71,7 @@ def eval_tasks(model, tasks, args, batch_size=64):
                 xb = xb.view(xb.size(0), -1)
             yb = y[b_from:b_to].to(device)
 
-            logits = model(xb, fast_weights=None)
+            logits = model(xb, t) if args.model != 'anml' else model(xb, t, fast_weights=None)
             pb = torch.argmax(logits, dim=1)
             correct += (pb == yb).sum().item()
 
