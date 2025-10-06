@@ -1,6 +1,4 @@
-# TODO: combine resnet181d and lps dataloader with this repo
-# TODO: make sure config options make sense
-# TODO: run resnet181d with La-MAML on lora dataset
+# TODO: hyperparameter tuner
 
 import importlib
 import datetime
@@ -73,7 +71,7 @@ def eval_tasks(model, tasks, args, batch_size=64):
                 xb = xb.view(xb.size(0), -1)
             yb = y[b_from:b_to].to(device)
 
-            logits = model(xb, t)
+            logits = model(xb, fast_weights=None)
             pb = torch.argmax(logits, dim=1)
             correct += (pb == yb).sum().item()
 
@@ -130,7 +128,6 @@ def life_experience(model, inc_loader, args):
     for task_i in range(inc_loader.n_tasks):
         task_info, train_loader, _, _ = inc_loader.new_task()
         for ep in range(args.n_epochs):
-
             model.real_epoch = ep
 
             prog_bar = tqdm(train_loader)
@@ -147,7 +144,6 @@ def life_experience(model, inc_loader, args):
                 if args.cuda:
                     v_x = v_x.cuda()
                     v_y = v_y.cuda()
-
                 model.train()
 
                 loss = model.observe(Variable(v_x), Variable(v_y), task_info["task"])
@@ -213,6 +209,7 @@ def main():
     args = file_parser.parse_args_from_yaml(yaml_file)
     # parser = file_parser.get_parser()
     # args = parser.parse_args()
+    print("Running model: ", args.model)
 
     # initialize seeds
     misc_utils.init_seed(args.seed)
@@ -231,12 +228,14 @@ def main():
     # load model
     Model = importlib.import_module('model.' + args.model)
     model = Model.Net(n_inputs, n_outputs, n_tasks, args)
+    # print(model)
     if args.cuda:
         try:
-            model.net.cuda()            
+            model.cuda()            
         except:
-            pass 
-
+            pass
+    print(args.cuda)
+    print("Model device:", next(model.parameters()).device)
     # run model on loader
     if args.model == "iid2":
         # oracle baseline with all task data shown at same time

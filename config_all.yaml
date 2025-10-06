@@ -1,6 +1,6 @@
 # Experiment details
-expt_name: icarl_lora_cf_test        # name of the experiment
-model: icarl                        # algo to train
+expt_name: anml_basic_test        # name of the experiment
+model: anml                        # algo to train
 arch: resnet1d                          # arch to use for training (choices: [linear, pc_cnn, resnet18, resnet1d])
 n_hiddens: 100                          # number of hidden neurons at each layer
 n_layers: 2                             # number of hidden layers
@@ -21,10 +21,10 @@ test_batch_size: 100000              # batch size to use during testing
 
 # Optimizer parameters (influencing all models)
 glances: 1                    # Number of times the model is allowed to train over a set of samples in the single pass setting
-n_epochs: 2                   # Number of epochs per task
-batch_size: 10                 # the amount of items received by the algorithm at one time (set to 1 across all experiments). Variable name is from GEM project.
+n_epochs: 20                   # Number of epochs per task
+batch_size: 64                 # the amount of items received by the algorithm at one time (set to 1 across all experiments). Variable name is from GEM project.
 replay_batch_size: 10         # The batch size for experience replay
-samples_per_task: 256                 # training samples per task (all if negative)
+samples_per_task: 512                 # training samples per task (all if negative)
 memories: 400                # number of total memories stored in a reservoir sampling based buffer
 grad_clip_norm: 5.0                  # Clip the gradients by this value
 lr: 0.03                     # learning rate (For baselines)
@@ -65,3 +65,10 @@ train_mc_iters: 2                    # Number of MonteCarlo samples during train
 std_init: 0.02                       # STD init value (default 5e-2)
 mean_eta: 50.                        # Eta for mean step (default 1)
 fisher_gamma: 0.95                   # Fisher gamma
+
+# Parameters specific to ANML
+rln: 7
+update_steps: 10
+meta_lr: 0.001 
+update_lr: 0.1 
+# steps: 20000

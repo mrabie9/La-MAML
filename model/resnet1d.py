@@ -90,21 +90,27 @@ class _ResNet1D(nn.Module):
             layers.append(block(self.inplanes, planes))
         return nn.Sequential(*layers)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # pragma: no cover -
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
+    def forward(self, x: torch.Tensor, return_features=False, classify_feats=False) -> torch.Tensor:  # pragma: no cover -
+        
+        if classify_feats:
+            return self.fc(x)
+        else:
+            x = self.conv1(x)
+            x = self.bn1(x)
+            x = self.relu(x)
+            x = self.maxpool(x)
 
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
+            x = self.layer1(x)
+            x = self.layer2(x)
+            x = self.layer3(x)
+            x = self.layer4(x)
 
-        x = self.avgpool(x)
-        x = torch.flatten(x, 1)
-        x = self.fc(x)
-        return x
+            x = self.avgpool(x)
+            x = torch.flatten(x, 1)
+            if return_features:
+                return x
+            x = self.fc(x)
+            return x
 
 
 class ResNet1D(nn.Module):
@@ -127,12 +133,16 @@ class ResNet1D(nn.Module):
             [nn.Parameter(torch.ones_like(p) * alpha_init) for p in self.model.parameters()]
         )
 
-    def forward(self, x: torch.Tensor, vars=None, bn_training: bool = True) -> torch.Tensor:
+    # def classify_feats(self, x: torch.Tensor) -> torch.Tensor:
+    #     logits = self.model.fc(x)
+    #     return logits
+
+    def forward(self, x: torch.Tensor, vars=None, bn_training: bool = True, classify_feats=False, ret_feats = False) -> torch.Tensor:
         prev = self.model.training
         self.model.train(bn_training)
         try:
             if vars is None:
-                out = self.model(x)
+                out = self.model(x, return_features=ret_feats, classify_feats=classify_feats)
             else:
                 assert len(vars) == len(self.param_names), (
                     f"len(vars)={len(vars)} vs params={len(self.param_names)}"
