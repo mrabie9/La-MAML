@@ -1,6 +1,6 @@
 # Experiment details
-expt_name: ctn_basic_test        # name of the experiment
-model: ctn                        # algo to train
+expt_name: bcl_basic_test        # name of the experiment
+model: bcl_dual                        # algo to train
 arch: resnet1d                          # arch to use for training (choices: [linear, pc_cnn, resnet18, resnet1d])
 # n_hiddens: 100                          # number of hidden neurons at each layer
 # n_layers: 2                             # number of hidden layers
@@ -83,3 +83,6 @@ ctn_n_memories: 50
 ctn_alpha_init: 0.1
 ctn_memory_strength: 100
 ctn_task_emb: 64
+
+# Parameters specific to BCL
+# bcl_adapt: 

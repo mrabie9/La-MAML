@@ -171,6 +171,21 @@ def get_parser():
                         help='Memory strength for CTN')
     parser.add_argument('--ctn_task_emb', type=int, default=64,
                         help='Task embedding dimension for CTN')
+    
+    # BCL-Dual parameters
+    parser.add_argument('--bcl_n_memories', type=int, default=2000,
+                        help='Number of memories for BCL-Dual')
+    parser.add_argument('--bcl_memory_strength', type=float, default=1.0,
+                        help='Memory strength for BCL-Dual')
+    parser.add_argument('--bcl_temperature', type=float, default=2.0,
+                        help='Temperature for BCL-Dual')
+    parser.add_argument('--bcl_inner_steps', type=int, default=5,
+                        help='Number of inner updates for BCL-Dual')
+    parser.add_argument('--bcl_n_meta', type=int, default=5,
+                        help='Number of meta-updates for BCL-Dual')
+    parser.add_argument('--bcl_adapt_lr', type=float, default=0.1,
+                        help='Learning rate for adapting the model in BCL-Dual')
+
 
     return parser
 
