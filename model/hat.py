@@ -21,10 +21,10 @@ import torch.nn.functional as F
 
 @dataclass
 class HatConfig:
-    lr: float = 1e-3
-    optimizer: str = "adam"
-    gamma: float = 0.1
-    smax: float = 10
+    lr: float = 1e-4
+    optimizer: str = "sgd"
+    gamma: float = 0.75
+    smax: float = 50
     grad_clip_norm: float = 10.0
     cuda: bool = True
     arch: str = "resnet1d"
@@ -329,8 +329,8 @@ class HatBackbone(nn.Module):
 
     # ------------------------------------------------------------------
     def compensate_embedding_grads(self, s: float, smax: float, thres_cosh: float = 50.0) -> None:
-        if s <= 0:
-            return
+        # if s <= 0:
+        #     return
         s_eff = max(float(s), 1.0)
         scale = min(self.cfg.smax / s_eff, 10.0)
         for emb in self.embeddings:
@@ -339,7 +339,7 @@ class HatBackbone(nn.Module):
                 continue
             num = torch.cosh(torch.clamp(s * weight.data, -thres_cosh, thres_cosh)) + 1
             den = torch.cosh(weight.data) + 1
-            weight.grad.data *= scale * (num / den)
+            weight.grad.data *= smax/s * (num / den)
 
     def clamp_embeddings(self, thres_emb: float = 6.0) -> None:
         for emb in self.embeddings:
@@ -429,6 +429,9 @@ class Net(nn.Module):
         self._epoch_counts: Dict[int, int] = defaultdict(int)
         self._epoch_sizes: Dict[int, Optional[int]] = defaultdict(lambda: None)
         self._last_epoch: Dict[int, int] = defaultdict(lambda: -1)
+
+        self.num_batches = args.samples_per_task//args.batch_size
+        self.batch_idx = 0
 
     # ------------------------------------------------------------------
     def _device(self) -> torch.device:
@@ -521,14 +524,16 @@ class Net(nn.Module):
 
         device = x.device if x.is_cuda else self._device()
         batch_idx, total_batches = self._update_epoch_counters(t)
-        s = self._schedule_s(batch_idx, total_batches)
+        self.batch_idx += 1
+        s = self._schedule_s(self.batch_idx, self.num_batches)
+        # print(s, self.num_batches)
 
         self.bridge.set_bn_eval(self.bridge.freeze_bn_stats and self.mask_pre is not None)
 
         self.opt.zero_grad(set_to_none=True)
         logits, masks = self.bridge.forward(self._task_tensor(t, device), x, s, return_masks=True)
-        with torch.no_grad():
-            self.log_gate_stats(t, self.real_epoch, batch_idx, masks)
+        # with torch.no_grad():
+        #     self.log_gate_stats(t, self.real_epoch, batch_idx, masks)
 
         # for mask in masks:
         #     print(mask.mean(), mask.min())

@@ -1,121 +1,203 @@
-# Copyright 2017-present, Facebook, Inc.
-# All rights reserved.
-#
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
+"""Elastic Weight Consolidation (EWC) learner compatible with ``main.py``.
+
+This version mirrors the behaviour of the original script—keeping the Fisher
+information based regulariser and the per-task parameter snapshots—while
+adapting it to the common ``Net`` interface used throughout the repository.  A
+``ResNet1D`` backbone supplies task-agnostic features, and all interaction with
+training happens through ``observe`` so it plugs directly into
+``life_experience``.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Dict, Optional, Tuple
 
 import torch
+import torch.nn as nn
+
 from model.resnet1d import ResNet1D
-# from .resnet import ResNet18 as ResNet18Full
-import pdb
 
-class Net(torch.nn.Module):
 
-    def __init__(self,
-                 n_inputs,
-                 n_outputs,
-                 n_tasks,
-                 args):
-        super(Net, self).__init__()
-        
-        self.reg = args.memory_strength
+@dataclass
+class EwcConfig:
+    """Hyper-parameters pulled from ``args`` with sensible fallbacks."""
 
-        # setup network
-        self.is_task_incremental = True
-        self.net = ResNet1D(n_outputs, args)
-        self.net.define_task_lr_params(alpha_init=args.alpha_init)
+    lr: float = 0.03
+    optimizer: str = "sgd"
+    momentum: float = 0.0
+    weight_decay: float = 0.0
+    lamb: float = 1.0
+    clipgrad: float = 100.0
 
-        # setup optimizer
-        self.opt = torch.optim.SGD(self.net.parameters(), lr=args.lr)
+    @staticmethod
+    def from_args(args: object) -> "EwcConfig":
+        cfg = EwcConfig()
+        for field in cfg.__dataclass_fields__:
+            if hasattr(args, field):
+                setattr(cfg, field, getattr(args, field))
+        if hasattr(args, "clipgrad") and not hasattr(args, "clipgrad_norm"):
+            cfg.clipgrad = getattr(args, "clipgrad")
+        if hasattr(args, "lamb"):
+            cfg.lamb = getattr(args, "lamb")
+        return cfg
 
-        # setup losses
-        self.bce = torch.nn.CrossEntropyLoss()
 
-        # setup memories
-        self.current_task = 0
-        self.fisher = {}
-        self.optpar = {}
-        self.memx = None
-        self.memy = None
+class Net(nn.Module):
+    """EWC continual learner built on top of ``ResNet1D``."""
 
-        if self.is_task_incremental:
-            self.nc_per_task = n_outputs / n_tasks
-        else:
-            self.nc_per_task = n_outputs
+    def __init__(self, n_inputs: int, n_outputs: int, n_tasks: int, args: object) -> None:
+        super().__init__()
+
+        assert n_tasks > 0, "EWC requires a positive number of tasks"
+        assert n_outputs % n_tasks == 0, "EWC assumes balanced classes per task"
+
+        self.cfg = EwcConfig.from_args(args)
+        self.n_tasks = n_tasks
         self.n_outputs = n_outputs
-        self.n_memories = args.n_memories
+        self.nc_per_task = n_outputs // n_tasks
 
-    def compute_offsets(self, task):
-        if self.is_task_incremental:
-            offset1 = task * self.nc_per_task
-            offset2 = (task + 1) * self.nc_per_task
-        else:
-            offset1 = 0
-            offset2 = self.n_outputs
-        return int(offset1), int(offset2)
+        self.net = ResNet1D(n_outputs, args)
 
-    def forward(self, x, t):
-        output = self.net(x)
-        if self.is_task_incremental:
-            # make sure we predict classes within the current task
-            offset1, offset2 = self.compute_offsets(t)
-            if offset1 > 0:
-                output[:, :offset1].data.fill_(-10e10)
-            if offset2 < self.n_outputs:
-                output[:, int(offset2):self.n_outputs].data.fill_(-10e10)
-        return output
-    def on_epoch_end(self):
-        pass
+        self.opt = self._build_optimizer()
+        self.ce = nn.CrossEntropyLoss()
 
-    def observe(self, x, y, t):
+        self.lamb = float(self.cfg.lamb)
+        self.clipgrad = float(self.cfg.clipgrad) if self.cfg.clipgrad > 0 else None
+
+        self.current_task: Optional[int] = None
+        self._tasks_consolidated = 0
+
+        self.fisher: Dict[str, torch.Tensor] = {}
+        self.param_star: Dict[str, torch.Tensor] = {}
+
+        self._fisher_accum: Optional[Dict[str, torch.Tensor]] = None
+        self._fisher_count: int = 0
+    # ------------------------------------------------------------------
+    def forward(self, x: torch.Tensor, t: int) -> torch.Tensor:
+        logits = self.net(x)
+        offset1, offset2 = self._compute_offsets(t)
+        masked = logits.clone()
+        if offset1 > 0:
+            masked[:, :offset1] = masked[:, :offset1].new_full(masked[:, :offset1].shape, -1e9)
+        if offset2 < self.n_outputs:
+            masked[:, offset2:] = masked[:, offset2:].new_full(masked[:, offset2:].shape, -1e9)
+        return masked
+
+    # ------------------------------------------------------------------
+    def observe(self, x: torch.Tensor, y: torch.Tensor, t: int) -> float:
+        if self.current_task is None:
+            self.current_task = t
+        elif t != self.current_task:
+            self._consolidate_current_task()
+            self.current_task = t
+
         self.net.train()
 
-        # next task?
-        if t != self.current_task:
-            self.net.zero_grad()
+        logits = self.net(x)
+        offset1, offset2 = self._compute_offsets(t)
+        logits_task = logits[:, offset1:offset2]
+        targets = (y - offset1).long()
 
-            if self.is_task_incremental:
-                offset1, offset2 = self.compute_offsets(self.current_task)
-                self.bce((self.net(self.memx)[:, offset1: offset2]),
-                         self.memy - offset1).backward()
-            else:
-                self.bce(self(self.memx,
-                              self.current_task),
-                         self.memy).backward()
-            self.fisher[self.current_task] = []
-            self.optpar[self.current_task] = []
-            for p in self.net.parameters():
-                pd = p.data.clone()
-                pg = p.grad.data.clone().pow(2)
-                self.optpar[self.current_task].append(pd)
-                self.fisher[self.current_task].append(pg)
-            self.current_task = t
-            self.memx = None
-            self.memy = None
+        self.opt.zero_grad()
+        loss_ce = self.ce(logits_task, targets)
+        loss_ce.backward(retain_graph=True)
+        self._accumulate_fisher(x.size(0))
 
-        if self.memx is None:
-            self.memx = x.data.clone()
-            self.memy = y.data.clone()
-        else:
-            if self.memx.size(0) < self.n_memories:
-                self.memx = torch.cat((self.memx, x.data.clone()))
-                self.memy = torch.cat((self.memy, y.data.clone()))
-                if self.memx.size(0) > self.n_memories:
-                    self.memx = self.memx[:self.n_memories]
-                    self.memy = self.memy[:self.n_memories]
-
-        self.net.zero_grad()
-        if self.is_task_incremental:
-            offset1, offset2 = self.compute_offsets(t)
-            loss = self.bce((self.net(x)[:, offset1: offset2]),
-                            y - offset1)
-        else:
-            loss = self.bce(self(x, t), y)
-        for tt in range(t):
-            for i, p in enumerate(self.net.parameters()):
-                l = self.reg * self.fisher[tt][i]
-                l = l * (p - self.optpar[tt][i]).pow(2)
-                loss += l.sum()
+        self.opt.zero_grad()
+        loss = loss_ce + 0.5 * self.lamb * self._ewc_penalty()
         loss.backward()
+
+        if self.clipgrad is not None:
+            torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.clipgrad)
+
         self.opt.step()
-        return loss.item()
+
+        return float(loss.item())
+
+    # ------------------------------------------------------------------
+    def _build_optimizer(self) -> torch.optim.Optimizer:
+        params = self.net.parameters()
+        optim = self.cfg.optimizer.lower()
+        lr = float(self.cfg.lr)
+        weight_decay = float(self.cfg.weight_decay)
+
+        if optim == "adam":
+            return torch.optim.Adam(params, lr=lr, weight_decay=weight_decay)
+        momentum = float(self.cfg.momentum)
+        return torch.optim.SGD(params, lr=lr, momentum=momentum, weight_decay=weight_decay)
+
+    # ------------------------------------------------------------------
+    def _compute_offsets(self, task: int) -> Tuple[int, int]:
+        offset1 = task * self.nc_per_task
+        offset2 = min(self.n_outputs, (task + 1) * self.nc_per_task)
+        return offset1, offset2
+
+    # ------------------------------------------------------------------
+    def _device(self) -> torch.device:
+        return next(self.net.parameters()).device
+
+    # ------------------------------------------------------------------
+    def _accumulate_fisher(self, batch_size: int) -> None:
+        if self._fisher_accum is None:
+            self._fisher_accum = {
+                name: torch.zeros_like(param, device=param.device)
+                for name, param in self.net.named_parameters()
+                if param.requires_grad
+            }
+            self._fisher_count = 0
+
+        for name, param in self.net.named_parameters():
+            if not param.requires_grad:
+                continue
+            grad = param.grad
+            if grad is None:
+                continue
+            self._fisher_accum[name] += grad.detach().clone().pow(2) * batch_size
+        self._fisher_count += batch_size
+
+    # ------------------------------------------------------------------
+    def _consolidate_current_task(self) -> None:
+        if self._fisher_accum is None or self._fisher_count == 0:
+            self._reset_fisher_accum()
+            return
+
+        scale = 1.0 / float(self._fisher_count)
+        for name, param in self.net.named_parameters():
+            if not param.requires_grad:
+                continue
+            fisher_est = self._fisher_accum.get(name)
+            if fisher_est is None:
+                continue
+            fisher_est = fisher_est * scale
+            if name in self.fisher:
+                prev = self.fisher[name]
+                merged = (prev * self._tasks_consolidated + fisher_est) / (self._tasks_consolidated + 1)
+                self.fisher[name] = merged
+            else:
+                self.fisher[name] = fisher_est
+            self.param_star[name] = param.detach().clone()
+
+        self._tasks_consolidated += 1
+        self._reset_fisher_accum()
+
+    # ------------------------------------------------------------------
+    def _ewc_penalty(self) -> torch.Tensor:
+        if not self.fisher:
+            return torch.zeros(1, device=self._device())
+        penalty = torch.zeros(1, device=self._device())
+        for name, param in self.net.named_parameters():
+            if name not in self.fisher:
+                continue
+            penalty += (self.fisher[name] * (param - self.param_star[name]).pow(2)).sum()
+        return penalty
+
+    # ------------------------------------------------------------------
+    def _reset_fisher_accum(self) -> None:
+        self._fisher_accum = None
+        self._fisher_count = 0
+
+    # ------------------------------------------------------------------
+    def on_task_end(self) -> None:
+        """Optional hook for the training harness (called if available)."""
+        self._consolidate_current_task()
