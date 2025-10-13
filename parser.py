@@ -185,6 +185,9 @@ def get_parser():
                         help='Number of meta-updates for BCL-Dual')
     parser.add_argument('--bcl_adapt_lr', type=float, default=0.1,
                         help='Learning rate for adapting the model in BCL-Dual')
+    
+    # Parameters for HAT
+    
 
 
     return parser

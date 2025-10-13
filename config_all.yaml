@@ -1,6 +1,6 @@
 # Experiment details
-expt_name: bcl_basic_test        # name of the experiment
-model: bcl_dual                        # algo to train
+expt_name: hat_repo_basic_test        # name of the experiment
+model: hat                    # algo to train
 arch: resnet1d                          # arch to use for training (choices: [linear, pc_cnn, resnet18, resnet1d])
 # n_hiddens: 100                          # number of hidden neurons at each layer
 # n_layers: 2                             # number of hidden layers
@@ -29,10 +29,10 @@ calc_test_accuracy: false     # Calculate test accuracy along with val accuracy
 
 # Optimizer parameters (influencing all models)
 glances: 1                    # Number of times the model is allowed to train over a set of samples in the single pass setting
-n_epochs: 20                   # Number of epochs per task
-batch_size: 64                 # the amount of items received by the algorithm at one time (set to 1 across all experiments). Variable name is from GEM project.
+n_epochs: 60                   # Number of epochs per task
+batch_size: 128                 # the amount of items received by the algorithm at one time (set to 1 across all experiments). Variable name is from GEM project.
 replay_batch_size: 10         # The batch size for experience replay
-samples_per_task: 512                 # training samples per task (all if negative)
+samples_per_task: 4096                 # training samples per task (all if negative)
 memories: 400                # number of total memories stored in a reservoir sampling based buffer
 grad_clip_norm: 5.0                  # Clip the gradients by this value
 lr: 0.03                     # learning rate (For baselines)
@@ -85,4 +85,10 @@ ctn_memory_strength: 100
 ctn_task_emb: 64
 
 # Parameters specific to BCL
+bcl_temperature: 5
+bcl_memory_strength: 100
+bcl_n_meta: 2
+bcl_inner_steps: 2
+bcl_adapt_lr: 0.01
+bcl_n_memories: 400
 # bcl_adapt: 
