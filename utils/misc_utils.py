@@ -8,7 +8,11 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
+def compute_offsets(task, nc_per_task):
+    offset1 = task * nc_per_task
+    offset2 = (task + 1) * nc_per_task
 
+    return int(offset1), int(offset2)
 
 def to_onehot(targets, n_classes):
     onehot = torch.zeros(targets.shape[0], n_classes).to(targets.device)
