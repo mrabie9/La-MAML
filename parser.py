@@ -83,6 +83,8 @@ def get_parser():
                         help="number of classes to increment by in class incremental loader")
     parser.add_argument('--test_batch_size', type=int, default=100000 ,
                         help='batch size to use during testing.')
+    parser.add_argument('--nc_per_task', type=int, default=5,
+                        help='number of classes per task')
 
 
     # La-MAML parameters
