@@ -99,6 +99,7 @@ class Net(BaseNet):
 
     def observe(self, x, y, t):
         self.net.train() 
+        tr_acc = []
         for pass_itr in range(self.glances):
             self.pass_itr = pass_itr
             perm = torch.randperm(x.size(0))
@@ -134,7 +135,17 @@ class Net(BaseNet):
                 if(self.real_epoch == 0):
                     self.push_to_mem(batch_x, batch_y, torch.tensor(t))
                 meta_loss, logits = self.meta_loss(bx, fast_weights, by, bt, t) 
-                
+                with torch.no_grad():
+                    correct = 0
+                    total = logits.size(0)
+                    for sample_idx, task_idx in enumerate(bt):
+                        offset1_s, offset2_s = self.compute_offsets(int(task_idx))
+                        preds = torch.argmax(logits[sample_idx, offset1_s:offset2_s], dim=0)
+                        target = by[sample_idx] - offset1_s
+                        correct += int(preds.item() == target.item())
+                    if total:
+                        tr_acc.append(correct / total)
+
                 meta_losses[i] += meta_loss
 
             # Taking the meta gradient step (will update the learning rates)
@@ -159,5 +170,5 @@ class Net(BaseNet):
             self.net.zero_grad()
             self.net.alpha_lr.zero_grad()
 
-        return meta_loss.item()
-
+        avg_tr_acc = sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
+        return meta_loss.item(), avg_tr_acc

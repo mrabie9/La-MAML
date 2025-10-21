@@ -243,7 +243,8 @@ class Net(nn.Module):
             self.observed_tasks.append(t)
             self.current_task = t
             self.grad_align.append([])
-
+            
+        tr_acc = [0 for _ in range(self.glances)]
         for pass_itr in range(self.glances):
 # copy x into memory with matching shape
                 
@@ -288,10 +289,9 @@ class Net(nn.Module):
 
                     offset1, offset2 = compute_offsets(past_task, self.nc_per_task,
                                                        self.is_cifar)
+                    logits = self.forward(Variable(self.memory_data[past_task]), past_task)[:, offset1: offset2]
                     ptloss = self.ce(
-                        self.forward(
-                            Variable(self.memory_data[past_task]),
-                            past_task)[:, offset1: offset2],
+                        logits,
                         Variable(self.memory_labs[past_task] - offset1))
                     ptloss.backward()
                     torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.args.grad_clip_norm)
@@ -303,7 +303,11 @@ class Net(nn.Module):
             self.zero_grad()
 
             offset1, offset2 = compute_offsets(t, self.nc_per_task, self.is_cifar)
-            loss = self.ce(self.forward(x, t)[:, offset1: offset2], y - offset1)
+            logits = self.forward(x, t)[:, offset1: offset2]
+            pb = torch.argmax(logits, dim=1)
+            correct = (pb == y- offset1).sum().item()
+            tr_acc[pass_itr] += correct / y.size(0)
+            loss = self.ce(logits, y - offset1)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.args.grad_clip_norm)
 
@@ -335,4 +339,4 @@ class Net(nn.Module):
                 if p < self.memories:
                     self.M[p] = [xi[i],yi[i],t]
 
-        return loss.item()
+        return loss.item(), sum(tr_acc)/len(tr_acc)

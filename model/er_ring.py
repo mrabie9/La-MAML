@@ -129,15 +129,21 @@ class Net(torch.nn.Module):
             #self.mem_feat[tt] = F.softmax(out[:, offset1:offset2] / self.temp, dim=1 ).data.clone()
             self.current_task = t
             
+        tr_acc = []
+
         for _ in range(self.inner_steps):
             self.net.zero_grad()
             loss1 = torch.tensor(0.).cuda()
             loss2 = torch.tensor(0.).cuda()
             loss3 = torch.tensor(0.).cuda()
-         
+ 
             offset1, offset2 = self.compute_offsets(t)
             pred = self.forward(x,t, True)
-            loss1 = self.bce(pred[:, offset1:offset2], y - offset1)
+            logits = pred[:, offset1:offset2]
+            targets = y - offset1
+            preds = torch.argmax(logits, dim=1)
+            tr_acc.append((preds == targets).float().mean().item())
+            loss1 = self.bce(logits, targets)
             if t > 0:
                 xx, yy, target, mask = self.memory_sampling(t)
                 pred_ = self.net(xx)
@@ -148,4 +154,5 @@ class Net(torch.nn.Module):
             loss.backward()
             self.opt.step()
 
-        return loss.item()
+        avg_tr_acc = sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
+        return loss.item(), avg_tr_acc

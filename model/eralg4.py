@@ -161,9 +161,9 @@ class Net(nn.Module):
            self.current_task = t
 
         if self.args.learn_lr:
-            loss = self.la_ER(x, y, t)
+            loss, tr_acc = self.la_ER(x, y, t)
         else:
-            loss = self.ER(xi, yi, t)
+            loss, tr_acc = self.ER(xi, yi, t)
 
         for i in range(0, x.size()[0]):
             self.age += 1
@@ -176,9 +176,23 @@ class Net(nn.Module):
                 if p < self.memories:
                     self.M[p] = [xi[i], yi[i], t]
 
-        return loss.item()
+        return loss.item(), tr_acc
+
+    def _batch_accuracy(self, bt, logits, labels):
+        correct = 0
+        total = len(bt)
+        if total == 0:
+            return 0.0
+        with torch.no_grad():
+            for idx, task_idx in enumerate(bt):
+                offset1, offset2 = self.compute_offsets(int(task_idx))
+                preds = torch.argmax(logits[idx, offset1:offset2], dim=0)
+                target = labels[idx] - offset1
+                correct += int(preds.item() == target.item())
+        return correct / total
 
     def ER(self, x, y, t):
+        tr_acc = []
         for pass_itr in range(self.glances):
 
             self.net.zero_grad()
@@ -189,13 +203,15 @@ class Net(nn.Module):
             bx = bx.squeeze()
             prediction = self.net.forward(bx)
             loss = self.take_multitask_loss(bt, prediction, by)
+            tr_acc.append(self._batch_accuracy(bt, prediction, by))
 
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.args.grad_clip_norm)
 
             self.opt_wt.step()
         
-        return loss
+        avg_tr_acc = sum(tr_acc)/len(tr_acc) if tr_acc else 0.0
+        return loss, avg_tr_acc
 
     def inner_update(self, x, fast_weights, y, t):
         """
@@ -236,6 +252,7 @@ class Net(nn.Module):
         and use it with ER (therefore no meta-learning for the weights)
 
         """
+        tr_acc = []
         for pass_itr in range(self.glances):
             
             perm = torch.randperm(x.size(0))
@@ -282,6 +299,7 @@ class Net(nn.Module):
             # compute ER loss for network weights
             prediction = self.net.forward(bx)
             loss = self.take_multitask_loss(bt, prediction, by)
+            tr_acc.append(self._batch_accuracy(bt, prediction, by))
 
             loss.backward()
 
@@ -294,4 +312,5 @@ class Net(nn.Module):
             self.net.zero_grad()
             self.net.alpha_lr.zero_grad()
 
-        return loss
+        avg_tr_acc = sum(tr_acc)/len(tr_acc) if tr_acc else 0.0
+        return loss, avg_tr_acc

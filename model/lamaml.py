@@ -81,7 +81,8 @@ class Net(BaseNet):
                 self.current_task = t
 
             batch_sz = x.shape[0]
-            # meta_losses = [0 for _ in range(batch_sz)] 
+            meta_losses = [0 for _ in range(batch_sz)]
+            tr_acc = [0 for _ in range(batch_sz)]
 
             bx, by, bt = self.getBatch(x.cpu().numpy(), y.cpu().numpy(), t)
             fast_weights = None
@@ -99,10 +100,13 @@ class Net(BaseNet):
                     with torch.no_grad():
                         self.push_to_mem(batch_x.detach().cpu(), batch_y.detach().cpu(), torch.tensor(t))
 
-                meta_loss, _ = self.meta_loss(bx, fast_weights, by, t) # loss on the meta batch
-                # meta_losses[i] += meta_loss
+                meta_loss, logits = self.meta_loss(bx, fast_weights, by, t) # loss on the meta batch
+                pb = torch.argmax(logits, dim=1)
+                correct = (pb == by).sum().item()
+                tr_acc[i] += correct / batch_sz
+                meta_losses[i] += meta_loss/batch_sz
                 assert meta_loss.requires_grad, "meta_loss has no grad path to alpha"
-                (meta_loss / batch_sz).backward()
+                meta_losses[i].backward()
 
     
             # Taking the meta gradient step (will update the learning rates)
@@ -133,4 +137,4 @@ class Net(BaseNet):
             self.net.zero_grad(set_to_none=True)
             self.net.alpha_lr.zero_grad(set_to_none=True)
 
-        return meta_loss.item()
+        return meta_loss.mean().item(), sum(tr_acc)/len(tr_acc)

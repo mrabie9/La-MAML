@@ -107,10 +107,16 @@ class Net(torch.nn.Module):
         self.net.zero_grad()
         if self.is_task_incremental:
             offset1, offset2 = self.compute_offsets(t)
-            loss = self.bce((self.net(x)[:, offset1: offset2]),
-                            y - offset1)
+            logits = self.net(x)[:, offset1: offset2]
+            targets = y - offset1
+            preds = torch.argmax(logits, dim=1)
+            tr_acc = (preds == targets).float().mean().item()
+            loss = self.bce(logits, targets)
         else:
-            loss = self.bce(self(x, t), y)
+            logits = self(x, t)
+            preds = torch.argmax(logits, dim=1)
+            tr_acc = (preds == y).float().mean().item()
+            loss = self.bce(logits, y)
         for tt in range(t):
             for i, p in enumerate(self.net.parameters()):
                 l = self.reg * self.fisher[tt][i]
@@ -118,4 +124,4 @@ class Net(torch.nn.Module):
                 loss += l.sum()
         loss.backward()
         self.opt.step()
-        return loss.item()
+        return loss.item(), tr_acc

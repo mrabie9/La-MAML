@@ -269,6 +269,8 @@ class Net(torch.nn.Module):
         else:
             num_of_mc_iters = 1
 
+        train_acc_values = []
+
         for glance_itr in range(self.glances):
 
             mc_meta_losses = [0 for _ in range(num_of_mc_iters)]
@@ -319,6 +321,20 @@ class Net(torch.nn.Module):
                     # the meta loss is computed at each inner step
                     # as this is shown to work better in Reptile [] 
                     meta_loss, logits = self.meta_loss(bx, fast_weights, by, bt, t) 
+                    with torch.no_grad():
+                        if self.is_cifar:
+                            correct = 0
+                            total = logits.size(0)
+                            for sample_idx, task_idx in enumerate(bt):
+                                offset1, offset2 = self.compute_offsets(task_idx)
+                                preds = torch.argmax(logits[sample_idx, offset1:offset2], dim=0)
+                                target = by[sample_idx] - offset1
+                                correct += int(preds.item() == target.item())
+                            acc = correct / total if logits.size(0) else 0.0
+                        else:
+                            preds = torch.argmax(logits, dim=1)
+                            acc = (preds == by).float().mean().item()
+                    accuracy_meta_set[i] = acc
                     meta_losses[i] += meta_loss
 
                 self.optimizer.zero_grad()                                                                   
@@ -328,6 +344,8 @@ class Net(torch.nn.Module):
                 meta_loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.args.grad_clip_norm)
                 mc_meta_losses[pass_itr] = meta_loss
+                if accuracy_meta_set:
+                    train_acc_values.append(sum(accuracy_meta_set)/len(accuracy_meta_set))
                 if self.bgd_optimizer == 'bgd':
                     self.optimizer.aggregate_grads(batch_size=batch_sz)           
             
@@ -340,6 +358,6 @@ class Net(torch.nn.Module):
                 self.optimizer.step()
 
         meta_loss_return = sum(mc_meta_losses)/len(mc_meta_losses)
+        avg_tr_acc = sum(train_acc_values)/len(train_acc_values) if train_acc_values else 0.0
 
-        return meta_loss_return.item()
-
+        return meta_loss_return.item(), avg_tr_acc

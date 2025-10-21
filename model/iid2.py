@@ -85,7 +85,16 @@ class Net(torch.nn.Module):
         self.net.zero_grad()
         logits = self.net.forward(x)
         loss = self.take_multitask_loss(t, logits, y) 
+        with torch.no_grad():
+            correct = 0
+            total = len(t)
+            for i, ti in enumerate(t):
+                offset1, offset2 = self.compute_offsets(ti)
+                preds = torch.argmax(logits[i, offset1:offset2], dim=0)
+                target = y[i] - offset1
+                correct += int(preds.item() == target.item())
+            tr_acc = correct / total if total else 0.0
         loss.backward()
         self.opt.step()
 
-        return loss.item()
+        return loss.item(), tr_acc

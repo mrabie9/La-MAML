@@ -213,16 +213,21 @@ class Net(torch.nn.Module):
         self.zero_grad()   
         meta_grad_init = [0 for _ in range(len(self.net.state_dict()))]
         #for _ in range(self.inner_steps):
+        tr_acc = []
         for _ in range(self.n_meta):
             meta_grad = deepcopy(meta_grad_init)
             loss1 = torch.tensor(0.).cuda()
             loss2 = torch.tensor(0.).cuda()
             loss3 = torch.tensor(0.).cuda()
-         
+ 
             offset1, offset2 = self.compute_offsets(t)
             pred = self.forward(x,t)
-        
-            loss1 = self.bce(pred[:, offset1:offset2], y - offset1)
+            logits = pred[:, offset1:offset2]
+            targets = y - offset1
+            preds = torch.argmax(logits, dim=1)
+            tr_acc.append((preds == targets).float().mean().item())
+
+            loss1 = self.bce(logits, targets)
             #tt = t + 1
             for i in range(self.inner_steps):
                 if t > 0:
@@ -260,4 +265,5 @@ class Net(torch.nn.Module):
             #SGD update the CONTROLLER 
             self.zero_grad() 
                
-        return loss.item()
+        avg_tr_acc = sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
+        return loss.item(), avg_tr_acc

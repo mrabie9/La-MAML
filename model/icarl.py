@@ -158,6 +158,9 @@ class Net(torch.nn.Module):
 
         x = x.view(x.size(0), -1)
         self.net.train()
+        if self.gpu: self.net.cuda()
+
+        tr_acc = []
 
         for pass_itr in range(self.glances):
 
@@ -176,8 +179,11 @@ class Net(torch.nn.Module):
 
             self.net.zero_grad()
             offset1, offset2 = self.compute_offsets(t)
-            loss = self.bce((self.netforward(x)[:, offset1: offset2]),
-                            y - offset1)
+            logits = self.netforward(x)[:, offset1: offset2]
+            targets = y - offset1
+            preds = torch.argmax(logits, dim=1)
+            tr_acc.append((preds == targets).float().mean().item())
+            loss = self.bce(logits, targets)
             # num_exemplars remains 0 unless final epoch is reached
             if self.num_exemplars > 0:
                 # distillation
@@ -226,7 +232,8 @@ class Net(torch.nn.Module):
                 num_classes = all_labs.size(0)
             else:
                 num_classes = all_labs[offset1:offset2].size(0)
-
+            
+            print("num_classes", num_classes, "nc_per_task", self.nc_per_task)
             assert(num_classes == self.nc_per_task)
             # Reduce exemplar set by updating value of num. exemplars per class
             self.num_exemplars = int(self.n_memories /
@@ -279,4 +286,5 @@ class Net(torch.nn.Module):
             self.memy = None
             print(len(self.mem_class_x[0]))
 
-        return loss.item()
+        avg_tr_acc = sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
+        return loss.item(), avg_tr_acc

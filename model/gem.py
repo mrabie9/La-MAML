@@ -227,6 +227,8 @@ class Net(nn.Module):
             self.observed_tasks.append(t)
             self.old_task = t
 
+        tr_acc = []
+
         for pass_itr in range(self.glances):
             # push current batch once per batch (not each glance)
             if pass_itr == 0:
@@ -273,7 +275,11 @@ class Net(nn.Module):
             # current batch
             self.zero_grad()
             offset1, offset2 = compute_offsets(t, self.nc_per_task, self.is_cifar)
-            loss = self.ce(self.forward(x, t)[:, offset1:offset2], y - offset1)
+            logits = self.forward(x, t)[:, offset1:offset2]
+            targets = y - offset1
+            preds = torch.argmax(logits, dim=1)
+            tr_acc.append((preds == targets).float().mean().item())
+            loss = self.ce(logits, targets)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.args.grad_clip_norm)
 
@@ -288,4 +294,5 @@ class Net(nn.Module):
                     overwrite_grad(self.parameters, self.grads[:, t], self.grad_dims)
 
             self.opt.step()
-        return loss.item()
+        avg_tr_acc = sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
+        return loss.item(), avg_tr_acc

@@ -85,7 +85,7 @@ class Net(nn.Module):
         return masked
 
     # ------------------------------------------------------------------
-    def observe(self, x: torch.Tensor, y: torch.Tensor, t: int) -> float:
+    def observe(self, x: torch.Tensor, y: torch.Tensor, t: int) -> Tuple[float, float]:
         if self.current_task is None:
             self.current_task = t
         elif t != self.current_task:
@@ -98,6 +98,8 @@ class Net(nn.Module):
         offset1, offset2 = self._compute_offsets(t)
         logits_task = logits[:, offset1:offset2]
         targets = (y - offset1).long()
+        preds = torch.argmax(logits_task, dim=1)
+        tr_acc = (preds == targets).float().mean().item()
 
         self.opt.zero_grad()
         loss_ce = self.ce(logits_task, targets)
@@ -113,7 +115,7 @@ class Net(nn.Module):
 
         self.opt.step()
 
-        return float(loss.item())
+        return float(loss.item()), tr_acc
 
     # ------------------------------------------------------------------
     def _build_optimizer(self) -> torch.optim.Optimizer:

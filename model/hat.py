@@ -514,7 +514,7 @@ class Net(nn.Module):
             )
         print("\n".join(lines))
 
-    def observe(self, x: torch.Tensor, y: torch.Tensor, t: int) -> float:
+    def observe(self, x: torch.Tensor, y: torch.Tensor, t: int) -> Tuple[float, float]:
 
         if self.current_task is None:
             self.current_task = t
@@ -538,6 +538,8 @@ class Net(nn.Module):
         # for mask in masks:
         #     print(mask.mean(), mask.min())
         loss, _ = self._criterion(logits, y, masks)
+        preds = torch.argmax(logits, dim=1)
+        tr_acc = (preds == y).float().mean().item()
         loss.backward()
 
         if self.mask_back:
@@ -556,7 +558,7 @@ class Net(nn.Module):
         self.bridge.clamp_embeddings()
 
         self._epoch_counts[t] += 1
-        return float(loss.detach().cpu())
+        return float(loss.detach().cpu()), tr_acc
 
     def on_epoch_end(self) -> None:
         pass

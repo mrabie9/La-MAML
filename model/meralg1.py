@@ -150,6 +150,9 @@ class Net(nn.Module):
     def observe(self, x, y, t):
 
         # step through elements of x
+        correct_total = 0
+        count_total = 0
+
         for i in range(0,x.size()[0]):
 
             self.age += 1
@@ -168,7 +171,7 @@ class Net(nn.Module):
                 loss = 0.0
                 total_loss = 0.0
                 for idx in range(len(bxs)):
-                    
+
                     self.net.zero_grad()
                     bx = bxs[idx] 
                     by = bys[idx] 
@@ -179,15 +182,21 @@ class Net(nn.Module):
                         prediction = (self.netforward(bx)[:, offset1:offset2])
                         loss = self.bce(prediction,
                                         by.unsqueeze(0)-offset1)
+                        preds = torch.argmax(prediction, dim=1)
+                        target = by - offset1
                     else:
                         prediction = self.forward(bx,0)
                         loss = self.bce(prediction, by.unsqueeze(0))
+                        preds = torch.argmax(prediction, dim=1)
+                        target = by
                     if torch.isnan(loss):
                         ipdb.set_trace()
 
                     loss.backward()
                     torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.args.grad_clip_norm)
                     self.opt.step()
+                    correct_total += int(preds.item() == target.item())
+                    count_total += 1
                     total_loss += loss.item()
                 weights_after = self.net.state_dict()
                 if weights_after != weights_after:
@@ -210,5 +219,5 @@ class Net(nn.Module):
                 if p < self.memories:
                     self.M[p] = [xi,yi,t]
 
-        return total_loss/self.steps
-
+        avg_tr_acc = correct_total / count_total if count_total else 0.0
+        return total_loss/self.steps, avg_tr_acc

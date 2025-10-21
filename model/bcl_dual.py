@@ -223,12 +223,17 @@ class Net(torch.nn.Module):
 
         self.zero_grad()   
         tt = t + 1
+        tr_acc = []
         for _ in range(self.n_meta):
             weights_before = deepcopy(self.net.state_dict())
             offset1, offset2 = self.compute_offsets(t)
             for i in range(self.inner_steps):
                 pred = self.forward(x,t)
-                loss1 = self.bce(pred[:, offset1:offset2], y - offset1)
+                logits = pred[:, offset1:offset2]
+                targets = y - offset1
+                preds = torch.argmax(logits, dim=1)
+                tr_acc.append((preds == targets).float().mean().item())
+                loss1 = self.bce(logits, targets)
                 if t > 0:
                     xx, yy, feat, mask, list_t = self.memory_sampling(t)
                     pred_ = self.net(xx)
@@ -250,4 +255,5 @@ class Net(torch.nn.Module):
             weights_after = self.net.state_dict()
             new_params = {name : weights_before[name] + ((weights_after[name] - weights_before[name]) * self.beta) for name in weights_before.keys()}
             self.net.load_state_dict(new_params)
-        return outer_loss.item()
+        avg_tr_acc = sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
+        return outer_loss.item(), avg_tr_acc

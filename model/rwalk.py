@@ -108,7 +108,7 @@ class Net(nn.Module):
         return masked
 
     # ------------------------------------------------------------------
-    def observe(self, x: torch.Tensor, y: torch.Tensor, t: int) -> float:
+    def observe(self, x: torch.Tensor, y: torch.Tensor, t: int) -> Tuple[float, float]:
         if self.current_task is None:
             self.current_task = t
         elif t != self.current_task:
@@ -127,6 +127,8 @@ class Net(nn.Module):
             targets = (targets - offset1).long()
 
         loss_ce = self.ce(logits, targets)
+        preds = torch.argmax(logits, dim=1)
+        tr_acc = (preds == targets).float().mean().item()
         loss = loss_ce + self.lamb * self._regulariser()
         loss.backward()
 
@@ -135,7 +137,7 @@ class Net(nn.Module):
         self.opt.step()
         self._update_running_statistics()
 
-        return float(loss.item())
+        return float(loss.item()), tr_acc
 
     # ------------------------------------------------------------------
     def on_task_end(self) -> None:

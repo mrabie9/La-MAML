@@ -176,6 +176,8 @@ class Net(nn.Module):
         self.freeze_layers(self.args.rln)
         self.backbone.train(); self.nm.train()
 
+        tr_acc = []
+
         for pass_itr in range(self.args.update_steps):
             self.pass_itr = pass_itr
             
@@ -217,7 +219,10 @@ class Net(nn.Module):
                     with torch.no_grad():
                         self.push_to_mem(batch_x.detach().cpu(), batch_y.detach().cpu(), torch.tensor(t))
 
-                meta_loss, _ = self.meta_loss(bx, fast_weights, by) # loss on the meta batch
+                meta_loss, logits = self.meta_loss(bx, fast_weights, by) # loss on the meta batch
+                with torch.no_grad():
+                    correct = self.eval_accuracy(logits, by)
+                    tr_acc.append(correct / float(by.size(0)))
                 # meta_losses[i] += meta_loss
                 assert meta_loss.requires_grad, "meta_loss has no grad path to alpha"
                 (meta_loss / batch_sz).backward()
@@ -237,7 +242,8 @@ class Net(nn.Module):
             self.zero_grad(set_to_none=True)
             # self.backbone.alpha_lr.zero_grad(set_to_none=True)
 
-        return meta_loss.item()
+        avg_tr_acc = sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
+        return meta_loss.item(), avg_tr_acc
     
     def push_to_mem(self, batch_x, batch_y, t):
         """
@@ -361,6 +367,5 @@ class Net(nn.Module):
             pad = last.new_zeros((pad_size, *last.shape[1:]))
             minibatches[-1] = torch.cat([last, pad], dim=0)
             return torch.stack(minibatches)
-
 
 
