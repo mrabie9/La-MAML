@@ -34,16 +34,24 @@ def eval_class_tasks(model, tasks, args):
         result.append(correct / len(task_loader.dataset))
     return result
 
-def eval_tasks(model, tasks, args, batch_size=64):
+def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
     model.eval()
     device = torch.device('cuda' if getattr(args, 'cuda', False) and torch.cuda.is_available() else 'cpu')
     results = []
     is_iq = getattr(args, 'dataset', '').lower() == 'iq'
+    batch_size = getattr(args, 'eval_batch_size', 64)
 
+    if specific_task is not None:
+        tasks = [tasks[specific_task]]
+        batch_size = 64
+    
     for i, task in enumerate(tasks):
         t = i
         x_data = task[1]
         y = torch.as_tensor(task[2], dtype=torch.long)
+        if 'ucl' in args.model:
+            offset1, offset2 = misc_utils.compute_offsets(t, args.nc_per_task)
+            y = y - offset1  # make labels start from 0 for each task
 
         if isinstance(x_data, torch.Tensor):
             x_data_cpu = x_data.detach().cpu()
@@ -63,17 +71,35 @@ def eval_tasks(model, tasks, args, batch_size=64):
 
         correct = 0
         N = x.size(0)
-
+        epistemic_uncertainties = []
+        eh = []
+        h_preds = []
         for b_from in range(0, N, batch_size):
             b_to = min(b_from + batch_size, N)
             xb = x[b_from:b_to].to(device)
             if getattr(args, 'arch', '').lower() == 'linear':
                 xb = xb.view(xb.size(0), -1)
+                
             yb = y[b_from:b_to].to(device)
 
             logits = model(xb, t) if args.model != 'anml' else model(xb, t, fast_weights=None)
             pb = torch.argmax(logits, dim=1)
             correct += (pb == yb).sum().item()
+            if eval_epistemic and 'ucl' in args.model:
+                p_mean, H_pred, EH, MI = model.mc_epistemic_classification(xb, t, S=30)
+                epistemic_uncertainties.append(MI.mean().cpu().item())
+                eh.append(EH.mean().cpu().item())
+                h_preds.append(H_pred.mean().cpu().item())
+        
+        if eval_epistemic and 'ucl' in args.model:
+            average_eh = 100* sum(eh)/len(eh)
+            norm_avg_eh = average_eh / np.log(args.nc_per_task)
+            average_h_pred = 100* sum(h_preds)/len(h_preds)
+            norm_avg_h_pred = average_h_pred / np.log(args.nc_per_task)
+            average_eu = 100* sum(epistemic_uncertainties)/len(epistemic_uncertainties)
+            norm_avg_eu = average_eu / np.log(args.nc_per_task)
+            print("Task: {} | Epistemic: {} | Aleatoric: {} | Total: {} | F_eu | {}".format(
+                i, round(norm_avg_eu, 2), round(norm_avg_eh, 2), round(norm_avg_h_pred, 2), round(norm_avg_eu/norm_avg_h_pred, 2)))
 
         results.append(correct / N)
 
@@ -126,6 +152,9 @@ def life_experience(model, inc_loader, args):
         evaluator = eval_class_tasks
 
     for task_i in range(inc_loader.n_tasks):
+        result_epoch_loss = []
+        result_acc_val = []
+        result_acc_tr = []
         task_info, train_loader, _, _ = inc_loader.new_task()
         for ep in range(args.n_epochs):
             model.real_epoch = ep
@@ -133,8 +162,10 @@ def life_experience(model, inc_loader, args):
             prog_bar = tqdm(train_loader)
             for (i, (x, y)) in enumerate(prog_bar):
 
-                if((i % args.log_every) == 0):
-                    result_val_a.append(evaluator(model, val_tasks, args))
+                if((ep % 10) == 0) and ((i % 3125 == 0)):
+                    val_acc = evaluator(model, val_tasks, args)
+                    result_acc_val.append(val_acc)
+                    result_val_a.append(val_acc)
                     result_val_t.append(task_info["task"])
 
                 v_x = x
@@ -146,12 +177,18 @@ def life_experience(model, inc_loader, args):
                     v_y = v_y.cuda()
                 model.train()
 
-                loss = model.observe(Variable(v_x), Variable(v_y), task_info["task"])
+                loss, tr_acc = model.observe(Variable(v_x), Variable(v_y), task_info["task"])
+                # logits = model(x, task_i) if args.model != 'anml' else model(x, task_i, fast_weights=None)
+                # pb = torch.argmax(logits, dim=1)
+                # correct += (pb == y).sum().item()
+                # tr_acc = correct / x.size(0)
+                result_acc_tr.append(tr_acc)
+                result_epoch_loss.append(loss)
 
                 prog_bar.set_description(
-                    "Task: {} | Epoch: {}/{} | Iter: {} | Loss: {} | Acc: Total: {} Current Task: {} ".format(
-                        task_info["task"], ep+1, args.n_epochs, i%(1000*args.n_epochs), round(loss, 3),
-                        round(sum(result_val_a[-1])/len(result_val_a[-1]), 5), round(result_val_a[-1][task_info["task"]], 5)
+                    "Task: {} | Epoch: {}/{} | Loss: {} | Acc: Task_avg: {} Tr: {} Val: {} ".format(
+                        task_info["task"], ep+1, args.n_epochs, round(loss, 3),
+                        round(sum(result_val_a[-1])/len(result_val_a[-1]), 5), round(tr_acc, 5), round(result_val_a[-1][task_info["task"]], 5)
                     )
                 )
 
@@ -161,9 +198,18 @@ def life_experience(model, inc_loader, args):
                 #         round(sum(result_val_a[-1]).item()/len(result_val_a[-1]), 5), round(result_val_a[-1][task_info["task"]].item(), 5)
                 #     )
                 # )
-
+        evaluator(model, val_tasks, args, eval_epistemic=True)
         result_val_a.append(evaluator(model, val_tasks, args))
         result_val_t.append(task_info["task"])
+
+        losses = np.array(result_epoch_loss)
+        # print(epoch_accuracies)
+        result_acc_tr = np.array([x.cpu().item() if torch.is_tensor(x) else x for x in result_acc_tr])
+        # print(epoch_accuracies)
+        result_acc_val = np.array([x.detach().cpu().item() if torch.is_tensor(x) else x for sublist in result_acc_val for x in sublist])
+        logs_dir = os.path.join(args.log_dir, "metrics")
+        os.makedirs(logs_dir, exist_ok=True)
+        np.savez(os.path.join(logs_dir, "task" + str(task_i)+".npz"), losses=losses, tr_acc=result_acc_tr, val_acc=result_acc_val) 
 
         if args.calc_test_accuracy:
             result_test_a.append(evaluator(model, test_tasks, args))
@@ -228,7 +274,7 @@ def main():
     # load model
     Model = importlib.import_module('model.' + args.model)
     model = Model.Net(n_inputs, n_outputs, n_tasks, args)
-    # print(model)
+    print(model)
     if args.cuda:
         try:
             model.cuda()            
