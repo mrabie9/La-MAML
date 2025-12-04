@@ -1,4 +1,5 @@
 import torch
+from dataclasses import dataclass
 
 import numpy as np
 import random
@@ -7,6 +8,7 @@ import model.meta.learner as Learner
 import model.meta.modelfactory as mf
 import ipdb
 import sys
+from utils.training_metrics import macro_recall
 
 if not sys.warnoptions:
     import warnings
@@ -18,6 +20,25 @@ Multi task
     inference time for acc eval, use offsets
 """
 
+
+@dataclass
+class IidConfig:
+    arch: str = "linear"
+    n_layers: int = 2
+    n_hiddens: int = 100
+    dataset: str = "tinyimagenet"
+    lr: float = 1e-3
+    cuda: bool = True
+
+    @staticmethod
+    def from_args(args: object) -> "IidConfig":
+        cfg = IidConfig()
+        for field in cfg.__dataclass_fields__:
+            if hasattr(args, field):
+                setattr(cfg, field, getattr(args, field))
+        return cfg
+
+
 class Net(torch.nn.Module):
     def __init__(self,
                  n_inputs,
@@ -25,25 +46,25 @@ class Net(torch.nn.Module):
                  n_tasks,
                  args):
         super(Net, self).__init__()
-        self.args = args
+        self.cfg = IidConfig.from_args(args)
         self.nt = n_tasks
 
         self.n_feat = n_outputs
         self.n_classes = n_outputs
 
-        arch = args.arch
-        nl, nh = args.n_layers, args.n_hiddens
+        arch = self.cfg.arch
+        nl, nh = self.cfg.n_layers, self.cfg.n_hiddens
         config = mf.ModelFactory.get_model(model_type = arch, sizes = [n_inputs] + [nh] * nl + [n_outputs],
-                                                dataset = args.dataset, args=args)
+                                                dataset = self.cfg.dataset, args=args)
         self.net = Learner.Learner(config, args)
 
         # setup optimizer
-        self.opt = torch.optim.SGD(self.parameters(), lr=args.lr)
+        self.opt = torch.optim.SGD(self.parameters(), lr=self.cfg.lr)
 
         # setup losses
         self.loss = torch.nn.CrossEntropyLoss()
 
-        self.gpu = args.cuda
+        self.gpu = self.cfg.cuda
         self.nc_per_task = int(n_outputs / n_tasks)
         self.n_outputs = n_outputs
 
@@ -86,14 +107,20 @@ class Net(torch.nn.Module):
         logits = self.net.forward(x)
         loss = self.take_multitask_loss(t, logits, y) 
         with torch.no_grad():
-            correct = 0
-            total = len(t)
+            batch_preds = []
+            batch_targets = []
             for i, ti in enumerate(t):
                 offset1, offset2 = self.compute_offsets(ti)
                 preds = torch.argmax(logits[i, offset1:offset2], dim=0)
                 target = y[i] - offset1
-                correct += int(preds.item() == target.item())
-            tr_acc = correct / total if total else 0.0
+                batch_preds.append(preds.detach().cpu())
+                batch_targets.append(target.detach().cpu())
+            if batch_preds:
+                stacked_preds = torch.stack(batch_preds).view(-1)
+                stacked_targets = torch.stack(batch_targets).view(-1)
+                tr_acc = macro_recall(stacked_preds, stacked_targets)
+            else:
+                tr_acc = 0.0
         loss.backward()
         self.opt.step()
 

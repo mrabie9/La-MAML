@@ -45,9 +45,9 @@ class IncrementalLoader:
         if self._current_task >= len(self.test_dataset):
             raise Exception("No more tasks.")
 
-        p = self.sample_permutations[self._current_task]
-        x_train, y_train = self.train_dataset[self._current_task][1][p], self.train_dataset[self._current_task][2][p]
-        x_test, y_test = self.test_dataset[self._current_task][1][p], self.test_dataset[self._current_task][2][p]
+        p_tr, p_te = self.sample_permutations[self._current_task]
+        x_train, y_train = self.train_dataset[self._current_task][1][p_tr], self.train_dataset[self._current_task][2][p_tr]
+        x_test, y_test = self.test_dataset[self._current_task][1][p_te], self.test_dataset[self._current_task][2][p_te]
 
         train_loader = self._get_loader(x_train, y_train, mode="train")
         test_loader = self._get_loader(x_test, y_test, mode="test")
@@ -140,10 +140,21 @@ class IncrementalLoader:
                             return data[k]
                     return None
 
-                x_train = _get(['x_train', 'X_train', 'Xtr', 'X'])
+                x_train = _get(['x_train', 'X_train', 'Xtr', 'X', 'xtr'])
                 y_train = _get(['y_train', 'Y_train', 'ytr', 'y'])
-                x_test = _get(['x_test', 'X_test', 'Xte', 'X'])
+                x_test = _get(['x_test', 'X_test', 'Xte', 'X', 'xte'])
                 y_test = _get(['y_test', 'Y_test', 'yte', 'y'])
+
+                size_tr = x_train.shape[0]
+                size_te = min(x_test.shape[0], int(size_tr * validation_split)) if validation_split > 0. else x_test.shape[0]
+                x_test = x_test[:size_te]
+                y_test = y_test[:size_te]
+
+                print(f"Loaded {fname}: Unique train labels: {np.unique(y_train)}")
+
+                for data in [x_train, x_test, y_train, y_test]:
+                    if data is None:
+                        raise ValueError(f"Data {data} not found in {fname}")
 
                 if y_train is None or y_test is None:
                     raise ValueError(f"Labels not found in {fname}")
@@ -157,7 +168,8 @@ class IncrementalLoader:
                 if needs_remap:
                     y_train = unique_labels.searchsorted(y_train) + labels_offset
                     y_test = unique_labels.searchsorted(y_test) + labels_offset
-                    labels_offset += unique_labels.size
+                labels_offset += unique_labels.size
+                print(f"Loaded {fname}: Remapped labels: {np.unique(y_train)}")
 
                 # 3D array[task, split (xtr/yte/xte/yte), data]
                 raw_datasets.append((x_train, y_train, x_test, y_test))
@@ -180,8 +192,10 @@ class IncrementalLoader:
                 else:
                     n = min(self._args.samples_per_task, N)
                 # randomly shuffle data
-                p = np.random.permutation(N)[:n]
-                self.sample_permutations.append(p)
+                p_tr = np.random.permutation(N)[:n]
+                N = self.test_dataset[t][1].shape[0]
+                p_te = np.random.permutation(N)[:n]
+                self.sample_permutations.append([p_tr, p_te])
         else:
             self.train_dataset, self.test_dataset = torch.load(os.path.join(self._args.data_path, self._args.dataset + ".pt"))
 

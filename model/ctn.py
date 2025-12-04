@@ -4,6 +4,8 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+from dataclasses import dataclass
+
 import torch
 from torch.autograd import Variable
 # from .common import ContextMLP, ContextNet18
@@ -15,6 +17,33 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from copy import deepcopy
+from utils.training_metrics import macro_recall
+
+
+@dataclass
+class CtnConfig:
+    ctn_memory_strength: float = 0.5
+    ctn_temperature: float = 5.0
+    arch: str = "resnet1d"
+    ctn_task_emb: int = 64
+    ctn_lr: float = 0.01
+    ctn_beta: float = 0.05
+    ctn_n_memories: int = 50
+    validation: float = 0.0
+    cuda: bool = True
+    batch_size: int = 1
+    samples_per_task: int = -1
+    replay_batch_size: int = 20
+    ctn_inner_steps: int = 2
+    ctn_n_meta: int = 2
+
+    @staticmethod
+    def from_args(args: object) -> "CtnConfig":
+        cfg = CtnConfig()
+        for field in cfg.__dataclass_fields__:
+            if hasattr(args, field):
+                setattr(cfg, field, getattr(args, field))
+        return cfg
 
 class Net(torch.nn.Module):
 
@@ -24,19 +53,20 @@ class Net(torch.nn.Module):
                  n_tasks,
                  args):
         super(Net, self).__init__()
-        self.reg = args.ctn_memory_strength
-        self.temp = args.ctn_temperature
+        self.cfg = CtnConfig.from_args(args)
+        self.reg = self.cfg.ctn_memory_strength
+        self.temp = self.cfg.ctn_temperature
         # setup network
-        if  args.arch == 'resnet1d':
+        if  self.cfg.arch == 'resnet1d':
             # self.net = ResNet1D(n_outputs, args)
-            self.net = ContextNet18(n_outputs, n_tasks=n_tasks, task_emb=args.ctn_task_emb)
+            self.net = ContextNet18(n_outputs, n_tasks=n_tasks, task_emb=self.cfg.ctn_task_emb)
             # self.net.define_task_lr_params(alpha_init=args.ctn_alpha_init)
         else:
             raise NotImplementedError
 
         self.is_task_incremental = True 
-        self.inner_lr = args.ctn_lr
-        self.outer_lr = args.ctn_beta
+        self.inner_lr = self.cfg.ctn_lr
+        self.outer_lr = self.cfg.ctn_beta
         self.opt = torch.optim.SGD(self.net.parameters(), lr=self.outer_lr)
         # setup losses
         self.bce = torch.nn.CrossEntropyLoss()
@@ -48,11 +78,11 @@ class Net(torch.nn.Module):
         self.current_task = 0
         self.fisher = {}
         self.optpar = {}
-        self.n_memories = args.ctn_n_memories
+        self.n_memories = self.cfg.ctn_n_memories
         self.mem_cnt = 0       
         
         # set up the semantic memory
-        self.n_val = int(self.n_memories * args.validation)
+        self.n_val = int(self.n_memories * self.cfg.validation)
         self.n_memories -= self.n_val
         self.full_val = True # avoid OOM when using too large memory
 
@@ -72,7 +102,7 @@ class Net(torch.nn.Module):
         self.valy = torch.LongTensor(n_tasks, self.n_val)
         self.mem_feat = torch.FloatTensor(n_tasks, self.n_memories, self.nc_per_task)
         self.mem = {}
-        if args.cuda:
+        if self.cfg.cuda:
             self.valx = self.valx.cuda().fill_(0)
             self.memx = self.memx.cuda().fill_(0)
             self.memy = self.memy.cuda().fill_(0)
@@ -82,17 +112,17 @@ class Net(torch.nn.Module):
 
         self.mem_cnt = 0
         self.val_cnt = 0
-        self.bsz = args.batch_size
+        self.bsz = self.cfg.batch_size
         
         self.n_outputs = n_outputs
 
         self.mse = nn.MSELoss()
         self.kl = nn.KLDivLoss()
         self.samples_seen = 0
-        self.samples_per_task = args.samples_per_task
-        self.sz = args.replay_batch_size
-        self.inner_steps = args.ctn_inner_steps
-        self.n_meta = args.ctn_n_meta
+        self.samples_per_task = self.cfg.samples_per_task
+        self.sz = self.cfg.replay_batch_size
+        self.inner_steps = self.cfg.ctn_inner_steps
+        self.n_meta = self.cfg.ctn_n_meta
         self.count = 0
         self.val_count = 0
         self.counter = 0
@@ -225,7 +255,7 @@ class Net(torch.nn.Module):
             logits = pred[:, offset1:offset2]
             targets = y - offset1
             preds = torch.argmax(logits, dim=1)
-            tr_acc.append((preds == targets).float().mean().item())
+            tr_acc.append(macro_recall(preds, targets))
 
             loss1 = self.bce(logits, targets)
             #tt = t + 1

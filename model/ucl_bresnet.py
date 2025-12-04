@@ -18,6 +18,7 @@ from typing import Iterable, List, Optional, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from utils.training_metrics import macro_recall
 
 
 def _calculate_fan_in_and_fan_out(tensor: torch.Tensor) -> Tuple[int, int]:
@@ -337,14 +338,14 @@ class UCLConfig:
     @staticmethod
     def from_args(args: object) -> "UCLConfig":
         cfg = UCLConfig()
-        if hasattr(args, "clipgrad"):
-            cfg.clipgrad = getattr(args, "clipgrad")
-        if hasattr(args, "split"):
-            cfg.split = getattr(args, "split")
-        if hasattr(args, "ratio"):
-            cfg.ratio = getattr(args, "ratio")
-        if hasattr(args, "eval_samples"):
-            cfg.eval_samples = max(1, int(getattr(args, "eval_samples")))
+        # if hasattr(args, "clipgrad"):
+        #     cfg.clipgrad = getattr(args, "clipgrad")
+        # if hasattr(args, "split"):
+        #     cfg.split = getattr(args, "split")
+        # if hasattr(args, "ratio"):
+        #     cfg.ratio = getattr(args, "ratio")
+        # if hasattr(args, "eval_samples"):
+        #     cfg.eval_samples = max(1, int(getattr(args, "eval_samples")))
         return cfg
 
 
@@ -497,7 +498,7 @@ class Net(nn.Module):
         logits = outputs[t] if self.split else outputs
 
         preds = torch.argmax(logits, dim=1)
-        tr_acc = (preds == y).float().mean().item()
+        tr_acc = macro_recall(preds, y)
         loss = self.ce(logits, y)
         loss = self._apply_regularisation(loss, y.size(0))
 

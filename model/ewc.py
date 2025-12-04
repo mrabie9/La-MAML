@@ -17,6 +17,7 @@ import torch
 import torch.nn as nn
 
 from model.resnet1d import ResNet1D
+from utils.training_metrics import macro_recall
 
 
 @dataclass
@@ -33,9 +34,10 @@ class EwcConfig:
     @staticmethod
     def from_args(args: object) -> "EwcConfig":
         cfg = EwcConfig()
-        for field in cfg.__dataclass_fields__:
-            if hasattr(args, field):
-                setattr(cfg, field, getattr(args, field))
+        # Override defaults with any args attributes that match
+        # for field in cfg.__dataclass_fields__:
+        #     if hasattr(args, field):
+        #         setattr(cfg, field, getattr(args, field))
         if hasattr(args, "clipgrad") and not hasattr(args, "clipgrad_norm"):
             cfg.clipgrad = getattr(args, "clipgrad")
         if hasattr(args, "lamb"):
@@ -99,7 +101,7 @@ class Net(nn.Module):
         logits_task = logits[:, offset1:offset2]
         targets = (y - offset1).long()
         preds = torch.argmax(logits_task, dim=1)
-        tr_acc = (preds == targets).float().mean().item()
+        tr_acc = macro_recall(preds, targets)
 
         self.opt.zero_grad()
         loss_ce = self.ce(logits_task, targets)

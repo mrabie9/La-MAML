@@ -9,6 +9,9 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+from dataclasses import dataclass
+from typing import Optional
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -21,6 +24,31 @@ import quadprog
 
 from model.resnet import ResNet18
 from model.resnet1d import ResNet1D
+from utils.training_metrics import macro_recall
+
+
+@dataclass
+class GemConfig:
+    arch: str = "linear"
+    n_layers: int = 2
+    n_hiddens: int = 100
+    memory_strength: float = 0.0
+    dataset: str = "tinyimagenet"
+    glances: int = 1
+    lr: float = 1e-3
+    n_memories: int = 0
+    cuda: bool = True
+    alpha_init: float = 1e-3
+    grad_clip_norm: Optional[float] = 2.0
+    input_channels: int = 1
+
+    @staticmethod
+    def from_args(args: object) -> "GemConfig":
+        cfg = GemConfig()
+        for field in cfg.__dataclass_fields__:
+            if hasattr(args, field):
+                setattr(cfg, field, getattr(args, field))
+        return cfg
 
 # Auxiliary functions useful for GEM's inner optimization.
 
@@ -106,39 +134,41 @@ class Net(nn.Module):
                  n_tasks,
                  args):
         super(Net, self).__init__()
-        self.args = args
-        self.margin = args.memory_strength
-        self.is_cifar = ((args.dataset == 'cifar100') or (args.dataset == 'tinyimagenet'))
+        self.cfg = GemConfig.from_args(args)
+        self.margin = self.cfg.memory_strength
+        self.is_cifar = (
+            (self.cfg.dataset == 'cifar100') or (self.cfg.dataset == 'tinyimagenet')
+        )
 
         # --- IQ mode toggle ---
-        self.input_channels = getattr(args, "input_channels", 1)
-        self.is_iq = (getattr(args, "dataset", "") == "iq") or (self.input_channels == 2)
+        self.input_channels = self.cfg.input_channels
+        self.is_iq = (self.cfg.dataset == "iq") or (self.input_channels == 2)
 
-        nl, nh = args.n_layers, args.n_hiddens
+        nl, nh = self.cfg.n_layers, self.cfg.n_hiddens
 
-        if args.arch == 'resnet18':
+        if self.cfg.arch == 'resnet18':
             self.net = ResNet18(n_outputs, args)
-            self.net.define_task_lr_params(alpha_init=args.alpha_init)
-        elif args.arch == 'resnet1d':
+            self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
+        elif self.cfg.arch == 'resnet1d':
             self.net = ResNet1D(n_outputs, args)
-            self.net.define_task_lr_params(alpha_init=args.alpha_init)
+            self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
         else:
             config = mf.ModelFactory.get_model(
-                model_type=args.arch,
+                model_type=self.cfg.arch,
                 sizes=[n_inputs] + [nh] * nl + [n_outputs],
-                dataset=args.dataset, args=args
+                dataset=self.cfg.dataset, args=args
             )
             self.net = Learner.Learner(config, args=args)
 
         self.netforward = self.net.forward
         self.ce = nn.CrossEntropyLoss()
         self.n_outputs = n_outputs
-        self.glances = args.glances
+        self.glances = self.cfg.glances
 
-        self.opt = optim.SGD(self.parameters(), args.lr)
+        self.opt = optim.SGD(self.parameters(), self.cfg.lr)
 
-        self.n_memories = args.n_memories
-        self.gpu = args.cuda
+        self.n_memories = self.cfg.n_memories
+        self.gpu = self.cfg.cuda
 
         # --- Episodic memory allocation ---
         if self.is_iq:
@@ -151,14 +181,14 @@ class Net(nn.Module):
             self.memory_data = torch.FloatTensor(n_tasks, self.n_memories, n_inputs)
 
         self.memory_labs = torch.LongTensor(n_tasks, self.n_memories)
-        if args.cuda:
+        if self.gpu:
             self.memory_data = self.memory_data.cuda()
             self.memory_labs = self.memory_labs.cuda()
 
         # --- GEM gradient buffers ---
         self.grad_dims = [p.data.numel() for p in self.parameters()]
         self.grads = torch.Tensor(sum(self.grad_dims), n_tasks)
-        if args.cuda:
+        if self.gpu:
             self.grads = self.grads.cuda()
 
         # --- counters / bookkeeping ---
@@ -170,7 +200,7 @@ class Net(nn.Module):
         else:
             self.nc_per_task = int(n_outputs / n_tasks)
 
-        if args.cuda:
+        if self.gpu:
             self.cuda()
 
     def _ensure_iq_shape(self, x):
@@ -191,9 +221,9 @@ class Net(nn.Module):
             raise ValueError(f"Unexpected IQ input shape {tuple(x.shape)}; expected (B, 2, L) or (B, 2L).")
 
     def forward(self, x, t):
-        if self.args.dataset == 'tinyimagenet':
+        if self.cfg.dataset == 'tinyimagenet':
             x = x.view(-1, 3, 64, 64)
-        elif self.args.dataset == 'cifar100':
+        elif self.cfg.dataset == 'cifar100':
             x = x.view(-1, 3, 32, 32)
         elif self.is_iq:
             x = self._ensure_iq_shape(x)  # (B, 2, L)
@@ -269,7 +299,8 @@ class Net(nn.Module):
                         mem_y - offset1
                     )
                     ptloss.backward()
-                    torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.args.grad_clip_norm)
+                    if self.cfg.grad_clip_norm:
+                        torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.cfg.grad_clip_norm)
                     store_grad(self.parameters, self.grads, self.grad_dims, past_task)
 
             # current batch
@@ -278,15 +309,17 @@ class Net(nn.Module):
             logits = self.forward(x, t)[:, offset1:offset2]
             targets = y - offset1
             preds = torch.argmax(logits, dim=1)
-            tr_acc.append((preds == targets).float().mean().item())
+            tr_acc.append(macro_recall(preds, targets))
             loss = self.ce(logits, targets)
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.args.grad_clip_norm)
+            if self.cfg.grad_clip_norm:
+                torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.cfg.grad_clip_norm)
 
             # GEM projection if needed
             if len(self.observed_tasks) > 1:
                 store_grad(self.parameters, self.grads, self.grad_dims, t)
-                indx = torch.cuda.LongTensor(self.observed_tasks[:-1]) if self.gpu else torch.LongTensor(self.observed_tasks[:-1])
+                device = torch.device("cuda") if self.gpu else torch.device("cpu")
+                indx = torch.tensor(self.observed_tasks[:-1], dtype=torch.long, device=device)
                 dotp = torch.mm(self.grads[:, t].unsqueeze(0), self.grads.index_select(1, indx))
                 if (dotp < 0).sum() != 0:
                     project2cone2(self.grads[:, t].unsqueeze(1),

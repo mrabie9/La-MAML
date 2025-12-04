@@ -3,6 +3,9 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+from dataclasses import dataclass
+from typing import Optional
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -16,6 +19,32 @@ import random
 
 from model.resnet import ResNet18
 from model.resnet1d import ResNet1D
+from utils.training_metrics import macro_recall
+
+
+@dataclass
+class AgemConfig:
+    arch: str = "linear"
+    n_layers: int = 2
+    n_hiddens: int = 100
+    memory_strength: float = 0.0
+    dataset: str = "tinyimagenet"
+    glances: int = 1
+    lr: float = 1e-3
+    n_memories: int = 0
+    memories: int = 5120
+    cuda: bool = True
+    alpha_init: float = 1e-3
+    grad_clip_norm: Optional[float] = 2.0
+    input_channels: int = 1
+
+    @staticmethod
+    def from_args(args: object) -> "AgemConfig":
+        cfg = AgemConfig()
+        for field in cfg.__dataclass_fields__:
+            if hasattr(args, field):
+                setattr(cfg, field, getattr(args, field))
+        return cfg
 # Auxiliary functions useful for AGEM's inner optimization.
 
 def compute_offsets(task, nc_per_task, is_cifar):
@@ -110,44 +139,44 @@ class Net(nn.Module):
                  n_tasks,
                  args):
         super(Net, self).__init__()
-        self.args = args
+        self.cfg = AgemConfig.from_args(args)
 
-        nl, nh = args.n_layers, args.n_hiddens
-        self.margin = args.memory_strength
-        self.is_cifar = ((args.dataset == 'cifar100') or (args.dataset == 'tinyimagenet'))
+        nl, nh = self.cfg.n_layers, self.cfg.n_hiddens
+        self.margin = self.cfg.memory_strength
+        self.is_cifar = (
+            (self.cfg.dataset == 'cifar100') or (self.cfg.dataset == 'tinyimagenet')
+        )
         
         # --- IQ mode toggle ---
-        self.input_channels = getattr(args, "input_channels", 1)
-        self.is_iq = (getattr(args, "dataset", "") == "iq") or (self.input_channels == 2)
+        self.input_channels = self.cfg.input_channels
+        self.is_iq = (self.cfg.dataset == "iq") or (self.input_channels == 2)
 
-        nl, nh = args.n_layers, args.n_hiddens
-
-        if args.arch == 'resnet18':
+        if self.cfg.arch == 'resnet18':
             self.net = ResNet18(n_outputs, args)
-            self.net.define_task_lr_params(alpha_init=args.alpha_init)
-        elif args.arch == 'resnet1d':
+            self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
+        elif self.cfg.arch == 'resnet1d':
             self.net = ResNet1D(n_outputs, args)
-            self.net.define_task_lr_params(alpha_init=args.alpha_init)
+            self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
         else:
             config = mf.ModelFactory.get_model(
-                model_type = args.arch, 
+                model_type = self.cfg.arch, 
                 sizes = [n_inputs] + [nh] * nl + [n_outputs],
-                dataset = args.dataset, args=args)
+                dataset = self.cfg.dataset, args=args)
             self.net = Learner.Learner(config, args)
 
         self.ce = nn.CrossEntropyLoss()
         self.bce = torch.nn.CrossEntropyLoss()
         self.n_outputs = n_outputs
-        self.glances = args.glances
+        self.glances = self.cfg.glances
 
-        self.opt = optim.SGD(self.parameters(), args.lr)
+        self.opt = optim.SGD(self.parameters(), self.cfg.lr)
 
-        self.n_memories = args.n_memories
-        self.gpu = args.cuda
+        self.n_memories = self.cfg.n_memories
+        self.gpu = self.cfg.cuda
 
         self.age = 0
         self.M = []
-        self.memories = args.memories
+        self.memories = self.cfg.memories
         self.grad_align = []
         self.grad_task_align = {}
         self.current_task = 0
@@ -163,7 +192,7 @@ class Net(nn.Module):
             self.memory_data = torch.FloatTensor(n_tasks, self.n_memories, n_inputs)
 
         self.memory_labs = torch.LongTensor(n_tasks, self.n_memories)
-        if args.cuda:
+        if self.gpu:
             self.memory_data = self.memory_data.cuda()
             self.memory_labs = self.memory_labs.cuda()
 
@@ -172,7 +201,7 @@ class Net(nn.Module):
         for param in self.parameters():
             self.grad_dims.append(param.data.numel())
         self.grads = torch.Tensor(sum(self.grad_dims), n_tasks)
-        if args.cuda:
+        if self.gpu:
             self.grads = self.grads.cuda()
 
         # allocate counters
@@ -184,7 +213,7 @@ class Net(nn.Module):
             self.nc_per_task = int(n_outputs / n_tasks)
             # self.nc_per_task = n_outputs
         
-        if args.cuda:
+        if self.gpu:
             self.cuda()
 
         self.iter = 0
@@ -207,9 +236,9 @@ class Net(nn.Module):
             raise ValueError(f"Unexpected IQ input shape {tuple(x.shape)}; expected (B, 2, L) or (B, 2L).")
     
     def forward(self, x, t):
-        if self.args.dataset == 'tinyimagenet':
+        if self.cfg.dataset == 'tinyimagenet':
             x = x.view(-1, 3, 64, 64)
-        elif self.args.dataset == 'cifar100':
+        elif self.cfg.dataset == 'cifar100':
             x = x.view(-1, 3, 32, 32)
         elif self.is_iq:
             x = self._ensure_iq_shape(x) # (B, 2, L)
@@ -244,7 +273,7 @@ class Net(nn.Module):
             self.current_task = t
             self.grad_align.append([])
             
-        tr_acc = [0 for _ in range(self.glances)]
+        tr_acc = []
         for pass_itr in range(self.glances):
 # copy x into memory with matching shape
                 
@@ -294,22 +323,23 @@ class Net(nn.Module):
                         logits,
                         Variable(self.memory_labs[past_task] - offset1))
                     ptloss.backward()
-                    torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.args.grad_clip_norm)
+                    if self.cfg.grad_clip_norm:
+                        torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.cfg.grad_clip_norm)
 
                     store_grad(self.parameters, self.grads, self.grad_dims,
                                past_task)
 
             # now compute the grad on the current minibatch
             self.zero_grad()
-
             offset1, offset2 = compute_offsets(t, self.nc_per_task, self.is_cifar)
             logits = self.forward(x, t)[:, offset1: offset2]
             pb = torch.argmax(logits, dim=1)
-            correct = (pb == y- offset1).sum().item()
-            tr_acc[pass_itr] += correct / y.size(0)
-            loss = self.ce(logits, y - offset1)
+            targets = y - offset1
+            tr_acc.append(macro_recall(pb, targets))
+            loss = self.ce(logits, targets)
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.args.grad_clip_norm)
+            if self.cfg.grad_clip_norm:
+                torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.cfg.grad_clip_norm)
 
             # check if gradient violates constraints                                                           
             if len(self.observed_tasks) > 1:
@@ -339,4 +369,5 @@ class Net(nn.Module):
                 if p < self.memories:
                     self.M[p] = [xi[i],yi[i],t]
 
-        return loss.item(), sum(tr_acc)/len(tr_acc)
+        avg_tr_acc = sum(tr_acc)/len(tr_acc) if tr_acc else 0.0
+        return loss.item(), avg_tr_acc

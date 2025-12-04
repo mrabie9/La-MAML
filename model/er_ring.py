@@ -4,6 +4,8 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+from dataclasses import dataclass
+
 import torch
 from torch.autograd import Variable
 from model.resnet1d import ResNet1D
@@ -11,6 +13,30 @@ import pdb
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+from utils.training_metrics import macro_recall
+
+
+@dataclass
+class ErRingConfig:
+    bcl_memory_strength: float = 1.0
+    bcl_temperature: float = 2.0
+    alpha_init: float = 1e-3
+    lr: float = 1e-3
+    bcl_n_memories: int = 2000
+    n_memories: int = 0
+    cuda: bool = True
+    batch_size: int = 1
+    samples_per_task: int = -1
+    replay_batch_size: int = 20
+    bcl_inner_steps: int = 5
+
+    @staticmethod
+    def from_args(args: object) -> "ErRingConfig":
+        cfg = ErRingConfig()
+        for field in cfg.__dataclass_fields__:
+            if hasattr(args, field):
+                setattr(cfg, field, getattr(args, field))
+        return cfg
 
 class Net(torch.nn.Module):
 
@@ -20,14 +46,15 @@ class Net(torch.nn.Module):
                  n_tasks,
                  args):
         super(Net, self).__init__()
-        self.reg = args.bcl_memory_strength
-        self.temp = args.bcl_temperature
+        self.cfg = ErRingConfig.from_args(args)
+        self.reg = self.cfg.bcl_memory_strength
+        self.temp = self.cfg.bcl_temperature
         # setup network
         self.is_task_incremental = True
         self.net = ResNet1D(n_outputs, args)
-        self.net.define_task_lr_params(alpha_init=args.alpha_init)
+        self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
         # setup optimizer
-        self.lr = args.lr
+        self.lr = self.cfg.lr
         #if self.is_task_incremental:
         #    self.opt = torch.optim.Adam(self.net.parameters(), lr='self.lr)
         #else:
@@ -44,29 +71,29 @@ class Net(torch.nn.Module):
         self.current_task = 0
         self.fisher = {}
         self.optpar = {}
-        self.n_memories = args.bcl_n_memories
+        self.n_memories = self.cfg.bcl_n_memories
         self.mem_cnt = 0       
         
         self.memx = torch.FloatTensor(n_tasks, self.n_memories, 2, n_inputs//2)
         self.memy = torch.LongTensor(n_tasks, self.n_memories)
         self.mem_feat = torch.FloatTensor(n_tasks, self.n_memories, self.nc_per_task)
         self.mem = {}
-        if args.cuda:
+        if self.cfg.cuda:
             self.memx = self.memx.cuda()
             self.memy = self.memy.cuda()
             self.mem_feat = self.mem_feat.cuda()
         self.mem_cnt = 0
-        self.n_memories = args.n_memories
-        self.bsz = args.batch_size
+        self.n_memories = self.cfg.n_memories or self.n_memories
+        self.bsz = self.cfg.batch_size
         
         self.n_outputs = n_outputs
 
         self.mse = nn.MSELoss()
         self.kl = nn.KLDivLoss()
         self.samples_seen = 0
-        self.samples_per_task = args.samples_per_task
-        self.sz = args.replay_batch_size
-        self.inner_steps = args.bcl_inner_steps
+        self.samples_per_task = self.cfg.samples_per_task
+        self.sz = self.cfg.replay_batch_size
+        self.inner_steps = self.cfg.bcl_inner_steps
     def on_epoch_end(self):  
         pass
 
@@ -142,7 +169,7 @@ class Net(torch.nn.Module):
             logits = pred[:, offset1:offset2]
             targets = y - offset1
             preds = torch.argmax(logits, dim=1)
-            tr_acc.append((preds == targets).float().mean().item())
+            tr_acc.append(macro_recall(preds, targets))
             loss1 = self.bce(logits, targets)
             if t > 0:
                 xx, yy, target, mask = self.memory_sampling(t)

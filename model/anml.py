@@ -1,5 +1,8 @@
 import logging
 import copy
+from dataclasses import dataclass
+from typing import Optional
+
 import numpy as np
 import torch
 from torch import nn
@@ -13,8 +16,29 @@ from torch.autograd import Variable
 from model.resnet1d import ResNet1D
 import random
 # import model.learner as Learner
+from utils.training_metrics import macro_recall
 
 logger = logging.getLogger("experiment")
+
+
+@dataclass
+class AnmlConfig:
+    update_lr: float = 0.1
+    meta_lr: float = 1e-3
+    update_steps: int = 10
+    replay_batch_size: int = 20
+    memories: int = 5120
+    rln: int = 7
+    grad_clip_norm: Optional[float] = 2.0
+    use_old_task_memory: bool = False
+
+    @staticmethod
+    def from_args(args: object) -> "AnmlConfig":
+        cfg = AnmlConfig()
+        for field in cfg.__dataclass_fields__:
+            if hasattr(args, field):
+                setattr(cfg, field, getattr(args, field))
+        return cfg
 
 
 class Net(nn.Module):
@@ -26,9 +50,10 @@ class Net(nn.Module):
 
         super(Net, self).__init__()
         self.args = args
-        self.update_lr = self.args.update_lr
-        self.meta_lr = self.args.meta_lr
-        self.update_steps = self.args.update_steps
+        self.cfg = AnmlConfig.from_args(args)
+        self.update_lr = self.cfg.update_lr
+        self.meta_lr = self.cfg.meta_lr
+        self.update_steps = self.cfg.update_steps
 
         # self.net = Learner(n_outputs, self.args, neuromodulation=neuromodulation)
         # self.net = Learner.Learner(config, neuromodulation)
@@ -47,11 +72,11 @@ class Net(nn.Module):
 
         self.epoch = 0
         self.current_task = 0
-        self.batchSize = int(args.replay_batch_size)
+        self.batchSize = int(self.cfg.replay_batch_size)
         self.M = []        
         self.M_new = []
         self.age = 0
-        self.memories = args.memories
+        self.memories = self.cfg.memories
 
     def reset_classifer(self, class_to_reset):
         bias = self.parameters()[-1]
@@ -173,12 +198,12 @@ class Net(nn.Module):
 
         
     def observe(self, x, y, t):
-        self.freeze_layers(self.args.rln)
+        self.freeze_layers(self.cfg.rln)
         self.backbone.train(); self.nm.train()
 
         tr_acc = []
 
-        for pass_itr in range(self.args.update_steps):
+        for pass_itr in range(self.update_steps):
             self.pass_itr = pass_itr
             
             # shuffle the data (again)
@@ -221,8 +246,8 @@ class Net(nn.Module):
 
                 meta_loss, logits = self.meta_loss(bx, fast_weights, by) # loss on the meta batch
                 with torch.no_grad():
-                    correct = self.eval_accuracy(logits, by)
-                    tr_acc.append(correct / float(by.size(0)))
+                    preds = torch.argmax(logits, dim=1)
+                    tr_acc.append(macro_recall(preds, by))
                 # meta_losses[i] += meta_loss
                 assert meta_loss.requires_grad, "meta_loss has no grad path to alpha"
                 (meta_loss / batch_sz).backward()
@@ -235,7 +260,8 @@ class Net(nn.Module):
 
             # meta_loss.backward()
 
-            torch.nn.utils.clip_grad_norm_(self.parameters(), self.args.grad_clip_norm)
+            if self.cfg.grad_clip_norm:
+                torch.nn.utils.clip_grad_norm_(self.parameters(), self.cfg.grad_clip_norm)
             self.optimizer.step()       
 
             # better zeroing (lower mem)
@@ -285,7 +311,7 @@ class Net(nn.Module):
         bys = []
         bts = []
 
-        if self.args.use_old_task_memory and t>0:
+        if self.cfg.use_old_task_memory and t>0:
             MEM = self.M
         else:
             MEM = self.M_new
@@ -367,5 +393,3 @@ class Net(nn.Module):
             pad = last.new_zeros((pad_size, *last.shape[1:]))
             minibatches[-1] = torch.cat([last, pad], dim=0)
             return torch.stack(minibatches)
-
-

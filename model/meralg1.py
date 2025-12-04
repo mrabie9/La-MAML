@@ -4,27 +4,50 @@
 # All rights reserved.
 #
 # This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
+# LICENSE file found in the root directory of this source tree.
+
+from dataclasses import dataclass
+from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.autograd import Variable
-
-import numpy as np
-
 import random
-from torch.nn.modules.loss import CrossEntropyLoss
-from random import shuffle
 import sys
 import ipdb
-from copy import deepcopy
 import warnings
 import model.meta.learner as Learner
 import model.meta.modelfactory as mf
 warnings.filterwarnings("ignore")
 from model.resnet import ResNet18
 from model.resnet1d import ResNet1D
+from utils.training_metrics import macro_recall
+
+
+@dataclass
+class MerAlgConfig:
+    arch: str = "linear"
+    n_layers: int = 2
+    n_hiddens: int = 100
+    dataset: str = "tinyimagenet"
+    alpha_init: float = 1e-3
+    lr: float = 1e-3
+    replay_batch_size: int = 20
+    memories: int = 5120
+    batches_per_example: int = 1
+    beta: float = 1.0
+    gamma: float = 0.0
+    cuda: bool = True
+    grad_clip_norm: Optional[float] = 2.0
+    input_channels: int = 1
+
+    @staticmethod
+    def from_args(args: object) -> "MerAlgConfig":
+        cfg = MerAlgConfig()
+        for field in cfg.__dataclass_fields__:
+            if hasattr(args, field):
+                setattr(cfg, field, getattr(args, field))
+        return cfg
 
 class Net(nn.Module):
     def __init__(self,
@@ -33,24 +56,24 @@ class Net(nn.Module):
                  n_tasks,
                  args):
         super(Net, self).__init__()
-        self.args = args
-        nl, nh = args.n_layers, args.n_hiddens
-        self.is_cifar = (args.dataset == 'cifar100' or args.dataset == 'tinyimagenet')
+        self.cfg = MerAlgConfig.from_args(args)
+        nl, nh = self.cfg.n_layers, self.cfg.n_hiddens
+        self.is_cifar = (self.cfg.dataset == 'cifar100' or self.cfg.dataset == 'tinyimagenet')
 
         # --- IQ mode toggle ---
-        self.input_channels = getattr(args, "input_channels", 1)
-        self.is_iq = (getattr(args, "dataset", "") == "iq") or (self.input_channels == 2)
+        self.input_channels = self.cfg.input_channels
+        self.is_iq = (self.cfg.dataset == "iq") or (self.input_channels == 2)
 
-        nl, nh = args.n_layers, args.n_hiddens
+        nl, nh = self.cfg.n_layers, self.cfg.n_hiddens
 
-        if args.arch == 'resnet18':
+        if self.cfg.arch == 'resnet18':
             self.net = ResNet18(n_outputs, args)
-            self.net.define_task_lr_params(alpha_init=args.alpha_init)
-        elif args.arch == 'resnet1d':
+            self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
+        elif self.cfg.arch == 'resnet1d':
             self.net = ResNet1D(n_outputs, args)
-            self.net.define_task_lr_params(alpha_init=args.alpha_init)
+            self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
         else:
-            config = mf.ModelFactory.get_model(args.arch, sizes=[n_inputs] + [nh] * nl + [n_outputs], dataset=args.dataset, args=args)
+            config = mf.ModelFactory.get_model(self.cfg.arch, sizes=[n_inputs] + [nh] * nl + [n_outputs], dataset=self.cfg.dataset, args=args)
             self.net = Learner.Learner(config, args=args)
 
         self.netforward = self.net.forward
@@ -64,20 +87,20 @@ class Net(nn.Module):
         # else:
         #     self.nc_per_task = n_outputs
 
-        self.opt = optim.SGD(self.parameters(), args.lr)
-        self.batchSize = int(args.replay_batch_size)
+        self.opt = optim.SGD(self.parameters(), self.cfg.lr)
+        self.batchSize = int(self.cfg.replay_batch_size)
 
-        self.memories = args.memories
-        self.steps = int(args.batches_per_example)
-        self.beta = args.beta
-        self.gamma = args.gamma
+        self.memories = self.cfg.memories
+        self.steps = int(self.cfg.batches_per_example)
+        self.beta = self.cfg.beta
+        self.gamma = self.cfg.gamma
 
         # allocate buffer
         self.M = []
         self.age = 0
 
         # handle gpus if specified
-        self.cuda = args.cuda
+        self.cuda = self.cfg.cuda
         if self.cuda:
             self.net = self.net.cuda()
 
@@ -103,46 +126,38 @@ class Net(nn.Module):
         #     offset2 = self.n_outputs
         return int(offset1), int(offset2)
 
+    def _clone_model_state(self):
+        return {name: tensor.detach().clone() for name, tensor in self.net.state_dict().items()}
+
+    def _apply_meta_update(self, base_state, target_state, mix):
+        own_params = dict(self.net.named_parameters())
+        own_params.update(dict(self.net.named_buffers()))
+        with torch.no_grad():
+            for name, tensor in own_params.items():
+                tensor.copy_(base_state[name] + (target_state[name] - base_state[name]) * mix)
+
     def getBatch(self,x,y,t):
-        if(x is not None):
-            xi = Variable(torch.from_numpy(np.array(x))).float().unsqueeze(0) #.view(1,-1)
-            yi = Variable(torch.from_numpy(np.array(y))).long()
-            ti = Variable(torch.from_numpy(np.array(t))).long()
-
-            if self.cuda:
-                xi = xi.cuda()
-                yi = yi.cuda()
-                ti = ti.cuda()
-
-            bxs = [xi]
-            bys = [yi]
-            bts = [ti]
-
-        else:
-            bxs = []
-            bys = []
-            bts = []
-
+        samples = []
+        if x is not None:
+            samples.append((x, y, t))
         if len(self.M) > 0:
-            order = [i for i in range(0,len(self.M))]
             osize = min(self.batchSize,len(self.M))
-            for j in range(0,osize):
-                shuffle(order)
-                k = order[j]
-                x,y,t = self.M[k]
-                xi = Variable(torch.from_numpy(np.array(x))).float().unsqueeze(0) #.view(1,-1)
-                yi = Variable(torch.from_numpy(np.array(y))).long()
-                ti = Variable(torch.from_numpy(np.array(t))).long()
+            indices = random.sample(range(len(self.M)), osize)
+            for idx in indices:
+                samples.append(self.M[idx])
 
-                # handle gpus if specified
-                if self.cuda:
-                    xi = xi.cuda()
-                    yi = yi.cuda()
-                    ti = ti.cuda()
-
-                bxs.append(xi)
-                bys.append(yi)
-                bts.append(ti)
+        bxs = []
+        bys = []
+        bts = []
+        for sx, sy, st in samples:
+            bx = sx.unsqueeze(0).float()
+            by = sy.view(1).long()
+            if self.cuda:
+                bx = bx.cuda(non_blocking=True)
+                by = by.cuda(non_blocking=True)
+            bxs.append(bx)
+            bys.append(by)
+            bts.append(st)
 
         return bxs,bys,bts
                
@@ -150,24 +165,25 @@ class Net(nn.Module):
     def observe(self, x, y, t):
 
         # step through elements of x
-        correct_total = 0
-        count_total = 0
+        batch_preds = []
+        batch_targets = []
 
+        task_id = int(t) if isinstance(t, int) else int(t.item())
         for i in range(0,x.size()[0]):
 
             self.age += 1
-            xi = x[i].data.cpu().numpy()
-            yi = y[i].data.cpu().numpy()
+            xi = x[i].detach().cpu()
+            yi = y[i].detach().cpu()
             self.net.zero_grad()
 
-            before = deepcopy(self.net.state_dict())
+            before = self._clone_model_state()
             for step in range(0,self.steps):
-                weights_before = deepcopy(self.net.state_dict())
+                weights_before = self._clone_model_state()
                 ##Check for nan
                 if weights_before != weights_before:
                     ipdb.set_trace()
                 # Draw batch from buffer:
-                bxs, bys, bts = self.getBatch(xi,yi,t)          
+                bxs, bys, bts = self.getBatch(xi,yi,task_id)          
                 loss = 0.0
                 total_loss = 0.0
                 for idx in range(len(bxs)):
@@ -181,43 +197,49 @@ class Net(nn.Module):
                         offset1, offset2 = self.compute_offsets(bt)
                         prediction = (self.netforward(bx)[:, offset1:offset2])
                         loss = self.bce(prediction,
-                                        by.unsqueeze(0)-offset1)
+                                        by - offset1)
                         preds = torch.argmax(prediction, dim=1)
                         target = by - offset1
                     else:
                         prediction = self.forward(bx,0)
-                        loss = self.bce(prediction, by.unsqueeze(0))
+                        loss = self.bce(prediction, by)
                         preds = torch.argmax(prediction, dim=1)
                         target = by
                     if torch.isnan(loss):
                         ipdb.set_trace()
 
                     loss.backward()
-                    torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.args.grad_clip_norm)
+                    if self.cfg.grad_clip_norm:
+                        torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.cfg.grad_clip_norm)
                     self.opt.step()
-                    correct_total += int(preds.item() == target.item())
-                    count_total += 1
+                    batch_preds.append(preds.detach().cpu())
+                    batch_targets.append(target.detach().cpu())
                     total_loss += loss.item()
-                weights_after = self.net.state_dict()
+                weights_after = self._clone_model_state()
                 if weights_after != weights_after:
                     ipdb.set_trace()
 
                 # Within batch Reptile meta-update:
-                self.net.load_state_dict({name : weights_before[name] + ((weights_after[name] - weights_before[name]) * self.beta) for name in weights_before})
+                self._apply_meta_update(weights_before, weights_after, self.beta)
 
-            after = self.net.state_dict()
+            after = self._clone_model_state()
 
             # Across batch Reptile meta-update:
-            self.net.load_state_dict({name : before[name] + ((after[name] - before[name]) * self.gamma) for name in before})
+            self._apply_meta_update(before, after, self.gamma)
 
             # Reservoir sampling memory update:
             if len(self.M) < self.memories:
-                self.M.append([xi,yi,t])
+                self.M.append((xi.clone(), yi.clone(), task_id))
 
             else:
                 p = random.randint(0,self.age)
                 if p < self.memories:
-                    self.M[p] = [xi,yi,t]
+                    self.M[p] = (xi.clone(), yi.clone(), task_id)
 
-        avg_tr_acc = correct_total / count_total if count_total else 0.0
+        if batch_preds:
+            stacked_preds = torch.stack(batch_preds).view(-1)
+            stacked_targets = torch.stack(batch_targets).view(-1)
+            avg_tr_acc = macro_recall(stacked_preds, stacked_targets)
+        else:
+            avg_tr_acc = 0.0
         return total_loss/self.steps, avg_tr_acc

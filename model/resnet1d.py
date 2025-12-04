@@ -8,8 +8,11 @@ raw IQ sample classification tasks.
 
 from __future__ import annotations
 
+import math
+
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.func import functional_call
 
 
@@ -19,17 +22,19 @@ class BasicBlock1D(nn.Module):
     expansion = 1
 
     def __init__(self, inplanes: int, planes: int, stride: int = 1,
-                 downsample: nn.Module | None = None) -> None:
+                 downsample: nn.Module | None = None, norm_layer=None) -> None:
         super().__init__()
+        if norm_layer is None:
+            norm_layer = nn.BatchNorm1d
         self.conv1 = nn.Conv1d(
             inplanes, planes, kernel_size=3, stride=stride, padding=1, bias=False
         )
-        self.bn1 = nn.BatchNorm1d(planes)
+        self.bn1 = norm_layer(planes)
         self.relu = nn.ReLU(inplace=True)
         self.conv2 = nn.Conv1d(
             planes, planes, kernel_size=3, stride=1, padding=1, bias=False
         )
-        self.bn2 = nn.BatchNorm1d(planes)
+        self.bn2 = norm_layer(planes)
         self.downsample = downsample
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # pragma: no cover -
@@ -53,14 +58,17 @@ class _ResNet1D(nn.Module):
     """Internal utility that mirrors ``torchvision``'s ``ResNet`` logic."""
 
     def __init__(self, block: type[nn.Module], layers: list[int], num_classes: int,
-                 in_channels: int = 2) -> None:
+                 in_channels: int = 2, norm_layer=None) -> None:
         super().__init__()
+        if norm_layer is None:
+            norm_layer = nn.BatchNorm1d
+        self._norm_layer = norm_layer
         self.inplanes = 64
 
         self.conv1 = nn.Conv1d(
             in_channels, 64, kernel_size=7, stride=2, padding=1, bias=False
         )
-        self.bn1 = nn.BatchNorm1d(64)
+        self.bn1 = norm_layer(64)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
 
@@ -70,7 +78,8 @@ class _ResNet1D(nn.Module):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
 
         self.avgpool = nn.AdaptiveAvgPool1d(1)
-        self.fc = nn.Linear(512 * block.expansion, num_classes)
+        out_dim = 512 * block.expansion
+        self.fc = nn.Linear(out_dim, num_classes)
 
     def _make_layer(self, block: type[nn.Module], planes: int, blocks: int,
                     stride: int = 1) -> nn.Sequential:
@@ -81,13 +90,13 @@ class _ResNet1D(nn.Module):
                     self.inplanes, planes * block.expansion, kernel_size=1,
                     stride=stride, bias=False
                 ),
-                nn.BatchNorm1d(planes * block.expansion),
+                self._norm_layer(planes * block.expansion),
             )
 
-        layers = [block(self.inplanes, planes, stride, downsample)]
+        layers = [block(self.inplanes, planes, stride, downsample, norm_layer=self._norm_layer)]
         self.inplanes = planes * block.expansion
         for _ in range(1, blocks):
-            layers.append(block(self.inplanes, planes))
+            layers.append(block(self.inplanes, planes, norm_layer=self._norm_layer))
         return nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor, return_features=False, classify_feats=False, return_h4=False) -> torch.Tensor:  # pragma: no cover -
@@ -122,9 +131,14 @@ class ResNet1D(nn.Module):
     def __init__(self, num_classes: int, args=None, in_channels: int = 2) -> None:
         super().__init__()
         self.args = args
-
+        use_linear_norm = bool(getattr(args, "model", "") == "packnet")
+        norm_layer = self._build_norm_factory(args)
         self.model = _ResNet1D(
-            BasicBlock1D, [2, 2, 2, 2], num_classes, in_channels=in_channels
+            BasicBlock1D,
+            [2, 2, 2, 2],
+            num_classes,
+            in_channels=in_channels,
+            norm_layer=norm_layer,
         )
 
         # Ordered names for mapping fast weights
@@ -168,6 +182,17 @@ class ResNet1D(nn.Module):
             [nn.Parameter(torch.ones_like(p) * alpha_init) for p in self.model.parameters()]
         )
 
+    # ------------------------------------------------------------------
+    def _build_norm_factory(self, args):
+        use_groupnorm = getattr(args, "model", "") == "packnet"
+        if use_groupnorm:
+            target_groups = getattr(args, "groupnorm_groups", 4)
+
+            def gn_factory(channels: int):
+                groups = max(1, math.gcd(channels, target_groups))
+                return nn.GroupNorm(groups, channels)
+
+            return lambda c: nn.Identity(c) # gn_factory
+        return lambda c: nn.BatchNorm1d(c)
 
 __all__ = ["ResNet1D"]
-

@@ -5,6 +5,7 @@ import math
 import torch
 import torch.nn as nn
 from model.lamaml_base import *
+from utils.training_metrics import macro_recall
 
 class Net(BaseNet):
 
@@ -76,7 +77,7 @@ class Net(BaseNet):
         logits = self.net.forward(x, vars=fast_weights)[:, :offset2]
         loss = self.take_loss(t, logits, y)
 
-        graph_required = bool(self.args.second_order)
+        graph_required = bool(self.cfg.second_order)
 
         # All inputs to grad must require grad and be used in loss
         for p in fast_weights:
@@ -88,7 +89,10 @@ class Net(BaseNet):
         )
 
         # Clip
-        grads = [g.clamp(min=-self.args.grad_clip_norm, max=self.args.grad_clip_norm) for g in grads]
+        grads = [
+            g.clamp(min=-self.cfg.grad_clip_norm, max=self.cfg.grad_clip_norm)
+            for g in grads
+        ] if self.cfg.grad_clip_norm else grads
 
         # Inner step: w' = w - alpha * g
         # (zip three lists directly; avoid nested zip to prevent iterator surprises)
@@ -114,7 +118,7 @@ class Net(BaseNet):
                 self.current_task = t
 
             batch_sz = x.shape[0]
-            n_batches = self.args.cifar_batches
+            n_batches = self.cfg.cifar_batches
             rough_sz = math.ceil(batch_sz/n_batches)
             fast_weights = None
             meta_losses = [0 for _ in range(n_batches)]
@@ -136,15 +140,18 @@ class Net(BaseNet):
                     self.push_to_mem(batch_x, batch_y, torch.tensor(t))
                 meta_loss, logits = self.meta_loss(bx, fast_weights, by, bt, t) 
                 with torch.no_grad():
-                    correct = 0
-                    total = logits.size(0)
+                    preds_list = []
+                    target_list = []
                     for sample_idx, task_idx in enumerate(bt):
                         offset1_s, offset2_s = self.compute_offsets(int(task_idx))
                         preds = torch.argmax(logits[sample_idx, offset1_s:offset2_s], dim=0)
                         target = by[sample_idx] - offset1_s
-                        correct += int(preds.item() == target.item())
-                    if total:
-                        tr_acc.append(correct / total)
+                        preds_list.append(preds.detach().cpu())
+                        target_list.append(target.detach().cpu())
+                    if preds_list:
+                        stacked_preds = torch.stack(preds_list).view(-1)
+                        stacked_targets = torch.stack(target_list).view(-1)
+                        tr_acc.append(macro_recall(stacked_preds, stacked_targets))
 
                 meta_losses[i] += meta_loss
 
@@ -154,14 +161,15 @@ class Net(BaseNet):
             meta_loss = sum(meta_losses)/len(meta_losses)            
             meta_loss.backward()
 
-            torch.nn.utils.clip_grad_norm_(self.net.alpha_lr.parameters(), self.args.grad_clip_norm)
-            torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.args.grad_clip_norm)
-            if self.args.learn_lr:
+            if self.cfg.grad_clip_norm:
+                torch.nn.utils.clip_grad_norm_(self.net.alpha_lr.parameters(), self.cfg.grad_clip_norm)
+                torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.cfg.grad_clip_norm)
+            if self.cfg.learn_lr:
                 self.opt_lr.step()
 
             # if sync-update is being carried out (as in sync-maml) then update the weights using the optimiser
             # otherwise update the weights with sgd using updated LRs as step sizes
-            if(self.args.sync_update):
+            if(self.cfg.sync_update):
                 self.opt_wt.step()
             else:            
                 for i,p in enumerate(self.net.parameters()):          

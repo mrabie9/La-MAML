@@ -17,6 +17,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from utils.training_metrics import macro_recall
 
 
 @dataclass
@@ -34,9 +35,10 @@ class HatConfig:
     @staticmethod
     def from_args(args: object) -> "HatConfig":
         cfg = HatConfig()
-        for field in cfg.__dataclass_fields__:
-            if hasattr(args, field):
-                setattr(cfg, field, getattr(args, field))
+        # Override defaults with any args attributes that match
+        # for field in cfg.__dataclass_fields__:
+        #     if hasattr(args, field):
+        #         setattr(cfg, field, getattr(args, field))
         if hasattr(args, "clipgrad") and not hasattr(args, "grad_clip_norm"):
             cfg.grad_clip_norm = getattr(args, "clipgrad")
         return cfg
@@ -539,7 +541,7 @@ class Net(nn.Module):
         #     print(mask.mean(), mask.min())
         loss, _ = self._criterion(logits, y, masks)
         preds = torch.argmax(logits, dim=1)
-        tr_acc = (preds == y).float().mean().item()
+        tr_acc = macro_recall(preds, y)
         loss.backward()
 
         if self.mask_back:

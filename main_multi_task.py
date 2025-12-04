@@ -57,12 +57,13 @@ def life_experience_iid(model, inc_loader, args):
 
             model.train()
 
-            loss = model.observe(Variable(v_x), Variable(v_y), Variable(super_v_y))
+            loss, tr_acc = model.observe(Variable(v_x), Variable(v_y), Variable(super_v_y))
 
+            val_acc = sum(result_val_a[-1]).item()/len(result_val_a[-1]) if result_val_a else 0.0
             prog_bar.set_description(
-                "Epoch: {}/{} | Iter: {} | Loss: {} | Acc: Total: {}".format(
+                "Epoch: {}/{} | Iter: {} | Loss: {} | Acc: Tr: {} Val: {}".format(
                     ep+1, args.n_epochs, i%(1000*args.n_epochs), round(loss, 3),
-                    round(sum(result_val_a[-1]).item()/len(result_val_a[-1]), 5)
+                    round(tr_acc, 5), round(val_acc, 5)
                 )
             )
 
@@ -85,4 +86,3 @@ def life_experience_iid(model, inc_loader, args):
     time_end = time.time()
     time_spent = time_end - time_start
     return torch.Tensor(result_val_t), torch.Tensor(result_val_a), torch.Tensor(result_test_t), torch.Tensor(result_test_a), time_spent
-

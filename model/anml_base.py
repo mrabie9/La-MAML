@@ -2,6 +2,7 @@
 
 import logging
 import matplotlib.pyplot as plt
+from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -12,6 +13,18 @@ from model.modelfactory import ModelFactory
 # from dataloaders.iq_data_loader import ensure_iq_two_channel
 
 logger = logging.getLogger("experiment")
+
+
+@dataclass
+class AnmlBaseConfig:
+    alpha_init: float = 1e-3
+
+    @staticmethod
+    def from_args(args: object) -> "AnmlBaseConfig":
+        cfg = AnmlBaseConfig()
+        if hasattr(args, "alpha_init"):
+            cfg.alpha_init = getattr(args, "alpha_init")
+        return cfg
 
 def batchnorm(input, weight=None, bias=None, running_mean=None, running_var=None, training=True, eps=1e-5, momentum=0.1):
     ''' momentum = 1 restricts stats to the current mini-batch '''
@@ -41,6 +54,7 @@ class Learner(nn.Module):
         """
         super(Learner, self).__init__()
         self.args = args
+        self.cfg = AnmlBaseConfig.from_args(args)
         
         # self.config = config
         self.Neuromodulation = neuromodulation
@@ -49,7 +63,7 @@ class Learner(nn.Module):
         # running_mean and running_var
         self.vars_bn = nn.ParameterList()
         self.net = ResNet1D(n_outputs, self.args)
-        self.net.define_task_lr_params(alpha_init=self.args.alpha_init)
+        self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
 
         self.config = ModelFactory.get_model()
 

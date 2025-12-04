@@ -4,6 +4,8 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+from dataclasses import dataclass
+
 import torch
 from torch.autograd import Variable
 from model.resnet1d import ResNet1D
@@ -14,6 +16,32 @@ import torch.nn.functional as F
 import numpy as np
 from copy import deepcopy
 from torch.utils.data import DataLoader
+from utils.training_metrics import macro_recall
+
+
+@dataclass
+class BclDualConfig:
+    bcl_memory_strength: float = 1.0
+    bcl_temperature: float = 2.0
+    alpha_init: float = 1e-3
+    lr: float = 1e-3
+    beta: float = 1.0
+    bcl_n_memories: int = 2000
+    cuda: bool = True
+    batch_size: int = 1
+    samples_per_task: int = -1
+    replay_batch_size: int = 20
+    bcl_inner_steps: int = 5
+    bcl_n_meta: int = 5
+    bcl_adapt_lr: float = 0.1
+
+    @staticmethod
+    def from_args(args: object) -> "BclDualConfig":
+        cfg = BclDualConfig()
+        for field in cfg.__dataclass_fields__:
+            if hasattr(args, field):
+                setattr(cfg, field, getattr(args, field))
+        return cfg
 
 class Net(torch.nn.Module):
 
@@ -23,17 +51,18 @@ class Net(torch.nn.Module):
                  n_tasks,
                  args):
         super(Net, self).__init__()
+        self.cfg = BclDualConfig.from_args(args)
         self.n_tasks = n_tasks
-        self.reg = args.bcl_memory_strength
-        self.temp = args.bcl_temperature
+        self.reg = self.cfg.bcl_memory_strength
+        self.temp = self.cfg.bcl_temperature
         # setup network
         self.is_task_incremental = True
         self.net = ResNet1D(n_outputs, args)
-        self.net.define_task_lr_params(alpha_init=args.alpha_init)
+        self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
 
         # setup optimizer
-        self.inner_lr = args.lr
-        self.beta= args.beta
+        self.inner_lr = self.cfg.lr
+        self.beta= self.cfg.beta
         #self.outer_opt = torch.optim.SGD(self.net.parameters(), lr=self.outer_lr)
         self.inner_opt = torch.optim.SGD(self.net.parameters(), lr=self.inner_lr)
         # setup losses
@@ -47,7 +76,7 @@ class Net(torch.nn.Module):
         self.current_task = 0
         self.fisher = {}
         self.optpar = {}
-        self.n_memories = args.bcl_n_memories
+        self.n_memories = self.cfg.bcl_n_memories
         self.mem_cnt = 0       
         
         self.n_val = int(self.n_memories * 0.2)
@@ -59,7 +88,7 @@ class Net(torch.nn.Module):
         self.mem_feat = torch.FloatTensor(n_tasks, self.n_memories, self.nc_per_task).fill_(0)
         self.valy = torch.LongTensor(n_tasks, self.n_val)
         self.mem = {}
-        if args.cuda:
+        if self.cfg.cuda:
             self.memy = self.memy.cuda().fill_(0)
             self.memx = self.memx.cuda().fill_(0)
             self.mem_feat = self.mem_feat.cuda()
@@ -68,21 +97,21 @@ class Net(torch.nn.Module):
 
         self.mem_cnt = 0
         self.val_cnt = 0
-        self.bsz = args.batch_size
+        self.bsz = self.cfg.batch_size
         self.valid_id = []
         self.n_outputs = n_outputs
 
         self.mse = nn.MSELoss()
         self.kl = nn.KLDivLoss()
         self.samples_seen = 0
-        self.samples_per_task = args.samples_per_task
-        self.sz = args.replay_batch_size
-        self.inner_steps = args.bcl_inner_steps
-        self.n_meta = args.bcl_n_meta
+        self.samples_per_task = self.cfg.samples_per_task
+        self.sz = self.cfg.replay_batch_size
+        self.inner_steps = self.cfg.bcl_inner_steps
+        self.n_meta = self.cfg.bcl_n_meta
         self.count = 0
         self.val_count = 0
         self.adapt_ = False #args.adapt
-        self.adapt_lr = args.bcl_adapt_lr
+        self.adapt_lr = self.cfg.bcl_adapt_lr
         self.models={}
 
     def on_epoch_end(self):  
@@ -232,7 +261,7 @@ class Net(torch.nn.Module):
                 logits = pred[:, offset1:offset2]
                 targets = y - offset1
                 preds = torch.argmax(logits, dim=1)
-                tr_acc.append((preds == targets).float().mean().item())
+                tr_acc.append(macro_recall(preds, targets))
                 loss1 = self.bce(logits, targets)
                 if t > 0:
                     xx, yy, feat, mask, list_t = self.memory_sampling(t)

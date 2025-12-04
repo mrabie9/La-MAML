@@ -24,6 +24,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from model.resnet1d import ResNet1D
+from utils.training_metrics import macro_recall
 
 
 def _calculate_fan_in_and_fan_out(tensor: torch.Tensor) -> Tuple[int, int]:
@@ -105,10 +106,10 @@ class UCLConfig:
         #     if hasattr(args, field):
         #         setattr(cfg, field, getattr(args, field))
         # fallbacks to legacy flag names
-        if hasattr(args, "clipgrad"):
-            cfg.clipgrad = getattr(args, "clipgrad")
-        if hasattr(args, "split"):
-            cfg.split = getattr(args, "split")
+        # if hasattr(args, "clipgrad"):
+        #     cfg.clipgrad = getattr(args, "clipgrad")
+        # if hasattr(args, "split"):
+        #     cfg.split = getattr(args, "split")
         return cfg
 
 
@@ -241,7 +242,7 @@ class Net(nn.Module):
         logits = outputs[t] if self.split else outputs
 
         preds = torch.argmax(logits, dim=1)
-        tr_acc = (preds == y).float().mean().item()
+        tr_acc = macro_recall(preds, y)
         loss = self.ce(logits, y)
         loss = self._apply_regularisation(loss, y.size(0))
 

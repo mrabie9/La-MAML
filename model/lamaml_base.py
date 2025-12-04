@@ -6,12 +6,43 @@ import math
 import torch
 from torch.autograd import Variable
 import torch.nn as nn
+from dataclasses import dataclass
+from typing import Optional
 import model.meta.learner as Learner
 import model.meta.modelfactory as mf
 from model.resnet import ResNet18
 from model.resnet1d import ResNet1D
 from scipy.stats import pearsonr
 import datetime
+
+
+@dataclass
+class LamamlBaseConfig:
+    arch: str = "linear"
+    n_layers: int = 2
+    n_hiddens: int = 100
+    alpha_init: float = 1e-3
+    opt_wt: float = 1e-1
+    opt_lr: float = 1e-1
+    dataset: str = "tinyimagenet"
+    glances: int = 1
+    memories: int = 5120
+    replay_batch_size: int = 20
+    cuda: bool = True
+    use_old_task_memory: bool = False
+    learn_lr: bool = False
+    grad_clip_norm: Optional[float] = 2.0
+    second_order: bool = False
+    sync_update: bool = False
+    cifar_batches: int = 3
+
+    @staticmethod
+    def from_args(args: object) -> "LamamlBaseConfig":
+        cfg = LamamlBaseConfig()
+        for field in cfg.__dataclass_fields__:
+            if hasattr(args, field):
+                setattr(cfg, field, getattr(args, field))
+        return cfg
 
 class BaseNet(torch.nn.Module):
 
@@ -23,27 +54,28 @@ class BaseNet(torch.nn.Module):
         super(BaseNet, self).__init__()
 
         self.args = args
-        nl, nh = args.n_layers, args.n_hiddens
+        self.cfg = LamamlBaseConfig.from_args(args)
+        nl, nh = self.cfg.n_layers, self.cfg.n_hiddens
 
-        if args.arch == 'resnet18':
+        if self.cfg.arch == 'resnet18':
             self.net = ResNet18(n_outputs, args)
-            self.net.define_task_lr_params(alpha_init=args.alpha_init)
-        elif args.arch == 'resnet1d':
+            self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
+        elif self.cfg.arch == 'resnet1d':
             self.net = ResNet1D(n_outputs, args)
-            self.net.define_task_lr_params(alpha_init=args.alpha_init)
+            self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
         else:
             config = mf.ModelFactory.get_model(
-                model_type=args.arch,
+                model_type=self.cfg.arch,
                 sizes=[n_inputs] + [nh] * nl + [n_outputs],
-                dataset=args.dataset,
+                dataset=self.cfg.dataset,
                 args=args,
             )
             self.net = Learner.Learner(config, args)
             # define the lr params
-            self.net.define_task_lr_params(alpha_init=args.alpha_init)
+            self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
 
-        self.opt_wt = torch.optim.SGD(list(self.net.parameters()), lr=args.opt_wt)     
-        self.opt_lr = torch.optim.SGD(list(self.net.alpha_lr.parameters()), lr=args.opt_lr) 
+        self.opt_wt = torch.optim.SGD(list(self.net.parameters()), lr=self.cfg.opt_wt)     
+        self.opt_lr = torch.optim.SGD(list(self.net.alpha_lr.parameters()), lr=self.cfg.opt_lr) 
 
         self.epoch = 0
         # allocate buffer
@@ -53,16 +85,16 @@ class BaseNet(torch.nn.Module):
 
         # setup losses
         self.loss = torch.nn.CrossEntropyLoss()
-        self.is_cifar = ((args.dataset == 'cifar100') or (args.dataset == 'tinyimagenet'))
-        self.glances = args.glances
+        self.is_cifar = ((self.cfg.dataset == 'cifar100') or (self.cfg.dataset == 'tinyimagenet'))
+        self.glances = self.cfg.glances
         self.pass_itr = 0
         self.real_epoch = 0
 
         self.current_task = 0
-        self.memories = args.memories
-        self.batchSize = int(args.replay_batch_size)
+        self.memories = self.cfg.memories
+        self.batchSize = int(self.cfg.replay_batch_size)
 
-        self.cuda = args.cuda
+        self.cuda = self.cfg.cuda
         if self.cuda:
             self.net = self.net.cuda()
 
@@ -109,7 +141,7 @@ class BaseNet(torch.nn.Module):
         bys = []
         bts = []
 
-        if self.args.use_old_task_memory and t>0:
+        if self.cfg.use_old_task_memory and t>0:
             MEM = self.M
         else:
             MEM = self.M_new
@@ -159,7 +191,7 @@ class BaseNet(torch.nn.Module):
         return int(offset1), int(offset2)
 
     def zero_grads(self):
-        if self.args.learn_lr:
+        if self.cfg.learn_lr:
             self.opt_lr.zero_grad()
         self.opt_wt.zero_grad()
         self.net.zero_grad()

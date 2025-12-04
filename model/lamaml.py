@@ -6,6 +6,7 @@ import math
 import torch
 import torch.nn as nn
 from model.lamaml_base import *
+from utils.training_metrics import macro_recall
 
 
 class Net(BaseNet):
@@ -45,7 +46,7 @@ class Net(BaseNet):
             fast_weights = list(self.net.parameters())
 
         # NOTE if we want higher order grads to be allowed, change create_graph=False to True
-        graph_required = self.args.second_order
+        graph_required = self.cfg.second_order
         grads = torch.autograd.grad(loss, fast_weights, create_graph=graph_required, retain_graph=graph_required)
         # grads = [g.clamp(min = -self.args.grad_clip_norm, max = self.args.grad_clip_norm) for g in grads]
         # for i in range(len(grads)):
@@ -82,7 +83,7 @@ class Net(BaseNet):
 
             batch_sz = x.shape[0]
             meta_losses = [0 for _ in range(batch_sz)]
-            tr_acc = [0 for _ in range(batch_sz)]
+            tr_acc = []
 
             bx, by, bt = self.getBatch(x.cpu().numpy(), y.cpu().numpy(), t)
             fast_weights = None
@@ -102,8 +103,7 @@ class Net(BaseNet):
 
                 meta_loss, logits = self.meta_loss(bx, fast_weights, by, t) # loss on the meta batch
                 pb = torch.argmax(logits, dim=1)
-                correct = (pb == by).sum().item()
-                tr_acc[i] += correct / batch_sz
+                tr_acc.append(macro_recall(pb, by))
                 meta_losses[i] += meta_loss/batch_sz
                 assert meta_loss.requires_grad, "meta_loss has no grad path to alpha"
                 meta_losses[i].backward()
@@ -116,13 +116,14 @@ class Net(BaseNet):
 
             # meta_loss.backward()
 
-            torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.args.grad_clip_norm)
-            torch.nn.utils.clip_grad_norm_(self.net.alpha_lr.parameters(), self.args.grad_clip_norm)
+            if self.cfg.grad_clip_norm:
+                torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.cfg.grad_clip_norm)
+                torch.nn.utils.clip_grad_norm_(self.net.alpha_lr.parameters(), self.cfg.grad_clip_norm)
 
-            if self.args.learn_lr:
+            if self.cfg.learn_lr:
                 self.opt_lr.step()
 
-            if self.args.sync_update:
+            if self.cfg.sync_update:
                 self.opt_wt.step()
             else:
                 with torch.no_grad():
@@ -137,4 +138,5 @@ class Net(BaseNet):
             self.net.zero_grad(set_to_none=True)
             self.net.alpha_lr.zero_grad(set_to_none=True)
 
-        return meta_loss.mean().item(), sum(tr_acc)/len(tr_acc)
+        avg_tr_acc = sum(tr_acc)/len(tr_acc) if tr_acc else 0.0
+        return meta_loss.mean().item(), avg_tr_acc

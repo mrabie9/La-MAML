@@ -1,20 +1,21 @@
 # Experiment details
-expt_name: hat_repo_basic_test        # name of the experiment
-model: hat                    # algo to train
+expt_name: gem_test_radar        # name of the experiment
+model: gem                   # algo to train
 arch: resnet1d                          # arch to use for training (choices: [linear, pc_cnn, resnet18, resnet1d])
 # n_hiddens: 100                          # number of hidden neurons at each layer
 # n_layers: 2                             # number of hidden layers
 xav_init: true                          # Use xavier initialization
 
 # Data parameters
-data_path: data/rff/rfmls            # path where data is located
+data_path: data/rff/radar            # path where data is located
 loader: task_incremental_loader      # data loader to use
 shuffle_tasks: false                 # NOT USED present tasks in order
-classes_per_it: 5                    # number of classes in every batch
+classes_per_it: 6                    # number of classes in every batch
 iterations: 5000                     # number of classes in every batch
 dataset: iq                 # Dataset to train and test on
 workers: 0                           # Number of workers preprocessing the data
-validation: 0.2                      # Validation split (0. <= x <= 1.)
+validation: 0.5                      # Validation split (0. <= x <= 1.)
+val-rate: 10
 class_order: random                     # define classes order of increment (choices: [random, chrono, old, super])
 increment: 5                         # number of classes to increment by in class incremental loader
 test_batch_size: 100000              # batch size to use during testing
@@ -22,17 +23,17 @@ test_batch_size: 100000              # batch size to use during testing
 # Experiment parameters
 cuda: true                    # Use GPU
 seed: 0                       # random seed of model
-log_every: 3125                # frequency of checking the validation accuracy, in minibatches
+log_every: 10                # frequency of checking the validation accuracy, in minibatches
 log_dir: logs/                # the directory where the logs will be saved
 tf_dir: ""                    # (not set by user)
 calc_test_accuracy: false     # Calculate test accuracy along with val accuracy
 
 # Optimizer parameters (influencing all models)
 glances: 1                    # Number of times the model is allowed to train over a set of samples in the single pass setting
-n_epochs: 60                   # Number of epochs per task
+n_epochs: 1                   # Number of epochs per task
 batch_size: 128                 # the amount of items received by the algorithm at one time (set to 1 across all experiments). Variable name is from GEM project.
 replay_batch_size: 10         # The batch size for experience replay
-samples_per_task: 4096                 # training samples per task (all if negative)
+samples_per_task: 256                 # training samples per task (all if negative)
 memories: 400                # number of total memories stored in a reservoir sampling based buffer
 grad_clip_norm: 5.0                  # Clip the gradients by this value
 lr: 0.03                     # learning rate (For baselines)
@@ -92,3 +93,5 @@ bcl_inner_steps: 2
 bcl_adapt_lr: 0.01
 bcl_n_memories: 400
 # bcl_adapt: 
+
+nc_per_task: 6

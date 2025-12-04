@@ -56,6 +56,8 @@ def get_parser():
                         help='(not set by user)')
     parser.add_argument('--calc_test_accuracy', default=False , action='store_true',
                         help='Calculate test accuracy along with val accuracy')
+    parser.add_argument('--state_logging', default=False, action='store_true',
+                        help='Print high-level state messages to stdout for debugging')
 
     # data parameters
     parser.add_argument('--data_path', default='data/tiny-imagenet-200/',
@@ -85,6 +87,8 @@ def get_parser():
                         help='batch size to use during testing.')
     parser.add_argument('--nc_per_task', type=int, default=5,
                         help='number of classes per task')
+    parser.add_argument('--val_rate', type=int, default=10,
+                        help='frequency (in epochs) of validation')
 
 
     # La-MAML parameters

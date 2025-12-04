@@ -15,6 +15,7 @@ import torch
 import torch.nn as nn
 
 from model.resnet1d import ResNet1D
+from utils.training_metrics import macro_recall
 
 
 @dataclass
@@ -32,21 +33,21 @@ class SiConfig:
     @staticmethod
     def from_args(args: object) -> "SiConfig":
         cfg = SiConfig()
-        for field in ("lr", "optimizer", "momentum", "weight_decay", "clipgrad"):
-            if hasattr(args, field):
-                value = getattr(args, field)
-                if value is not None:
-                    setattr(cfg, field, value)
-        if hasattr(args, "clipgrad_norm") and not hasattr(args, "clipgrad"):
-            cfg.clipgrad = getattr(args, "clipgrad_norm")
-        if hasattr(args, "c"):
-            cfg.si_c = getattr(args, "c")
-        if hasattr(args, "si_c"):
-            cfg.si_c = getattr(args, "si_c")
-        if hasattr(args, "epsilon"):
-            cfg.si_epsilon = getattr(args, "epsilon")
-        if getattr(args, "experiment", None) == "split_notmnist" and not hasattr(args, "epsilon"):
-            cfg.si_epsilon = 0.001
+        # for field in ("lr", "optimizer", "momentum", "weight_decay", "clipgrad"):
+        #     if hasattr(args, field):
+        #         value = getattr(args, field)
+        #         if value is not None:
+        #             setattr(cfg, field, value)
+        # if hasattr(args, "clipgrad_norm") and not hasattr(args, "clipgrad"):
+        #     cfg.clipgrad = getattr(args, "clipgrad_norm")
+        # if hasattr(args, "c"):
+        #     cfg.si_c = getattr(args, "c")
+        # if hasattr(args, "si_c"):
+        #     cfg.si_c = getattr(args, "si_c")
+        # if hasattr(args, "epsilon"):
+        #     cfg.si_epsilon = getattr(args, "epsilon")
+        # if getattr(args, "experiment", None) == "split_notmnist" and not hasattr(args, "epsilon"):
+        #     cfg.si_epsilon = 0.001
         return cfg
 
 
@@ -111,7 +112,7 @@ class Net(nn.Module):
 
         loss = self.ce(logits, targets)
         preds = torch.argmax(logits, dim=1)
-        tr_acc = (preds == targets).float().mean().item()
+        tr_acc = macro_recall(preds, targets)
         loss = loss + self.si_c * self._surrogate_loss()
 
         loss.backward()

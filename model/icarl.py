@@ -4,6 +4,9 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+from dataclasses import dataclass
+from typing import Optional
+
 import torch
 
 import numpy as np
@@ -18,10 +21,39 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../dataloaders')))
 from iq_data_loader import ensure_iq_two_channel
+from utils.training_metrics import macro_recall
 
 if not sys.warnoptions:
     import warnings
     warnings.simplefilter("once")
+
+
+@dataclass
+class IcarlConfig:
+    arch: str = "linear"
+    n_layers: int = 2
+    n_hiddens: int = 100
+    memory_strength: float = 0.0
+    n_memories: int = 0
+    samples_per_task: int = -1
+    validation: float = 0.0
+    glances: int = 1
+    dataset: str = "tinyimagenet"
+    alpha_init: float = 1e-3
+    lr: float = 1e-3
+    cuda: bool = True
+    grad_clip_norm: Optional[float] = 2.0
+    n_epochs: int = 1
+    loader: str = "task_incremental_loader"
+    input_channels: int = 1
+
+    @staticmethod
+    def from_args(args: object) -> "IcarlConfig":
+        cfg = IcarlConfig()
+        for field in cfg.__dataclass_fields__:
+            if hasattr(args, field):
+                setattr(cfg, field, getattr(args, field))
+        return cfg
 
 class Net(torch.nn.Module):
     # Re-implementation of
@@ -34,42 +66,42 @@ class Net(torch.nn.Module):
                  n_tasks,
                  args):
         super(Net, self).__init__()
-        self.args = args
+        self.cfg = IcarlConfig.from_args(args)
         self.nt = n_tasks
-        self.reg = args.memory_strength
-        self.n_memories = args.n_memories
+        self.reg = self.cfg.memory_strength
+        self.n_memories = self.cfg.n_memories
         self.num_exemplars = 0
         self.n_feat = n_outputs
         self.n_classes = n_outputs
-        self.samples_per_task = args.samples_per_task * (1.0 - args.validation)
+        self.samples_per_task = self.cfg.samples_per_task #* (1.0 - self.cfg.validation)
         assert self.samples_per_task > 0, 'Samples per task is <= 0'
         self.examples_seen = 0
 
-        self.glances = args.glances
+        self.glances = self.cfg.glances
         # setup network
 
         # --- IQ mode toggle ---
-        self.input_channels = getattr(args, "input_channels", 1)
-        self.is_iq = (getattr(args, "dataset", "") == "iq") or (self.input_channels == 2)
+        self.input_channels = self.cfg.input_channels
+        self.is_iq = (self.cfg.dataset == "iq") or (self.input_channels == 2)
 
-        nl, nh = args.n_layers, args.n_hiddens
+        nl, nh = self.cfg.n_layers, self.cfg.n_hiddens
 
-        if args.arch == 'resnet18':
+        if self.cfg.arch == 'resnet18':
             self.net = ResNet18(n_outputs, args)
-            self.net.define_task_lr_params(alpha_init=args.alpha_init)
-        elif args.arch == 'resnet1d':
+            self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
+        elif self.cfg.arch == 'resnet1d':
             self.net = ResNet1D(n_outputs, args)
-            self.net.define_task_lr_params(alpha_init=args.alpha_init)
+            self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
         else:
             config = mf.ModelFactory.get_model(
-                model_type=args.arch,
+                model_type=self.cfg.arch,
                 sizes=[n_inputs] + [nh] * nl + [n_outputs],
-                dataset=args.dataset, args=args
+                dataset=self.cfg.dataset, args=args
             )
             self.net = Learner.Learner(config, args=args)
 
         # setup optimizer
-        self.opt = torch.optim.SGD(self.parameters(), lr=args.lr)
+        self.opt = torch.optim.SGD(self.parameters(), lr=self.cfg.lr)
 
         # setup losses
         self.bce = torch.nn.CrossEntropyLoss()
@@ -83,16 +115,16 @@ class Net(torch.nn.Module):
         self.mem_class_x = {}  # stores exemplars class by class
         self.mem_class_y = {}
 
-        self.gpu = args.cuda
+        self.gpu = self.cfg.cuda
         self.nc_per_task = int(n_outputs / n_tasks)
         self.n_outputs = n_outputs
 
     def netforward(self, x):
-        if self.args.dataset == 'tinyimagenet':
+        if self.cfg.dataset == 'tinyimagenet':
             x = x.view(-1, 3, 64, 64)
-        elif self.args.dataset == 'cifar100':
+        elif self.cfg.dataset == 'cifar100':
             x = x.view(-1, 3, 32, 32)
-        elif 'iq' in self.args.dataset.lower():
+        elif 'iq' in self.cfg.dataset.lower():
             # print(x.shape)
             x = ensure_iq_two_channel(x.detach().cpu().numpy())
             x = torch.from_numpy(x).float().cuda()
@@ -169,6 +201,7 @@ class Net(torch.nn.Module):
                 self.examples_seen += x.size(0)
 
                 # if not last batch of task, store samples in memx/memy
+                # Problem if batch_size <= samples_per_task
                 if self.examples_seen < self.samples_per_task:
                     if self.memx is None:
                         self.memx = x.data.clone()
@@ -182,7 +215,7 @@ class Net(torch.nn.Module):
             logits = self.netforward(x)[:, offset1: offset2]
             targets = y - offset1
             preds = torch.argmax(logits, dim=1)
-            tr_acc.append((preds == targets).float().mean().item())
+            tr_acc.append(macro_recall(preds, targets))
             loss = self.bce(logits, targets)
             # num_exemplars remains 0 unless final epoch is reached
             if self.num_exemplars > 0:
@@ -208,18 +241,19 @@ class Net(torch.nn.Module):
                         self.sm(target_dist[:, offset1: offset2])) * self.nc_per_task
             # bprop and update
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.args.grad_clip_norm)
+            if self.cfg.grad_clip_norm:
+                torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.cfg.grad_clip_norm)
 
             self.opt.step()
 
         # check whether this is the last minibatch of the current task
         # We assume only 1 epoch!
-        target = int(self.args.n_epochs * self.samples_per_task)
+        target = int(self.cfg.n_epochs * self.samples_per_task)
         if self.examples_seen >= target:  # not ==
             self.examples_seen = 0
             # self._rebuild_exemplars_for_task(t, x.device)
 
-        # if self.examples_seen == self.args.n_epochs * self.samples_per_task:
+        # if self.examples_seen == self.cfg.n_epochs * self.samples_per_task:
         #     self.examples_seen = 0
             # get labels from previous task; we assume labels are consecutive
             offset1, offset2 = self.compute_offsets(t)
@@ -228,12 +262,14 @@ class Net(torch.nn.Module):
             else:
                 all_labs = torch.LongTensor(np.unique(self.memy.numpy()))
             
-            if self.args.loader == 'class_incremental_loader':
-                num_classes = all_labs.size(0)
-            else:
-                num_classes = all_labs[offset1:offset2].size(0)
+            num_classes = all_labs.size(0)
+            # if self.cfg.loader == 'class_incremental_loader':
+            #     num_classes = all_labs.size(0)
+            # else:
+            #     num_classes = all_labs[offset1:offset2].size(0)
             
-            print("num_classes", num_classes, "nc_per_task", self.nc_per_task)
+            print("num_classes", num_classes, "nc_per_task", self.nc_per_task,
+                  offset1, offset2)
             assert(num_classes == self.nc_per_task)
             # Reduce exemplar set by updating value of num. exemplars per class
             self.num_exemplars = int(self.n_memories /
@@ -284,7 +320,7 @@ class Net(torch.nn.Module):
                     self.mem_class_x[cc]).data.clone()
             self.memx = None
             self.memy = None
-            print(len(self.mem_class_x[0]))
+            # print(len(self.mem_class_x[0]))
 
         avg_tr_acc = sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
         return loss.item(), avg_tr_acc

@@ -3,6 +3,8 @@ from random import shuffle
 import numpy as np
 import ipdb
 import math
+from dataclasses import dataclass, field
+from typing import List, Optional, Sequence
 
 import torch
 from torch.autograd import Variable
@@ -14,6 +16,7 @@ from model.optimizers_lib import optimizers_lib
 from ast import literal_eval
 from model.resnet1d import ResNet1D
 from model.resnet import ResNet18
+from utils.training_metrics import macro_recall
 
 """
 This baseline/ablation is constructed by merging C-MAML and BGD
@@ -28,6 +31,35 @@ The weight update is then carried out using the BGD formula that implicitly
 uses the variances to derive the learning rates for the parameters
 """
 
+
+@dataclass
+class MetaBgdConfig:
+    arch: str = "linear"
+    n_layers: int = 2
+    n_hiddens: int = 100
+    alpha_init: float = 1e-3
+    cuda: bool = True
+    bgd_optimizer: str = "bgd"
+    mean_eta: float = 1.0
+    std_init: float = 5e-2
+    train_mc_iters: int = 5
+    optimizer_params: Sequence[str] = field(default_factory=lambda: ["{}"])
+    dataset: str = "tinyimagenet"
+    glances: int = 1
+    memories: int = 5120
+    replay_batch_size: int = 20
+    use_old_task_memory: bool = False
+    grad_clip_norm: Optional[float] = 2.0
+    cifar_batches: int = 3
+
+    @staticmethod
+    def from_args(args: object) -> "MetaBgdConfig":
+        cfg = MetaBgdConfig()
+        for field in cfg.__dataclass_fields__:
+            if hasattr(args, field):
+                setattr(cfg, field, getattr(args, field))
+        return cfg
+
 class Net(torch.nn.Module):
 
     def __init__(self,
@@ -36,36 +68,43 @@ class Net(torch.nn.Module):
                  n_tasks,           
                  args):
         super(Net, self).__init__()
-        self.args = args
-        nl, nh = args.n_layers, args.n_hiddens
+        self.cfg = MetaBgdConfig.from_args(args)
+        nl, nh = self.cfg.n_layers, self.cfg.n_hiddens
 
-        if args.arch == 'resnet18':
+        if self.cfg.arch == 'resnet18':
             self.net = ResNet18(n_outputs, args)
-            self.net.define_task_lr_params(alpha_init=args.alpha_init)
-        elif args.arch == 'resnet1d':
+            self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
+        elif self.cfg.arch == 'resnet1d':
             self.net = ResNet1D(n_outputs, args)
-            self.net.define_task_lr_params(alpha_init=args.alpha_init)
+            self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
         else:
-            config = mf.ModelFactory.get_model(model_type = args.arch, sizes = [n_inputs] + [nh] * nl + [n_outputs],
-                                                    dataset = args.dataset, args=args)
+            config = mf.ModelFactory.get_model(model_type = self.cfg.arch, sizes = [n_inputs] + [nh] * nl + [n_outputs],
+                                                    dataset = self.cfg.dataset, args=args)
 
             self.net = Learner.Learner(config, args)
 
         # define the lr params
-        self.net.define_task_lr_params(alpha_init = args.alpha_init)
+        self.net.define_task_lr_params(alpha_init = self.cfg.alpha_init)
 
-        self.cuda = args.cuda
+        self.cuda = self.cfg.cuda
         if self.cuda:
             self.net = self.net.cuda()
 
         # optimizer model
-        self.bgd_optimizer = args.bgd_optimizer
-        optimizer_model = optimizers_lib.__dict__[args.bgd_optimizer]
+        self.bgd_optimizer = self.cfg.bgd_optimizer
+        optimizer_model = optimizers_lib.__dict__[self.cfg.bgd_optimizer]
         # params used to instantiate the BGD optimiser
+        opt_params_raw = self.cfg.optimizer_params
+        if isinstance(opt_params_raw, str):
+            opt_params_str = opt_params_raw
+        elif isinstance(opt_params_raw, Sequence):
+            opt_params_str = " ".join(opt_params_raw)
+        else:
+            opt_params_str = str(opt_params_raw)
         optimizer_params = dict({ #"logger": logger,
-                                 "mean_eta": args.mean_eta,
-                                 "std_init": args.std_init,
-                                 "mc_iters": args.train_mc_iters}, **literal_eval(" ".join(args.optimizer_params)))
+                                 "mean_eta": self.cfg.mean_eta,
+                                 "std_init": self.cfg.std_init,
+                                 "mc_iters": self.cfg.train_mc_iters}, **literal_eval(opt_params_str))
         self.optimizer = optimizer_model(self.net, **optimizer_params)
 
         self.epoch = 0
@@ -76,16 +115,16 @@ class Net(torch.nn.Module):
 
         # setup losses
         self.loss = torch.nn.CrossEntropyLoss()
-        self.is_cifar = ((args.dataset == 'cifar100') or (args.dataset == 'tinyimagenet'))
-        self.glances = args.glances
+        self.is_cifar = ((self.cfg.dataset == 'cifar100') or (self.cfg.dataset == 'tinyimagenet'))
+        self.glances = self.cfg.glances
         self.pass_itr = 0
         self.real_epoch = 0
 
         # setup memories
         self.current_task = 0
 
-        self.memories = args.memories
-        self.batchSize = int(args.replay_batch_size)
+        self.memories = self.cfg.memories
+        self.batchSize = int(self.cfg.replay_batch_size)
 
         self.nc_per_task = n_outputs / n_tasks
         # if self.is_cifar:
@@ -185,7 +224,7 @@ class Net(torch.nn.Module):
         bys = []
         bts = []
 
-        if self.args.use_old_task_memory: # and t>0:
+        if self.cfg.use_old_task_memory: # and t>0:
             MEM = self.M
         else:
             MEM = self.M_new
@@ -252,7 +291,8 @@ class Net(torch.nn.Module):
         grads = list(torch.autograd.grad(loss, fast_weights, create_graph=graph_required, retain_graph=graph_required))
         
         for i in range(len(grads)):
-            grads[i] = torch.clamp(grads[i], min = -self.args.grad_clip_norm, max = self.args.grad_clip_norm)            
+            if self.cfg.grad_clip_norm:
+                grads[i] = torch.clamp(grads[i], min = -self.cfg.grad_clip_norm, max = self.cfg.grad_clip_norm)            
 
         # get fast weights vector by taking SGD step on grads
         fast_weights = list(
@@ -295,7 +335,7 @@ class Net(torch.nn.Module):
 
                 batch_sz = x.shape[0]
 
-                n_batches = self.args.cifar_batches
+                n_batches = self.cfg.cifar_batches
                 rough_sz = math.ceil(batch_sz/n_batches)
 
                 # the samples of new task to iterate over in inner update trajectory
@@ -323,17 +363,23 @@ class Net(torch.nn.Module):
                     meta_loss, logits = self.meta_loss(bx, fast_weights, by, bt, t) 
                     with torch.no_grad():
                         if self.is_cifar:
-                            correct = 0
-                            total = logits.size(0)
+                            preds_list = []
+                            target_list = []
                             for sample_idx, task_idx in enumerate(bt):
                                 offset1, offset2 = self.compute_offsets(task_idx)
                                 preds = torch.argmax(logits[sample_idx, offset1:offset2], dim=0)
                                 target = by[sample_idx] - offset1
-                                correct += int(preds.item() == target.item())
-                            acc = correct / total if logits.size(0) else 0.0
+                                preds_list.append(preds.detach().cpu())
+                                target_list.append(target.detach().cpu())
+                            if preds_list:
+                                stacked_preds = torch.stack(preds_list).view(-1)
+                                stacked_targets = torch.stack(target_list).view(-1)
+                                acc = macro_recall(stacked_preds, stacked_targets)
+                            else:
+                                acc = 0.0
                         else:
                             preds = torch.argmax(logits, dim=1)
-                            acc = (preds == by).float().mean().item()
+                            acc = macro_recall(preds, by)
                     accuracy_meta_set[i] = acc
                     meta_losses[i] += meta_loss
 
@@ -342,7 +388,8 @@ class Net(torch.nn.Module):
                 if torch.isnan(meta_loss):
                     ipdb.set_trace()
                 meta_loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.args.grad_clip_norm)
+                if self.cfg.grad_clip_norm:
+                    torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.cfg.grad_clip_norm)
                 mc_meta_losses[pass_itr] = meta_loss
                 if accuracy_meta_set:
                     train_acc_values.append(sum(accuracy_meta_set)/len(accuracy_meta_set))

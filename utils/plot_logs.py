@@ -2,7 +2,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 
-folder = "logs/ucl_bresnet/ucl_bresnet_test-2025-10-17_13-13-15-8993/0/metrics"
+folder = "logs/packnet/packnet_test-2025-11-12_13-14-53-9277/0/metrics"
 files = sorted(f for f in os.listdir(folder) if f.endswith(".npz"))
 
 # Organize files by task and phase

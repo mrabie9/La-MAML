@@ -16,6 +16,7 @@ import torch
 import torch.nn as nn
 
 from model.resnet1d import ResNet1D
+from utils.training_metrics import macro_recall
 
 
 @dataclass
@@ -37,22 +38,22 @@ class RWalkConfig:
         if args is None:
             return cfg
 
-        for field in ("lr", "optimizer", "momentum", "weight_decay", "lamb", "alpha", "eps"):
-            if hasattr(args, field):
-                value = getattr(args, field)
-                if value is not None:
-                    setattr(cfg, field, value)
-        if hasattr(args, "clipgrad") and getattr(args, "clipgrad") is not None:
-            cfg.clipgrad = getattr(args, "clipgrad")
-        elif hasattr(args, "clipgrad_norm") and getattr(args, "clipgrad_norm") is not None:
-            cfg.clipgrad = getattr(args, "clipgrad_norm")
+        # for field in ("lr", "optimizer", "momentum", "weight_decay", "lamb", "alpha", "eps"):
+        #     if hasattr(args, field):
+        #         value = getattr(args, field)
+        #         if value is not None:
+        #             setattr(cfg, field, value)
+        # if hasattr(args, "clipgrad") and getattr(args, "clipgrad") is not None:
+        #     cfg.clipgrad = getattr(args, "clipgrad")
+        # elif hasattr(args, "clipgrad_norm") and getattr(args, "clipgrad_norm") is not None:
+        #     cfg.clipgrad = getattr(args, "clipgrad_norm")
 
-        parameter = getattr(args, "parameter", "")
-        if isinstance(parameter, str) and parameter:
-            try:
-                cfg.lamb = float(parameter.split(",")[0])
-            except (ValueError, IndexError):
-                pass
+        # parameter = getattr(args, "parameter", "")
+        # if isinstance(parameter, str) and parameter:
+        #     try:
+        #         cfg.lamb = float(parameter.split(",")[0])
+        #     except (ValueError, IndexError):
+        #         pass
 
         return cfg
 
@@ -128,7 +129,7 @@ class Net(nn.Module):
 
         loss_ce = self.ce(logits, targets)
         preds = torch.argmax(logits, dim=1)
-        tr_acc = (preds == targets).float().mean().item()
+        tr_acc = macro_recall(preds, targets)
         loss = loss_ce + self.lamb * self._regulariser()
         loss.backward()
 

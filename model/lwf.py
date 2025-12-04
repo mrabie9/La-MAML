@@ -22,6 +22,7 @@ import model.meta.learner as Learner
 import model.meta.modelfactory as mf
 from model.resnet import ResNet18
 from model.resnet1d import ResNet1D
+from utils.training_metrics import macro_recall
 
 
 @dataclass
@@ -39,11 +40,12 @@ class LwfConfig:
     @staticmethod
     def from_args(args: object) -> "LwfConfig":
         cfg = LwfConfig()
-        for field in ("lr", "optimizer", "momentum", "weight_decay", "clipgrad"):
-            if hasattr(args, field):
-                value = getattr(args, field)
-                if value is not None:
-                    setattr(cfg, field, value)
+        # Override defaults with any args attributes that match
+        # for field in ("lr", "optimizer", "momentum", "weight_decay", "clipgrad"):
+        #     if hasattr(args, field):
+        #         value = getattr(args, field)
+        #         if value is not None:
+        #             setattr(cfg, field, value)
         if getattr(cfg, "clipgrad", None) is None and hasattr(args, "grad_clip_norm"):
             cfg.clipgrad = getattr(args, "grad_clip_norm")
         # Allow multiple naming variants for the LwF knobs.
@@ -120,7 +122,7 @@ class Net(nn.Module):
         targets = (y - offset1).long()
 
         preds = torch.argmax(current_logits, dim=1)
-        tr_acc = (preds == targets).float().mean().item()
+        tr_acc = macro_recall(preds, targets)
 
         loss_ce = self.ce(current_logits, targets)
         distill_loss = self._distillation_loss(logits, x, offset1)

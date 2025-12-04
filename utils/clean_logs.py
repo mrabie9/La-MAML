@@ -12,7 +12,7 @@ def main(base="logs", dry_run=True):
 
     # Assumes structure: logs/<method>/<run>/0/results.txt
     for method_dir in base.iterdir():
-        if not method_dir.is_dir() or method_dir.name.startswith("tuning"): 
+        if not method_dir.is_dir() or method_dir.name.startswith("tuning") or method_dir.name.startswith("iq_experiments"): 
             continue
         for run_dir in method_dir.iterdir():
             if not run_dir.is_dir():

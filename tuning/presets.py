@@ -340,19 +340,6 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
             }
         ),
     ),
-    "secret_algo": TuningPreset(
-        model_name="secret_algo",
-        description="Run grid or random search over the Secret Algo hyperparameters.",
-        default_output_root="logs/tuning/secret_algo",
-        type_hints=COMMON_TYPE_HINTS,
-        grid_factory=make_grid_factory(
-            {
-                "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-2},
-                "memory_strength": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.1, "fallback": 1.0},
-                "n_memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 64, "fallback": 128},
-            }
-        ),
-    ),
     "si": TuningPreset(
         model_name="si",
         description="Run grid or random search over Synaptic Intelligence hyperparameters.",
