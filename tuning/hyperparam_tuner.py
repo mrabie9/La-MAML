@@ -16,7 +16,8 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Sequence
 
 import torch
-
+import sys
+sys.path.append("/home/lunet/wsmr11/repos/La-MAML")  # to import from parent directory
 import parser as file_parser
 from main import life_experience, life_experience_iid
 from utils import misc_utils

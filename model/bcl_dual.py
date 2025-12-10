@@ -9,7 +9,6 @@ from dataclasses import dataclass
 import torch
 from torch.autograd import Variable
 from model.resnet1d import ResNet1D
-from .resnet import ResNet18 as ResNet18Full
 import pdb
 import torch.nn as nn
 import torch.nn.functional as F

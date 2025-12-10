@@ -209,8 +209,6 @@ def life_experience(model, inc_loader, args):
 
                 v_x = x
                 v_y = y
-                if args.arch == 'linear':
-                    v_x = x.view(x.size(0), -1)
                 if args.cuda:
                     v_x = v_x.cuda()
                     v_y = v_y.cuda()

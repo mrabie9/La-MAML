@@ -23,18 +23,14 @@ import sys
 import warnings
 import math
 
-from model.resnet import ResNet18
 from model.resnet1d import ResNet1D
-
-import model.meta.modelfactory as mf
-import model.meta.learner as Learner
 warnings.filterwarnings("ignore")
 from utils.training_metrics import macro_recall
 
 
 @dataclass
 class ErAlgConfig:
-    arch: str = "linear"
+    arch: str = "resnet1d"
     n_layers: int = 2
     n_hiddens: int = 100
     alpha_init: float = 1e-3
@@ -67,24 +63,15 @@ class Net(nn.Module):
         super(Net, self).__init__()
 
         self.cfg = ErAlgConfig.from_args(args)
-        nl, nh = self.cfg.n_layers, self.cfg.n_hiddens
 
-        if self.cfg.arch == 'resnet18':
-            self.net = ResNet18(n_outputs, args)
-            self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
-        elif self.cfg.arch == 'resnet1d':
-            self.net = ResNet1D(n_outputs, args)
-            self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
-        else:
-
-            config = mf.ModelFactory.get_model(model_type = self.cfg.arch, sizes = [n_inputs] + [nh] * nl + [n_outputs],
-                                                    dataset = self.cfg.dataset, args=args)
-            self.net = Learner.Learner(config, args)
+        if self.cfg.arch != 'resnet1d':
+            raise ValueError(f"Unsupported arch {self.cfg.arch}; only resnet1d is available now.")
+        self.net = ResNet1D(n_outputs, args)
+        self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
 
         self.opt_wt = optim.SGD(self.parameters(), lr=self.cfg.lr)
 
         if self.cfg.learn_lr:
-            self.net.define_task_lr_params(alpha_init = self.cfg.alpha_init)
             self.opt_lr = torch.optim.SGD(list(self.net.alpha_lr.parameters()), lr=self.cfg.opt_lr)          
 
         self.loss = CrossEntropyLoss()

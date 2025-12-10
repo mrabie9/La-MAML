@@ -1,7 +1,7 @@
 # Experiment details
 expt_name: gem_test_radar        # name of the experiment
 model: gem                   # algo to train
-arch: resnet1d                          # arch to use for training (choices: [linear, pc_cnn, resnet18, resnet1d])
+arch: resnet1d                          # arch to use for training (choices: [resnet1d])
 # n_hiddens: 100                          # number of hidden neurons at each layer
 # n_layers: 2                             # number of hidden layers
 xav_init: true                          # Use xavier initialization

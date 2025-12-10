@@ -46,8 +46,6 @@ def life_experience_iid(model, inc_loader, args):
 
             v_x = x
             v_y = y
-            if args.arch == 'linear':
-                v_x = x.view(x.size(0), -1)
             super_v_y = super_y
 
             if args.cuda:

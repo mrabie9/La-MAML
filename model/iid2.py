@@ -4,11 +4,9 @@ from dataclasses import dataclass
 import numpy as np
 import random
 
-import model.meta.learner as Learner
-import model.meta.modelfactory as mf
-import ipdb
 import sys
 from utils.training_metrics import macro_recall
+from model.resnet1d import ResNet1D
 
 if not sys.warnoptions:
     import warnings
@@ -23,7 +21,7 @@ Multi task
 
 @dataclass
 class IidConfig:
-    arch: str = "linear"
+    arch: str = "resnet1d"
     n_layers: int = 2
     n_hiddens: int = 100
     dataset: str = "tinyimagenet"
@@ -53,10 +51,9 @@ class Net(torch.nn.Module):
         self.n_classes = n_outputs
 
         arch = self.cfg.arch
-        nl, nh = self.cfg.n_layers, self.cfg.n_hiddens
-        config = mf.ModelFactory.get_model(model_type = arch, sizes = [n_inputs] + [nh] * nl + [n_outputs],
-                                                dataset = self.cfg.dataset, args=args)
-        self.net = Learner.Learner(config, args)
+        if arch != 'resnet1d':
+            raise ValueError(f"Unsupported arch {arch}; only resnet1d is available now.")
+        self.net = ResNet1D(n_outputs, args)
 
         # setup optimizer
         self.opt = torch.optim.SGD(self.parameters(), lr=self.cfg.lr)

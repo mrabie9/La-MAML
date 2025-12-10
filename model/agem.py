@@ -11,30 +11,29 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
 
-import ipdb
-import model.meta.learner as Learner
-import model.meta.modelfactory as mf
 import numpy as np
 import random
 
-from model.resnet import ResNet18
 from model.resnet1d import ResNet1D
 from utils.training_metrics import macro_recall
 
 
 @dataclass
 class AgemConfig:
-    arch: str = "linear"
+    ## AGEM-specific hyperparameters
+    lr: float = 1e-3
+    memory_strength: float = 0.0
+    glances: int = 1
+    memories: int = 5120
+    n_memories: int = 0
+    alpha_init: float = 1e-3
+
+    ## Generic hyperparameters
+    arch: str = "resnet1d"
     n_layers: int = 2
     n_hiddens: int = 100
-    memory_strength: float = 0.0
     dataset: str = "tinyimagenet"
-    glances: int = 1
-    lr: float = 1e-3
-    n_memories: int = 0
-    memories: int = 5120
     cuda: bool = True
-    alpha_init: float = 1e-3
     grad_clip_norm: Optional[float] = 2.0
     input_channels: int = 1
 
@@ -141,7 +140,6 @@ class Net(nn.Module):
         super(Net, self).__init__()
         self.cfg = AgemConfig.from_args(args)
 
-        nl, nh = self.cfg.n_layers, self.cfg.n_hiddens
         self.margin = self.cfg.memory_strength
         self.is_cifar = (
             (self.cfg.dataset == 'cifar100') or (self.cfg.dataset == 'tinyimagenet')
@@ -151,18 +149,10 @@ class Net(nn.Module):
         self.input_channels = self.cfg.input_channels
         self.is_iq = (self.cfg.dataset == "iq") or (self.input_channels == 2)
 
-        if self.cfg.arch == 'resnet18':
-            self.net = ResNet18(n_outputs, args)
-            self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
-        elif self.cfg.arch == 'resnet1d':
-            self.net = ResNet1D(n_outputs, args)
-            self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
-        else:
-            config = mf.ModelFactory.get_model(
-                model_type = self.cfg.arch, 
-                sizes = [n_inputs] + [nh] * nl + [n_outputs],
-                dataset = self.cfg.dataset, args=args)
-            self.net = Learner.Learner(config, args)
+        if self.cfg.arch != 'resnet1d':
+            raise ValueError(f"Unsupported arch {self.cfg.arch}; only resnet1d is available now.")
+        self.net = ResNet1D(n_outputs, args)
+        self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
 
         self.ce = nn.CrossEntropyLoss()
         self.bce = torch.nn.CrossEntropyLoss()

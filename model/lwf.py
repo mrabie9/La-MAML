@@ -18,9 +18,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import model.meta.learner as Learner
-import model.meta.modelfactory as mf
-from model.resnet import ResNet18
 from model.resnet1d import ResNet1D
 from utils.training_metrics import macro_recall
 
@@ -140,20 +137,9 @@ class Net(nn.Module):
     def _build_backbone(self, n_inputs: int, n_outputs: int, args: object) -> nn.Module:
         arch = getattr(args, "arch", "resnet1d")
         arch = arch.lower() if isinstance(arch, str) else "resnet1d"
-        if arch == "resnet18":
-            return ResNet18(n_outputs, args)
-        if arch == "resnet1d":
-            return ResNet1D(n_outputs, args)
-
-        nl = getattr(args, "n_layers", 2)
-        nh = getattr(args, "n_hiddens", 100)
-        config = mf.ModelFactory.get_model(
-            model_type=arch,
-            sizes=[n_inputs] + [nh] * nl + [n_outputs],
-            dataset=getattr(args, "dataset", ""),
-            args=args,
-        )
-        return Learner.Learner(config, args)
+        if arch != "resnet1d":
+            raise ValueError(f"Unsupported arch {arch}; only resnet1d is available now.")
+        return ResNet1D(n_outputs, args)
 
     # ------------------------------------------------------------------
     def _build_optimizer(self) -> torch.optim.Optimizer:

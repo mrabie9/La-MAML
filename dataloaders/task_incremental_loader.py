@@ -169,7 +169,7 @@ class IncrementalLoader:
                     y_train = unique_labels.searchsorted(y_train) + labels_offset
                     y_test = unique_labels.searchsorted(y_test) + labels_offset
                 labels_offset += unique_labels.size
-                print(f"Loaded {fname}: Remapped labels: {np.unique(y_train)}")
+                print(f"Loaded {fname}: Remapped labels: {np.unique(y_train)}. Size: {x_train.shape[0]})")
 
                 # 3D array[task, split (xtr/yte/xte/yte), data]
                 raw_datasets.append((x_train, y_train, x_test, y_test))

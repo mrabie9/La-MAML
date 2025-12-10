@@ -37,35 +37,35 @@ awk '
 echo "Logging IQ experiment suite to $LOG_FILE"
 
 
-##### AGEM ##### [0.66, 0.34] 6H
-python3 -u main.py $IQ --model agem --expt_name all_agem --n_memories 5196 --batch_size 128 --n_epochs 50 \
-                    --lr 0.03 --glances 1 --memory_strength 0.5   --increment 5 \
-                    --log_every 3125 --class_order random \
-                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+# ##### AGEM ##### [0.66, 0.34] 6H
+# python3 -u main.py $IQ --model agem --expt_name all_agem --n_memories 5192 --batch_size 128 --n_epochs 50 \
+#                     --lr 0.03 --glances 1 --memory_strength 0.5   --increment 5 \
+#                     --log_every 3125 --class_order random \
+#                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
 
-##### ER ##### [0.76, 0.84] 11H
-python3 -u main.py $IQ --model eralg4 --expt_name all_eralg4 --memories 200 --batch_size 128 --n_epochs 50 --replay_batch_size 64 \
-                     --lr 0.03 --glances 1   --increment 5 \
-                    --log_every 3125 --class_order random \
-                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+# ##### ER ##### [0.76, 0.84] 11H
+# python3 -u main.py $IQ --model eralg4 --expt_name all_eralg4 --memories 5192 --batch_size 128 --n_epochs 50 --replay_batch_size 64 \
+#                      --lr 0.03 --glances 1   --increment 5 \
+#                     --log_every 3125 --class_order random \
+#                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
 
-##### La-ER ##### [0.78, 0.92]
-python3 -u main.py $IQ --model eralg4 --expt_name all_la-eralg4 --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 \
-                    --opt_lr 0.1 --alpha_init 0.1 --glances 1  --increment 5 \
-                     --cifar_batches 5 --learn_lr --log_every 3125 --class_order random \
-                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+##### La-ER ##### [0.78, 0.92] # batch size = 256 is twice as fast as 64 (1800 vs 900 secs/epoch)
+# python3 -u main.py $IQ --model eralg4 --expt_name all_la-eralg4 --memories 5192 --batch_size 256 --replay_batch_size 64 --n_epochs 15 \
+#                     --opt_lr 0.1 --alpha_init 0.1 --glances 1  --increment 5 \
+#                      --cifar_batches 5 --learn_lr --log_every 3125 --class_order random \
+#                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
 
 # ##### iCaRL ##### Problem Child
-# python3 -u main.py $IQ --model icarl --expt_name all_icarl --n_memories 5196 --batch_size 128 --n_epochs 50 \
+# python3 -u main.py $IQ --model icarl --expt_name all_icarl --n_memories 5192 --batch_size 128 --n_epochs 50 \
 #                     --lr 0.03 --glances 1 --memory_strength 1.0  --increment 5 \
 #                     --log_every 3125 --class_order random  --samples_per_task 2500 \
 #                     --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3 --samples_per_task -1
 
-#### GEM ##### [0.52, 0.23] Problem Child
-python3 -u main.py $IQ --model gem --expt_name all_gem --n_memories 5196 --batch_size 128 --n_epochs 50 \
-                    --lr 0.03 --glances 1 --memory_strength 0.5   --increment 5 \
-                    --log_every 3125 --class_order random --samples_per_task 2500 \
-                    --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3 --samples_per_task -1
+# #### GEM ##### [0.52, 0.23] Problem Child - NEEDS REDO
+# python3 -u main.py $IQ --model gem --expt_name all_gem --n_memories 512 --batch_size 128 --n_epochs 1 \
+#                     --lr 0.03 --glances 1 --memory_strength 0.5   --increment 5 \
+#                     --log_every 3125 --class_order random --samples_per_task 2500 \
+#                     --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3 --samples_per_task -1
 
 
 ##### EWC #####
@@ -107,14 +107,14 @@ python3 -u main.py $IQ --model hat --expt_name all_hat --batch_size 128 --n_epoc
 ##### CTN #####
 python3 -u main.py $IQ --model ctn --expt_name all_ctn --batch_size 128 --replay_batch_size 64 --n_epochs 50 \
                     --increment 5 \
-                    --ctn_n_memories 200 --ctn_lr 0.01 --ctn_beta 0.05 --ctn_inner_steps 2 --ctn_n_meta 2 \
+                    --ctn_n_memories 5192 --ctn_lr 0.01 --ctn_beta 0.05 --ctn_inner_steps 2 --ctn_n_meta 2 \
                     --log_every 3125 --class_order random \
                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
 
 ##### ER-Ring #####
 python3 -u main.py $IQ --model er_ring --expt_name all_erring --batch_size 128 --replay_batch_size 64 --n_epochs 50 \
                     --lr 0.03 --increment 5 \
-                    --bcl_n_memories 200 --bcl_temperature 2.0 --bcl_memory_strength 1.0 --bcl_inner_steps 5 \
+                    --bcl_n_memories 5192 --bcl_temperature 2.0 --bcl_memory_strength 1.0 --bcl_inner_steps 5 \
                     --log_every 3125 --class_order random \
                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
 
@@ -132,31 +132,31 @@ python3 -u main.py $IQ --model anml --expt_name all_anml --batch_size 128 --n_ep
                     --rln 7 --update_steps 10 --meta_lr 0.001 --update_lr 0.1 
 
 ##### MER ##### VEEEEERY SLOW
-python3 -u main.py $IQ --model meralg1 --expt_name all_meralg1 --batch_size 128 --memories 200 --replay_batch_size 64 \
+python3 -u main.py $IQ --model meralg1 --expt_name all_meralg1 --batch_size 128 --memories 5192 --replay_batch_size 64 \
                     --lr 0.1 --beta 0.1 --gamma 1.0 --batches_per_example 10  --increment 5 \
                     --log_every 3125 --grad_clip_norm 10.0 --class_order random \
                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
 
 ##### Meta BGD ##### [0.24, 0.39] Problem
-python3 -u main.py $IQ --model meta-bgd --expt_name all_meta-bgd --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 \
+python3 -u main.py $IQ --model meta-bgd --expt_name all_meta-bgd --memories 5192 --batch_size 128 --replay_batch_size 64 --n_epochs 50 \
                     --alpha_init 0.1 --glances 1  --increment 5 \
                     --cifar_batches 3 --log_every 3125 --second_order --class_order random \
                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1 --xav_init  --std_init 0.02 --mean_eta 50. --train_mc_iters 2
 
 ##### La-MAML ##### [0.41, 0.48]
-python3 -u main.py $IQ --model lamaml_cifar --expt_name all_lamaml --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 \
+python3 -u main.py $IQ --model lamaml_cifar --expt_name all_lamaml --memories 5192 --batch_size 128 --replay_batch_size 64 --n_epochs 50 \
                     --opt_lr 0.25 --alpha_init 0.1 --opt_wt 0.1 --glances 1  --increment 5 \
                     --cifar_batches 5 --learn_lr --log_every 3125 --second_order --class_order random \
                     --seed $SEED --grad_clip_norm 1.0 --calc_test_accuracy --validation 0.3 --samples_per_task -1
 
 ##### sync ##### [0.52, 0.52]
-python3 -u main.py $IQ --model lamaml_cifar --expt_name all_lamaml_sync --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 \
+python3 -u main.py $IQ --model lamaml_cifar --expt_name all_lamaml_sync --memories 5192 --batch_size 128 --replay_batch_size 64 --n_epochs 50 \
                     --opt_lr 0.35 --alpha_init 0.1 --opt_wt 0.1 --glances 1  --increment 5 \
                     --cifar_batches 5 --learn_lr --sync_update --log_every 3125 --second_order --class_order random \
                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
 
 ##### C-MAML ##### [0.45, 0.51]
-python3 -u main.py $IQ --model lamaml_cifar --expt_name all_cmaml --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 \
+python3 -u main.py $IQ --model lamaml_cifar --expt_name all_cmaml --memories 5192 --batch_size 128 --replay_batch_size 64 --n_epochs 50 \
                     --opt_lr 0.35 --alpha_init 0.075 --opt_wt 0.075 --glances 1  --increment 5 \
                     --cifar_batches 5 --sync_update --log_every 3125 --second_order --class_order random \
                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1

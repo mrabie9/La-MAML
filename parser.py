@@ -14,9 +14,9 @@ def get_parser():
     parser.add_argument(
         '--arch',
         type=str,
-        default='linear',
+        default='resnet1d',
         help='arch to use for training',
-        choices=['linear', 'pc_cnn', 'resnet18', 'resnet1d'],
+        choices=['resnet1d'],
     )
     parser.add_argument('--n_hiddens', type=int, default=100,
                         help='number of hidden neurons at each layer')
