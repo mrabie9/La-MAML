@@ -1,0 +1,276 @@
+python3 main.py $IQ --model agem --expt_name all_agem --n_memories 200 --batch_size 128 --n_epochs 1 
+                    --lr 0.03 --glances 1 --memory_strength 0.5   --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model anml --expt_name all_anml --batch_size 128 --n_epochs 1 
+                    --lr 0.001 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model eralg4 --expt_name all_eralg4 --memories 200 --batch_size 128 --n_epochs 1 --replay_batch_size 64 
+                     --lr 0.03 --glances 1   --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model eralg4 --expt_name all_eralg4 --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 1 
+                    --opt_lr 0.1 --alpha_init 0.1 --glances 1  --increment 5 
+                     --cifar_batches 5 --learn_lr --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model icarl --expt_name all_icarl --n_memories 200 --batch_size 128 --n_epochs 1 
+                    --lr 0.03 --glances 1 --memory_strength 1.0  --increment 5 
+                    --log_every 3125 --class_order random  --samples_per_task 2500 
+                    --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model gem --expt_name all_gem --n_memories 200 --batch_size 128 --n_epochs 1 
+                    --lr 0.03 --glances 1 --memory_strength 0.5   --increment 5 
+                    --log_every 3125 --class_order random --samples_per_task 2500 
+                    --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model meralg1 --expt_name all_meralg1 --batch_size 128 --memories 200 --replay_batch_size 64 
+                    --lr 0.1 --beta 0.1 --gamma 1.0 --batches_per_example 10  --increment 5 
+                    --log_every 3125 --grad_clip_norm 10.0 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model ewc --expt_name all_ewc --batch_size 128 --n_epochs 1 
+                    --lr 0.03 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 25.0 --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model lwf --expt_name all_lwf --batch_size 128 --n_epochs 1 
+                    --lr 0.001 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model packnet --expt_name all_packnet --batch_size 128 --n_epochs 1 
+                    --lr 0.01 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model rwalk --expt_name all_rwalk --batch_size 128 --n_epochs 1 
+                    --lr 0.001 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 25.0 --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model si --expt_name all_si --batch_size 128 --n_epochs 1 
+                    --lr 0.001 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 25.0 --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model hat --expt_name all_hat --batch_size 128 --n_epochs 1 
+                    --lr 0.0005 --gamma 0.75 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 10.0 --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model ctn --expt_name all_ctn --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 1 
+                    --lr 0.03 --glances 1 --increment 5 
+                    --ctn_n_memories 200 --ctn_lr 0.01 --ctn_beta 0.05 --ctn_inner_steps 2 --ctn_n_meta 2 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model er_ring --expt_name all_erring --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 1 
+                    --lr 0.03 --glances 1 --increment 5 
+                    --bcl_n_memories 200 --bcl_temperature 2.0 --bcl_memory_strength 1.0 --bcl_inner_steps 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model ucl_bresnet --expt_name all_ucl_bresnet --batch_size 64 --n_epochs 1 
+                    --lr 0.001 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 10.0 --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model meta-bgd --expt_name all_meta-bgd --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 1 
+                    --alpha_init 0.1 --glances 1  --increment 5 
+                    --cifar_batches 3 --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 128 --xav_init  --std_init 0.02 --mean_eta 50. --train_mc_iters 2
+
+python3 main.py $IQ --model lamaml_cifar --expt_name all_lamaml --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 1 
+                    --opt_lr 0.25 --alpha_init 0.1 --opt_wt 0.1 --glances 1  --increment 5 
+                    --cifar_batches 5 --learn_lr --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --grad_clip_norm 1.0 --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model lamaml_cifar --expt_name all_lamaml_sync --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 1 
+                    --opt_lr 0.35 --alpha_init 0.1 --opt_wt 0.1 --glances 1  --increment 5 
+                    --cifar_batches 5 --learn_lr --sync_update --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model lamaml_cifar --expt_name all_cmaml --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 1 
+                    --opt_lr 0.35 --alpha_init 0.075 --opt_wt 0.075 --glances 1  --increment 5 
+                    --cifar_batches 5 --sync_update --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+Logging IQ experiment suite to logs/iq_experiments/run_20251203_100846.log
+Running model:  agem
+Set seed 0
+Loaded task0.npz: Unique train labels: [2 3 5 7 8]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4]
+Loaded task1.npz: Unique train labels: [0 1 4 6 9]
+Loaded task1.npz: Remapped labels: [5 6 7 8 9]
+n_outputs: 10 	n_tasks: 2
+True
+Model device: cuda:0
+  0%|          | 0/1 [00:00<?, ?it/s]Task: 0 | Epoch: 1/1 | Loss: 1.726 | Acc: Task_avg: 0.10298 Tr: 0.24219 Val: 0.04683 :   0%|          | 0/1 [00:01<?, ?it/s]Task: 0 | Epoch: 1/1 | Loss: 1.726 | Acc: Task_avg: 0.10298 Tr: 0.24219 Val: 0.04683 : 100%|██████████| 1/1 [00:01<00:00,  1.84s/it]Task: 0 | Epoch: 1/1 | Loss: 1.726 | Acc: Task_avg: 0.10298 Tr: 0.24219 Val: 0.04683 : 100%|██████████| 1/1 [00:01<00:00,  1.84s/it]
+---- Eval at Epoch 0: [0.046825396825396826, 0.15912698412698412] ----
+  0%|          | 0/1 [00:00<?, ?it/s]Task: 1 | Epoch: 1/1 | Loss: 1.651 | Acc: Task_avg: 0.10357 Tr: 0.21094 Val: 0.16111 :   0%|          | 0/1 [00:01<?, ?it/s]Task: 1 | Epoch: 1/1 | Loss: 1.651 | Acc: Task_avg: 0.10357 Tr: 0.21094 Val: 0.16111 : 100%|██████████| 1/1 [00:01<00:00,  1.65s/it]Task: 1 | Epoch: 1/1 | Loss: 1.651 | Acc: Task_avg: 0.10357 Tr: 0.21094 Val: 0.16111 : 100%|██████████| 1/1 [00:01<00:00,  1.65s/it]
+---- Eval at Epoch 0: [0.046031746031746035, 0.16111111111111112] ----
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.11726190476190476 
+ Individual Accuracy: [0.08452380952380953, 0.15]
+####Final Test Accuracy####
+Final Results:- 
+ Total Accuracy: 0.11726190476190476 
+ Individual Accuracy: [0.08452380952380953, 0.15]
+logs//agem/all_agem-2025-12-03_10-08-50-0089/0/results: {'expt_name': 'all_agem', 'model': 'agem', 'arch': 'resnet1d', 'n_hiddens': 100, 'n_layers': 2, 'xav_init': False, 'glances': 1, 'n_epochs': 1, 'batch_size': 128, 'replay_batch_size': 20, 'memories': 5120, 'lr': 0.03, 'cuda': True, 'seed': 0, 'log_every': 3125, 'log_dir': 'logs//agem/all_agem-2025-12-03_10-08-50-0089/0', 'tf_dir': 'logs//agem/all_agem-2025-12-03_10-08-50-0089/0/tfdir', 'calc_test_accuracy': True, 'data_path': 'data/rff/rfmls/', 'loader': 'task_incremental_loader', 'samples_per_task': 128, 'shuffle_tasks': False, 'classes_per_it': 4, 'iterations': 5000, 'dataset': 'iq', 'workers': 3, 'validation': 0.3, 'class_order': 'random', 'increment': 5, 'test_batch_size': 100000, 'nc_per_task': 5, 'val_rate': 10, 'opt_lr': 0.1, 'opt_wt': 0.1, 'alpha_init': 0.001, 'learn_lr': False, 'sync_update': False, 'grad_clip_norm': 2.0, 'cifar_batches': 3, 'use_old_task_memory': False, 'second_order': False, 'n_memories': 200, 'memory_strength': 0.5, 'steps_per_sample': 1, 'gamma': 1.0, 'beta': 1.0, 's': 1, 'batches_per_example': 1, 'bgd_optimizer': 'bgd', 'optimizer_params': '{}', 'train_mc_iters': 5, 'std_init': 0.05, 'mean_eta': 1, 'fisher_gamma': 0.95, 'rln': 7, 'update_steps': 10, 'meta_lr': 0.001, 'update_lr': 0.1, 'ctn_lr': 0.01, 'ctn_beta': 0.05, 'ctn_n_meta': 2, 'ctn_inner_steps': 2, 'ctn_temperature': 5, 'ctn_n_memories': 50, 'ctn_alpha_init': 0.1, 'ctn_memory_strength': 0.5, 'ctn_task_emb': 64, 'bcl_n_memories': 2000, 'bcl_memory_strength': 1.0, 'bcl_temperature': 2.0, 'bcl_inner_steps': 5, 'bcl_n_meta': 5, 'bcl_adapt_lr': 0.1} # val: 0.098 0.117 0.019 0.001 # test: 0.098 0.117 0.019 0.000 # 12.679202795028687
+Running model:  anml
+Set seed 0
+Loaded task0.npz: Unique train labels: [2 3 5 7 8]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4]
+Loaded task1.npz: Unique train labels: [0 1 4 6 9]
+Loaded task1.npz: Remapped labels: [5 6 7 8 9]
+n_outputs: 10 	n_tasks: 2
+True
+Model device: cuda:0
+  0%|          | 0/1 [00:00<?, ?it/s]Task: 0 | Epoch: 1/1 | Loss: 0.216 | Acc: Task_avg: 0.10198 Tr: 0.65946 Val: 0.0 :   0%|          | 0/1 [03:22<?, ?it/s]Task: 0 | Epoch: 1/1 | Loss: 0.216 | Acc: Task_avg: 0.10198 Tr: 0.65946 Val: 0.0 : 100%|██████████| 1/1 [03:22<00:00, 202.52s/it]Task: 0 | Epoch: 1/1 | Loss: 0.216 | Acc: Task_avg: 0.10198 Tr: 0.65946 Val: 0.0 : 100%|██████████| 1/1 [03:22<00:00, 202.52s/it]
+---- Eval at Epoch 0: [0.0, 0.20396825396825397] ----
+  0%|          | 0/1 [00:00<?, ?it/s]Task: 1 | Epoch: 1/1 | Loss: 2.368 | Acc: Task_avg: 0.1252 Tr: 0.04662 Val: 0.0 :   0%|          | 0/1 [03:26<?, ?it/s]Task: 1 | Epoch: 1/1 | Loss: 2.368 | Acc: Task_avg: 0.1252 Tr: 0.04662 Val: 0.0 : 100%|██████████| 1/1 [03:26<00:00, 206.35s/it]Task: 1 | Epoch: 1/1 | Loss: 2.368 | Acc: Task_avg: 0.1252 Tr: 0.04662 Val: 0.0 : 100%|██████████| 1/1 [03:26<00:00, 206.35s/it]
+---- Eval at Epoch 0: [0.2503968253968254, 0.0] ----
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.11488095238095239 
+ Individual Accuracy: [0.14047619047619048, 0.08928571428571429]
+####Final Test Accuracy####
+Final Results:- 
+ Total Accuracy: 0.11488095238095239 
+ Individual Accuracy: [0.14047619047619048, 0.08928571428571429]
+logs//anml/all_anml-2025-12-03_10-09-07-6263/0/results: {'expt_name': 'all_anml', 'model': 'anml', 'arch': 'resnet1d', 'n_hiddens': 100, 'n_layers': 2, 'xav_init': False, 'glances': 1, 'n_epochs': 1, 'batch_size': 128, 'replay_batch_size': 20, 'memories': 5120, 'lr': 0.001, 'cuda': True, 'seed': 0, 'log_every': 3125, 'log_dir': 'logs//anml/all_anml-2025-12-03_10-09-07-6263/0', 'tf_dir': 'logs//anml/all_anml-2025-12-03_10-09-07-6263/0/tfdir', 'calc_test_accuracy': True, 'data_path': 'data/rff/rfmls/', 'loader': 'task_incremental_loader', 'samples_per_task': 128, 'shuffle_tasks': False, 'classes_per_it': 4, 'iterations': 5000, 'dataset': 'iq', 'workers': 3, 'validation': 0.3, 'class_order': 'random', 'increment': 5, 'test_batch_size': 100000, 'nc_per_task': 5, 'val_rate': 10, 'opt_lr': 0.1, 'opt_wt': 0.1, 'alpha_init': 0.001, 'learn_lr': False, 'sync_update': False, 'grad_clip_norm': 2.0, 'cifar_batches': 3, 'use_old_task_memory': False, 'second_order': False, 'n_memories': 0, 'memory_strength': 0, 'steps_per_sample': 1, 'gamma': 1.0, 'beta': 1.0, 's': 1, 'batches_per_example': 1, 'bgd_optimizer': 'bgd', 'optimizer_params': '{}', 'train_mc_iters': 5, 'std_init': 0.05, 'mean_eta': 1, 'fisher_gamma': 0.95, 'rln': 7, 'update_steps': 10, 'meta_lr': 0.001, 'update_lr': 0.1, 'ctn_lr': 0.01, 'ctn_beta': 0.05, 'ctn_n_meta': 2, 'ctn_inner_steps': 2, 'ctn_temperature': 5, 'ctn_n_memories': 50, 'ctn_alpha_init': 0.1, 'ctn_memory_strength': 0.5, 'ctn_task_emb': 64, 'bcl_n_memories': 2000, 'bcl_memory_strength': 1.0, 'bcl_temperature': 2.0, 'bcl_inner_steps': 5, 'bcl_n_meta': 5, 'bcl_adapt_lr': 0.1} # val: 0.170 0.115 -0.055 -0.102 # test: 0.170 0.115 -0.055 0.000 # 420.2277772426605
+./run_iq_experiments.sh: line 46: --log_every: command not found
+Running model:  eralg4
+Set seed 0
+Loaded task0.npz: Unique train labels: [2 3 5 7 8]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4]
+Loaded task1.npz: Unique train labels: [0 1 4 6 9]
+Loaded task1.npz: Remapped labels: [5 6 7 8 9]
+n_outputs: 10 	n_tasks: 2
+True
+Model device: cuda:0
+---- Eval at Epoch 0: [0.20436507936507936, 0.1988095238095238] ----
+Task 0 Epoch 1/1 | Loss 1.7264 | Train Acc 0.2422 | Val Acc 0.2044 | Epoch Time 1.89s (Eval 1.67s, Train 0.22s)
+---- Eval at Epoch 0: [0.2361111111111111, 0.2015873015873016] ----
+Task 1 Epoch 1/1 | Loss 1.5860 | Train Acc 0.2552 | Val Acc 0.2016 | Epoch Time 1.77s (Eval 1.55s, Train 0.22s)
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.2283730158730159 
+ Individual Accuracy: [0.2496031746031746, 0.20714285714285716]
+####Final Test Accuracy####
+Final Results:- 
+ Total Accuracy: 0.2283730158730159 
+ Individual Accuracy: [0.2496031746031746, 0.20714285714285716]
+logs//eralg4/all_eralg4-2025-12-03_10-16-13-1195/0/results: {'expt_name': 'all_eralg4', 'model': 'eralg4', 'arch': 'resnet1d', 'n_hiddens': 100, 'n_layers': 2, 'xav_init': False, 'glances': 1, 'n_epochs': 1, 'batch_size': 128, 'replay_batch_size': 64.0, 'memories': 200, 'lr': 0.03, 'cuda': True, 'seed': 0, 'log_every': 3125, 'log_dir': 'logs//eralg4/all_eralg4-2025-12-03_10-16-13-1195/0', 'tf_dir': 'logs//eralg4/all_eralg4-2025-12-03_10-16-13-1195/0/tfdir', 'calc_test_accuracy': True, 'state_logging': False, 'data_path': 'data/rff/rfmls/', 'loader': 'task_incremental_loader', 'samples_per_task': 128, 'shuffle_tasks': False, 'classes_per_it': 4, 'iterations': 5000, 'dataset': 'iq', 'workers': 3, 'validation': 0.3, 'class_order': 'random', 'increment': 5, 'test_batch_size': 100000, 'nc_per_task': 5, 'val_rate': 10, 'opt_lr': 0.1, 'opt_wt': 0.1, 'alpha_init': 0.001, 'learn_lr': False, 'sync_update': False, 'grad_clip_norm': 2.0, 'cifar_batches': 3, 'use_old_task_memory': False, 'second_order': False, 'n_memories': 0, 'memory_strength': 0, 'steps_per_sample': 1, 'gamma': 1.0, 'beta': 1.0, 's': 1, 'batches_per_example': 1, 'bgd_optimizer': 'bgd', 'optimizer_params': '{}', 'train_mc_iters': 5, 'std_init': 0.05, 'mean_eta': 1, 'fisher_gamma': 0.95, 'rln': 7, 'update_steps': 10, 'meta_lr': 0.001, 'update_lr': 0.1, 'ctn_lr': 0.01, 'ctn_beta': 0.05, 'ctn_n_meta': 2, 'ctn_inner_steps': 2, 'ctn_temperature': 5, 'ctn_n_memories': 50, 'ctn_alpha_init': 0.1, 'ctn_memory_strength': 0.5, 'ctn_task_emb': 64, 'bcl_n_memories': 2000, 'bcl_memory_strength': 1.0, 'bcl_temperature': 2.0, 'bcl_inner_steps': 5, 'bcl_n_meta': 5, 'bcl_adapt_lr': 0.1} # val: 0.222 0.228 0.007 0.001 # test: 0.222 0.228 0.007 0.000 # 12.957636833190918
+Running model:  eralg4
+Set seed 0
+Loaded task0.npz: Unique train labels: [2 3 5 7 8]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4]
+Loaded task1.npz: Unique train labels: [0 1 4 6 9]
+Loaded task1.npz: Remapped labels: [5 6 7 8 9]
+n_outputs: 10 	n_tasks: 2
+True
+Model device: cuda:0
+---- Eval at Epoch 0: [0.20436507936507936, 0.1988095238095238] ----
+Task 0 Epoch 1/1 | Loss 1.7264 | Train Acc 0.2422 | Val Acc 0.2044 | Epoch Time 2.45s (Eval 1.67s, Train 0.78s)
+---- Eval at Epoch 0: [0.2492063492063492, 0.2007936507936508] ----
+Task 1 Epoch 1/1 | Loss 1.5393 | Train Acc 0.3177 | Val Acc 0.2008 | Epoch Time 2.43s (Eval 1.54s, Train 0.89s)
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.22976190476190478 
+ Individual Accuracy: [0.2507936507936508, 0.20873015873015874]
+####Final Test Accuracy####
+Final Results:- 
+ Total Accuracy: 0.22976190476190478 
+ Individual Accuracy: [0.2507936507936508, 0.20873015873015874]
+logs//eralg4/all_eralg4-2025-12-03_10-16-31-0061/0/results: {'expt_name': 'all_eralg4', 'model': 'eralg4', 'arch': 'resnet1d', 'n_hiddens': 100, 'n_layers': 2, 'xav_init': False, 'glances': 1, 'n_epochs': 1, 'batch_size': 128, 'replay_batch_size': 64.0, 'memories': 200, 'lr': 0.001, 'cuda': True, 'seed': 0, 'log_every': 3125, 'log_dir': 'logs//eralg4/all_eralg4-2025-12-03_10-16-31-0061/0', 'tf_dir': 'logs//eralg4/all_eralg4-2025-12-03_10-16-31-0061/0/tfdir', 'calc_test_accuracy': True, 'state_logging': False, 'data_path': 'data/rff/rfmls/', 'loader': 'task_incremental_loader', 'samples_per_task': 128, 'shuffle_tasks': False, 'classes_per_it': 4, 'iterations': 5000, 'dataset': 'iq', 'workers': 3, 'validation': 0.3, 'class_order': 'random', 'increment': 5, 'test_batch_size': 100000, 'nc_per_task': 5, 'val_rate': 10, 'opt_lr': 0.1, 'opt_wt': 0.1, 'alpha_init': 0.1, 'learn_lr': True, 'sync_update': False, 'grad_clip_norm': 2.0, 'cifar_batches': 5, 'use_old_task_memory': False, 'second_order': False, 'n_memories': 0, 'memory_strength': 0, 'steps_per_sample': 1, 'gamma': 1.0, 'beta': 1.0, 's': 1, 'batches_per_example': 1, 'bgd_optimizer': 'bgd', 'optimizer_params': '{}', 'train_mc_iters': 5, 'std_init': 0.05, 'mean_eta': 1, 'fisher_gamma': 0.95, 'rln': 7, 'update_steps': 10, 'meta_lr': 0.001, 'update_lr': 0.1, 'ctn_lr': 0.01, 'ctn_beta': 0.05, 'ctn_n_meta': 2, 'ctn_inner_steps': 2, 'ctn_temperature': 5, 'ctn_n_memories': 50, 'ctn_alpha_init': 0.1, 'ctn_memory_strength': 0.5, 'ctn_task_emb': 64, 'bcl_n_memories': 2000, 'bcl_memory_strength': 1.0, 'bcl_temperature': 2.0, 'bcl_inner_steps': 5, 'bcl_n_meta': 5, 'bcl_adapt_lr': 0.1} # val: 0.229 0.230 0.001 0.001 # test: 0.229 0.230 0.001 0.000 # 14.144989728927612
+Running model:  icarl
+Set seed 0
+Loaded task0.npz: Unique train labels: [2 3 5 7 8]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4]
+Loaded task1.npz: Unique train labels: [0 1 4 6 9]
+Loaded task1.npz: Remapped labels: [5 6 7 8 9]
+n_outputs: 10 	n_tasks: 2
+True
+Model device: cuda:0
+---- Eval at Epoch 0: [0.19206349206349208, 0.19206349206349208] ----
+Traceback (most recent call last):
+  File "/home/lunet/wsmr11/repos/La-MAML/main.py", line 381, in <module>
+    main()
+  File "/home/lunet/wsmr11/repos/La-MAML/main.py", line 372, in main
+    result_val_t, result_val_a, result_test_t, result_test_a, spent_time = life_experience(
+  File "/home/lunet/wsmr11/repos/La-MAML/main.py", line 218, in life_experience
+    loss, tr_acc = model.observe(Variable(v_x), Variable(v_y), task_info["task"])
+  File "/home/lunet/wsmr11/repos/La-MAML/model/icarl.py", line 227, in observe
+    all_labs = torch.LongTensor(np.unique(self.memy.cpu().numpy()))
+AttributeError: 'NoneType' object has no attribute 'cpu'
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [0,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [1,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [2,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [3,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [4,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [5,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [6,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [7,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [8,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [9,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [10,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [11,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [12,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [13,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [14,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [15,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [16,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [17,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [18,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [19,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [20,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [21,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [22,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [23,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [24,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [25,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [26,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [27,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [28,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [29,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [30,0,0] Assertion `t >= 0 && t < n_classes` failed.
+/pytorch/aten/src/ATen/native/cuda/Loss.cu:245: nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [31,0,0] Assertion `t >= 0 && t < n_classes` failed.
+Running model:  gem
+Set seed 0
+Loaded task0.npz: Unique train labels: [2 3 5 7 8]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4]
+Loaded task1.npz: Unique train labels: [0 1 4 6 9]
+Loaded task1.npz: Remapped labels: [5 6 7 8 9]
+n_outputs: 10 	n_tasks: 2
+True
+Model device: cuda:0
+---- Eval at Epoch 0: [0.046825396825396826, 0.15912698412698412] ----
+Task 0 Epoch 1/1 | Loss 1.7264 | Train Acc 0.2422 | Val Acc 0.0468 | Epoch Time 1.85s (Eval 1.66s, Train 0.19s)
+---- Eval at Epoch 0: [0.11587301587301588, 0.10912698412698413] ----
+Traceback (most recent call last):
+  File "/home/lunet/wsmr11/repos/La-MAML/main.py", line 381, in <module>
+    main()
+  File "/home/lunet/wsmr11/repos/La-MAML/main.py", line 372, in main
+    result_val_t, result_val_a, result_test_t, result_test_a, spent_time = life_experience(
+  File "/home/lunet/wsmr11/repos/La-MAML/main.py", line 218, in life_experience
+    loss, tr_acc = model.observe(Variable(v_x), Variable(v_y), task_info["task"])
+  File "/home/lunet/wsmr11/repos/La-MAML/model/gem.py", line 271, in observe
+    ptloss.backward()
+  File "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/torch/_tensor.py", line 647, in backward
+    torch.autograd.backward(
+  File "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/torch/autograd/__init__.py", line 354, in backward
+    _engine_run_backward(
+  File "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/torch/autograd/graph.py", line 829, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+torch.AcceleratorError: CUDA error: device-side assert triggered
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+

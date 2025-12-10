@@ -1,0 +1,125 @@
+python3 -u main.py $IQ --model agem --expt_name all_agem --n_memories 5196 --batch_size 128 --n_epochs 50 
+                    --lr 0.03 --glances 1 --memory_strength 0.5   --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model eralg4 --expt_name all_eralg4 --memories 200 --batch_size 128 --n_epochs 50 --replay_batch_size 64 
+                     --lr 0.03 --glances 1   --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model eralg4 --expt_name all_la-eralg4 --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --opt_lr 0.1 --alpha_init 0.1 --glances 1  --increment 5 
+                     --cifar_batches 5 --learn_lr --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model gem --expt_name all_gem --n_memories 5196 --batch_size 128 --n_epochs 50 
+                    --lr 0.03 --glances 1 --memory_strength 0.5   --increment 5 
+                    --log_every 3125 --class_order random --samples_per_task 2500 
+                    --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model ewc --expt_name all_ewc --batch_size 128 --n_epochs 50 
+                    --lr 0.03 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model lwf --expt_name all_lwf --batch_size 128 --n_epochs 50 
+                    --lr 0.001 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model packnet --expt_name all_packnet --batch_size 128 --n_epochs 50 
+                    --lr 0.01 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model rwalk --expt_name all_rwalk --batch_size 128 --n_epochs 50 
+                    --lr 0.001 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model si --expt_name all_si --batch_size 128 --n_epochs 50 
+                    --lr 0.001 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model hat --expt_name all_hat --batch_size 128 --n_epochs 50 
+                    --lr 0.0005 --gamma 0.75 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 10.0 --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model ctn --expt_name all_ctn --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --increment 5 
+                    --ctn_n_memories 200 --ctn_lr 0.01 --ctn_beta 0.05 --ctn_inner_steps 2 --ctn_n_meta 2 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model er_ring --expt_name all_erring --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --lr 0.03 --increment 5 
+                    --bcl_n_memories 200 --bcl_temperature 2.0 --bcl_memory_strength 1.0 --bcl_inner_steps 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model ucl_bresnet --expt_name all_ucl_bresnet --batch_size 64 --n_epochs 50 
+                    --lr 0.001 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model anml --expt_name all_anml --batch_size 128 --n_epochs 50 
+                    --lr 0.001 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1 
+                    --rln 7 --update_steps 10 --meta_lr 0.001 --update_lr 0.1 
+
+python3 -u main.py $IQ --model meralg1 --expt_name all_meralg1 --batch_size 128 --memories 200 --replay_batch_size 64 
+                    --lr 0.1 --beta 0.1 --gamma 1.0 --batches_per_example 10  --increment 5 
+                    --log_every 3125 --grad_clip_norm 10.0 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model meta-bgd --expt_name all_meta-bgd --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --alpha_init 0.1 --glances 1  --increment 5 
+                    --cifar_batches 3 --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1 --xav_init  --std_init 0.02 --mean_eta 50. --train_mc_iters 2
+
+python3 -u main.py $IQ --model lamaml_cifar --expt_name all_lamaml --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --opt_lr 0.25 --alpha_init 0.1 --opt_wt 0.1 --glances 1  --increment 5 
+                    --cifar_batches 5 --learn_lr --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --grad_clip_norm 1.0 --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model lamaml_cifar --expt_name all_lamaml_sync --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --opt_lr 0.35 --alpha_init 0.1 --opt_wt 0.1 --glances 1  --increment 5 
+                    --cifar_batches 5 --learn_lr --sync_update --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model lamaml_cifar --expt_name all_cmaml --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --opt_lr 0.35 --alpha_init 0.075 --opt_wt 0.075 --glances 1  --increment 5 
+                    --cifar_batches 5 --sync_update --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+Logging IQ experiment suite to logs/iq_experiments/run_20251204_133556.log
+New Experiment Starting...
+Running model:  agem
+[STATE 2025-12-04 13:35:58] Experiment 'all_agem' starting with model 'agem' (seed 0)
+Set seed 0
+Loaded task0.npz: Unique train labels: [0 1 2 3 4 5]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]
+Loaded task1.npz: Unique train labels: [ 0  6  7  8  9 10]
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11]
+[STATE 2025-12-04 13:36:02] Loader 'task_incremental_loader' ready: 1024 inputs, 12 outputs, 2 tasks
+n_outputs: 12 	n_tasks: 2
+[STATE 2025-12-04 13:36:02] Logging to logs//agem/all_agem-2025-12-04_13-36-02-6561/0
+True
+Model device: cuda:0
+[STATE 2025-12-04 13:36:02] Model initialized on device cuda:0
+[STATE 2025-12-04 13:36:02] Invoking continual life experience flow
+[STATE 2025-12-04 13:36:02] Life experience start: 2 tasks queued
+[STATE 2025-12-04 13:36:02] Starting task 0 (1/2)
+[STATE 2025-12-04 13:36:02] Task 0 Epoch 1/50: entering train loop
+[STATE 2025-12-04 13:36:02] Task 0 Epoch 1/50 Iter 0: running validation
+---- Eval at Epoch 0: [0.001181744285715008, 0.01964721579493898] ----
+Task 0 Epoch 1/50 | Loss 0.0885 | Train Acc 0.7908 | Val Acc 0.0012 | Epoch Time 185.41s (Eval 42.18s, Train 143.23s)
+[STATE 2025-12-04 13:39:08] Task 0 Epoch 1/50 complete: 185.41s total (42.18s eval/143.23s train)
+[STATE 2025-12-04 13:39:08] Task 0 Epoch 2/50: entering train loop
+Task 0 Epoch 2/50 | Loss 0.0378 | Train Acc 0.8908 | Val Acc 0.0012 | Epoch Time 145.24s (Eval 0.00s, Train 145.24s)
+[STATE 2025-12-04 13:41:33] Task 0 Epoch 2/50 complete: 145.24s total (0.00s eval/145.24s train)
+[STATE 2025-12-04 13:41:33] Task 0 Epoch 3/50: entering train loop

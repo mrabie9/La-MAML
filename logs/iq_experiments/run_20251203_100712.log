@@ -1,0 +1,187 @@
+python3 main.py $IQ --model agem --expt_name all_agem --n_memories 200 --batch_size 128 --n_epochs 30 
+                    --lr 0.03 --glances 1 --memory_strength 0.5   --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model anml --expt_name all_anml --batch_size 128 --n_epochs 50 
+                    --lr 0.001 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model eralg4 --expt_name all_eralg4 --memories 200 --batch_size 128 --n_epochs 50 --replay_batch_size 64 
+                     --lr 0.03 --glances 1   --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model eralg4 --expt_name all_eralg4 --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --opt_lr 0.1 --alpha_init 0.1 --glances 1  --increment 5 
+                     --cifar_batches 5 --learn_lr --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model icarl --expt_name all_icarl --n_memories 200 --batch_size 128 --n_epochs 50 
+                    --lr 0.03 --glances 1 --memory_strength 1.0  --increment 5 
+                    --log_every 3125 --class_order random  --samples_per_task 2500 
+                    --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model gem --expt_name all_gem --n_memories 200 --batch_size 128 --n_epochs 50 
+                    --lr 0.03 --glances 1 --memory_strength 0.5   --increment 5 
+                    --log_every 3125 --class_order random --samples_per_task 2500 
+                    --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model meralg1 --expt_name all_meralg1 --batch_size 128 --memories 200 --replay_batch_size 64 
+                    --lr 0.1 --beta 0.1 --gamma 1.0 --batches_per_example 10  --increment 5 
+                    --log_every 3125 --grad_clip_norm 10.0 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model ewc --expt_name all_ewc --batch_size 128 --n_epochs 50 
+                    --lr 0.03 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 25.0 --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model lwf --expt_name all_lwf --batch_size 128 --n_epochs 50 
+                    --lr 0.001 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model packnet --expt_name all_packnet --batch_size 128 --n_epochs 50 
+                    --lr 0.01 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model rwalk --expt_name all_rwalk --batch_size 128 --n_epochs 50 
+                    --lr 0.001 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 25.0 --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model si --expt_name all_si --batch_size 128 --n_epochs 50 
+                    --lr 0.001 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 25.0 --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model hat --expt_name all_hat --batch_size 128 --n_epochs 50 
+                    --lr 0.0005 --gamma 0.75 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 10.0 --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model ctn --expt_name all_ctn --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --lr 0.03 --glances 1 --increment 5 
+                    --ctn_n_memories 200 --ctn_lr 0.01 --ctn_beta 0.05 --ctn_inner_steps 2 --ctn_n_meta 2 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model er_ring --expt_name all_erring --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --lr 0.03 --glances 1 --increment 5 
+                    --bcl_n_memories 200 --bcl_temperature 2.0 --bcl_memory_strength 1.0 --bcl_inner_steps 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model ucl_bresnet --expt_name all_ucl_bresnet --batch_size 64 --n_epochs 50 
+                    --lr 0.001 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 10.0 --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model meta-bgd --expt_name all_meta-bgd --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --alpha_init 0.1 --glances 1  --increment 5 
+                    --cifar_batches 3 --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 128 --xav_init  --std_init 0.02 --mean_eta 50. --train_mc_iters 2
+
+python3 main.py $IQ --model lamaml_cifar --expt_name all_lamaml --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --opt_lr 0.25 --alpha_init 0.1 --opt_wt 0.1 --glances 1  --increment 5 
+                    --cifar_batches 5 --learn_lr --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --grad_clip_norm 1.0 --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model lamaml_cifar --expt_name all_lamaml_sync --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --opt_lr 0.35 --alpha_init 0.1 --opt_wt 0.1 --glances 1  --increment 5 
+                    --cifar_batches 5 --learn_lr --sync_update --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model lamaml_cifar --expt_name all_cmaml --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --opt_lr 0.35 --alpha_init 0.075 --opt_wt 0.075 --glances 1  --increment 5 
+                    --cifar_batches 5 --sync_update --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+Logging IQ experiment suite to logs/iq_experiments/run_20251203_100712.log
+Running model:  agem
+Set seed 0
+Loaded task0.npz: Unique train labels: [2 3 5 7 8]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4]
+Loaded task1.npz: Unique train labels: [0 1 4 6 9]
+Loaded task1.npz: Remapped labels: [5 6 7 8 9]
+n_outputs: 10 	n_tasks: 2
+True
+Model device: cuda:0
+---- Eval at Epoch 0: [0.046825396825396826, 0.15912698412698412] ----
+Task 0 Epoch 1/30 | Loss 1.7264 | Train Acc 0.2422 | Val Acc 0.0468
+Task 0 Epoch 2/30 | Loss 1.4458 | Train Acc 0.4531 | Val Acc 0.0468
+Task 0 Epoch 3/30 | Loss 1.2580 | Train Acc 0.6016 | Val Acc 0.0468
+Task 0 Epoch 4/30 | Loss 1.2006 | Train Acc 0.6172 | Val Acc 0.0468
+Task 0 Epoch 5/30 | Loss 1.1412 | Train Acc 0.6328 | Val Acc 0.0468
+Task 0 Epoch 6/30 | Loss 1.0996 | Train Acc 0.6719 | Val Acc 0.0468
+Task 0 Epoch 7/30 | Loss 1.0547 | Train Acc 0.6953 | Val Acc 0.0468
+Task 0 Epoch 8/30 | Loss 1.0100 | Train Acc 0.7188 | Val Acc 0.0468
+Task 0 Epoch 9/30 | Loss 0.9694 | Train Acc 0.7422 | Val Acc 0.0468
+Task 0 Epoch 10/30 | Loss 0.9255 | Train Acc 0.7656 | Val Acc 0.0468
+---- Eval at Epoch 10: [0.1876984126984127, 0.0630952380952381] ----
+Task 0 Epoch 11/30 | Loss 0.8912 | Train Acc 0.7656 | Val Acc 0.1877
+Task 0 Epoch 12/30 | Loss 0.8624 | Train Acc 0.7969 | Val Acc 0.1877
+Task 0 Epoch 13/30 | Loss 0.8292 | Train Acc 0.8125 | Val Acc 0.1877
+Task 0 Epoch 14/30 | Loss 0.7988 | Train Acc 0.8203 | Val Acc 0.1877
+Task 0 Epoch 15/30 | Loss 0.7677 | Train Acc 0.8281 | Val Acc 0.1877
+Task 0 Epoch 16/30 | Loss 0.7440 | Train Acc 0.7969 | Val Acc 0.1877
+Task 0 Epoch 17/30 | Loss 0.7155 | Train Acc 0.8125 | Val Acc 0.1877
+Task 0 Epoch 18/30 | Loss 0.6960 | Train Acc 0.8281 | Val Acc 0.1877
+Task 0 Epoch 19/30 | Loss 0.6716 | Train Acc 0.8359 | Val Acc 0.1877
+Task 0 Epoch 20/30 | Loss 0.6510 | Train Acc 0.8359 | Val Acc 0.1877
+---- Eval at Epoch 20: [0.2123015873015873, 0.04563492063492063] ----
+Task 0 Epoch 21/30 | Loss 0.6256 | Train Acc 0.8359 | Val Acc 0.2123
+Task 0 Epoch 22/30 | Loss 0.6030 | Train Acc 0.8516 | Val Acc 0.2123
+Task 0 Epoch 23/30 | Loss 0.5751 | Train Acc 0.8516 | Val Acc 0.2123
+Task 0 Epoch 24/30 | Loss 0.5573 | Train Acc 0.8750 | Val Acc 0.2123
+Task 0 Epoch 25/30 | Loss 0.5287 | Train Acc 0.8828 | Val Acc 0.2123
+Task 0 Epoch 26/30 | Loss 0.5148 | Train Acc 0.8984 | Val Acc 0.2123
+Task 0 Epoch 27/30 | Loss 0.4869 | Train Acc 0.9375 | Val Acc 0.2123
+Task 0 Epoch 28/30 | Loss 0.4746 | Train Acc 0.9219 | Val Acc 0.2123
+Task 0 Epoch 29/30 | Loss 0.4447 | Train Acc 0.9609 | Val Acc 0.2123
+Task 0 Epoch 30/30 | Loss 0.4300 | Train Acc 0.9609 | Val Acc 0.2123
+---- Eval at Epoch 0: [0.23214285714285715, 0.034126984126984124] ----
+Task 1 Epoch 1/30 | Loss 1.6478 | Train Acc 0.2266 | Val Acc 0.0341
+Task 1 Epoch 2/30 | Loss 1.4183 | Train Acc 0.4609 | Val Acc 0.0341
+Task 1 Epoch 3/30 | Loss 1.2644 | Train Acc 0.7344 | Val Acc 0.0341
+Task 1 Epoch 4/30 | Loss 1.2221 | Train Acc 0.7578 | Val Acc 0.0341
+Task 1 Epoch 5/30 | Loss 1.1427 | Train Acc 0.7812 | Val Acc 0.0341
+Task 1 Epoch 6/30 | Loss 1.1079 | Train Acc 0.8047 | Val Acc 0.0341
+Task 1 Epoch 7/30 | Loss 1.0464 | Train Acc 0.8047 | Val Acc 0.0341
+Task 1 Epoch 8/30 | Loss 1.0175 | Train Acc 0.8281 | Val Acc 0.0341
+Task 1 Epoch 9/30 | Loss 0.9727 | Train Acc 0.8672 | Val Acc 0.0341
+Task 1 Epoch 10/30 | Loss 0.9554 | Train Acc 0.8594 | Val Acc 0.0341
+---- Eval at Epoch 10: [0.201984126984127, 0.0761904761904762] ----
+Task 1 Epoch 11/30 | Loss 0.9236 | Train Acc 0.8984 | Val Acc 0.0762
+Task 1 Epoch 12/30 | Loss 0.8939 | Train Acc 0.8828 | Val Acc 0.0762
+Task 1 Epoch 13/30 | Loss 0.8631 | Train Acc 0.9141 | Val Acc 0.0762
+Task 1 Epoch 14/30 | Loss 0.8280 | Train Acc 0.9141 | Val Acc 0.0762
+Task 1 Epoch 15/30 | Loss 0.8028 | Train Acc 0.9219 | Val Acc 0.0762
+Task 1 Epoch 16/30 | Loss 0.7705 | Train Acc 0.9141 | Val Acc 0.0762
+Task 1 Epoch 17/30 | Loss 0.7518 | Train Acc 0.9297 | Val Acc 0.0762
+Task 1 Epoch 18/30 | Loss 0.7243 | Train Acc 0.9219 | Val Acc 0.0762
+Task 1 Epoch 19/30 | Loss 0.7011 | Train Acc 0.9453 | Val Acc 0.0762
+Task 1 Epoch 20/30 | Loss 0.6761 | Train Acc 0.9375 | Val Acc 0.0762
+---- Eval at Epoch 20: [0.16150793650793652, 0.1253968253968254] ----
+Task 1 Epoch 21/30 | Loss 0.6504 | Train Acc 0.9531 | Val Acc 0.1254
+Task 1 Epoch 22/30 | Loss 0.6317 | Train Acc 0.9531 | Val Acc 0.1254
+Task 1 Epoch 23/30 | Loss 0.6008 | Train Acc 0.9766 | Val Acc 0.1254
+Task 1 Epoch 24/30 | Loss 0.5866 | Train Acc 0.9531 | Val Acc 0.1254
+Task 1 Epoch 25/30 | Loss 0.5572 | Train Acc 0.9766 | Val Acc 0.1254
+Task 1 Epoch 26/30 | Loss 0.5491 | Train Acc 0.9609 | Val Acc 0.1254
+Task 1 Epoch 27/30 | Loss 0.5209 | Train Acc 0.9844 | Val Acc 0.1254
+Task 1 Epoch 28/30 | Loss 0.5079 | Train Acc 0.9609 | Val Acc 0.1254
+Task 1 Epoch 29/30 | Loss 0.4797 | Train Acc 0.9844 | Val Acc 0.1254
+Task 1 Epoch 30/30 | Loss 0.4676 | Train Acc 0.9844 | Val Acc 0.1254
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.13234126984126984 
+ Individual Accuracy: [0.0996031746031746, 0.16507936507936508]
+####Final Test Accuracy####
+Final Results:- 
+ Total Accuracy: 0.13234126984126984 
+ Individual Accuracy: [0.0996031746031746, 0.16507936507936508]
+logs//agem/all_agem-2025-12-03_10-07-16-1159/0/results: {'expt_name': 'all_agem', 'model': 'agem', 'arch': 'resnet1d', 'n_hiddens': 100, 'n_layers': 2, 'xav_init': False, 'glances': 1, 'n_epochs': 30, 'batch_size': 128, 'replay_batch_size': 20, 'memories': 5120, 'lr': 0.03, 'cuda': True, 'seed': 0, 'log_every': 3125, 'log_dir': 'logs//agem/all_agem-2025-12-03_10-07-16-1159/0', 'tf_dir': 'logs//agem/all_agem-2025-12-03_10-07-16-1159/0/tfdir', 'calc_test_accuracy': True, 'data_path': 'data/rff/rfmls/', 'loader': 'task_incremental_loader', 'samples_per_task': 128, 'shuffle_tasks': False, 'classes_per_it': 4, 'iterations': 5000, 'dataset': 'iq', 'workers': 3, 'validation': 0.3, 'class_order': 'random', 'increment': 5, 'test_batch_size': 100000, 'nc_per_task': 5, 'val_rate': 10, 'opt_lr': 0.1, 'opt_wt': 0.1, 'alpha_init': 0.001, 'learn_lr': False, 'sync_update': False, 'grad_clip_norm': 2.0, 'cifar_batches': 3, 'use_old_task_memory': False, 'second_order': False, 'n_memories': 200, 'memory_strength': 0.5, 'steps_per_sample': 1, 'gamma': 1.0, 'beta': 1.0, 's': 1, 'batches_per_example': 1, 'bgd_optimizer': 'bgd', 'optimizer_params': '{}', 'train_mc_iters': 5, 'std_init': 0.05, 'mean_eta': 1, 'fisher_gamma': 0.95, 'rln': 7, 'update_steps': 10, 'meta_lr': 0.001, 'update_lr': 0.1, 'ctn_lr': 0.01, 'ctn_beta': 0.05, 'ctn_n_meta': 2, 'ctn_inner_steps': 2, 'ctn_temperature': 5, 'ctn_n_memories': 50, 'ctn_alpha_init': 0.1, 'ctn_memory_strength': 0.5, 'ctn_task_emb': 64, 'bcl_n_memories': 2000, 'bcl_memory_strength': 1.0, 'bcl_temperature': 2.0, 'bcl_inner_steps': 5, 'bcl_n_meta': 5, 'bcl_adapt_lr': 0.1} # val: 0.199 0.132 -0.066 -0.062 # test: 0.199 0.132 -0.066 0.000 # 25.12598443031311

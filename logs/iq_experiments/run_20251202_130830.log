@@ -1,0 +1,166 @@
+python3 main.py $IQ --model agem --expt_name all_agem --n_memories 10 --batch_size 128 --n_epochs 100 
+                    --lr 0.03 --glances 1 --memory_strength 0.5   --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 128
+
+python3 main.py $IQ --model anml --expt_name all_anml --batch_size 128 --n_epochs 100 
+                    --lr 0.001 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3
+
+python3 main.py $IQ --model eralg4 --expt_name all_eralg4 --memories 200 --batch_size 128 --n_epochs 100 --replay_batch_size 64 
+                     --lr 0.03 --glances 1   --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3
+
+python3 main.py $IQ --model eralg4 --expt_name all_eralg4 --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 100 
+                    --opt_lr 0.1 --alpha_init 0.1 --glances 1  --increment 5 
+                     --cifar_batches 5 --learn_lr --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3
+
+python3 main.py $IQ --model icarl --expt_name all_icarl --n_memories 200 --batch_size 128 --n_epochs 100 
+                    --lr 0.03 --glances 1 --memory_strength 1.0  --increment 5 
+                    --log_every 3125 --class_order random  --samples_per_task 2500 
+                    --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3
+
+python3 main.py $IQ --model gem --expt_name all_gem --n_memories 10 --batch_size 128 --n_epochs 100 
+                    --lr 0.03 --glances 1 --memory_strength 0.5   --increment 5 
+                    --log_every 3125 --class_order random --samples_per_task 2500 
+                    --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3
+
+python3 main.py $IQ --model meralg1 --expt_name all_meralg1 --batch_size 128 --memories 200 --replay_batch_size 64 
+                    --lr 0.1 --beta 0.1 --gamma 1.0 --batches_per_example 10  --increment 5 
+                    --log_every 3125 --grad_clip_norm 10.0 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3
+
+python3 main.py $IQ --model ewc --expt_name all_ewc --batch_size 128 --n_epochs 100 
+                    --lr 0.03 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 25.0 --calc_test_accuracy --validation 0.3
+
+python3 main.py $IQ --model lwf --expt_name all_lwf --batch_size 128 --n_epochs 100 
+                    --lr 0.001 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3
+
+python3 main.py $IQ --model packnet --expt_name all_packnet --batch_size 128 --n_epochs 100 
+                    --lr 0.01 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3
+
+python3 main.py $IQ --model rwalk --expt_name all_rwalk --batch_size 128 --n_epochs 100 
+                    --lr 0.001 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 25.0 --calc_test_accuracy --validation 0.3
+
+python3 main.py $IQ --model si --expt_name all_si --batch_size 128 --n_epochs 100 
+                    --lr 0.001 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 25.0 --calc_test_accuracy --validation 0.3
+
+python3 main.py $IQ --model hat --expt_name all_hat --batch_size 128 --n_epochs 100 
+                    --lr 0.0005 --gamma 0.75 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 10.0 --calc_test_accuracy --validation 0.3
+
+python3 main.py $IQ --model ctn --expt_name all_ctn --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 100 
+                    --lr 0.03 --glances 1 --increment 5 
+                    --ctn_n_memories 200 --ctn_lr 0.01 --ctn_beta 0.05 --ctn_inner_steps 2 --ctn_n_meta 2 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3
+
+python3 main.py $IQ --model er_ring --expt_name all_erring --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 100 
+                    --lr 0.03 --glances 1 --increment 5 
+                    --bcl_n_memories 200 --bcl_temperature 2.0 --bcl_memory_strength 1.0 --bcl_inner_steps 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3
+
+python3 main.py $IQ --model ucl_bresnet --expt_name all_ucl_bresnet --batch_size 64 --n_epochs 100 
+                    --lr 0.001 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 10.0 --calc_test_accuracy --validation 0.3
+
+python3 main.py $IQ --model meta-bgd --expt_name all_meta-bgd --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 100 
+                    --alpha_init 0.1 --glances 1  --increment 5 
+                    --cifar_batches 3 --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --xav_init  --std_init 0.02 --mean_eta 50. --train_mc_iters 2
+
+python3 main.py $IQ --model lamaml_cifar --expt_name all_lamaml --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 100 
+                    --opt_lr 0.25 --alpha_init 0.1 --opt_wt 0.1 --glances 1  --increment 5 
+                    --cifar_batches 5 --learn_lr --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --grad_clip_norm 1.0 --calc_test_accuracy --validation 0.3
+
+python3 main.py $IQ --model lamaml_cifar --expt_name all_lamaml_sync --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 100 
+                    --opt_lr 0.35 --alpha_init 0.1 --opt_wt 0.1 --glances 1  --increment 5 
+                    --cifar_batches 5 --learn_lr --sync_update --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3
+
+python3 main.py $IQ --model lamaml_cifar --expt_name all_cmaml --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 100 
+                    --opt_lr 0.35 --alpha_init 0.075 --opt_wt 0.075 --glances 1  --increment 5 
+                    --cifar_batches 5 --sync_update --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3
+
+Logging IQ experiment suite to logs/iq_experiments/run_20251202_130830.log
+Running model:  agem
+Set seed 0
+Loaded task0.npz: Unique train labels: [0 1 2 3 4 5]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]
+Loaded task1.npz: Unique train labels: [ 0  6  7  8  9 10]
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11]
+n_outputs: 12 	n_tasks: 2
+True
+Model device: cuda:0
+---- Eval at Epoch 0: [0.0002932858489577878, 0.015125058409778411] ----
+Task 0 Epoch 1/21 | Loss 1.8389 | Train Acc 0.1250 | Val Acc 0.0003
+Task 0 Epoch 2/21 | Loss 0.9437 | Train Acc 0.8750 | Val Acc 0.0003
+Task 0 Epoch 3/21 | Loss 0.6720 | Train Acc 0.8281 | Val Acc 0.0003
+Task 0 Epoch 4/21 | Loss 0.7499 | Train Acc 0.8672 | Val Acc 0.0003
+Task 0 Epoch 5/21 | Loss 0.4473 | Train Acc 0.8984 | Val Acc 0.0003
+Task 0 Epoch 6/21 | Loss 0.4463 | Train Acc 0.8672 | Val Acc 0.0003
+Task 0 Epoch 7/21 | Loss 0.3840 | Train Acc 0.9141 | Val Acc 0.0003
+Task 0 Epoch 8/21 | Loss 0.3439 | Train Acc 0.9062 | Val Acc 0.0003
+Task 0 Epoch 9/21 | Loss 0.3201 | Train Acc 0.9141 | Val Acc 0.0003
+Task 0 Epoch 10/21 | Loss 0.3031 | Train Acc 0.9141 | Val Acc 0.0003
+---- Eval at Epoch 10: [0.9064837121608882, 0.0] ----
+Task 0 Epoch 11/21 | Loss 0.2893 | Train Acc 0.9141 | Val Acc 0.9065
+Task 0 Epoch 12/21 | Loss 0.2754 | Train Acc 0.9219 | Val Acc 0.9065
+Task 0 Epoch 13/21 | Loss 0.2633 | Train Acc 0.9219 | Val Acc 0.9065
+Task 0 Epoch 14/21 | Loss 0.2464 | Train Acc 0.9297 | Val Acc 0.9065
+Task 0 Epoch 15/21 | Loss 0.2309 | Train Acc 0.9375 | Val Acc 0.9065
+Task 0 Epoch 16/21 | Loss 0.2156 | Train Acc 0.9375 | Val Acc 0.9065
+Task 0 Epoch 17/21 | Loss 0.2022 | Train Acc 0.9375 | Val Acc 0.9065
+Task 0 Epoch 18/21 | Loss 0.1887 | Train Acc 0.9453 | Val Acc 0.9065
+Task 0 Epoch 19/21 | Loss 0.1755 | Train Acc 0.9453 | Val Acc 0.9065
+Task 0 Epoch 20/21 | Loss 0.1623 | Train Acc 0.9453 | Val Acc 0.9065
+---- Eval at Epoch 20: [0.9031109248978737, 0.0] ----
+Task 0 Epoch 21/21 | Loss 0.1497 | Train Acc 0.9453 | Val Acc 0.9031
+---- Eval at Epoch 0: [0.902210118361789, 0.0] ----
+Task 1 Epoch 1/21 | Loss 1.9696 | Train Acc 0.0234 | Val Acc 0.0000
+Task 1 Epoch 2/21 | Loss 1.0951 | Train Acc 0.9609 | Val Acc 0.0000
+Task 1 Epoch 3/21 | Loss 0.5047 | Train Acc 0.9766 | Val Acc 0.0000
+Task 1 Epoch 4/21 | Loss 0.2634 | Train Acc 0.9688 | Val Acc 0.0000
+Task 1 Epoch 5/21 | Loss 0.1149 | Train Acc 0.9844 | Val Acc 0.0000
+Task 1 Epoch 6/21 | Loss 0.0643 | Train Acc 1.0000 | Val Acc 0.0000
+Task 1 Epoch 7/21 | Loss 0.0441 | Train Acc 1.0000 | Val Acc 0.0000
+Task 1 Epoch 8/21 | Loss 0.0336 | Train Acc 1.0000 | Val Acc 0.0000
+Task 1 Epoch 9/21 | Loss 0.0272 | Train Acc 1.0000 | Val Acc 0.0000
+Task 1 Epoch 10/21 | Loss 0.0229 | Train Acc 1.0000 | Val Acc 0.0000
+---- Eval at Epoch 10: [0.04350057609720331, 0.8747509898920341] ----
+Task 1 Epoch 11/21 | Loss 0.0197 | Train Acc 1.0000 | Val Acc 0.8748
+Task 1 Epoch 12/21 | Loss 0.0174 | Train Acc 1.0000 | Val Acc 0.8748
+Task 1 Epoch 13/21 | Loss 0.0155 | Train Acc 1.0000 | Val Acc 0.8748
+Task 1 Epoch 14/21 | Loss 0.0140 | Train Acc 1.0000 | Val Acc 0.8748
+Task 1 Epoch 15/21 | Loss 0.0127 | Train Acc 1.0000 | Val Acc 0.8748
+Task 1 Epoch 16/21 | Loss 0.0117 | Train Acc 1.0000 | Val Acc 0.8748
+Task 1 Epoch 17/21 | Loss 0.0108 | Train Acc 1.0000 | Val Acc 0.8748
+Task 1 Epoch 18/21 | Loss 0.0100 | Train Acc 1.0000 | Val Acc 0.8748
+Task 1 Epoch 19/21 | Loss 0.0094 | Train Acc 1.0000 | Val Acc 0.8748
+Task 1 Epoch 20/21 | Loss 0.0088 | Train Acc 1.0000 | Val Acc 0.8748
+---- Eval at Epoch 20: [0.037121608882371426, 0.8808133100514006] ----
+Task 1 Epoch 21/21 | Loss 0.0083 | Train Acc 1.0000 | Val Acc 0.8808
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.4589655335442502 
+ Individual Accuracy: [0.036755001571174194, 0.8811760655173262]
+logs//agem/agem_test_radar-2025-12-02_13-08-37-2773/0/results: {'expt_name': 'agem_test_radar', 'model': 'agem', 'arch': 'resnet1d', 'n_hiddens': 100, 'n_layers': 2, 'xav_init': True, 'glances': 1, 'n_epochs': 21, 'batch_size': 128, 'replay_batch_size': 10, 'memories': 400, 'lr': 0.03, 'cuda': True, 'seed': 0, 'log_every': 10, 'log_dir': 'logs//agem/agem_test_radar-2025-12-02_13-08-37-2773/0', 'tf_dir': 'logs//agem/agem_test_radar-2025-12-02_13-08-37-2773/0/tfdir', 'calc_test_accuracy': False, 'data_path': 'data/rff/radar', 'loader': 'task_incremental_loader', 'samples_per_task': 128, 'shuffle_tasks': False, 'classes_per_it': 6, 'iterations': 5000, 'dataset': 'iq', 'workers': 0, 'validation': 0.5, 'class_order': 'random', 'increment': 5, 'test_batch_size': 100000, 'nc_per_task': 6, 'val_rate': 10, 'opt_lr': 0.1, 'opt_wt': 0.1, 'alpha_init': 0.1, 'learn_lr': False, 'sync_update': False, 'grad_clip_norm': 5.0, 'cifar_batches': 3, 'use_old_task_memory': False, 'second_order': True, 'n_memories': 200, 'memory_strength': 1.0, 'steps_per_sample': 1, 'gamma': 1.0, 'beta': 0.1, 's': 1.0, 'batches_per_example': 1.0, 'bgd_optimizer': 'bgd', 'optimizer_params': '{}', 'train_mc_iters': 2, 'std_init': 0.02, 'mean_eta': 50.0, 'fisher_gamma': 0.95, 'rln': 7, 'update_steps': 10, 'meta_lr': 0.001, 'update_lr': 0.1, 'ctn_lr': 0.01, 'ctn_beta': 0.05, 'ctn_n_meta': 2, 'ctn_inner_steps': 2, 'ctn_temperature': 5, 'ctn_n_memories': 50, 'ctn_alpha_init': 0.1, 'ctn_memory_strength': 100, 'ctn_task_emb': 64, 'bcl_n_memories': 400, 'bcl_memory_strength': 100, 'bcl_temperature': 5, 'bcl_inner_steps': 2, 'bcl_n_meta': 2, 'bcl_adapt_lr': 0.01} # val: 0.892 0.459 -0.433 -0.008 # 596.7909078598022
+./run_iq_experiments.sh: line 40: hon3: command not found

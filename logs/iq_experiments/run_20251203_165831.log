@@ -1,0 +1,170 @@
+python3 -u main.py $IQ --model agem --expt_name all_agem --n_memories 5196 --batch_size 128 --n_epochs 50 
+                    --lr 0.03 --glances 1 --memory_strength 0.5   --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model eralg4 --expt_name all_eralg4 --memories 200 --batch_size 128 --n_epochs 50 --replay_batch_size 64 
+                     --lr 0.03 --glances 1   --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model eralg4 --expt_name all_la-eralg4 --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --opt_lr 0.1 --alpha_init 0.1 --glances 1  --increment 5 
+                     --cifar_batches 5 --learn_lr --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model gem --expt_name all_gem --n_memories 5196 --batch_size 128 --n_epochs 50 
+                    --lr 0.03 --glances 1 --memory_strength 0.5   --increment 5 
+                    --log_every 3125 --class_order random --samples_per_task 2500 
+                    --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model ewc --expt_name all_ewc --batch_size 128 --n_epochs 50 
+                    --lr 0.03 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model lwf --expt_name all_lwf --batch_size 128 --n_epochs 50 
+                    --lr 0.001 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model packnet --expt_name all_packnet --batch_size 128 --n_epochs 50 
+                    --lr 0.01 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model rwalk --expt_name all_rwalk --batch_size 128 --n_epochs 50 
+                    --lr 0.001 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model si --expt_name all_si --batch_size 128 --n_epochs 50 
+                    --lr 0.001 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model hat --expt_name all_hat --batch_size 128 --n_epochs 50 
+                    --lr 0.0005 --gamma 0.75 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 10.0 --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model ctn --expt_name all_ctn --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --increment 5 
+                    --ctn_n_memories 200 --ctn_lr 0.01 --ctn_beta 0.05 --ctn_inner_steps 2 --ctn_n_meta 2 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model er_ring --expt_name all_erring --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --lr 0.03 --increment 5 
+                    --bcl_n_memories 200 --bcl_temperature 2.0 --bcl_memory_strength 1.0 --bcl_inner_steps 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model ucl_bresnet --expt_name all_ucl_bresnet --batch_size 64 --n_epochs 50 
+                    --lr 0.001 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model anml --expt_name all_anml --batch_size 128 --n_epochs 50 
+                    --lr 0.001 --glances 1 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1 
+                    --rln 7 --update_steps 10 --meta_lr 0.001 --update_lr 0.1 
+
+python3 -u main.py $IQ --model meralg1 --expt_name all_meralg1 --batch_size 128 --memories 200 --replay_batch_size 64 
+                    --lr 0.1 --beta 0.1 --gamma 1.0 --batches_per_example 10  --increment 5 
+                    --log_every 3125 --grad_clip_norm 10.0 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model meta-bgd --expt_name all_meta-bgd --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --alpha_init 0.1 --glances 1  --increment 5 
+                    --cifar_batches 3 --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1 --xav_init  --std_init 0.02 --mean_eta 50. --train_mc_iters 2
+
+python3 -u main.py $IQ --model lamaml_cifar --expt_name all_lamaml --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --opt_lr 0.25 --alpha_init 0.1 --opt_wt 0.1 --glances 1  --increment 5 
+                    --cifar_batches 5 --learn_lr --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --grad_clip_norm 1.0 --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model lamaml_cifar --expt_name all_lamaml_sync --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --opt_lr 0.35 --alpha_init 0.1 --opt_wt 0.1 --glances 1  --increment 5 
+                    --cifar_batches 5 --learn_lr --sync_update --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model lamaml_cifar --expt_name all_cmaml --memories 200 --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --opt_lr 0.35 --alpha_init 0.075 --opt_wt 0.075 --glances 1  --increment 5 
+                    --cifar_batches 5 --sync_update --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+Logging IQ experiment suite to logs/iq_experiments/run_20251203_165831.log
+New Experiment Starting...
+Running model:  gem
+Set seed 0
+Loaded task0.npz: Unique train labels: [0 1 2 3 4 5]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]
+Loaded task1.npz: Unique train labels: [ 0  6  7  8  9 10]
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11]
+n_outputs: 12 	n_tasks: 2
+True
+Model device: cuda:0
+---- Eval at Epoch 0: [0.0, 0.0] ----
+Task 0 Epoch 1/1 | Loss 1.4136 | Train Acc 0.2178 | Val Acc 0.0000 | Epoch Time 63.55s (Eval 63.28s, Train 0.27s)
+---- Eval at Epoch 0: [0.00023462867916623022, 0.0] ----
+Task 1 Epoch 1/1 | Loss 1.6646 | Train Acc 0.2583 | Val Acc 0.0000 | Epoch Time 64.48s (Eval 63.91s, Train 0.58s)
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 8.379595684508222e-05 
+ Individual Accuracy: [0.00016759191369016444, 0.0]
+logs//gem/gem_test_radar-2025-12-03_16-58-37-4236/0/results: {'expt_name': 'gem_test_radar', 'model': 'gem', 'arch': 'resnet1d', 'n_hiddens': 100, 'n_layers': 2, 'xav_init': True, 'glances': 1, 'n_epochs': 1, 'batch_size': 128, 'replay_batch_size': 10, 'memories': 400, 'lr': 0.03, 'cuda': True, 'seed': 0, 'log_every': 10, 'log_dir': 'logs//gem/gem_test_radar-2025-12-03_16-58-37-4236/0', 'tf_dir': 'logs//gem/gem_test_radar-2025-12-03_16-58-37-4236/0/tfdir', 'calc_test_accuracy': False, 'state_logging': False, 'data_path': 'data/rff/radar', 'loader': 'task_incremental_loader', 'samples_per_task': 256, 'shuffle_tasks': False, 'classes_per_it': 6, 'iterations': 5000, 'dataset': 'iq', 'workers': 0, 'validation': 0.5, 'class_order': 'random', 'increment': 5, 'test_batch_size': 100000, 'nc_per_task': 6, 'val_rate': 10, 'opt_lr': 0.1, 'opt_wt': 0.1, 'alpha_init': 0.1, 'learn_lr': False, 'sync_update': False, 'grad_clip_norm': 5.0, 'cifar_batches': 3, 'use_old_task_memory': False, 'second_order': True, 'n_memories': 200, 'memory_strength': 1.0, 'steps_per_sample': 1, 'gamma': 1.0, 'beta': 0.1, 's': 1.0, 'batches_per_example': 1.0, 'bgd_optimizer': 'bgd', 'optimizer_params': '{}', 'train_mc_iters': 2, 'std_init': 0.02, 'mean_eta': 50.0, 'fisher_gamma': 0.95, 'rln': 7, 'update_steps': 10, 'meta_lr': 0.001, 'update_lr': 0.1, 'ctn_lr': 0.01, 'ctn_beta': 0.05, 'ctn_n_meta': 2, 'ctn_inner_steps': 2, 'ctn_temperature': 5, 'ctn_n_memories': 50, 'ctn_alpha_init': 0.1, 'ctn_memory_strength': 100, 'ctn_task_emb': 64, 'bcl_n_memories': 400, 'bcl_memory_strength': 100, 'bcl_temperature': 5, 'bcl_inner_steps': 2, 'bcl_n_meta': 2, 'bcl_adapt_lr': 0.01} # val: 0.000 0.000 -0.000 0.000 # 383.4562702178955
+New Experiment Starting...
+Running model:  gem
+Set seed 0
+Loaded task0.npz: Unique train labels: [0 1 2 3 4 5]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]
+Loaded task1.npz: Unique train labels: [ 0  6  7  8  9 10]
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11]
+n_outputs: 12 	n_tasks: 2
+True
+Model device: cuda:0
+---- Eval at Epoch 0: [0.0, 0.0] ----
+Task 0 Epoch 1/1 | Loss 1.4136 | Train Acc 0.2178 | Val Acc 0.0000 | Epoch Time 64.96s (Eval 64.69s, Train 0.27s)
+---- Eval at Epoch 0: [0.00023462867916623022, 0.0] ----
+Task 1 Epoch 1/1 | Loss 1.6646 | Train Acc 0.2583 | Val Acc 0.0000 | Epoch Time 65.33s (Eval 64.74s, Train 0.59s)
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 8.379595684508222e-05 
+ Individual Accuracy: [0.00016759191369016444, 0.0]
+logs//gem/gem_test_radar-2025-12-03_17-05-08-3832/0/results: {'expt_name': 'gem_test_radar', 'model': 'gem', 'arch': 'resnet1d', 'n_hiddens': 100, 'n_layers': 2, 'xav_init': True, 'glances': 1, 'n_epochs': 1, 'batch_size': 128, 'replay_batch_size': 10, 'memories': 400, 'lr': 0.03, 'cuda': True, 'seed': 0, 'log_every': 10, 'log_dir': 'logs//gem/gem_test_radar-2025-12-03_17-05-08-3832/0', 'tf_dir': 'logs//gem/gem_test_radar-2025-12-03_17-05-08-3832/0/tfdir', 'calc_test_accuracy': False, 'state_logging': False, 'data_path': 'data/rff/radar', 'loader': 'task_incremental_loader', 'samples_per_task': 256, 'shuffle_tasks': False, 'classes_per_it': 6, 'iterations': 5000, 'dataset': 'iq', 'workers': 0, 'validation': 0.5, 'class_order': 'random', 'increment': 5, 'test_batch_size': 100000, 'nc_per_task': 6, 'val_rate': 10, 'opt_lr': 0.1, 'opt_wt': 0.1, 'alpha_init': 0.1, 'learn_lr': False, 'sync_update': False, 'grad_clip_norm': 5.0, 'cifar_batches': 3, 'use_old_task_memory': False, 'second_order': True, 'n_memories': 200, 'memory_strength': 1.0, 'steps_per_sample': 1, 'gamma': 1.0, 'beta': 0.1, 's': 1.0, 'batches_per_example': 1.0, 'bgd_optimizer': 'bgd', 'optimizer_params': '{}', 'train_mc_iters': 2, 'std_init': 0.02, 'mean_eta': 50.0, 'fisher_gamma': 0.95, 'rln': 7, 'update_steps': 10, 'meta_lr': 0.001, 'update_lr': 0.1, 'ctn_lr': 0.01, 'ctn_beta': 0.05, 'ctn_n_meta': 2, 'ctn_inner_steps': 2, 'ctn_temperature': 5, 'ctn_n_memories': 50, 'ctn_alpha_init': 0.1, 'ctn_memory_strength': 100, 'ctn_task_emb': 64, 'bcl_n_memories': 400, 'bcl_memory_strength': 100, 'bcl_temperature': 5, 'bcl_inner_steps': 2, 'bcl_n_meta': 2, 'bcl_adapt_lr': 0.01} # val: 0.000 0.000 -0.000 0.000 # 389.2314534187317
+New Experiment Starting...
+Running model:  gem
+Set seed 0
+Loaded task0.npz: Unique train labels: [0 1 2 3 4 5]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]
+Loaded task1.npz: Unique train labels: [ 0  6  7  8  9 10]
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11]
+n_outputs: 12 	n_tasks: 2
+True
+Model device: cuda:0
+---- Eval at Epoch 0: [0.0, 0.0] ----
+Task 0 Epoch 1/1 | Loss 1.4136 | Train Acc 0.2178 | Val Acc 0.0000 | Epoch Time 64.25s (Eval 63.98s, Train 0.27s)
+---- Eval at Epoch 0: [0.00023462867916623022, 0.0] ----
+Task 1 Epoch 1/1 | Loss 1.6646 | Train Acc 0.2583 | Val Acc 0.0000 | Epoch Time 64.72s (Eval 64.14s, Train 0.59s)
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 8.379595684508222e-05 
+ Individual Accuracy: [0.00016759191369016444, 0.0]
+logs//gem/gem_test_radar-2025-12-03_17-11-45-3235/0/results: {'expt_name': 'gem_test_radar', 'model': 'gem', 'arch': 'resnet1d', 'n_hiddens': 100, 'n_layers': 2, 'xav_init': True, 'glances': 1, 'n_epochs': 1, 'batch_size': 128, 'replay_batch_size': 10, 'memories': 400, 'lr': 0.03, 'cuda': True, 'seed': 0, 'log_every': 10, 'log_dir': 'logs//gem/gem_test_radar-2025-12-03_17-11-45-3235/0', 'tf_dir': 'logs//gem/gem_test_radar-2025-12-03_17-11-45-3235/0/tfdir', 'calc_test_accuracy': False, 'state_logging': False, 'data_path': 'data/rff/radar', 'loader': 'task_incremental_loader', 'samples_per_task': 256, 'shuffle_tasks': False, 'classes_per_it': 6, 'iterations': 5000, 'dataset': 'iq', 'workers': 0, 'validation': 0.5, 'class_order': 'random', 'increment': 5, 'test_batch_size': 100000, 'nc_per_task': 6, 'val_rate': 10, 'opt_lr': 0.1, 'opt_wt': 0.1, 'alpha_init': 0.1, 'learn_lr': False, 'sync_update': False, 'grad_clip_norm': 5.0, 'cifar_batches': 3, 'use_old_task_memory': False, 'second_order': True, 'n_memories': 200, 'memory_strength': 1.0, 'steps_per_sample': 1, 'gamma': 1.0, 'beta': 0.1, 's': 1.0, 'batches_per_example': 1.0, 'bgd_optimizer': 'bgd', 'optimizer_params': '{}', 'train_mc_iters': 2, 'std_init': 0.02, 'mean_eta': 50.0, 'fisher_gamma': 0.95, 'rln': 7, 'update_steps': 10, 'meta_lr': 0.001, 'update_lr': 0.1, 'ctn_lr': 0.01, 'ctn_beta': 0.05, 'ctn_n_meta': 2, 'ctn_inner_steps': 2, 'ctn_temperature': 5, 'ctn_n_memories': 50, 'ctn_alpha_init': 0.1, 'ctn_memory_strength': 100, 'ctn_task_emb': 64, 'bcl_n_memories': 400, 'bcl_memory_strength': 100, 'bcl_temperature': 5, 'bcl_inner_steps': 2, 'bcl_n_meta': 2, 'bcl_adapt_lr': 0.01} # val: 0.000 0.000 -0.000 0.000 # 385.16837978363037
+New Experiment Starting...
+Running model:  gem
+Set seed 0
+Loaded task0.npz: Unique train labels: [0 1 2 3 4 5]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]
+Loaded task1.npz: Unique train labels: [ 0  6  7  8  9 10]
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11]
+n_outputs: 12 	n_tasks: 2
+True
+Model device: cuda:0
+---- Eval at Epoch 0: [0.0, 0.0] ----
+Task 0 Epoch 1/1 | Loss 1.4136 | Train Acc 0.2178 | Val Acc 0.0000 | Epoch Time 65.25s (Eval 64.98s, Train 0.27s)
+---- Eval at Epoch 0: [0.00023462867916623022, 0.0] ----
+Task 1 Epoch 1/1 | Loss 1.6646 | Train Acc 0.2583 | Val Acc 0.0000 | Epoch Time 65.73s (Eval 65.15s, Train 0.58s)

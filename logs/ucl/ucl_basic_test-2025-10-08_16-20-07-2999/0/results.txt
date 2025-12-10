@@ -1,0 +1,9 @@
+0.2176 0.0000
+|
+0.2715 0.0000
+0.2504 0.0000
+
+Diagonal Accuracy: 0.1358
+Final Accuracy: 0.1252
+Backward: -0.0106
+Forward:  0.0000

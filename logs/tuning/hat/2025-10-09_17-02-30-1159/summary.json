@@ -1,0 +1,727 @@
+{
+  "config": "/home/lunet/wsmr11/repos/La-MAML/config_all.yaml",
+  "base_expt_name": "hat_repo_basic_test",
+  "session_dir": "/home/lunet/wsmr11/repos/La-MAML/logs/tuning/hat/2025-10-09_17-02-30-1159",
+  "timestamp": "2025-10-09_17-02-30-1159",
+  "fixed_overrides": {},
+  "search_space": {
+    "lr": [
+      0.001,
+      0.01,
+      0.1
+    ],
+    "gamma": [
+      1.0,
+      1.3,
+      1.8
+    ],
+    "smax": [
+      25,
+      50,
+      100
+    ]
+  },
+  "num_trials": 27,
+  "results": [
+    {
+      "status": "ok",
+      "trial": 0,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_000_gamma-1_lr-1em03_smax-25-2025-10-09_17-02-30-1159-trial000/0",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_000_gamma-1_lr-1em03_smax-25-2025-10-09_17-02-30-1159-trial000/0/tfdir",
+      "params": {
+        "gamma": 1.0,
+        "lr": 0.001,
+        "smax": 25
+      },
+      "trial_params": {
+        "gamma": 1.0,
+        "lr": 0.001,
+        "smax": 25
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.45916667580604553,
+        0.4702380895614624
+      ],
+      "val_mean": 0.46470238268375397,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1102.3105285167694
+    },
+    {
+      "status": "ok",
+      "trial": 1,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_001_gamma-1_lr-1em03_smax-50-2025-10-09_17-02-30-1159-trial001/1",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_001_gamma-1_lr-1em03_smax-50-2025-10-09_17-02-30-1159-trial001/1/tfdir",
+      "params": {
+        "gamma": 1.0,
+        "lr": 0.001,
+        "smax": 50
+      },
+      "trial_params": {
+        "gamma": 1.0,
+        "lr": 0.001,
+        "smax": 50
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.5476190447807312,
+        0.2692857086658478
+      ],
+      "val_mean": 0.4084523767232895,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1100.4730894565582
+    },
+    {
+      "status": "ok",
+      "trial": 2,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_002_gamma-1_lr-1em03_smax-100-2025-10-09_17-02-30-1159-trial002/2",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_002_gamma-1_lr-1em03_smax-100-2025-10-09_17-02-30-1159-trial002/2/tfdir",
+      "params": {
+        "gamma": 1.0,
+        "lr": 0.001,
+        "smax": 100
+      },
+      "trial_params": {
+        "gamma": 1.0,
+        "lr": 0.001,
+        "smax": 100
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.5247619152069092,
+        0.36047619581222534
+      ],
+      "val_mean": 0.44261905550956726,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1100.6857810020447
+    },
+    {
+      "status": "ok",
+      "trial": 3,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_003_gamma-1_lr-1em02_smax-25-2025-10-09_17-02-30-1159-trial003/3",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_003_gamma-1_lr-1em02_smax-25-2025-10-09_17-02-30-1159-trial003/3/tfdir",
+      "params": {
+        "gamma": 1.0,
+        "lr": 0.01,
+        "smax": 25
+      },
+      "trial_params": {
+        "gamma": 1.0,
+        "lr": 0.01,
+        "smax": 25
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.5647618770599365,
+        0.6833333373069763
+      ],
+      "val_mean": 0.6240476071834564,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1101.6623027324677
+    },
+    {
+      "status": "ok",
+      "trial": 4,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_004_gamma-1_lr-1em02_smax-50-2025-10-09_17-02-30-1159-trial004/4",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_004_gamma-1_lr-1em02_smax-50-2025-10-09_17-02-30-1159-trial004/4/tfdir",
+      "params": {
+        "gamma": 1.0,
+        "lr": 0.01,
+        "smax": 50
+      },
+      "trial_params": {
+        "gamma": 1.0,
+        "lr": 0.01,
+        "smax": 50
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.6103571653366089,
+        0.6617857217788696
+      ],
+      "val_mean": 0.6360714435577393,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1101.316852092743
+    },
+    {
+      "status": "ok",
+      "trial": 5,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_005_gamma-1_lr-1em02_smax-100-2025-10-09_17-02-30-1159-trial005/5",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_005_gamma-1_lr-1em02_smax-100-2025-10-09_17-02-30-1159-trial005/5/tfdir",
+      "params": {
+        "gamma": 1.0,
+        "lr": 0.01,
+        "smax": 100
+      },
+      "trial_params": {
+        "gamma": 1.0,
+        "lr": 0.01,
+        "smax": 100
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.607619047164917,
+        0.6180952191352844
+      ],
+      "val_mean": 0.6128571331501007,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1101.326711654663
+    },
+    {
+      "status": "ok",
+      "trial": 6,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_006_gamma-1_lr-1em01_smax-25-2025-10-09_17-02-30-1159-trial006/6",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_006_gamma-1_lr-1em01_smax-25-2025-10-09_17-02-30-1159-trial006/6/tfdir",
+      "params": {
+        "gamma": 1.0,
+        "lr": 0.1,
+        "smax": 25
+      },
+      "trial_params": {
+        "gamma": 1.0,
+        "lr": 0.1,
+        "smax": 25
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.3507142961025238,
+        0.20000000298023224
+      ],
+      "val_mean": 0.275357149541378,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1100.617648601532
+    },
+    {
+      "status": "ok",
+      "trial": 7,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_007_gamma-1_lr-1em01_smax-50-2025-10-09_17-02-30-1159-trial007/7",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_007_gamma-1_lr-1em01_smax-50-2025-10-09_17-02-30-1159-trial007/7/tfdir",
+      "params": {
+        "gamma": 1.0,
+        "lr": 0.1,
+        "smax": 50
+      },
+      "trial_params": {
+        "gamma": 1.0,
+        "lr": 0.1,
+        "smax": 50
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.6921428442001343,
+        0.20000000298023224
+      ],
+      "val_mean": 0.44607142359018326,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1100.130960226059
+    },
+    {
+      "status": "ok",
+      "trial": 8,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_008_gamma-1_lr-1em01_smax-100-2025-10-09_17-02-30-1159-trial008/8",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_008_gamma-1_lr-1em01_smax-100-2025-10-09_17-02-30-1159-trial008/8/tfdir",
+      "params": {
+        "gamma": 1.0,
+        "lr": 0.1,
+        "smax": 100
+      },
+      "trial_params": {
+        "gamma": 1.0,
+        "lr": 0.1,
+        "smax": 100
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.6435714364051819,
+        0.20000000298023224
+      ],
+      "val_mean": 0.42178571969270706,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1101.6036295890808
+    },
+    {
+      "status": "ok",
+      "trial": 9,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_009_gamma-1p3_lr-1em03_smax-25-2025-10-09_17-02-30-1159-trial009/9",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_009_gamma-1p3_lr-1em03_smax-25-2025-10-09_17-02-30-1159-trial009/9/tfdir",
+      "params": {
+        "gamma": 1.3,
+        "lr": 0.001,
+        "smax": 25
+      },
+      "trial_params": {
+        "gamma": 1.3,
+        "lr": 0.001,
+        "smax": 25
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.44309523701667786,
+        0.2953571379184723
+      ],
+      "val_mean": 0.3692261874675751,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1101.109990119934
+    },
+    {
+      "status": "ok",
+      "trial": 10,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_010_gamma-1p3_lr-1em03_smax-50-2025-10-09_17-02-30-1159-trial010/10",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_010_gamma-1p3_lr-1em03_smax-50-2025-10-09_17-02-30-1159-trial010/10/tfdir",
+      "params": {
+        "gamma": 1.3,
+        "lr": 0.001,
+        "smax": 50
+      },
+      "trial_params": {
+        "gamma": 1.3,
+        "lr": 0.001,
+        "smax": 50
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.47630953788757324,
+        0.352142870426178
+      ],
+      "val_mean": 0.4142262041568756,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1102.2904150485992
+    },
+    {
+      "status": "ok",
+      "trial": 11,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_011_gamma-1p3_lr-1em03_smax-100-2025-10-09_17-02-30-1159-trial011/11",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_011_gamma-1p3_lr-1em03_smax-100-2025-10-09_17-02-30-1159-trial011/11/tfdir",
+      "params": {
+        "gamma": 1.3,
+        "lr": 0.001,
+        "smax": 100
+      },
+      "trial_params": {
+        "gamma": 1.3,
+        "lr": 0.001,
+        "smax": 100
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.5219047665596008,
+        0.3855952322483063
+      ],
+      "val_mean": 0.45374999940395355,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1100.3577585220337
+    },
+    {
+      "status": "ok",
+      "trial": 12,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_012_gamma-1p3_lr-1em02_smax-25-2025-10-09_17-02-30-1159-trial012/12",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_012_gamma-1p3_lr-1em02_smax-25-2025-10-09_17-02-30-1159-trial012/12/tfdir",
+      "params": {
+        "gamma": 1.3,
+        "lr": 0.01,
+        "smax": 25
+      },
+      "trial_params": {
+        "gamma": 1.3,
+        "lr": 0.01,
+        "smax": 25
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.5980952382087708,
+        0.661309540271759
+      ],
+      "val_mean": 0.6297023892402649,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1101.0932099819183
+    },
+    {
+      "status": "ok",
+      "trial": 13,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_013_gamma-1p3_lr-1em02_smax-50-2025-10-09_17-02-30-1159-trial013/13",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_013_gamma-1p3_lr-1em02_smax-50-2025-10-09_17-02-30-1159-trial013/13/tfdir",
+      "params": {
+        "gamma": 1.3,
+        "lr": 0.01,
+        "smax": 50
+      },
+      "trial_params": {
+        "gamma": 1.3,
+        "lr": 0.01,
+        "smax": 50
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.6120238304138184,
+        0.6476190686225891
+      ],
+      "val_mean": 0.6298214495182037,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1101.2757461071014
+    },
+    {
+      "status": "ok",
+      "trial": 14,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_014_gamma-1p3_lr-1em02_smax-100-2025-10-09_17-02-30-1159-trial014/14",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_014_gamma-1p3_lr-1em02_smax-100-2025-10-09_17-02-30-1159-trial014/14/tfdir",
+      "params": {
+        "gamma": 1.3,
+        "lr": 0.01,
+        "smax": 100
+      },
+      "trial_params": {
+        "gamma": 1.3,
+        "lr": 0.01,
+        "smax": 100
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.658214271068573,
+        0.5848809480667114
+      ],
+      "val_mean": 0.6215476095676422,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1100.2665095329285
+    },
+    {
+      "status": "ok",
+      "trial": 15,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_015_gamma-1p3_lr-1em01_smax-25-2025-10-09_17-02-30-1159-trial015/15",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_015_gamma-1p3_lr-1em01_smax-25-2025-10-09_17-02-30-1159-trial015/15/tfdir",
+      "params": {
+        "gamma": 1.3,
+        "lr": 0.1,
+        "smax": 25
+      },
+      "trial_params": {
+        "gamma": 1.3,
+        "lr": 0.1,
+        "smax": 25
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.3841666579246521,
+        0.20000000298023224
+      ],
+      "val_mean": 0.29208333045244217,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1102.9516503810883
+    },
+    {
+      "status": "ok",
+      "trial": 16,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_016_gamma-1p3_lr-1em01_smax-50-2025-10-09_17-02-30-1159-trial016/16",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_016_gamma-1p3_lr-1em01_smax-50-2025-10-09_17-02-30-1159-trial016/16/tfdir",
+      "params": {
+        "gamma": 1.3,
+        "lr": 0.1,
+        "smax": 50
+      },
+      "trial_params": {
+        "gamma": 1.3,
+        "lr": 0.1,
+        "smax": 50
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.5188094973564148,
+        0.20000000298023224
+      ],
+      "val_mean": 0.3594047501683235,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1103.000830411911
+    },
+    {
+      "status": "ok",
+      "trial": 17,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_017_gamma-1p3_lr-1em01_smax-100-2025-10-09_17-02-30-1159-trial017/17",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_017_gamma-1p3_lr-1em01_smax-100-2025-10-09_17-02-30-1159-trial017/17/tfdir",
+      "params": {
+        "gamma": 1.3,
+        "lr": 0.1,
+        "smax": 100
+      },
+      "trial_params": {
+        "gamma": 1.3,
+        "lr": 0.1,
+        "smax": 100
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.7057142853736877,
+        0.20000000298023224
+      ],
+      "val_mean": 0.45285714417696,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1100.6595313549042
+    },
+    {
+      "status": "ok",
+      "trial": 18,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_018_gamma-1p8_lr-1em03_smax-25-2025-10-09_17-02-30-1159-trial018/18",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_018_gamma-1p8_lr-1em03_smax-25-2025-10-09_17-02-30-1159-trial018/18/tfdir",
+      "params": {
+        "gamma": 1.8,
+        "lr": 0.001,
+        "smax": 25
+      },
+      "trial_params": {
+        "gamma": 1.8,
+        "lr": 0.001,
+        "smax": 25
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.4901190400123596,
+        0.3321428596973419
+      ],
+      "val_mean": 0.41113094985485077,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1100.7750515937805
+    },
+    {
+      "status": "ok",
+      "trial": 19,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_019_gamma-1p8_lr-1em03_smax-50-2025-10-09_17-02-30-1159-trial019/19",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_019_gamma-1p8_lr-1em03_smax-50-2025-10-09_17-02-30-1159-trial019/19/tfdir",
+      "params": {
+        "gamma": 1.8,
+        "lr": 0.001,
+        "smax": 50
+      },
+      "trial_params": {
+        "gamma": 1.8,
+        "lr": 0.001,
+        "smax": 50
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.5935714244842529,
+        0.3704761862754822
+      ],
+      "val_mean": 0.48202380537986755,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1101.463606595993
+    },
+    {
+      "status": "ok",
+      "trial": 20,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_020_gamma-1p8_lr-1em03_smax-100-2025-10-09_17-02-30-1159-trial020/20",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_020_gamma-1p8_lr-1em03_smax-100-2025-10-09_17-02-30-1159-trial020/20/tfdir",
+      "params": {
+        "gamma": 1.8,
+        "lr": 0.001,
+        "smax": 100
+      },
+      "trial_params": {
+        "gamma": 1.8,
+        "lr": 0.001,
+        "smax": 100
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.4997619092464447,
+        0.3688095211982727
+      ],
+      "val_mean": 0.4342857152223587,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1100.9079673290253
+    },
+    {
+      "status": "ok",
+      "trial": 21,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_021_gamma-1p8_lr-1em02_smax-25-2025-10-09_17-02-30-1159-trial021/21",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_021_gamma-1p8_lr-1em02_smax-25-2025-10-09_17-02-30-1159-trial021/21/tfdir",
+      "params": {
+        "gamma": 1.8,
+        "lr": 0.01,
+        "smax": 25
+      },
+      "trial_params": {
+        "gamma": 1.8,
+        "lr": 0.01,
+        "smax": 25
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.32773810625076294,
+        0.643928587436676
+      ],
+      "val_mean": 0.4858333468437195,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1100.1956791877747
+    },
+    {
+      "status": "ok",
+      "trial": 22,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_022_gamma-1p8_lr-1em02_smax-50-2025-10-09_17-02-30-1159-trial022/22",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_022_gamma-1p8_lr-1em02_smax-50-2025-10-09_17-02-30-1159-trial022/22/tfdir",
+      "params": {
+        "gamma": 1.8,
+        "lr": 0.01,
+        "smax": 50
+      },
+      "trial_params": {
+        "gamma": 1.8,
+        "lr": 0.01,
+        "smax": 50
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.5929762125015259,
+        0.5565476417541504
+      ],
+      "val_mean": 0.5747619271278381,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1099.8327510356903
+    },
+    {
+      "status": "ok",
+      "trial": 23,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_023_gamma-1p8_lr-1em02_smax-100-2025-10-09_17-02-30-1159-trial023/23",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_023_gamma-1p8_lr-1em02_smax-100-2025-10-09_17-02-30-1159-trial023/23/tfdir",
+      "params": {
+        "gamma": 1.8,
+        "lr": 0.01,
+        "smax": 100
+      },
+      "trial_params": {
+        "gamma": 1.8,
+        "lr": 0.01,
+        "smax": 100
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.5284523963928223,
+        0.41238096356391907
+      ],
+      "val_mean": 0.47041667997837067,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1102.8705945014954
+    },
+    {
+      "status": "ok",
+      "trial": 24,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_024_gamma-1p8_lr-1em01_smax-25-2025-10-09_17-02-30-1159-trial024/24",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_024_gamma-1p8_lr-1em01_smax-25-2025-10-09_17-02-30-1159-trial024/24/tfdir",
+      "params": {
+        "gamma": 1.8,
+        "lr": 0.1,
+        "smax": 25
+      },
+      "trial_params": {
+        "gamma": 1.8,
+        "lr": 0.1,
+        "smax": 25
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.4253571331501007,
+        0.20000000298023224
+      ],
+      "val_mean": 0.3126785680651665,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1099.7760677337646
+    },
+    {
+      "status": "ok",
+      "trial": 25,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_025_gamma-1p8_lr-1em01_smax-50-2025-10-09_17-02-30-1159-trial025/25",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_025_gamma-1p8_lr-1em01_smax-50-2025-10-09_17-02-30-1159-trial025/25/tfdir",
+      "params": {
+        "gamma": 1.8,
+        "lr": 0.1,
+        "smax": 50
+      },
+      "trial_params": {
+        "gamma": 1.8,
+        "lr": 0.1,
+        "smax": 50
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.5816666483879089,
+        0.20000000298023224
+      ],
+      "val_mean": 0.3908333256840706,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1102.93404006958
+    },
+    {
+      "status": "ok",
+      "trial": 26,
+      "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_026_gamma-1p8_lr-1em01_smax-100-2025-10-09_17-02-30-1159-trial026/26",
+      "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_026_gamma-1p8_lr-1em01_smax-100-2025-10-09_17-02-30-1159-trial026/26/tfdir",
+      "params": {
+        "gamma": 1.8,
+        "lr": 0.1,
+        "smax": 100
+      },
+      "trial_params": {
+        "gamma": 1.8,
+        "lr": 0.1,
+        "smax": 100
+      },
+      "fixed_params": {},
+      "val_per_task": [
+        0.7184523940086365,
+        0.20000000298023224
+      ],
+      "val_mean": 0.45922619849443436,
+      "test_per_task": [],
+      "test_mean": NaN,
+      "duration_sec": 1101.0661551952362
+    }
+  ],
+  "best": {
+    "status": "ok",
+    "trial": 4,
+    "log_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_004_gamma-1_lr-1em02_smax-50-2025-10-09_17-02-30-1159-trial004/4",
+    "tf_dir": "logs/tuning/hat/2025-10-09_17-02-30-1159/runs/hat/hat_repo_basic_test_tune_004_gamma-1_lr-1em02_smax-50-2025-10-09_17-02-30-1159-trial004/4/tfdir",
+    "params": {
+      "gamma": 1.0,
+      "lr": 0.01,
+      "smax": 50
+    },
+    "trial_params": {
+      "gamma": 1.0,
+      "lr": 0.01,
+      "smax": 50
+    },
+    "fixed_params": {},
+    "val_per_task": [
+      0.6103571653366089,
+      0.6617857217788696
+    ],
+    "val_mean": 0.6360714435577393,
+    "test_per_task": [],
+    "test_mean": NaN,
+    "duration_sec": 1101.316852092743
+  }
+}
