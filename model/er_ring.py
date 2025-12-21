@@ -92,7 +92,7 @@ class Net(torch.nn.Module):
         self.kl = nn.KLDivLoss()
         self.samples_seen = 0
         self.samples_per_task = self.cfg.samples_per_task
-        self.sz = self.cfg.replay_batch_size
+        self.sz = int(self.cfg.replay_batch_size)
         self.inner_steps = self.cfg.bcl_inner_steps
     def on_epoch_end(self):  
         pass
@@ -123,8 +123,8 @@ class Net(torch.nn.Module):
         mem_x = self.memx[:t,:]
         mem_y = self.memy[:t,:]
         mem_feat = self.mem_feat[:t,:]
-        sz = min(self.n_memories, self.sz)
-        idx = np.random.choice(t* self.n_memories,sz, False)
+        sz = int(min(self.n_memories, self.sz))
+        idx = np.random.choice(int(t * self.n_memories), sz, False)
         t_idx = torch.from_numpy(idx // self.n_memories)
         s_idx = torch.from_numpy( idx % self.n_memories)
 

@@ -1,0 +1,48 @@
+python3 -u main.py $IQ --model ctn --expt_name all_ctn --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --increment 5 
+                    --ctn_n_memories 5192 --ctn_lr 0.01 --ctn_beta 0.05 --ctn_inner_steps 2 --ctn_n_meta 2 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model er_ring --expt_name all_erring --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --lr 0.03 --increment 5 
+                    --bcl_n_memories 5192 --bcl_temperature 2.0 --bcl_memory_strength 1.0 --bcl_inner_steps 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+Logging IQ experiment suite to logs/iq_experiments/run_20251221_172258.log
+New Experiment Starting...
+Running model:  ctn
+[STATE 2025-12-21 17:23:00] Experiment 'all_ctn' starting with model 'ctn' (seed 0)
+Set seed 0
+Loaded task0.npz: Unique train labels: [0 1 2 3 4 5]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 17294)
+Loaded task1.npz: Unique train labels: [ 0  6  7  8  9 10]
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11]. Size: 32208)
+[STATE 2025-12-21 17:23:02] Loader 'task_incremental_loader' ready: 1024 inputs, 12 outputs, 2 tasks
+n_outputs: 12 	n_tasks: 2
+[STATE 2025-12-21 17:23:02] Logging to logs//ctn/all_ctn-2025-12-21_17-23-02-7686/0
+True
+Model device: cuda:0
+[STATE 2025-12-21 17:23:02] Model initialized on device cuda:0
+[STATE 2025-12-21 17:23:02] Invoking continual life experience flow
+[STATE 2025-12-21 17:23:02] Life experience start: 2 tasks queued
+[STATE 2025-12-21 17:23:02] Starting task 0 (1/2)
+[STATE 2025-12-21 17:23:02] Task 0 Epoch 1/50: entering train loop
+[STATE 2025-12-21 17:23:02] Task 0 Epoch 1/50 Iter 0: running validation
+---- Eval at Epoch 0: [0.18211382113821137, 0.2203720865654209] ----
+Task 0 Epoch 1/50 | Loss 0.3859 | Train Acc 0.7909 | Val Acc 0.1821 | Epoch Time 159.05s (Eval 3.80s, Train 155.25s)
+[STATE 2025-12-21 17:25:41] Task 0 Epoch 1/50 complete: 159.05s total (3.80s eval/155.25s train)
+[STATE 2025-12-21 17:25:41] Task 0 Epoch 2/50: entering train loop
+Task 0 Epoch 2/50 | Loss 0.1346 | Train Acc 0.9166 | Val Acc 0.1821 | Epoch Time 156.54s (Eval 0.00s, Train 156.54s)
+[STATE 2025-12-21 17:28:18] Task 0 Epoch 2/50 complete: 156.54s total (0.00s eval/156.54s train)
+[STATE 2025-12-21 17:28:18] Task 0 Epoch 3/50: entering train loop
+Task 0 Epoch 3/50 | Loss 0.0796 | Train Acc 0.9435 | Val Acc 0.1821 | Epoch Time 156.32s (Eval 0.00s, Train 156.32s)
+[STATE 2025-12-21 17:30:54] Task 0 Epoch 3/50 complete: 156.32s total (0.00s eval/156.32s train)
+[STATE 2025-12-21 17:30:54] Task 0 Epoch 4/50: entering train loop
+Task 0 Epoch 4/50 | Loss 0.0496 | Train Acc 0.9617 | Val Acc 0.1821 | Epoch Time 155.72s (Eval 0.00s, Train 155.72s)
+[STATE 2025-12-21 17:33:30] Task 0 Epoch 4/50 complete: 155.72s total (0.00s eval/155.72s train)
+[STATE 2025-12-21 17:33:30] Task 0 Epoch 5/50: entering train loop
+Task 0 Epoch 5/50 | Loss 0.0380 | Train Acc 0.9682 | Val Acc 0.1821 | Epoch Time 155.66s (Eval 0.00s, Train 155.66s)
+[STATE 2025-12-21 17:36:06] Task 0 Epoch 5/50 complete: 155.66s total (0.00s eval/155.66s train)
+[STATE 2025-12-21 17:36:06] Task 0 Epoch 6/50: entering train loop

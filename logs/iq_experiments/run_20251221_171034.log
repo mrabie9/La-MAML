@@ -1,0 +1,32 @@
+python3 -u main.py $IQ --model ctn --expt_name all_ctn --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --increment 5 
+                    --ctn_n_memories 5192 --ctn_lr 0.01 --ctn_beta 0.05 --ctn_inner_steps 2 --ctn_n_meta 2 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model er_ring --expt_name all_erring --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --lr 0.03 --increment 5 
+                    --bcl_n_memories 5192 --bcl_temperature 2.0 --bcl_memory_strength 1.0 --bcl_inner_steps 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+Logging IQ experiment suite to logs/iq_experiments/run_20251221_171034.log
+New Experiment Starting...
+Running model:  ctn
+[STATE 2025-12-21 17:10:36] Experiment 'all_ctn' starting with model 'ctn' (seed 0)
+Set seed 0
+Loaded task0.npz: Unique train labels: [0 1 2 3 4 5]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 190940)
+Loaded task1.npz: Unique train labels: [ 0  6  7  8  9 10]
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11]. Size: 379500)
+[STATE 2025-12-21 17:10:40] Loader 'task_incremental_loader' ready: 1024 inputs, 12 outputs, 2 tasks
+n_outputs: 12 	n_tasks: 2
+[STATE 2025-12-21 17:10:40] Logging to logs//ctn/all_ctn-2025-12-21_17-10-40-4827/0
+True
+Model device: cuda:0
+[STATE 2025-12-21 17:10:40] Model initialized on device cuda:0
+[STATE 2025-12-21 17:10:40] Invoking continual life experience flow
+[STATE 2025-12-21 17:10:40] Life experience start: 2 tasks queued
+[STATE 2025-12-21 17:10:41] Starting task 0 (1/2)
+[STATE 2025-12-21 17:10:41] Task 0 Epoch 1/50: entering train loop
+[STATE 2025-12-21 17:10:41] Task 0 Epoch 1/50 Iter 0: running validation
