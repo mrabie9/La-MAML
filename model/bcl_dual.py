@@ -104,7 +104,7 @@ class Net(torch.nn.Module):
         self.kl = nn.KLDivLoss()
         self.samples_seen = 0
         self.samples_per_task = self.cfg.samples_per_task
-        self.sz = self.cfg.replay_batch_size
+        self.sz = int(self.cfg.replay_batch_size)
         self.inner_steps = self.cfg.bcl_inner_steps
         self.n_meta = self.cfg.bcl_n_meta
         self.count = 0
@@ -176,7 +176,7 @@ class Net(torch.nn.Module):
             mem_x = self.valx[:t,:]
             mem_y = self.valy[:t,:]
             mem_feat = self.mem_feat[:t,:]
-            sz = min(t*self.n_val, self.sz)
+            sz = int(min(t*self.n_val, self.sz))
             idx = np.random.choice(t* self.n_val,sz, False)
             self.valid_id = idx.tolist()
             t_idx = torch.from_numpy(idx // self.n_val)

@@ -96,7 +96,7 @@ class Net(nn.Module):
 
     def forward(self, x, t):
         output = self.netforward(x)
-        if self.is_cifar:
+        if self.is_iq:
             offset1, offset2 = self.compute_offsets(t)
             if offset1 > 0:
                 output[:, :offset1].data.fill_(-10e10)
@@ -116,11 +116,15 @@ class Net(nn.Module):
         return int(offset1), int(offset2)
 
     def _clone_model_state(self):
-        return {name: tensor.detach().clone() for name, tensor in self.net.state_dict().items()}
+        """Snapshot only the backbone weights/buffers used by meta updates."""
+        return {
+            name: tensor.detach().clone()
+            for name, tensor in self.net.model.state_dict().items()
+        }
 
     def _apply_meta_update(self, base_state, target_state, mix):
-        own_params = dict(self.net.named_parameters())
-        own_params.update(dict(self.net.named_buffers()))
+        own_params = dict(self.net.model.named_parameters())
+        own_params.update(dict(self.net.model.named_buffers()))
         with torch.no_grad():
             for name, tensor in own_params.items():
                 tensor.copy_(base_state[name] + (target_state[name] - base_state[name]) * mix)
@@ -182,7 +186,7 @@ class Net(nn.Module):
                     by = bys[idx] 
                     bt = bts[idx]
 
-                    if self.is_cifar:
+                    if self.is_iq:
                         offset1, offset2 = self.compute_offsets(bt)
                         prediction = (self.netforward(bx)[:, offset1:offset2])
                         loss = self.bce(prediction,

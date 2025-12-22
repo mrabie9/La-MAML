@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -90,18 +90,29 @@ class Net(nn.Module):
 
         self.current_task: Optional[int] = None
         self.teacher: Optional[nn.Module] = None
+        # Track the global class ids that belong to each task so we can
+        # correctly slice logits even when the dataset does not provide
+        # contiguous class blocks per task.
+        self.task_class_ids: Dict[int, List[int]] = {}
+        self.task_label_maps: Dict[int, Dict[int, int]] = {}
 
     # ------------------------------------------------------------------
     def forward(self, x: torch.Tensor, t: int, **kwargs) -> torch.Tensor:
         logits = self.net(x)
         if not self.is_task_incremental:
             return logits
-        offset1, offset2 = self._compute_offsets(t)
-        masked = logits.clone()
-        if offset1 > 0:
-            masked[:, :offset1] = -1e9
-        if offset2 < self.n_outputs:
-            masked[:, offset2:] = -1e9
+        class_ids = self.task_class_ids.get(t)
+        if not class_ids:
+            offset1, offset2 = self._compute_offsets(t)
+            masked = logits.clone()
+            if offset1 > 0:
+                masked[:, :offset1] = -1e9
+            if offset2 < self.n_outputs:
+                masked[:, offset2:] = -1e9
+            return masked
+        masked = logits.new_full(logits.shape, -1e9)
+        idx = torch.as_tensor(class_ids, dtype=torch.long, device=logits.device)
+        masked.index_copy_(1, idx, logits.index_select(1, idx))
         return masked
 
     # ------------------------------------------------------------------
@@ -114,15 +125,16 @@ class Net(nn.Module):
 
         self.net.train()
         logits = self.net(x)
-        offset1, offset2 = self._compute_offsets(t)
-        current_logits = logits[:, offset1:offset2]
-        targets = (y - offset1).long()
+        class_ids = self._update_task_classes(t, y)
+        current_logits = self._select_task_logits(logits, class_ids)
+        targets = self._map_labels_to_local(y, t)
 
         preds = torch.argmax(current_logits, dim=1)
         tr_acc = macro_recall(preds, targets)
 
         loss_ce = self.ce(current_logits, targets)
-        distill_loss = self._distillation_loss(logits, x, offset1)
+        prev_class_ids = self._collect_previous_class_ids(t)
+        distill_loss = self._distillation_loss(logits, x, prev_class_ids)
         loss = loss_ce + self.distill_lambda * distill_loss
 
         self.opt.zero_grad()
@@ -164,10 +176,47 @@ class Net(nn.Module):
 
     # ------------------------------------------------------------------
     def _distillation_loss(
-        self, student_logits: torch.Tensor, x: torch.Tensor, previous_classes: int
+        self, student_logits: torch.Tensor, x: torch.Tensor, prev_class_ids: List[int]
     ) -> torch.Tensor:
-        if self.teacher is None or previous_classes == 0:
+        if self.teacher is None or not prev_class_ids:
             return torch.zeros(1, device=student_logits.device)
+
+        idx = torch.as_tensor(prev_class_ids, dtype=torch.long, device=student_logits.device)
+        student_prev = student_logits.index_select(1, idx)
+        with torch.no_grad():
+            teacher_logits = self.teacher(x).index_select(1, idx)
+            teacher_probs = F.softmax(teacher_logits / self.temperature, dim=1)
+
+        student_log_probs = F.log_softmax(student_prev / self.temperature, dim=1)
+        loss = self.kl(student_log_probs, teacher_probs) * (self.temperature ** 2)
+        return loss
+
+    def _collect_previous_class_ids(self, current_task: int) -> List[int]:
+        """Return the ordered list of class ids belonging to completed tasks."""
+        class_ids: List[int] = []
+        for task_id in range(current_task):
+            class_ids.extend(self.task_class_ids.get(task_id, []))
+        return class_ids
+
+    def _update_task_classes(self, task: int, labels: torch.Tensor) -> List[int]:
+        label_map = self.task_label_maps.setdefault(task, {})
+        class_ids = self.task_class_ids.setdefault(task, [])
+        unique_labels = torch.unique(labels.detach().cpu()).tolist()
+        for label in unique_labels:
+            label = int(label)
+            if label not in label_map:
+                label_map[label] = len(class_ids)
+                class_ids.append(label)
+        return class_ids
+
+    def _map_labels_to_local(self, labels: torch.Tensor, task: int) -> torch.Tensor:
+        label_map = self.task_label_maps[task]
+        mapped = [label_map[int(lbl)] for lbl in labels.detach().cpu().tolist()]
+        return torch.tensor(mapped, dtype=torch.long, device=labels.device)
+
+    def _select_task_logits(self, logits: torch.Tensor, class_ids: List[int]) -> torch.Tensor:
+        idx = torch.as_tensor(class_ids, dtype=torch.long, device=logits.device)
+        return logits.index_select(1, idx)
 
         with torch.no_grad():
             teacher_logits = self.teacher(x)
