@@ -116,7 +116,8 @@ class Net(torch.nn.Module):
         self.n_outputs = n_outputs
 
         self.mse = nn.MSELoss()
-        self.kl = nn.KLDivLoss()
+        # Use batchmean to align with KL definition and silence PyTorch deprecation warning
+        self.kl = nn.KLDivLoss(reduction="batchmean")
         self.samples_seen = 0
         self.samples_per_task = self.cfg.samples_per_task
         self.sz = int(self.cfg.replay_batch_size)

@@ -101,7 +101,8 @@ class Net(torch.nn.Module):
         self.n_outputs = n_outputs
 
         self.mse = nn.MSELoss()
-        self.kl = nn.KLDivLoss()
+        # Use batchmean to match KL definition and remove PyTorch warning
+        self.kl = nn.KLDivLoss(reduction="batchmean")
         self.samples_seen = 0
         self.samples_per_task = self.cfg.samples_per_task
         self.sz = self.cfg.replay_batch_size
