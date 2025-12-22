@@ -91,7 +91,8 @@ class Net(torch.nn.Module):
 
         # setup losses
         self.bce = torch.nn.CrossEntropyLoss()
-        self.kl = torch.nn.KLDivLoss()  # for distillation
+        # Use batchmean to follow KL definition and avoid PyTorch warning
+        self.kl = torch.nn.KLDivLoss(reduction="batchmean")  # for distillation
         self.lsm = torch.nn.LogSoftmax(dim=1)
         self.sm = torch.nn.Softmax(dim=1)
 
