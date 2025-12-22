@@ -1,0 +1,31 @@
+python3 -u main.py $IQ --model ctn --expt_name all_ctn --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --increment 5 
+                    --ctn_n_memories 5192 --ctn_lr 0.01 --ctn_beta 0.05 --ctn_inner_steps 2 --ctn_n_meta 2 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model er_ring --expt_name all_erring --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --lr 0.03 --increment 5 
+                    --bcl_n_memories 5192 --bcl_temperature 2.0 --bcl_memory_strength 1.0 --bcl_inner_steps 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+Logging IQ experiment suite to logs/iq_experiments/run_20251221_171942.log
+New Experiment Starting...
+Running model:  ctn
+[STATE 2025-12-21 17:19:43] Experiment 'all_ctn' starting with model 'ctn' (seed 0)
+Set seed 0
+Traceback (most recent call last):
+  File "/home/lunet/wsmr11/repos/La-MAML/main.py", line 381, in <module>
+    main()
+  File "/home/lunet/wsmr11/repos/La-MAML/main.py", line 336, in main
+    loader = Loader.IncrementalLoader(args, seed=args.seed)
+  File "/home/lunet/wsmr11/repos/La-MAML/dataloaders/task_incremental_loader.py", line 24, in __init__
+    self._setup_data(
+  File "/home/lunet/wsmr11/repos/La-MAML/dataloaders/task_incremental_loader.py", line 149, in _setup_data
+    size_te = min(x_test.shape[0], int(size_tr * validation_split)) if validation_split > 0. else x_test.shape[0]
+AttributeError: 'NoneType' object has no attribute 'shape'
+New Experiment Starting...
+Running model:  er_ring
+[STATE 2025-12-21 17:19:47] Experiment 'all_erring' starting with model 'er_ring' (seed 0)
+Set seed 0
