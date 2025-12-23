@@ -8,14 +8,15 @@ from tuning.hyperparam_tuner import TuningPreset, make_main
 DEFAULT_GRID = {
     "lr": [1e-3, 1e-2, 1e-1],
     "gamma": [1.0, 1.3, 1.8],
-    "smax": [25, 50, 100],
+    "smax": [25, 50, 100, 250],
+    "batch_size": [128,256,512]
 }
 
 DEFAULT_TYPE_HINTS = {
     "lr": float,
     "gamma": float,
     "smax": float,
-    "grad_clip_norm": float,
+    "batch_size": int
 }
 
 PRESET = TuningPreset(

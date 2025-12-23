@@ -20,19 +20,21 @@ from utils.training_metrics import macro_recall
 
 @dataclass
 class BclDualConfig:
-    bcl_memory_strength: float = 1.0
-    bcl_temperature: float = 2.0
-    alpha_init: float = 1e-3
     lr: float = 1e-3
     beta: float = 1.0
+    bcl_memory_strength: float = 1.0
+    bcl_temperature: float = 2.0
     bcl_n_memories: int = 2000
+    bcl_inner_steps: int = 5
+    bcl_n_meta: int = 5
+    bcl_adapt_lr: float = 0.1
+
     cuda: bool = True
     batch_size: int = 1
     samples_per_task: int = -1
     replay_batch_size: int = 20
-    bcl_inner_steps: int = 5
-    bcl_n_meta: int = 5
-    bcl_adapt_lr: float = 0.1
+    alpha_init: float = 1e-3
+    
 
     @staticmethod
     def from_args(args: object) -> "BclDualConfig":
@@ -106,7 +108,7 @@ class Net(torch.nn.Module):
         self.samples_seen = 0
         self.samples_per_task = self.cfg.samples_per_task
         self.sz = int(self.cfg.replay_batch_size)
-        self.inner_steps = self.cfg.bcl_inner_steps
+        self.glances = self.cfg.bcl_inner_steps
         self.n_meta = self.cfg.bcl_n_meta
         self.count = 0
         self.val_count = 0
@@ -129,7 +131,7 @@ class Net(torch.nn.Module):
             opt = torch.optim.SGD(model.parameters(), self.adapt_lr)
             train = torch.utils.data.TensorDataset(xx, yy)
             loader = DataLoader(train, batch_size = self.bsz, shuffle = True, num_workers =0)
-            for _ in range(self.inner_steps):
+            for _ in range(self.glances):
                 model.zero_grad()
                 pred = model.forward(xx)
                 loss = self.bce(pred, yy)
@@ -256,7 +258,7 @@ class Net(torch.nn.Module):
         for _ in range(self.n_meta):
             weights_before = deepcopy(self.net.state_dict())
             offset1, offset2 = self.compute_offsets(t)
-            for i in range(self.inner_steps):
+            for i in range(self.glances):
                 pred = self.forward(x,t)
                 logits = pred[:, offset1:offset2]
                 targets = y - offset1

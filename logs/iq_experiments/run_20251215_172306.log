@@ -1,0 +1,404 @@
+python3 -u main.py $IQ --model lwf --expt_name all_lwf --batch_size 128 --n_epochs 50 
+                    --lr 0.001 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model meralg1 --expt_name all_meralg1 --batch_size 128 --memories 5192 --replay_batch_size 64 --n_epochs 15
+                    --lr 0.1 --beta 0.1 --gamma 1.0 --batches_per_example 10  --increment 5 
+                    --log_every 3125 --grad_clip_norm 10.0 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model meta-bgd --expt_name all_meta-bgd --memories 5192 --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --alpha_init 0.1 --glances 1  --increment 5 
+                    --cifar_batches 3 --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1 --xav_init  --std_init 0.02 --mean_eta 50. --train_mc_iters 2
+
+python3 -u main.py $IQ --model lamaml_cifar --expt_name all_lamaml --memories 5192 --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --opt_lr 0.25 --alpha_init 0.1 --opt_wt 0.1 --glances 1  --increment 5 
+                    --cifar_batches 5 --learn_lr --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --grad_clip_norm 1.0 --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model lamaml_cifar --expt_name all_lamaml_sync --memories 5192 --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --opt_lr 0.35 --alpha_init 0.1 --opt_wt 0.1 --glances 1  --increment 5 
+                    --cifar_batches 5 --learn_lr --sync_update --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+python3 -u main.py $IQ --model lamaml_cifar --expt_name all_cmaml --memories 5192 --batch_size 128 --replay_batch_size 64 --n_epochs 50 
+                    --opt_lr 0.35 --alpha_init 0.075 --opt_wt 0.075 --glances 1  --increment 5 
+                    --cifar_batches 5 --sync_update --log_every 3125 --second_order --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+Logging IQ experiment suite to logs/iq_experiments/run_20251215_172306.log
+New Experiment Starting...
+Running model:  lwf
+[STATE 2025-12-15 17:23:08] Experiment 'all_lwf' starting with model 'lwf' (seed 0)
+Set seed 0
+Loaded task0.npz: Unique train labels: [0 1 2 3 4 5]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 190940)
+Loaded task1.npz: Unique train labels: [ 0  6  7  8  9 10]
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11]. Size: 379500)
+[STATE 2025-12-15 17:23:11] Loader 'task_incremental_loader' ready: 1024 inputs, 12 outputs, 2 tasks
+n_outputs: 12 	n_tasks: 2
+[STATE 2025-12-15 17:23:11] Logging to logs//lwf/all_lwf-2025-12-15_17-23-11-3319/0
+True
+Model device: cuda:0
+[STATE 2025-12-15 17:23:11] Model initialized on device cuda:0
+[STATE 2025-12-15 17:23:11] Invoking continual life experience flow
+[STATE 2025-12-15 17:23:11] Life experience start: 2 tasks queued
+[STATE 2025-12-15 17:23:11] Starting task 0 (1/2)
+[STATE 2025-12-15 17:23:11] Task 0 Epoch 1/50: entering train loop
+[STATE 2025-12-15 17:23:11] Task 0 Epoch 1/50 Iter 0: running validation
+---- Eval at Epoch 0: [0.19910249530421933, 0.021764828942551235] ----
+Task 0 Epoch 1/50 | Loss 0.0874 | Train Acc 0.7817 | Val Acc 0.1991 | Epoch Time 218.61s (Eval 56.47s, Train 162.15s)
+[STATE 2025-12-15 17:26:50] Task 0 Epoch 1/50 complete: 218.61s total (56.47s eval/162.15s train)
+[STATE 2025-12-15 17:26:50] Task 0 Epoch 2/50: entering train loop
+Task 0 Epoch 2/50 | Loss 0.0480 | Train Acc 0.8634 | Val Acc 0.1991 | Epoch Time 158.19s (Eval 0.00s, Train 158.19s)
+[STATE 2025-12-15 17:29:28] Task 0 Epoch 2/50 complete: 158.19s total (0.00s eval/158.19s train)
+[STATE 2025-12-15 17:29:28] Task 0 Epoch 3/50: entering train loop
+Task 0 Epoch 3/50 | Loss 0.0390 | Train Acc 0.8863 | Val Acc 0.1991 | Epoch Time 157.70s (Eval 0.00s, Train 157.70s)
+[STATE 2025-12-15 17:32:06] Task 0 Epoch 3/50 complete: 157.70s total (0.00s eval/157.70s train)
+[STATE 2025-12-15 17:32:06] Task 0 Epoch 4/50: entering train loop
+Task 0 Epoch 4/50 | Loss 0.0338 | Train Acc 0.9002 | Val Acc 0.1991 | Epoch Time 155.08s (Eval 0.00s, Train 155.08s)
+[STATE 2025-12-15 17:34:41] Task 0 Epoch 4/50 complete: 155.08s total (0.00s eval/155.08s train)
+[STATE 2025-12-15 17:34:41] Task 0 Epoch 5/50: entering train loop
+Task 0 Epoch 5/50 | Loss 0.0319 | Train Acc 0.9029 | Val Acc 0.1991 | Epoch Time 157.78s (Eval 0.00s, Train 157.78s)
+[STATE 2025-12-15 17:37:19] Task 0 Epoch 5/50 complete: 157.78s total (0.00s eval/157.78s train)
+[STATE 2025-12-15 17:37:19] Task 0 Epoch 6/50: entering train loop
+Task 0 Epoch 6/50 | Loss 0.0296 | Train Acc 0.9092 | Val Acc 0.1991 | Epoch Time 158.12s (Eval 0.00s, Train 158.12s)
+[STATE 2025-12-15 17:39:57] Task 0 Epoch 6/50 complete: 158.12s total (0.00s eval/158.12s train)
+[STATE 2025-12-15 17:39:57] Task 0 Epoch 7/50: entering train loop
+Task 0 Epoch 7/50 | Loss 0.0273 | Train Acc 0.9182 | Val Acc 0.1991 | Epoch Time 159.41s (Eval 0.00s, Train 159.41s)
+[STATE 2025-12-15 17:42:36] Task 0 Epoch 7/50 complete: 159.41s total (0.00s eval/159.41s train)
+[STATE 2025-12-15 17:42:36] Task 0 Epoch 8/50: entering train loop
+Task 0 Epoch 8/50 | Loss 0.0258 | Train Acc 0.9202 | Val Acc 0.1991 | Epoch Time 157.43s (Eval 0.00s, Train 157.43s)
+[STATE 2025-12-15 17:45:14] Task 0 Epoch 8/50 complete: 157.43s total (0.00s eval/157.43s train)
+[STATE 2025-12-15 17:45:14] Task 0 Epoch 9/50: entering train loop
+Task 0 Epoch 9/50 | Loss 0.0243 | Train Acc 0.9238 | Val Acc 0.1991 | Epoch Time 156.46s (Eval 0.00s, Train 156.46s)
+[STATE 2025-12-15 17:47:50] Task 0 Epoch 9/50 complete: 156.46s total (0.00s eval/156.46s train)
+[STATE 2025-12-15 17:47:50] Task 0 Epoch 10/50: entering train loop
+Task 0 Epoch 10/50 | Loss 0.0250 | Train Acc 0.9268 | Val Acc 0.1991 | Epoch Time 158.36s (Eval 0.00s, Train 158.36s)
+[STATE 2025-12-15 17:50:28] Task 0 Epoch 10/50 complete: 158.36s total (0.00s eval/158.36s train)
+[STATE 2025-12-15 17:50:28] Task 0 Epoch 11/50: entering train loop
+[STATE 2025-12-15 17:50:28] Task 0 Epoch 11/50 Iter 0: running validation
+---- Eval at Epoch 10: [0.9266658316387381, 0.018641566340822976] ----
+Task 0 Epoch 11/50 | Loss 0.0214 | Train Acc 0.9375 | Val Acc 0.9267 | Epoch Time 208.29s (Eval 53.30s, Train 154.99s)
+[STATE 2025-12-15 17:53:57] Task 0 Epoch 11/50 complete: 208.29s total (53.30s eval/154.99s train)
+[STATE 2025-12-15 17:53:57] Task 0 Epoch 12/50: entering train loop
+Task 0 Epoch 12/50 | Loss 0.0210 | Train Acc 0.9328 | Val Acc 0.9267 | Epoch Time 154.13s (Eval 0.00s, Train 154.13s)
+[STATE 2025-12-15 17:56:31] Task 0 Epoch 12/50 complete: 154.13s total (0.00s eval/154.13s train)
+[STATE 2025-12-15 17:56:31] Task 0 Epoch 13/50: entering train loop
+Task 0 Epoch 13/50 | Loss 0.0195 | Train Acc 0.9369 | Val Acc 0.9267 | Epoch Time 158.44s (Eval 0.00s, Train 158.44s)
+[STATE 2025-12-15 17:59:09] Task 0 Epoch 13/50 complete: 158.44s total (0.00s eval/158.44s train)
+[STATE 2025-12-15 17:59:09] Task 0 Epoch 14/50: entering train loop
+Task 0 Epoch 14/50 | Loss 0.0186 | Train Acc 0.9433 | Val Acc 0.9267 | Epoch Time 157.69s (Eval 0.00s, Train 157.69s)
+[STATE 2025-12-15 18:01:47] Task 0 Epoch 14/50 complete: 157.69s total (0.00s eval/157.69s train)
+[STATE 2025-12-15 18:01:47] Task 0 Epoch 15/50: entering train loop
+Task 0 Epoch 15/50 | Loss 0.0177 | Train Acc 0.9425 | Val Acc 0.9267 | Epoch Time 156.55s (Eval 0.00s, Train 156.55s)
+[STATE 2025-12-15 18:04:23] Task 0 Epoch 15/50 complete: 156.55s total (0.00s eval/156.55s train)
+[STATE 2025-12-15 18:04:23] Task 0 Epoch 16/50: entering train loop
+Task 0 Epoch 16/50 | Loss 0.0167 | Train Acc 0.9483 | Val Acc 0.9267 | Epoch Time 158.53s (Eval 0.00s, Train 158.53s)
+[STATE 2025-12-15 18:07:02] Task 0 Epoch 16/50 complete: 158.53s total (0.00s eval/158.53s train)
+[STATE 2025-12-15 18:07:02] Task 0 Epoch 17/50: entering train loop
+Task 0 Epoch 17/50 | Loss 0.0157 | Train Acc 0.9517 | Val Acc 0.9267 | Epoch Time 167.11s (Eval 0.00s, Train 167.11s)
+[STATE 2025-12-15 18:09:49] Task 0 Epoch 17/50 complete: 167.11s total (0.00s eval/167.11s train)
+[STATE 2025-12-15 18:09:49] Task 0 Epoch 18/50: entering train loop
+Task 0 Epoch 18/50 | Loss 0.0144 | Train Acc 0.9551 | Val Acc 0.9267 | Epoch Time 167.06s (Eval 0.00s, Train 167.06s)
+[STATE 2025-12-15 18:12:36] Task 0 Epoch 18/50 complete: 167.06s total (0.00s eval/167.06s train)
+[STATE 2025-12-15 18:12:36] Task 0 Epoch 19/50: entering train loop
+Task 0 Epoch 19/50 | Loss 0.0134 | Train Acc 0.9571 | Val Acc 0.9267 | Epoch Time 165.99s (Eval 0.00s, Train 165.99s)
+[STATE 2025-12-15 18:15:22] Task 0 Epoch 19/50 complete: 165.99s total (0.00s eval/165.99s train)
+[STATE 2025-12-15 18:15:22] Task 0 Epoch 20/50: entering train loop
+Task 0 Epoch 20/50 | Loss 0.0124 | Train Acc 0.9606 | Val Acc 0.9267 | Epoch Time 164.77s (Eval 0.00s, Train 164.77s)
+[STATE 2025-12-15 18:18:07] Task 0 Epoch 20/50 complete: 164.77s total (0.00s eval/164.77s train)
+[STATE 2025-12-15 18:18:07] Task 0 Epoch 21/50: entering train loop
+[STATE 2025-12-15 18:18:07] Task 0 Epoch 21/50 Iter 0: running validation
+---- Eval at Epoch 20: [0.9333377990380753, 0.019006222825512106] ----
+Task 0 Epoch 21/50 | Loss 0.0112 | Train Acc 0.9633 | Val Acc 0.9333 | Epoch Time 219.14s (Eval 56.07s, Train 163.07s)
+[STATE 2025-12-15 18:21:46] Task 0 Epoch 21/50 complete: 219.14s total (56.07s eval/163.07s train)
+[STATE 2025-12-15 18:21:46] Task 0 Epoch 22/50: entering train loop
+Task 0 Epoch 22/50 | Loss 0.0106 | Train Acc 0.9645 | Val Acc 0.9333 | Epoch Time 164.31s (Eval 0.00s, Train 164.31s)
+[STATE 2025-12-15 18:24:30] Task 0 Epoch 22/50 complete: 164.31s total (0.00s eval/164.31s train)
+[STATE 2025-12-15 18:24:30] Task 0 Epoch 23/50: entering train loop
+Task 0 Epoch 23/50 | Loss 0.0089 | Train Acc 0.9691 | Val Acc 0.9333 | Epoch Time 162.54s (Eval 0.00s, Train 162.54s)
+[STATE 2025-12-15 18:27:13] Task 0 Epoch 23/50 complete: 162.54s total (0.00s eval/162.54s train)
+[STATE 2025-12-15 18:27:13] Task 0 Epoch 24/50: entering train loop
+Task 0 Epoch 24/50 | Loss 0.0081 | Train Acc 0.9722 | Val Acc 0.9333 | Epoch Time 163.88s (Eval 0.00s, Train 163.88s)
+[STATE 2025-12-15 18:29:57] Task 0 Epoch 24/50 complete: 163.88s total (0.00s eval/163.88s train)
+[STATE 2025-12-15 18:29:57] Task 0 Epoch 25/50: entering train loop
+Task 0 Epoch 25/50 | Loss 0.0073 | Train Acc 0.9750 | Val Acc 0.9333 | Epoch Time 161.42s (Eval 0.00s, Train 161.42s)
+[STATE 2025-12-15 18:32:38] Task 0 Epoch 25/50 complete: 161.42s total (0.00s eval/161.42s train)
+[STATE 2025-12-15 18:32:38] Task 0 Epoch 26/50: entering train loop
+Task 0 Epoch 26/50 | Loss 0.0068 | Train Acc 0.9767 | Val Acc 0.9333 | Epoch Time 164.70s (Eval 0.00s, Train 164.70s)
+[STATE 2025-12-15 18:35:23] Task 0 Epoch 26/50 complete: 164.70s total (0.00s eval/164.70s train)
+[STATE 2025-12-15 18:35:23] Task 0 Epoch 27/50: entering train loop
+Task 0 Epoch 27/50 | Loss 0.0061 | Train Acc 0.9775 | Val Acc 0.9333 | Epoch Time 161.00s (Eval 0.00s, Train 161.00s)
+[STATE 2025-12-15 18:38:04] Task 0 Epoch 27/50 complete: 161.00s total (0.00s eval/161.00s train)
+[STATE 2025-12-15 18:38:04] Task 0 Epoch 28/50: entering train loop
+Task 0 Epoch 28/50 | Loss 0.0054 | Train Acc 0.9777 | Val Acc 0.9333 | Epoch Time 161.57s (Eval 0.00s, Train 161.57s)
+[STATE 2025-12-15 18:40:46] Task 0 Epoch 28/50 complete: 161.57s total (0.00s eval/161.57s train)
+[STATE 2025-12-15 18:40:46] Task 0 Epoch 29/50: entering train loop
+Task 0 Epoch 29/50 | Loss 0.0053 | Train Acc 0.9797 | Val Acc 0.9333 | Epoch Time 161.07s (Eval 0.00s, Train 161.07s)
+[STATE 2025-12-15 18:43:27] Task 0 Epoch 29/50 complete: 161.07s total (0.00s eval/161.07s train)
+[STATE 2025-12-15 18:43:27] Task 0 Epoch 30/50: entering train loop
+Task 0 Epoch 30/50 | Loss 0.0048 | Train Acc 0.9826 | Val Acc 0.9333 | Epoch Time 160.82s (Eval 0.00s, Train 160.82s)
+[STATE 2025-12-15 18:46:07] Task 0 Epoch 30/50 complete: 160.82s total (0.00s eval/160.82s train)
+[STATE 2025-12-15 18:46:07] Task 0 Epoch 31/50: entering train loop
+[STATE 2025-12-15 18:46:07] Task 0 Epoch 31/50 Iter 0: running validation
+---- Eval at Epoch 30: [0.9323501501082678, 0.02470090018015709] ----
+Task 0 Epoch 31/50 | Loss 0.0050 | Train Acc 0.9830 | Val Acc 0.9324 | Epoch Time 214.59s (Eval 54.94s, Train 159.65s)
+[STATE 2025-12-15 18:49:42] Task 0 Epoch 31/50 complete: 214.59s total (54.94s eval/159.65s train)
+[STATE 2025-12-15 18:49:42] Task 0 Epoch 32/50: entering train loop
+Task 0 Epoch 32/50 | Loss 0.0042 | Train Acc 0.9832 | Val Acc 0.9324 | Epoch Time 157.13s (Eval 0.00s, Train 157.13s)
+[STATE 2025-12-15 18:52:19] Task 0 Epoch 32/50 complete: 157.13s total (0.00s eval/157.13s train)
+[STATE 2025-12-15 18:52:19] Task 0 Epoch 33/50: entering train loop
+Task 0 Epoch 33/50 | Loss 0.0042 | Train Acc 0.9860 | Val Acc 0.9324 | Epoch Time 156.44s (Eval 0.00s, Train 156.44s)
+[STATE 2025-12-15 18:54:56] Task 0 Epoch 33/50 complete: 156.44s total (0.00s eval/156.44s train)
+[STATE 2025-12-15 18:54:56] Task 0 Epoch 34/50: entering train loop
+Task 0 Epoch 34/50 | Loss 0.0041 | Train Acc 0.9840 | Val Acc 0.9324 | Epoch Time 157.22s (Eval 0.00s, Train 157.22s)
+[STATE 2025-12-15 18:57:33] Task 0 Epoch 34/50 complete: 157.22s total (0.00s eval/157.22s train)
+[STATE 2025-12-15 18:57:33] Task 0 Epoch 35/50: entering train loop
+Task 0 Epoch 35/50 | Loss 0.0038 | Train Acc 0.9869 | Val Acc 0.9324 | Epoch Time 157.73s (Eval 0.00s, Train 157.73s)
+[STATE 2025-12-15 19:00:11] Task 0 Epoch 35/50 complete: 157.73s total (0.00s eval/157.73s train)
+[STATE 2025-12-15 19:00:11] Task 0 Epoch 36/50: entering train loop
+Task 0 Epoch 36/50 | Loss 0.0036 | Train Acc 0.9873 | Val Acc 0.9324 | Epoch Time 157.55s (Eval 0.00s, Train 157.55s)
+[STATE 2025-12-15 19:02:48] Task 0 Epoch 36/50 complete: 157.55s total (0.00s eval/157.55s train)
+[STATE 2025-12-15 19:02:48] Task 0 Epoch 37/50: entering train loop
+Task 0 Epoch 37/50 | Loss 0.0037 | Train Acc 0.9883 | Val Acc 0.9324 | Epoch Time 156.88s (Eval 0.00s, Train 156.88s)
+[STATE 2025-12-15 19:05:25] Task 0 Epoch 37/50 complete: 156.88s total (0.00s eval/156.88s train)
+[STATE 2025-12-15 19:05:25] Task 0 Epoch 38/50: entering train loop
+Task 0 Epoch 38/50 | Loss 0.0031 | Train Acc 0.9885 | Val Acc 0.9324 | Epoch Time 157.20s (Eval 0.00s, Train 157.20s)
+[STATE 2025-12-15 19:08:02] Task 0 Epoch 38/50 complete: 157.20s total (0.00s eval/157.20s train)
+[STATE 2025-12-15 19:08:02] Task 0 Epoch 39/50: entering train loop
+Task 0 Epoch 39/50 | Loss 0.0033 | Train Acc 0.9890 | Val Acc 0.9324 | Epoch Time 159.55s (Eval 0.00s, Train 159.55s)
+[STATE 2025-12-15 19:10:42] Task 0 Epoch 39/50 complete: 159.55s total (0.00s eval/159.55s train)
+[STATE 2025-12-15 19:10:42] Task 0 Epoch 40/50: entering train loop
+Task 0 Epoch 40/50 | Loss 0.0029 | Train Acc 0.9915 | Val Acc 0.9324 | Epoch Time 158.47s (Eval 0.00s, Train 158.47s)
+[STATE 2025-12-15 19:13:20] Task 0 Epoch 40/50 complete: 158.47s total (0.00s eval/158.47s train)
+[STATE 2025-12-15 19:13:20] Task 0 Epoch 41/50: entering train loop
+[STATE 2025-12-15 19:13:20] Task 0 Epoch 41/50 Iter 0: running validation
+---- Eval at Epoch 40: [0.934952130357554, 0.05406201920377105] ----
+Task 0 Epoch 41/50 | Loss 0.0037 | Train Acc 0.9900 | Val Acc 0.9350 | Epoch Time 210.74s (Eval 52.41s, Train 158.32s)
+[STATE 2025-12-15 19:16:51] Task 0 Epoch 41/50 complete: 210.74s total (52.41s eval/158.32s train)
+[STATE 2025-12-15 19:16:51] Task 0 Epoch 42/50: entering train loop
+Task 0 Epoch 42/50 | Loss 0.0030 | Train Acc 0.9889 | Val Acc 0.9350 | Epoch Time 158.11s (Eval 0.00s, Train 158.11s)
+[STATE 2025-12-15 19:19:29] Task 0 Epoch 42/50 complete: 158.11s total (0.00s eval/158.11s train)
+[STATE 2025-12-15 19:19:29] Task 0 Epoch 43/50: entering train loop
+Task 0 Epoch 43/50 | Loss 0.0024 | Train Acc 0.9893 | Val Acc 0.9350 | Epoch Time 157.69s (Eval 0.00s, Train 157.69s)
+[STATE 2025-12-15 19:22:07] Task 0 Epoch 43/50 complete: 157.69s total (0.00s eval/157.69s train)
+[STATE 2025-12-15 19:22:07] Task 0 Epoch 44/50: entering train loop
+Task 0 Epoch 44/50 | Loss 0.0026 | Train Acc 0.9912 | Val Acc 0.9350 | Epoch Time 158.57s (Eval 0.00s, Train 158.57s)
+[STATE 2025-12-15 19:24:45] Task 0 Epoch 44/50 complete: 158.57s total (0.00s eval/158.57s train)
+[STATE 2025-12-15 19:24:45] Task 0 Epoch 45/50: entering train loop
+Task 0 Epoch 45/50 | Loss 0.0028 | Train Acc 0.9896 | Val Acc 0.9350 | Epoch Time 157.15s (Eval 0.00s, Train 157.15s)
+[STATE 2025-12-15 19:27:22] Task 0 Epoch 45/50 complete: 157.15s total (0.00s eval/157.15s train)
+[STATE 2025-12-15 19:27:22] Task 0 Epoch 46/50: entering train loop
+Task 0 Epoch 46/50 | Loss 0.0027 | Train Acc 0.9910 | Val Acc 0.9350 | Epoch Time 158.09s (Eval 0.00s, Train 158.09s)
+[STATE 2025-12-15 19:30:01] Task 0 Epoch 46/50 complete: 158.09s total (0.00s eval/158.09s train)
+[STATE 2025-12-15 19:30:01] Task 0 Epoch 47/50: entering train loop
+Task 0 Epoch 47/50 | Loss 0.0025 | Train Acc 0.9916 | Val Acc 0.9350 | Epoch Time 157.32s (Eval 0.00s, Train 157.32s)
+[STATE 2025-12-15 19:32:38] Task 0 Epoch 47/50 complete: 157.32s total (0.00s eval/157.32s train)
+[STATE 2025-12-15 19:32:38] Task 0 Epoch 48/50: entering train loop
+Task 0 Epoch 48/50 | Loss 0.0019 | Train Acc 0.9934 | Val Acc 0.9350 | Epoch Time 159.06s (Eval 0.00s, Train 159.06s)
+[STATE 2025-12-15 19:35:17] Task 0 Epoch 48/50 complete: 159.06s total (0.00s eval/159.06s train)
+[STATE 2025-12-15 19:35:17] Task 0 Epoch 49/50: entering train loop
+Task 0 Epoch 49/50 | Loss 0.0022 | Train Acc 0.9918 | Val Acc 0.9350 | Epoch Time 157.14s (Eval 0.00s, Train 157.14s)
+[STATE 2025-12-15 19:37:54] Task 0 Epoch 49/50 complete: 157.14s total (0.00s eval/157.14s train)
+[STATE 2025-12-15 19:37:54] Task 0 Epoch 50/50: entering train loop
+Task 0 Epoch 50/50 | Loss 0.0024 | Train Acc 0.9922 | Val Acc 0.9350 | Epoch Time 156.33s (Eval 0.00s, Train 156.33s)
+[STATE 2025-12-15 19:40:30] Task 0 Epoch 50/50 complete: 156.33s total (0.00s eval/156.33s train)
+[STATE 2025-12-15 19:40:30] Task 0: running final validation.
+[STATE 2025-12-15 19:43:07] Completed task 0 (1/2)
+[STATE 2025-12-15 19:43:08] Starting task 1 (2/2)
+[STATE 2025-12-15 19:43:08] Task 1 Epoch 1/50: entering train loop
+[STATE 2025-12-15 19:43:08] Task 1 Epoch 1/50 Iter 0: running validation
+---- Eval at Epoch 0: [0.9353843759440242, 0.06152104909130898] ----
+Task 1 Epoch 1/50 | Loss 0.0976 | Train Acc 0.7528 | Val Acc 0.0615 | Epoch Time 473.38s (Eval 52.73s, Train 420.65s)
+[STATE 2025-12-15 19:51:01] Task 1 Epoch 1/50 complete: 473.38s total (52.73s eval/420.65s train)
+[STATE 2025-12-15 19:51:01] Task 1 Epoch 2/50: entering train loop
+Task 1 Epoch 2/50 | Loss 0.0665 | Train Acc 0.8135 | Val Acc 0.0615 | Epoch Time 425.86s (Eval 0.00s, Train 425.86s)
+[STATE 2025-12-15 19:58:07] Task 1 Epoch 2/50 complete: 425.86s total (0.00s eval/425.86s train)
+[STATE 2025-12-15 19:58:07] Task 1 Epoch 3/50: entering train loop
+Task 1 Epoch 3/50 | Loss 0.0595 | Train Acc 0.8293 | Val Acc 0.0615 | Epoch Time 420.95s (Eval 0.00s, Train 420.95s)
+[STATE 2025-12-15 20:05:08] Task 1 Epoch 3/50 complete: 420.95s total (0.00s eval/420.95s train)
+[STATE 2025-12-15 20:05:08] Task 1 Epoch 4/50: entering train loop
+Task 1 Epoch 4/50 | Loss 0.0544 | Train Acc 0.8449 | Val Acc 0.0615 | Epoch Time 423.25s (Eval 0.00s, Train 423.25s)
+[STATE 2025-12-15 20:12:11] Task 1 Epoch 4/50 complete: 423.25s total (0.00s eval/423.25s train)
+[STATE 2025-12-15 20:12:11] Task 1 Epoch 5/50: entering train loop
+Task 1 Epoch 5/50 | Loss 0.0511 | Train Acc 0.8560 | Val Acc 0.0615 | Epoch Time 426.05s (Eval 0.00s, Train 426.05s)
+[STATE 2025-12-15 20:19:17] Task 1 Epoch 5/50 complete: 426.05s total (0.00s eval/426.05s train)
+[STATE 2025-12-15 20:19:17] Task 1 Epoch 6/50: entering train loop
+Task 1 Epoch 6/50 | Loss 0.0474 | Train Acc 0.8679 | Val Acc 0.0615 | Epoch Time 421.77s (Eval 0.00s, Train 421.77s)
+[STATE 2025-12-15 20:26:19] Task 1 Epoch 6/50 complete: 421.77s total (0.00s eval/421.77s train)
+[STATE 2025-12-15 20:26:19] Task 1 Epoch 7/50: entering train loop
+Task 1 Epoch 7/50 | Loss 0.0453 | Train Acc 0.8744 | Val Acc 0.0615 | Epoch Time 421.54s (Eval 0.00s, Train 421.54s)
+[STATE 2025-12-15 20:33:21] Task 1 Epoch 7/50 complete: 421.54s total (0.00s eval/421.54s train)
+[STATE 2025-12-15 20:33:21] Task 1 Epoch 8/50: entering train loop
+Task 1 Epoch 8/50 | Loss 0.0423 | Train Acc 0.8843 | Val Acc 0.0615 | Epoch Time 428.09s (Eval 0.00s, Train 428.09s)
+[STATE 2025-12-15 20:40:29] Task 1 Epoch 8/50 complete: 428.09s total (0.00s eval/428.09s train)
+[STATE 2025-12-15 20:40:29] Task 1 Epoch 9/50: entering train loop
+Task 1 Epoch 9/50 | Loss 0.0396 | Train Acc 0.8945 | Val Acc 0.0615 | Epoch Time 420.77s (Eval 0.00s, Train 420.77s)
+[STATE 2025-12-15 20:47:30] Task 1 Epoch 9/50 complete: 420.77s total (0.00s eval/420.77s train)
+[STATE 2025-12-15 20:47:30] Task 1 Epoch 10/50: entering train loop
+Task 1 Epoch 10/50 | Loss 0.0375 | Train Acc 0.8991 | Val Acc 0.0615 | Epoch Time 421.65s (Eval 0.00s, Train 421.65s)
+[STATE 2025-12-15 20:54:31] Task 1 Epoch 10/50 complete: 421.65s total (0.00s eval/421.65s train)
+[STATE 2025-12-15 20:54:31] Task 1 Epoch 11/50: entering train loop
+[STATE 2025-12-15 20:54:31] Task 1 Epoch 11/50 Iter 0: running validation
+---- Eval at Epoch 10: [0.9255886983516427, 0.29774327183089555] ----
+Task 1 Epoch 11/50 | Loss 0.0356 | Train Acc 0.9092 | Val Acc 0.2977 | Epoch Time 476.76s (Eval 52.50s, Train 424.26s)
+[STATE 2025-12-15 21:02:28] Task 1 Epoch 11/50 complete: 476.76s total (52.50s eval/424.26s train)
+[STATE 2025-12-15 21:02:28] Task 1 Epoch 12/50: entering train loop
+Task 1 Epoch 12/50 | Loss 0.0341 | Train Acc 0.9132 | Val Acc 0.2977 | Epoch Time 422.22s (Eval 0.00s, Train 422.22s)
+[STATE 2025-12-15 21:09:30] Task 1 Epoch 12/50 complete: 422.22s total (0.00s eval/422.22s train)
+[STATE 2025-12-15 21:09:30] Task 1 Epoch 13/50: entering train loop
+Task 1 Epoch 13/50 | Loss 0.0317 | Train Acc 0.9191 | Val Acc 0.2977 | Epoch Time 423.35s (Eval 0.00s, Train 423.35s)
+[STATE 2025-12-15 21:16:33] Task 1 Epoch 13/50 complete: 423.35s total (0.00s eval/423.35s train)
+[STATE 2025-12-15 21:16:33] Task 1 Epoch 14/50: entering train loop
+Task 1 Epoch 14/50 | Loss 0.0308 | Train Acc 0.9236 | Val Acc 0.2977 | Epoch Time 424.97s (Eval 0.00s, Train 424.97s)
+[STATE 2025-12-15 21:23:38] Task 1 Epoch 14/50 complete: 424.97s total (0.00s eval/424.97s train)
+[STATE 2025-12-15 21:23:38] Task 1 Epoch 15/50: entering train loop
+Task 1 Epoch 15/50 | Loss 0.0295 | Train Acc 0.9304 | Val Acc 0.2977 | Epoch Time 422.50s (Eval 0.00s, Train 422.50s)
+[STATE 2025-12-15 21:30:41] Task 1 Epoch 15/50 complete: 422.50s total (0.00s eval/422.50s train)
+[STATE 2025-12-15 21:30:41] Task 1 Epoch 16/50: entering train loop
+Task 1 Epoch 16/50 | Loss 0.0280 | Train Acc 0.9332 | Val Acc 0.2977 | Epoch Time 427.72s (Eval 0.00s, Train 427.72s)
+[STATE 2025-12-15 21:37:49] Task 1 Epoch 16/50 complete: 427.72s total (0.00s eval/427.72s train)
+[STATE 2025-12-15 21:37:49] Task 1 Epoch 17/50: entering train loop
+Task 1 Epoch 17/50 | Loss 0.0271 | Train Acc 0.9433 | Val Acc 0.2977 | Epoch Time 427.60s (Eval 0.00s, Train 427.60s)
+[STATE 2025-12-15 21:44:56] Task 1 Epoch 17/50 complete: 427.60s total (0.00s eval/427.60s train)
+[STATE 2025-12-15 21:44:56] Task 1 Epoch 18/50: entering train loop
+Task 1 Epoch 18/50 | Loss 0.0265 | Train Acc 0.9485 | Val Acc 0.2977 | Epoch Time 425.33s (Eval 0.00s, Train 425.33s)
+[STATE 2025-12-15 21:52:02] Task 1 Epoch 18/50 complete: 425.33s total (0.00s eval/425.33s train)
+[STATE 2025-12-15 21:52:02] Task 1 Epoch 19/50: entering train loop
+Task 1 Epoch 19/50 | Loss 0.0251 | Train Acc 0.9480 | Val Acc 0.2977 | Epoch Time 423.57s (Eval 0.00s, Train 423.57s)
+[STATE 2025-12-15 21:59:05] Task 1 Epoch 19/50 complete: 423.57s total (0.00s eval/423.57s train)
+[STATE 2025-12-15 21:59:05] Task 1 Epoch 20/50: entering train loop
+Task 1 Epoch 20/50 | Loss 0.0248 | Train Acc 0.9504 | Val Acc 0.2977 | Epoch Time 424.05s (Eval 0.00s, Train 424.05s)
+[STATE 2025-12-15 22:06:09] Task 1 Epoch 20/50 complete: 424.05s total (0.00s eval/424.05s train)
+[STATE 2025-12-15 22:06:09] Task 1 Epoch 21/50: entering train loop
+[STATE 2025-12-15 22:06:09] Task 1 Epoch 21/50 Iter 0: running validation
+---- Eval at Epoch 20: [0.9267114492566201, 0.3128159415541832] ----
+Task 1 Epoch 21/50 | Loss 0.0242 | Train Acc 0.9540 | Val Acc 0.3128 | Epoch Time 476.81s (Eval 52.23s, Train 424.58s)
+[STATE 2025-12-15 22:14:06] Task 1 Epoch 21/50 complete: 476.81s total (52.23s eval/424.58s train)
+[STATE 2025-12-15 22:14:06] Task 1 Epoch 22/50: entering train loop
+Task 1 Epoch 22/50 | Loss 0.0233 | Train Acc 0.9567 | Val Acc 0.3128 | Epoch Time 425.50s (Eval 0.00s, Train 425.50s)
+[STATE 2025-12-15 22:21:12] Task 1 Epoch 22/50 complete: 425.50s total (0.00s eval/425.50s train)
+[STATE 2025-12-15 22:21:12] Task 1 Epoch 23/50: entering train loop
+Task 1 Epoch 23/50 | Loss 0.0231 | Train Acc 0.9577 | Val Acc 0.3128 | Epoch Time 425.70s (Eval 0.00s, Train 425.70s)
+[STATE 2025-12-15 22:28:17] Task 1 Epoch 23/50 complete: 425.70s total (0.00s eval/425.70s train)
+[STATE 2025-12-15 22:28:17] Task 1 Epoch 24/50: entering train loop
+Task 1 Epoch 24/50 | Loss 0.0221 | Train Acc 0.9614 | Val Acc 0.3128 | Epoch Time 417.57s (Eval 0.00s, Train 417.57s)
+[STATE 2025-12-15 22:35:15] Task 1 Epoch 24/50 complete: 417.57s total (0.00s eval/417.57s train)
+[STATE 2025-12-15 22:35:15] Task 1 Epoch 25/50: entering train loop
+Task 1 Epoch 25/50 | Loss 0.0215 | Train Acc 0.9627 | Val Acc 0.3128 | Epoch Time 424.15s (Eval 0.00s, Train 424.15s)
+[STATE 2025-12-15 22:42:19] Task 1 Epoch 25/50 complete: 424.15s total (0.00s eval/424.15s train)
+[STATE 2025-12-15 22:42:19] Task 1 Epoch 26/50: entering train loop
+Task 1 Epoch 26/50 | Loss 0.0212 | Train Acc 0.9612 | Val Acc 0.3128 | Epoch Time 425.92s (Eval 0.00s, Train 425.92s)
+[STATE 2025-12-15 22:49:25] Task 1 Epoch 26/50 complete: 425.92s total (0.00s eval/425.92s train)
+[STATE 2025-12-15 22:49:25] Task 1 Epoch 27/50: entering train loop
+Task 1 Epoch 27/50 | Loss 0.0208 | Train Acc 0.9651 | Val Acc 0.3128 | Epoch Time 426.69s (Eval 0.00s, Train 426.69s)
+[STATE 2025-12-15 22:56:32] Task 1 Epoch 27/50 complete: 426.69s total (0.00s eval/426.69s train)
+[STATE 2025-12-15 22:56:32] Task 1 Epoch 28/50: entering train loop
+Task 1 Epoch 28/50 | Loss 0.0203 | Train Acc 0.9655 | Val Acc 0.3128 | Epoch Time 423.04s (Eval 0.00s, Train 423.04s)
+[STATE 2025-12-15 23:03:35] Task 1 Epoch 28/50 complete: 423.04s total (0.00s eval/423.04s train)
+[STATE 2025-12-15 23:03:35] Task 1 Epoch 29/50: entering train loop
+Task 1 Epoch 29/50 | Loss 0.0195 | Train Acc 0.9697 | Val Acc 0.3128 | Epoch Time 424.99s (Eval 0.00s, Train 424.99s)
+[STATE 2025-12-15 23:10:40] Task 1 Epoch 29/50 complete: 424.99s total (0.00s eval/424.99s train)
+[STATE 2025-12-15 23:10:40] Task 1 Epoch 30/50: entering train loop
+Task 1 Epoch 30/50 | Loss 0.0196 | Train Acc 0.9675 | Val Acc 0.3128 | Epoch Time 426.29s (Eval 0.00s, Train 426.29s)
+[STATE 2025-12-15 23:17:46] Task 1 Epoch 30/50 complete: 426.29s total (0.00s eval/426.29s train)
+[STATE 2025-12-15 23:17:46] Task 1 Epoch 31/50: entering train loop
+[STATE 2025-12-15 23:17:46] Task 1 Epoch 31/50 Iter 0: running validation
+---- Eval at Epoch 30: [0.9232648760544347, 0.3706299043453388] ----
+Task 1 Epoch 31/50 | Loss 0.0193 | Train Acc 0.9702 | Val Acc 0.3706 | Epoch Time 476.39s (Eval 53.03s, Train 423.36s)
+[STATE 2025-12-15 23:25:42] Task 1 Epoch 31/50 complete: 476.39s total (53.03s eval/423.36s train)
+[STATE 2025-12-15 23:25:42] Task 1 Epoch 32/50: entering train loop
+Task 1 Epoch 32/50 | Loss 0.0183 | Train Acc 0.9717 | Val Acc 0.3706 | Epoch Time 425.01s (Eval 0.00s, Train 425.01s)
+[STATE 2025-12-15 23:32:47] Task 1 Epoch 32/50 complete: 425.01s total (0.00s eval/425.01s train)
+[STATE 2025-12-15 23:32:47] Task 1 Epoch 33/50: entering train loop
+Task 1 Epoch 33/50 | Loss 0.0184 | Train Acc 0.9705 | Val Acc 0.3706 | Epoch Time 426.05s (Eval 0.00s, Train 426.05s)
+[STATE 2025-12-15 23:39:53] Task 1 Epoch 33/50 complete: 426.05s total (0.00s eval/426.05s train)
+[STATE 2025-12-15 23:39:53] Task 1 Epoch 34/50: entering train loop
+Task 1 Epoch 34/50 | Loss 0.0181 | Train Acc 0.9737 | Val Acc 0.3706 | Epoch Time 426.08s (Eval 0.00s, Train 426.08s)
+[STATE 2025-12-15 23:46:59] Task 1 Epoch 34/50 complete: 426.08s total (0.00s eval/426.08s train)
+[STATE 2025-12-15 23:46:59] Task 1 Epoch 35/50: entering train loop
+Task 1 Epoch 35/50 | Loss 0.0180 | Train Acc 0.9757 | Val Acc 0.3706 | Epoch Time 424.81s (Eval 0.00s, Train 424.81s)
+[STATE 2025-12-15 23:54:04] Task 1 Epoch 35/50 complete: 424.81s total (0.00s eval/424.81s train)
+[STATE 2025-12-15 23:54:04] Task 1 Epoch 36/50: entering train loop
+Task 1 Epoch 36/50 | Loss 0.0174 | Train Acc 0.9746 | Val Acc 0.3706 | Epoch Time 424.95s (Eval 0.00s, Train 424.95s)
+[STATE 2025-12-16 00:01:09] Task 1 Epoch 36/50 complete: 424.95s total (0.00s eval/424.95s train)
+[STATE 2025-12-16 00:01:09] Task 1 Epoch 37/50: entering train loop
+Task 1 Epoch 37/50 | Loss 0.0175 | Train Acc 0.9744 | Val Acc 0.3706 | Epoch Time 426.69s (Eval 0.00s, Train 426.69s)
+[STATE 2025-12-16 00:08:16] Task 1 Epoch 37/50 complete: 426.69s total (0.00s eval/426.69s train)
+[STATE 2025-12-16 00:08:16] Task 1 Epoch 38/50: entering train loop
+Task 1 Epoch 38/50 | Loss 0.0171 | Train Acc 0.9758 | Val Acc 0.3706 | Epoch Time 423.78s (Eval 0.00s, Train 423.78s)
+[STATE 2025-12-16 00:15:20] Task 1 Epoch 38/50 complete: 423.78s total (0.00s eval/423.78s train)
+[STATE 2025-12-16 00:15:20] Task 1 Epoch 39/50: entering train loop
+Task 1 Epoch 39/50 | Loss 0.0164 | Train Acc 0.9781 | Val Acc 0.3706 | Epoch Time 423.37s (Eval 0.00s, Train 423.37s)
+[STATE 2025-12-16 00:22:23] Task 1 Epoch 39/50 complete: 423.37s total (0.00s eval/423.37s train)
+[STATE 2025-12-16 00:22:23] Task 1 Epoch 40/50: entering train loop
+Task 1 Epoch 40/50 | Loss 0.0164 | Train Acc 0.9777 | Val Acc 0.3706 | Epoch Time 425.01s (Eval 0.00s, Train 425.01s)
+[STATE 2025-12-16 00:29:28] Task 1 Epoch 40/50 complete: 425.01s total (0.00s eval/425.01s train)
+[STATE 2025-12-16 00:29:28] Task 1 Epoch 41/50: entering train loop
+[STATE 2025-12-16 00:29:28] Task 1 Epoch 41/50 Iter 0: running validation
+---- Eval at Epoch 40: [0.9250430469373786, 0.3543000530737677] ----
+Task 1 Epoch 41/50 | Loss 0.0166 | Train Acc 0.9771 | Val Acc 0.3543 | Epoch Time 476.33s (Eval 53.34s, Train 423.00s)
+[STATE 2025-12-16 00:37:24] Task 1 Epoch 41/50 complete: 476.33s total (53.34s eval/423.00s train)
+[STATE 2025-12-16 00:37:24] Task 1 Epoch 42/50: entering train loop
+Task 1 Epoch 42/50 | Loss 0.0161 | Train Acc 0.9805 | Val Acc 0.3543 | Epoch Time 425.71s (Eval 0.00s, Train 425.71s)
+[STATE 2025-12-16 00:44:30] Task 1 Epoch 42/50 complete: 425.71s total (0.00s eval/425.71s train)
+[STATE 2025-12-16 00:44:30] Task 1 Epoch 43/50: entering train loop
+Task 1 Epoch 43/50 | Loss 0.0159 | Train Acc 0.9801 | Val Acc 0.3543 | Epoch Time 424.45s (Eval 0.00s, Train 424.45s)
+[STATE 2025-12-16 00:51:35] Task 1 Epoch 43/50 complete: 424.45s total (0.00s eval/424.45s train)
+[STATE 2025-12-16 00:51:35] Task 1 Epoch 44/50: entering train loop
+Task 1 Epoch 44/50 | Loss 0.0159 | Train Acc 0.9796 | Val Acc 0.3543 | Epoch Time 421.54s (Eval 0.00s, Train 421.54s)
+[STATE 2025-12-16 00:58:36] Task 1 Epoch 44/50 complete: 421.54s total (0.00s eval/421.54s train)
+[STATE 2025-12-16 00:58:36] Task 1 Epoch 45/50: entering train loop
+Task 1 Epoch 45/50 | Loss 0.0155 | Train Acc 0.9829 | Val Acc 0.3543 | Epoch Time 423.96s (Eval 0.00s, Train 423.96s)
+[STATE 2025-12-16 01:05:40] Task 1 Epoch 45/50 complete: 423.96s total (0.00s eval/423.96s train)
+[STATE 2025-12-16 01:05:40] Task 1 Epoch 46/50: entering train loop
+Task 1 Epoch 46/50 | Loss 0.0150 | Train Acc 0.9840 | Val Acc 0.3543 | Epoch Time 422.32s (Eval 0.00s, Train 422.32s)
+[STATE 2025-12-16 01:12:42] Task 1 Epoch 46/50 complete: 422.32s total (0.00s eval/422.32s train)
+[STATE 2025-12-16 01:12:42] Task 1 Epoch 47/50: entering train loop
+Task 1 Epoch 47/50 | Loss 0.0151 | Train Acc 0.9814 | Val Acc 0.3543 | Epoch Time 424.50s (Eval 0.00s, Train 424.50s)
+[STATE 2025-12-16 01:19:47] Task 1 Epoch 47/50 complete: 424.50s total (0.00s eval/424.50s train)
+[STATE 2025-12-16 01:19:47] Task 1 Epoch 48/50: entering train loop
+Task 1 Epoch 48/50 | Loss 0.0151 | Train Acc 0.9817 | Val Acc 0.3543 | Epoch Time 424.66s (Eval 0.00s, Train 424.66s)
+[STATE 2025-12-16 01:26:52] Task 1 Epoch 48/50 complete: 424.66s total (0.00s eval/424.66s train)
+[STATE 2025-12-16 01:26:52] Task 1 Epoch 49/50: entering train loop
+Task 1 Epoch 49/50 | Loss 0.0144 | Train Acc 0.9856 | Val Acc 0.3543 | Epoch Time 422.66s (Eval 0.00s, Train 422.66s)
+[STATE 2025-12-16 01:33:54] Task 1 Epoch 49/50 complete: 422.66s total (0.00s eval/422.66s train)
+[STATE 2025-12-16 01:33:54] Task 1 Epoch 50/50: entering train loop
+Task 1 Epoch 50/50 | Loss 0.0147 | Train Acc 0.9844 | Val Acc 0.3543 | Epoch Time 423.69s (Eval 0.00s, Train 423.69s)
+[STATE 2025-12-16 01:40:58] Task 1 Epoch 50/50 complete: 423.69s total (0.00s eval/423.69s train)
+[STATE 2025-12-16 01:40:58] Task 1: running final validation.
+[STATE 2025-12-16 01:43:35] Completed task 1 (2/2)
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.6232036228295457 
+ Individual Accuracy: [0.9246216408879648, 0.32178560477112655]
+####Final Test Accuracy####
+Final Results:- 
+ Total Accuracy: 0.6232036228295457 
+ Individual Accuracy: [0.9246216408879648, 0.32178560477112655]
+[STATE 2025-12-16 01:43:35] Saving results to logs//lwf/all_lwf-2025-12-15_17-23-11-3319/0/results
+logs//lwf/all_lwf-2025-12-15_17-23-11-3319/0/results: {'expt_name': 'all_lwf', 'model': 'lwf', 'arch': 'resnet1d', 'n_hiddens': 100, 'n_layers': 2, 'xav_init': False, 'glances': 1, 'n_epochs': 50, 'batch_size': 128, 'replay_batch_size': 20, 'memories': 5120, 'lr': 0.001, 'cuda': True, 'seed': 0, 'log_every': 3125, 'log_dir': 'logs//lwf/all_lwf-2025-12-15_17-23-11-3319/0', 'tf_dir': 'logs//lwf/all_lwf-2025-12-15_17-23-11-3319/0/tfdir', 'calc_test_accuracy': True, 'state_logging': True, 'data_path': 'data/rff/radar/', 'loader': 'task_incremental_loader', 'samples_per_task': -1, 'shuffle_tasks': False, 'classes_per_it': 4, 'iterations': 5000, 'dataset': 'iq', 'workers': 3, 'validation': 0.3, 'class_order': 'random', 'increment': 5, 'test_batch_size': 100000, 'nc_per_task': 5, 'val_rate': 10, 'opt_lr': 0.1, 'opt_wt': 0.1, 'alpha_init': 0.001, 'learn_lr': False, 'sync_update': False, 'grad_clip_norm': 2.0, 'cifar_batches': 3, 'use_old_task_memory': False, 'second_order': False, 'n_memories': 0, 'memory_strength': 0, 'steps_per_sample': 1, 'gamma': 1.0, 'beta': 1.0, 's': 1, 'batches_per_example': 1, 'bgd_optimizer': 'bgd', 'optimizer_params': '{}', 'train_mc_iters': 5, 'std_init': 0.05, 'mean_eta': 1, 'fisher_gamma': 0.95, 'rln': 7, 'update_steps': 10, 'meta_lr': 0.001, 'update_lr': 0.1, 'ctn_lr': 0.01, 'ctn_beta': 0.05, 'ctn_n_meta': 2, 'ctn_inner_steps': 2, 'ctn_temperature': 5, 'ctn_n_memories': 50, 'ctn_alpha_init': 0.1, 'ctn_memory_strength': 0.5, 'ctn_task_emb': 64, 'bcl_n_memories': 2000, 'bcl_memory_strength': 1.0, 'bcl_temperature': 2.0, 'bcl_inner_steps': 5, 'bcl_n_meta': 5, 'bcl_adapt_lr': 0.1} # val: 0.629 0.623 -0.005 0.020 # test: 0.629 0.623 -0.005 0.000 # 30023.820625543594
+[STATE 2025-12-16 01:43:35] Results saved; total runtime 30023.82s
+New Experiment Starting...
+Running model:  meralg1
+[STATE 2025-12-16 01:43:38] Experiment 'all_meralg1' starting with model 'meralg1' (seed 0)
+Set seed 0
+Loaded task0.npz: Unique train labels: [0 1 2 3 4 5]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 190940)
+Loaded task1.npz: Unique train labels: [ 0  6  7  8  9 10]
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11]. Size: 379500)
+[STATE 2025-12-16 01:43:41] Loader 'task_incremental_loader' ready: 1024 inputs, 12 outputs, 2 tasks
+n_outputs: 12 	n_tasks: 2
+[STATE 2025-12-16 01:43:41] Logging to logs//meralg1/all_meralg1-2025-12-16_01-43-41-0439/0
+True
+Model device: cuda:0
+[STATE 2025-12-16 01:43:41] Model initialized on device cuda:0
+[STATE 2025-12-16 01:43:41] Invoking continual life experience flow
+[STATE 2025-12-16 01:43:41] Life experience start: 2 tasks queued
+[STATE 2025-12-16 01:43:41] Starting task 0 (1/2)
+[STATE 2025-12-16 01:43:41] Task 0 Epoch 1/15: entering train loop
+[STATE 2025-12-16 01:43:41] Task 0 Epoch 1/15 Iter 0: running validation
+---- Eval at Epoch 0: [0.001181744285715008, 0.019647215794938975] ----

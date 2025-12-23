@@ -6,6 +6,9 @@ import argparse
 import time
 import os
 import sys
+from pathlib import Path
+from typing import List
+
 import ipdb
 from tqdm import tqdm
 
@@ -165,7 +168,7 @@ def life_experience(model, inc_loader, args):
     if args.loader == "class_incremental_loader":
         evaluator = eval_class_tasks
 
-    interactive_terminal = False # sys.stdout.isatty()
+    interactive_terminal = sys.stdout.isatty()
     log_state(args.state_logging, "Life experience start: {} tasks queued".format(inc_loader.n_tasks))
 
     for task_i in range(inc_loader.n_tasks):
@@ -192,7 +195,7 @@ def life_experience(model, inc_loader, args):
             prog_bar = tqdm(train_loader, disable=not interactive_terminal)
             for (i, (x, y)) in enumerate(prog_bar):
 
-                if((ep % args.val_rate) == 0) and ((i % 3125 == 0)):
+                if ((ep % args.val_rate) == 0) and ((i % 3125 == 0)):
                     eval_start = time.time()
                     log_state(
                         args.state_logging,
@@ -314,12 +317,50 @@ def save_results(args, result_val_t, result_val_a, result_test_t, result_test_a,
                 val_stats, one_liner, args), fname + '.pt')
     return val_stats, test_stats
 
+def _default_main_config_chain() -> List[str]:
+    chain: List[str] = []
+    base_cfg = Path("configs/base.yaml")
+    if base_cfg.exists():
+        chain.append(str(base_cfg))
+    legacy = Path("config_all.yaml")
+    if legacy.exists():
+        chain.append(str(legacy))
+    return chain
+
+
 def main():
-    base_path = ''
-    yaml_file = 'config_all.yaml'
-    # args = file_parser.parse_args_from_yaml(yaml_file)
+    config_parser = argparse.ArgumentParser(add_help=False)
+    config_parser.add_argument(
+        "--config",
+        action="append",
+        default=[],
+        metavar="FILE",
+        help="YAML config fragment to apply (may be provided multiple times).",
+    )
+    config_parser.add_argument(
+        "--config-dir",
+        action="append",
+        default=[],
+        metavar="DIR",
+        help="Directory of YAML fragments to apply in alphabetical order.",
+    )
+    config_parser.add_argument(
+        "--no-config",
+        action="store_true",
+        help="Skip loading YAML configs and rely solely on CLI arguments.",
+    )
+    config_cli, remaining = config_parser.parse_known_args()
+
+    config_chain: List[str] = []
+    if not config_cli.no_config:
+        config_chain.extend(config_cli.config)
+        config_chain.extend(config_cli.config_dir)
+        if not config_chain:
+            config_chain = _default_main_config_chain()
+
+    base_args = file_parser.parse_args_from_yaml(config_chain or None)
     parser = file_parser.get_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(remaining, namespace=base_args)
     print("Running model: ", args.model)
     log_state(
         args.state_logging,

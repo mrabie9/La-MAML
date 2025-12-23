@@ -26,6 +26,21 @@ Grid = Dict[str, List[Any]]
 TypeHints = Dict[str, type]
 
 
+def _default_config_chain(model_name: str, preset_default: str | None) -> List[str]:
+    """Return the default stack of config fragments for a model."""
+
+    chain: List[str] = []
+    base_cfg = Path("configs/base.yaml")
+    if base_cfg.exists():
+        chain.append(str(base_cfg))
+    model_cfg = Path("configs/models") / f"{model_name}.yaml"
+    if model_cfg.exists():
+        chain.append(str(model_cfg))
+    if not chain and preset_default:
+        chain.append(preset_default)
+    return chain
+
+
 @dataclass
 class TuningPreset:
     """Configuration wrapper for building a tuning entrypoint."""
@@ -56,9 +71,18 @@ def build_cli(preset: TuningPreset) -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--config",
-        type=str,
-        default=preset.default_config,
-        help="Base YAML config to start from.",
+        action="append",
+        default=[],
+        metavar="FILE",
+        help="Base YAML config file(s) applied in order. Defaults to the shared base"
+        " config plus the model-specific fragment when --config is omitted.",
+    )
+    parser.add_argument(
+        "--config-dir",
+        action="append",
+        default=[],
+        metavar="DIR",
+        help="Directory of YAML config fragments to apply (alphabetical order).",
     )
     parser.add_argument(
         "--grid",
@@ -392,7 +416,13 @@ def dump_summary(session_dir: Path, summary: Dict[str, Any], successes: List[Dic
 def run_tuning(preset: TuningPreset) -> None:
     cli = build_cli(preset).parse_args()
 
-    base_args = file_parser.parse_args_from_yaml(cli.config)
+    config_sources: List[str] = []
+    config_sources.extend(cli.config)
+    config_sources.extend(cli.config_dir)
+    if not config_sources:
+        config_sources = _default_config_chain(preset.model_name, preset.default_config)
+
+    base_args = file_parser.parse_args_from_yaml(config_sources)
     if getattr(base_args, "model", preset.model_name) != preset.model_name:
         base_args.model = preset.model_name
 
@@ -461,8 +491,10 @@ def run_tuning(preset: TuningPreset) -> None:
     successes = [r for r in results if r.get("status") == "ok"]
     best = max(successes, key=lambda r: r["val_mean"]) if successes else None
 
+    resolved_chain = [str(Path(path).resolve()) for path in config_sources]
     summary = {
-        "config": str(Path(cli.config).resolve()),
+        "config": resolved_chain[-1] if resolved_chain else None,
+        "config_chain": resolved_chain,
         "base_expt_name": getattr(base_args, "expt_name", preset.model_name),
         "session_dir": str(session_dir.resolve()),
         "timestamp": session_timestamp,
