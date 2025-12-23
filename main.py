@@ -48,6 +48,7 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
     device = torch.device('cuda' if getattr(args, 'cuda', False) and torch.cuda.is_available() else 'cpu')
     results = []
     is_iq = getattr(args, 'dataset', '').lower() == 'iq'
+    class_counts = getattr(args, "classes_per_task", None)
     batch_size = getattr(args, 'eval_batch_size', 64)
 
     if specific_task is not None:
@@ -59,7 +60,9 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
         x_data = task[1]
         y = torch.as_tensor(task[2], dtype=torch.long)
         if 'ucl' in args.model:
-            offset1, offset2 = misc_utils.compute_offsets(t, args.nc_per_task)
+            offset1, offset2 = misc_utils.compute_offsets(
+                t, class_counts if class_counts is not None else args.nc_per_task
+            )
             y = y - offset1  # make labels start from 0 for each task
 
         if isinstance(x_data, torch.Tensor):
@@ -107,11 +110,12 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
             print("EH min: {}, max: {}, mean: {}".format(min(eh), max(eh), sum(eh)/len(eh)))
             print("EU min: {}, max: {}, mean: {}".format(min(epistemic_uncertainties), max(epistemic_uncertainties), sum(epistemic_uncertainties)/len(epistemic_uncertainties)))
             average_eh = 100* sum(eh)/len(eh)
-            norm_avg_eh = average_eh / np.log(args.nc_per_task)
+            current_nc = misc_utils.task_class_count(class_counts, t) if class_counts is not None else args.nc_per_task
+            norm_avg_eh = average_eh / np.log(current_nc)
             average_h_pred = 100* sum(h_preds)/len(h_preds)
-            norm_avg_h_pred = average_h_pred / np.log(args.nc_per_task)
+            norm_avg_h_pred = average_h_pred / np.log(current_nc)
             average_eu = 100* sum(epistemic_uncertainties)/len(epistemic_uncertainties)
-            norm_avg_eu = average_eu / np.log(args.nc_per_task)
+            norm_avg_eu = average_eu / np.log(current_nc)
             print("Task: {} | Epistemic: {} | Aleatoric: {} | Total: {} | F_eu | {}".format(
                 i, round(norm_avg_eu, 2), round(norm_avg_eh, 2), round(norm_avg_h_pred, 2), round(norm_avg_eu/norm_avg_h_pred, 2)))
 
@@ -317,9 +321,9 @@ def save_results(args, result_val_t, result_val_a, result_test_t, result_test_a,
 def main():
     base_path = ''
     yaml_file = 'config_all.yaml'
-    # args = file_parser.parse_args_from_yaml(yaml_file)
     parser = file_parser.get_parser()
     args = parser.parse_args()
+    # args = file_parser.parse_args_from_yaml(yaml_file)
     print("Running model: ", args.model)
     log_state(
         args.state_logging,
@@ -335,6 +339,16 @@ def main():
     Loader = importlib.import_module('dataloaders.' + args.loader)
     loader = Loader.IncrementalLoader(args, seed=args.seed)
     n_inputs, n_outputs, n_tasks = loader.get_dataset_info()
+    args.classes_per_task = getattr(loader, "classes_per_task", None)
+    print("Classes per task:", args.classes_per_task)
+    if args.classes_per_task is None or len(args.classes_per_task) == 0:
+        args.classes_per_task = misc_utils.build_task_class_list(
+            n_tasks,
+            n_outputs,
+            nc_per_task=args.nc_per_task_list if getattr(args, "nc_per_task_list", "") else args.nc_per_task,
+            classes_per_task=getattr(args, "classes_per_task", None),
+        )
+        print("Built classes_per_task:", args.classes_per_task)
     log_state(
         args.state_logging,
         "Loader '{}' ready: {} inputs, {} outputs, {} tasks".format(args.loader, n_inputs, n_outputs, n_tasks),

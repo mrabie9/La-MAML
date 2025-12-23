@@ -16,6 +16,7 @@ import numpy as np
 from copy import deepcopy
 from torch.utils.data import DataLoader
 from utils.training_metrics import macro_recall
+from utils import misc_utils
 
 
 @dataclass
@@ -67,8 +68,14 @@ class Net(torch.nn.Module):
         # setup losses
         self.bce = torch.nn.CrossEntropyLoss()
 
+        self.classes_per_task = misc_utils.build_task_class_list(
+            n_tasks,
+            n_outputs,
+            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            classes_per_task=getattr(args, "classes_per_task", None),
+        )
         if self.is_task_incremental:
-            self.nc_per_task = int(n_outputs / n_tasks)
+            self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         else:
             self.nc_per_task = n_outputs
         # setup memories
@@ -140,12 +147,9 @@ class Net(torch.nn.Module):
 
     def compute_offsets(self, task):
         if self.is_task_incremental:
-            offset1 = task * self.nc_per_task
-            offset2 = (task + 1) * self.nc_per_task
+            return misc_utils.compute_offsets(task, self.classes_per_task)
         else:
-            offset1 = 0
-            offset2 = self.n_outputs
-        return int(offset1), int(offset2)
+            return 0, self.n_outputs
 
     def forward(self, x, t, return_feat= False):
         if self.adapt_ and not self.net.training:
@@ -177,7 +181,7 @@ class Net(torch.nn.Module):
             mem_x = self.valx[:t,:]
             mem_y = self.valy[:t,:]
             mem_feat = self.mem_feat[:t,:]
-            sz = min(t*self.n_val, self.sz)
+            sz = int(min(t*self.n_val, self.sz))
             idx = np.random.choice(t* self.n_val,sz, False)
             self.valid_id = idx.tolist()
             t_idx = torch.from_numpy(idx // self.n_val)
@@ -186,7 +190,7 @@ class Net(torch.nn.Module):
             mem_x = self.memx[:t,:]
             mem_y = self.memy[:t,:]
             mem_feat = self.mem_feat[:t,:]
-            sz = min(self.n_memories, self.sz)
+            sz = int(min(self.n_memories, self.sz))
             idx = np.random.choice(t* self.n_memories,sz, False)
             idx = [x for x in idx if x not in self.valid_id]
             idx = np.array(idx)
@@ -199,9 +203,11 @@ class Net(torch.nn.Module):
         feat = mem_feat[t_idx, s_idx]
         mask = torch.zeros(xx.size(0), self.nc_per_task)
         for j in range(mask.size(0)):
-            mask[j] = torch.arange(offsets[j][0], offsets[j][1])
+            cls_size = offsets[j][1] - offsets[j][0]
+            mask[j, :cls_size] = torch.arange(offsets[j][0], offsets[j][1])
         mask = mask.long().cuda()
-        return xx,yy, feat , mask, t_idx.tolist()
+        sizes = (offsets[:, 1] - offsets[:, 0]).long()
+        return xx,yy, feat , mask, t_idx.tolist(), sizes
     def observe(self, x, y, t):
         if t != self.current_task:
             tt = self.current_task
@@ -264,9 +270,12 @@ class Net(torch.nn.Module):
                 tr_acc.append(macro_recall(preds, targets))
                 loss1 = self.bce(logits, targets)
                 if t > 0:
-                    xx, yy, feat, mask, list_t = self.memory_sampling(t)
+                    xx, yy, feat, mask, list_t, class_sizes = self.memory_sampling(t)
                     pred_ = self.net(xx)
                     pred = torch.gather(pred_, 1, mask)
+                    for row, size in enumerate(class_sizes):
+                        if size < pred.size(1):
+                            pred[row, size:] = -1e9
                     loss2 = self.bce(pred, yy)
                     loss3 = self.reg * self.kl(F.log_softmax(pred / self.temp, dim = 1), feat)
                     loss = loss1 + loss2 + loss3
@@ -274,9 +283,12 @@ class Net(torch.nn.Module):
                     loss = loss1
                 loss.backward()
                 self.inner_opt.step()
-            xval, yval, _, mask_val, list_t = self.memory_sampling(tt, valid = True)  
+            xval, yval, _, mask_val, list_t, class_sizes_val = self.memory_sampling(tt, valid = True)  
             pred_ = self.net(xval)
             pred = torch.gather(pred_, 1, mask_val)
+            for row, size in enumerate(class_sizes_val):
+                if size < pred.size(1):
+                    pred[row, size:] = -1e9
             outer_loss = self.bce(pred, yval)
             outer_loss.backward()                    
             self.inner_opt.step()

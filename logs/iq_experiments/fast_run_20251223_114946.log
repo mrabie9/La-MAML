@@ -1,0 +1,61 @@
+python3 -u main.py $IQ --model gem --expt_name all_gem --n_memories 512 --batch_size 128 --n_epochs $N_EPOCHS 
+                    --lr 0.03 --glances 1 --memory_strength 0.5 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3 --samples_per_task 256
+
+python3 -u main.py $IQ --model er_ring --expt_name all_erring --batch_size 128 --replay_batch_size 64 --n_epochs $N_EPOCHS 
+                    --lr 0.03 --increment 5 
+                    --bcl_n_memories 5192 --bcl_temperature 2.0 --bcl_memory_strength 1.0 --bcl_inner_steps 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 256
+
+python3 -u main.py $IQ --model bcl_dual --expt_name bcl_basic_test --data_path data/rff/rfmls 
+                    --n_layers 2 --n_hiddens 100 --xav_init --glances 1 --n_epochs 1 
+                    --batch_size 64 --replay_batch_size 10 --memories 400 --lr 0.03 
+                    --increment 5 --log_every 3125 --class_order random 
+                    --seed $SEED --validation 0.2 --samples_per_task 256 --classes_per_it 6 
+                    --iterations 5000 --test_batch_size 100000 --n_memories 5192 --memory_strength 1.0 
+                    --steps_per_sample 1 --gamma 1.0 --beta 0.1 --batches_per_example 1 
+                    --opt_lr 0.1 --opt_wt 0.1 --alpha_init 0.1 --cifar_batches 3 --grad_clip_norm 5.0 
+                    --second_order --bcl_n_memories 2000 --bcl_memory_strength 1.0 --bcl_temperature 2.0 
+                    --bcl_inner_steps 5 --bcl_n_meta 5 --bcl_adapt_lr 0.1 --train_mc_iters 2 
+                    --std_init 0.02 --mean_eta 50.0 --fisher_gamma 0.95 --rln 7 --update_steps 10 
+                    --meta_lr 0.001 --update_lr 0.1
+
+Logging quick IQ experiment suite to logs/iq_experiments/fast_run_20251223_114946.log
+New Experiment Starting...
+Running model:  gem
+[STATE 2025-12-23 11:49:48] Experiment 'all_gem' starting with model 'gem' (seed 0)
+Set seed 0
+Loaded task0.npz: Unique train labels: [0 1 2 3 4 5]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 17294)
+Loaded task1.npz: Unique train labels: [ 0  6  7  8  9 10]
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11]. Size: 32208)
+Built classes_per_task: [6, 6]
+Classes per task: [6, 6]
+[STATE 2025-12-23 11:49:53] Loader 'task_incremental_loader' ready: 1024 inputs, 12 outputs, 2 tasks
+n_outputs: 12 	n_tasks: 2
+[STATE 2025-12-23 11:49:53] Logging to logs//gem/all_gem-2025-12-23_11-49-53-0108/0
+Traceback (most recent call last):
+  File "/home/lunet/wsmr11/repos/La-MAML/main.py", line 395, in <module>
+    main()
+  File "/home/lunet/wsmr11/repos/La-MAML/main.py", line 365, in main
+    Model = importlib.import_module('model.' + args.model)
+  File "/home/lunet/wsmr11/.asdf/installs/python/3.10.0/lib/python3.10/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1006, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 688, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 879, in exec_module
+  File "<frozen importlib._bootstrap_external>", line 1017, in get_code
+  File "<frozen importlib._bootstrap_external>", line 947, in source_to_code
+  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+  File "/home/lunet/wsmr11/repos/La-MAML/model/gem.py", line 282
+    raise ValueError(
+                    
+SyntaxError: '(' was never closed
+New Experiment Starting...
+Running model:  er_ring
+[STATE 2025-12-23 11:49:55] Experiment 'all_erring' starting with model 'er_ring' (seed 0)
+Set seed 0

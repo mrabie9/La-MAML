@@ -17,6 +17,7 @@ import torch.nn.functional as F
 import numpy as np
 from copy import deepcopy
 from utils.training_metrics import macro_recall
+from utils import misc_utils
 
 
 @dataclass
@@ -59,9 +60,9 @@ class Net(torch.nn.Module):
         if  self.cfg.arch == 'resnet1d':
             # self.net = ResNet1D(n_outputs, args)
             self.net = ContextNet18(n_outputs, n_tasks=n_tasks, task_emb=self.cfg.ctn_task_emb)
-            # self.net.define_task_lr_params(alpha_init=args.ctn_alpha_init)
+        # self.net.define_task_lr_params(alpha_init=args.ctn_alpha_init)
         else:
-            raise NotImplementedError
+            raise NotImplementedError(f"Unsupported arch {self.cfg.arch}; only resnet1d is available now.")
 
         self.is_task_incremental = True 
         self.inner_lr = self.cfg.ctn_lr
@@ -69,8 +70,14 @@ class Net(torch.nn.Module):
         self.opt = torch.optim.SGD(self.net.parameters(), lr=self.outer_lr)
         # setup losses
         self.bce = torch.nn.CrossEntropyLoss()
+        self.classes_per_task = misc_utils.build_task_class_list(
+            n_tasks,
+            n_outputs,
+            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            classes_per_task=getattr(args, "classes_per_task", None),
+        )
         if self.is_task_incremental:
-            self.nc_per_task = int(n_outputs / n_tasks)
+            self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         else:
             self.nc_per_task = n_outputs
         # setup memories
@@ -132,12 +139,9 @@ class Net(torch.nn.Module):
 
     def compute_offsets(self, task):
         if self.is_task_incremental:
-            offset1 = task * self.nc_per_task
-            offset2 = (task + 1) * self.nc_per_task
+            return misc_utils.compute_offsets(task, self.classes_per_task)
         else:
-            offset1 = 0
-            offset2 = self.n_outputs
-        return int(offset1), int(offset2)
+            return 0, self.n_outputs
 
     def forward(self, x, t, return_feat= False):
         output = self.net(x, t)
@@ -169,8 +173,10 @@ class Net(torch.nn.Module):
             yy = mem_y[t_idx, s_idx] - offsets[:,0]
             mask = torch.zeros(xx.size(0), self.nc_per_task)
             for j in range(mask.size(0)):
-                mask[j] = torch.arange(offsets[j][0], offsets[j][1])
-            return xx,yy, 0 , mask.long().cuda(), t_idx.tolist()
+                cls_size = offsets[j][1] - offsets[j][0]
+                mask[j, :cls_size] = torch.arange(offsets[j][0], offsets[j][1])
+            sizes = (offsets[:, 1] - offsets[:, 0]).long()
+            return xx,yy, 0 , mask.long().cuda(), t_idx.tolist(), sizes
         else:
             mem_x = self.memx[:t,:]
             mem_y = self.memy[:t,:]
@@ -185,8 +191,10 @@ class Net(torch.nn.Module):
             feat = mem_feat[t_idx, s_idx]
             mask = torch.zeros(xx.size(0), self.nc_per_task)
             for j in range(mask.size(0)):
-                mask[j] = torch.arange(offsets[j][0], offsets[j][1])
-            return xx,yy, feat , mask.long().cuda(), t_idx.tolist()
+                cls_size = offsets[j][1] - offsets[j][0]
+                mask[j, :cls_size] = torch.arange(offsets[j][0], offsets[j][1])
+            sizes = (offsets[:, 1] - offsets[:, 0]).long()
+            return xx,yy, feat , mask.long().cuda(), t_idx.tolist(), sizes
         
     def observe(self, x, y, t):
 
@@ -261,9 +269,12 @@ class Net(torch.nn.Module):
             #tt = t + 1
             for i in range(self.inner_steps):
                 if t > 0:
-                    xx, yy, feat, mask, list_t = self.memory_sampling(t)
+                    xx, yy, feat, mask, list_t, class_sizes = self.memory_sampling(t)
                     pred_ = self.net(xx, list_t)
                     pred = torch.gather(pred_, 1, mask)
+                    for row, size in enumerate(class_sizes):
+                        if size < pred.size(1):
+                            pred[row, size:] = -1e9
                     loss2 = self.bce(pred, yy)
                     loss3 = self.reg * self.kl(F.log_softmax(pred / self.temp, dim = 1), feat)
                     loss = loss1 + loss2 + loss3
@@ -278,9 +289,12 @@ class Net(torch.nn.Module):
                     new_param = new_param - self.inner_lr * grad
                     param.data.copy_(new_param)
 
-            xval, yval, feat, mask, list_t = self.memory_sampling(t+1, valid = True)
+            xval, yval, feat, mask, list_t, class_sizes_val = self.memory_sampling(t+1, valid = True)
             pred_ = self.net(xval, list_t)
             pred = torch.gather(pred_, 1, mask)
+            for row, size in enumerate(class_sizes_val):
+                if size < pred.size(1):
+                    pred[row, size:] = -1e9
             outer_loss = self.bce(pred, yval)
             outer_grad = torch.autograd.grad(outer_loss, self.net.context_param())
                 

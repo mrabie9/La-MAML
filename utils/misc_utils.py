@@ -8,9 +8,80 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
+def _parse_class_list(value):
+    """Convert string/list/tuple values into a list of ints."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = value.strip()
+        if len(value) == 0:
+            return None
+        parts = value.replace(";", ",").split(",")
+        return [int(p) for p in parts if len(p.strip()) > 0]
+    if isinstance(value, (list, tuple)):
+        return [int(v) for v in value]
+    if isinstance(value, np.ndarray):
+        return [int(v) for v in value.tolist()]
+    return None
+
+
+def build_task_class_list(n_tasks, n_outputs, nc_per_task=None, classes_per_task=None):
+    """
+    Return a per-task class-count list.
+    Priority:
+        1. Explicit classes_per_task (list or comma-separated str)
+        2. Explicit nc_per_task_list (via nc_per_task when given as list/str)
+        3. Scalar nc_per_task replicated per task
+        4. Even split of n_outputs across tasks.
+    """
+    explicit = _parse_class_list(classes_per_task)
+    if explicit is None:
+        explicit = _parse_class_list(nc_per_task)
+
+    if explicit is not None:
+        if n_tasks is not None and len(explicit) not in (1, n_tasks):
+            raise ValueError(
+                f"Expected 1 or {n_tasks} class counts, got {len(explicit)}: {explicit}"
+            )
+        if n_tasks is not None and len(explicit) == 1:
+            explicit = explicit * n_tasks
+        return explicit
+
+    if isinstance(nc_per_task, (int, float)) and n_tasks is not None:
+        return [int(nc_per_task) for _ in range(n_tasks)]
+
+    if n_tasks is not None and n_outputs is not None and n_tasks > 0:
+        base = n_outputs // n_tasks
+        remainder = n_outputs - base * n_tasks
+        counts = [base for _ in range(n_tasks)]
+        for i in range(remainder):
+            counts[i] += 1
+        return counts
+
+    raise ValueError("Unable to infer per-task class counts.")
+
+
+def task_class_count(nc_per_task, task):
+    if isinstance(nc_per_task, (list, tuple, np.ndarray)):
+        return int(nc_per_task[task])
+    return int(nc_per_task)
+
+
+def max_task_class_count(nc_per_task):
+    if isinstance(nc_per_task, (list, tuple, np.ndarray)):
+        return int(max(nc_per_task))
+    return int(nc_per_task)
+
+
 def compute_offsets(task, nc_per_task):
-    offset1 = task * nc_per_task
-    offset2 = (task + 1) * nc_per_task
+    if isinstance(nc_per_task, (list, tuple, np.ndarray)):
+        if task >= len(nc_per_task):
+            raise ValueError(f"Task index {task} out of range for nc_per_task={nc_per_task}")
+        offset1 = int(sum(nc_per_task[:task]))
+        offset2 = int(offset1 + nc_per_task[task])
+    else:
+        offset1 = task * nc_per_task
+        offset2 = (task + 1) * nc_per_task
 
     return int(offset1), int(offset2)
 

@@ -19,6 +19,7 @@ import warnings
 warnings.filterwarnings("ignore")
 from model.resnet1d import ResNet1D
 from utils.training_metrics import macro_recall
+from utils import misc_utils
 
 
 @dataclass
@@ -70,7 +71,13 @@ class Net(nn.Module):
         self.bce = torch.nn.CrossEntropyLoss()
 
         self.n_outputs = n_outputs
-        self.nc_per_task = n_outputs / n_tasks
+        self.classes_per_task = misc_utils.build_task_class_list(
+            n_tasks,
+            n_outputs,
+            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            classes_per_task=getattr(args, "classes_per_task", None),
+        )
+        self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         # if self.is_cifar:
         #     self.nc_per_task = n_outputs / n_tasks
         # else:
@@ -105,22 +112,18 @@ class Net(nn.Module):
         return output
     
     def compute_offsets(self, task):
-        offset1 = task * self.nc_per_task
-        offset2 = (task + 1) * self.nc_per_task
-        # if self.is_cifar:
-        #     offset1 = task * self.nc_per_task
-        #     offset2 = (task + 1) * self.nc_per_task
-        # else:
-        #     offset1 = 0
-        #     offset2 = self.n_outputs
-        return int(offset1), int(offset2)
+        if self.is_task_incremental:
+            return misc_utils.compute_offsets(task, self.classes_per_task)
+        else:
+            return 0, self.n_outputs
 
     def _clone_model_state(self):
-        return {name: tensor.detach().clone() for name, tensor in self.net.state_dict().items()}
+        # Use the underlying model to keep state_dict keys aligned with _apply_meta_update
+        return {name: tensor.detach().clone() for name, tensor in self.net.model.state_dict().items()}
 
     def _apply_meta_update(self, base_state, target_state, mix):
-        own_params = dict(self.net.named_parameters())
-        own_params.update(dict(self.net.named_buffers()))
+        own_params = dict(self.net.model.named_parameters())
+        own_params.update(dict(self.net.model.named_buffers()))
         with torch.no_grad():
             for name, tensor in own_params.items():
                 tensor.copy_(base_state[name] + (target_state[name] - base_state[name]) * mix)

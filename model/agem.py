@@ -16,6 +16,7 @@ import random
 
 from model.resnet1d import ResNet1D
 from utils.training_metrics import macro_recall
+from utils import misc_utils
 
 
 @dataclass
@@ -51,13 +52,7 @@ def compute_offsets(task, nc_per_task, is_cifar):
         Compute offsets for cifar to determine which
         outputs to select for a given task.
     """
-    if is_cifar:
-        offset1 = task * nc_per_task
-        offset2 = (task + 1) * nc_per_task
-    else:
-        offset1 = task * nc_per_task
-        offset2 = (task + 1) * nc_per_task
-    return offset1, offset2
+    return misc_utils.compute_offsets(task, nc_per_task)
 
 
 def store_grad(pp, grads, grad_dims, tid):
@@ -197,11 +192,13 @@ class Net(nn.Module):
         # allocate counters
         self.observed_tasks = []
         self.mem_cnt = 0
-        if self.is_cifar:
-            self.nc_per_task = int(n_outputs / n_tasks)
-        else:
-            self.nc_per_task = int(n_outputs / n_tasks)
-            # self.nc_per_task = n_outputs
+        self.classes_per_task = misc_utils.build_task_class_list(
+            n_tasks,
+            n_outputs,
+            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            classes_per_task=getattr(args, "classes_per_task", None),
+        )
+        self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         
         if self.gpu:
             self.cuda()
@@ -237,8 +234,7 @@ class Net(nn.Module):
 
         if self.is_cifar:
             # make sure we predict classes within the current task
-            offset1 = int(t * self.nc_per_task)
-            offset2 = int((t + 1) * self.nc_per_task)
+            offset1, offset2 = compute_offsets(t, self.classes_per_task, self.is_cifar)
             if offset1 > 0:
                 output[:, :offset1].data.fill_(-10e10)
             if offset2 < self.n_outputs:
@@ -306,7 +302,7 @@ class Net(nn.Module):
                     # fwd/bwd on the examples in the memory
                     past_task = self.observed_tasks[tt]
 
-                    offset1, offset2 = compute_offsets(past_task, self.nc_per_task,
+                    offset1, offset2 = compute_offsets(past_task, self.classes_per_task,
                                                        self.is_cifar)
                     logits = self.forward(Variable(self.memory_data[past_task]), past_task)[:, offset1: offset2]
                     ptloss = self.ce(
@@ -321,7 +317,7 @@ class Net(nn.Module):
 
             # now compute the grad on the current minibatch
             self.zero_grad()
-            offset1, offset2 = compute_offsets(t, self.nc_per_task, self.is_cifar)
+            offset1, offset2 = compute_offsets(t, self.classes_per_task, self.is_cifar)
             logits = self.forward(x, t)[:, offset1: offset2]
             pb = torch.argmax(logits, dim=1)
             targets = y - offset1

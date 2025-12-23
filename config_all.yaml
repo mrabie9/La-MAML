@@ -1,5 +1,5 @@
 # Experiment details
-expt_name: gem_test_radar        # name of the experiment
+expt_name: gem_test_ncpt       # name of the experiment
 model: gem                   # algo to train
 arch: resnet1d                          # arch to use for training (choices: [resnet1d])
 # n_hiddens: 100                          # number of hidden neurons at each layer
@@ -94,4 +94,4 @@ bcl_adapt_lr: 0.01
 bcl_n_memories: 400
 # bcl_adapt: 
 
-nc_per_task: 6
+# nc_per_task: 6

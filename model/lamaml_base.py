@@ -11,6 +11,7 @@ from typing import Optional
 from model.resnet1d import ResNet1D
 from scipy.stats import pearsonr
 import datetime
+from utils import misc_utils
 
 
 @dataclass
@@ -82,6 +83,13 @@ class BaseNet(torch.nn.Module):
             self.net = self.net.cuda()
 
         self.n_outputs = n_outputs
+        self.classes_per_task = misc_utils.build_task_class_list(
+            n_tasks,
+            n_outputs,
+            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            classes_per_task=getattr(args, "classes_per_task", None),
+        )
+        self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
 
     def push_to_mem(self, batch_x, batch_y, t):
         """
@@ -169,8 +177,7 @@ class BaseNet(torch.nn.Module):
 
     def compute_offsets(self, task):
         # mapping from classes [1-100] to their idx within a task
-        offset1 = task * self.nc_per_task
-        offset2 = (task + 1) * self.nc_per_task
+        offset1, offset2 = misc_utils.compute_offsets(task, self.classes_per_task)
         return int(offset1), int(offset2)
 
     def zero_grads(self):

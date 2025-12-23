@@ -1,0 +1,156 @@
+python3 -u main.py $IQ --model gem --expt_name all_gem --n_memories 512 --batch_size 128 --n_epochs $N_EPOCHS 
+                    --lr 0.03 --glances 1 --memory_strength 0.5 --increment 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3 --samples_per_task 256
+
+python3 -u main.py $IQ --model er_ring --expt_name all_erring --batch_size 128 --replay_batch_size 64 --n_epochs $N_EPOCHS 
+                    --lr 0.03 --increment 5 
+                    --bcl_n_memories 5192 --bcl_temperature 2.0 --bcl_memory_strength 1.0 --bcl_inner_steps 5 
+                    --log_every 3125 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 256
+
+python3 -u main.py $IQ --model bcl_dual --expt_name bcl_basic_test --data_path data/rff/rfmls 
+                    --n_layers 2 --n_hiddens 100 --xav_init --glances 1 --n_epochs 1 
+                    --batch_size 64 --replay_batch_size 10 --memories 400 --lr 0.03 
+                    --increment 5 --log_every 3125 --class_order random 
+                    --seed $SEED --validation 0.2 --samples_per_task 256 --classes_per_it 6 
+                    --iterations 5000 --test_batch_size 100000 --n_memories 5192 --memory_strength 1.0 
+                    --steps_per_sample 1 --gamma 1.0 --beta 0.1 --batches_per_example 1 
+                    --opt_lr 0.1 --opt_wt 0.1 --alpha_init 0.1 --cifar_batches 3 --grad_clip_norm 5.0 
+                    --second_order --bcl_n_memories 2000 --bcl_memory_strength 1.0 --bcl_temperature 2.0 
+                    --bcl_inner_steps 5 --bcl_n_meta 5 --bcl_adapt_lr 0.1 --train_mc_iters 2 
+                    --std_init 0.02 --mean_eta 50.0 --fisher_gamma 0.95 --rln 7 --update_steps 10 
+                    --meta_lr 0.001 --update_lr 0.1
+
+Logging quick IQ experiment suite to logs/iq_experiments/fast_run_20251223_115601.log
+New Experiment Starting...
+Running model:  gem
+[STATE 2025-12-23 11:56:03] Experiment 'all_gem' starting with model 'gem' (seed 0)
+Set seed 0
+Loaded task0.npz: Unique train labels: [0 1 2 3 4 5]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 17294)
+Loaded task1.npz: Unique train labels: [ 0  6  7  8  9 10]
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11]. Size: 32208)
+Built classes_per_task: [6, 6]
+Classes per task: [6, 6]
+[STATE 2025-12-23 11:56:06] Loader 'task_incremental_loader' ready: 1024 inputs, 12 outputs, 2 tasks
+n_outputs: 12 	n_tasks: 2
+[STATE 2025-12-23 11:56:06] Logging to logs//gem/all_gem-2025-12-23_11-56-06-6566/0
+True
+Model device: cuda:0
+[STATE 2025-12-23 11:56:06] Model initialized on device cuda:0
+[STATE 2025-12-23 11:56:06] Invoking continual life experience flow
+[STATE 2025-12-23 11:56:06] Life experience start: 2 tasks queued
+[STATE 2025-12-23 11:56:06] Starting task 0 (1/2)
+[STATE 2025-12-23 11:56:06] Task 0 Epoch 1/1: entering train loop
+[STATE 2025-12-23 11:56:06] Task 0 Epoch 1/1 Iter 0: running validation
+---- Eval at Epoch 0: [0.002781343602909713, 0.17995428361819601] ----
+Task 0 Epoch 1/1 | Loss 1.6557 | Train Acc 0.2191 | Val Acc 0.0028 | Epoch Time 4.12s (Eval 3.83s, Train 0.29s)
+[STATE 2025-12-23 11:56:10] Task 0 Epoch 1/1 complete: 4.12s total (3.83s eval/0.29s train)
+[STATE 2025-12-23 11:56:10] Task 0: running final validation.
+[STATE 2025-12-23 11:56:21] Completed task 0 (1/2)
+[STATE 2025-12-23 11:56:21] Starting task 1 (2/2)
+[STATE 2025-12-23 11:56:21] Task 1 Epoch 1/1: entering train loop
+[STATE 2025-12-23 11:56:21] Task 1 Epoch 1/1 Iter 0: running validation
+---- Eval at Epoch 0: [0.29370402632597753, 0.006355542679270713] ----
+Task 1 Epoch 1/1 | Loss 2.0265 | Train Acc 0.1752 | Val Acc 0.0064 | Epoch Time 4.43s (Eval 3.67s, Train 0.76s)
+[STATE 2025-12-23 11:56:26] Task 1 Epoch 1/1 complete: 4.43s total (3.67s eval/0.76s train)
+[STATE 2025-12-23 11:56:26] Task 1: running final validation.
+[STATE 2025-12-23 11:56:37] Completed task 1 (2/2)
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.16717730886282006 
+ Individual Accuracy: [0.33428184281842815, 7.27749072119933e-05]
+####Final Test Accuracy####
+Final Results:- 
+ Total Accuracy: 0.16717730886282006 
+ Individual Accuracy: [0.33428184281842815, 7.27749072119933e-05]
+[STATE 2025-12-23 11:56:37] Saving results to logs//gem/all_gem-2025-12-23_11-56-06-6566/0/results
+logs//gem/all_gem-2025-12-23_11-56-06-6566/0/results: {'expt_name': 'all_gem', 'model': 'gem', 'arch': 'resnet1d', 'n_hiddens': 100, 'n_layers': 2, 'xav_init': False, 'glances': 1, 'n_epochs': 1, 'batch_size': 128, 'replay_batch_size': 20, 'memories': 5120, 'lr': 0.03, 'cuda': True, 'seed': 0, 'log_every': 3125, 'log_dir': 'logs//gem/all_gem-2025-12-23_11-56-06-6566/0', 'tf_dir': 'logs//gem/all_gem-2025-12-23_11-56-06-6566/0/tfdir', 'calc_test_accuracy': True, 'state_logging': True, 'data_path': 'data/rff/radar/', 'loader': 'task_incremental_loader', 'samples_per_task': 256, 'shuffle_tasks': False, 'classes_per_it': 4, 'iterations': 5000, 'dataset': 'iq', 'workers': 3, 'validation': 0.3, 'class_order': 'random', 'increment': 5, 'test_batch_size': 100000, 'nc_per_task': None, 'nc_per_task_list': '', 'val_rate': 10, 'opt_lr': 0.1, 'opt_wt': 0.1, 'alpha_init': 0.001, 'learn_lr': False, 'sync_update': False, 'grad_clip_norm': 5.0, 'cifar_batches': 3, 'use_old_task_memory': False, 'second_order': False, 'n_memories': 512, 'memory_strength': 0.5, 'steps_per_sample': 1, 'gamma': 1.0, 'beta': 1.0, 's': 1, 'batches_per_example': 1, 'bgd_optimizer': 'bgd', 'optimizer_params': '{}', 'train_mc_iters': 5, 'std_init': 0.05, 'mean_eta': 1, 'fisher_gamma': 0.95, 'rln': 7, 'update_steps': 10, 'meta_lr': 0.001, 'update_lr': 0.1, 'ctn_lr': 0.01, 'ctn_beta': 0.05, 'ctn_n_meta': 2, 'ctn_inner_steps': 2, 'ctn_temperature': 5, 'ctn_n_memories': 50, 'ctn_alpha_init': 0.1, 'ctn_memory_strength': 0.5, 'ctn_task_emb': 64, 'bcl_n_memories': 2000, 'bcl_memory_strength': 1.0, 'bcl_temperature': 2.0, 'bcl_inner_steps': 5, 'bcl_n_meta': 5, 'bcl_adapt_lr': 0.1, 'classes_per_task': [6, 6]} # val: 0.147 0.167 0.020 -0.087 # test: 0.147 0.167 0.020 0.000 # 30.63464331626892
+[STATE 2025-12-23 11:56:37] Results saved; total runtime 30.63s
+New Experiment Starting...
+Running model:  er_ring
+[STATE 2025-12-23 11:56:40] Experiment 'all_erring' starting with model 'er_ring' (seed 0)
+Set seed 0
+Loaded task0.npz: Unique train labels: [0 1 2 3 4 5]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 17294)
+Loaded task1.npz: Unique train labels: [ 0  6  7  8  9 10]
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11]. Size: 32208)
+Built classes_per_task: [6, 6]
+Classes per task: [6, 6]
+[STATE 2025-12-23 11:56:43] Loader 'task_incremental_loader' ready: 1024 inputs, 12 outputs, 2 tasks
+n_outputs: 12 	n_tasks: 2
+[STATE 2025-12-23 11:56:43] Logging to logs//er_ring/all_erring-2025-12-23_11-56-43-3836/0
+True
+Model device: cuda:0
+[STATE 2025-12-23 11:56:43] Model initialized on device cuda:0
+[STATE 2025-12-23 11:56:43] Invoking continual life experience flow
+[STATE 2025-12-23 11:56:43] Life experience start: 2 tasks queued
+[STATE 2025-12-23 11:56:43] Starting task 0 (1/2)
+[STATE 2025-12-23 11:56:43] Task 0 Epoch 1/1: entering train loop
+[STATE 2025-12-23 11:56:43] Task 0 Epoch 1/1 Iter 0: running validation
+---- Eval at Epoch 0: [0.18073627668559392, 0.20250395400770593] ----
+Task 0 Epoch 1/1 | Loss 0.9016 | Train Acc 0.3975 | Val Acc 0.1807 | Epoch Time 4.74s (Eval 3.83s, Train 0.91s)
+[STATE 2025-12-23 11:56:48] Task 0 Epoch 1/1 complete: 4.74s total (3.83s eval/0.91s train)
+[STATE 2025-12-23 11:56:48] Task 0: running final validation.
+[STATE 2025-12-23 11:56:59] Completed task 0 (1/2)
+[STATE 2025-12-23 11:56:59] Starting task 1 (2/2)
+[STATE 2025-12-23 11:56:59] Task 1 Epoch 1/1: entering train loop
+[STATE 2025-12-23 11:56:59] Task 1 Epoch 1/1 Iter 0: running validation
+---- Eval at Epoch 0: [0.3454945799457992, 0.20432970471096065] ----
+Task 1 Epoch 1/1 | Loss 445.7534 | Train Acc 0.1687 | Val Acc 0.2043 | Epoch Time 6.24s (Eval 3.66s, Train 2.58s)
+[STATE 2025-12-23 11:57:05] Task 1 Epoch 1/1 complete: 6.24s total (3.66s eval/2.58s train)
+[STATE 2025-12-23 11:57:05] Task 1: running final validation.
+[STATE 2025-12-23 11:57:16] Completed task 1 (2/2)
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.2730549412256997 
+ Individual Accuracy: [0.3389227642276422, 0.20718711822375716]
+####Final Test Accuracy####
+Final Results:- 
+ Total Accuracy: 0.2730549412256997 
+ Individual Accuracy: [0.3389227642276422, 0.20718711822375716]
+[STATE 2025-12-23 11:57:16] Saving results to logs//er_ring/all_erring-2025-12-23_11-56-43-3836/0/results
+logs//er_ring/all_erring-2025-12-23_11-56-43-3836/0/results: {'expt_name': 'all_erring', 'model': 'er_ring', 'arch': 'resnet1d', 'n_hiddens': 100, 'n_layers': 2, 'xav_init': False, 'glances': 1, 'n_epochs': 1, 'batch_size': 128, 'replay_batch_size': 64.0, 'memories': 5120, 'lr': 0.03, 'cuda': True, 'seed': 0, 'log_every': 3125, 'log_dir': 'logs//er_ring/all_erring-2025-12-23_11-56-43-3836/0', 'tf_dir': 'logs//er_ring/all_erring-2025-12-23_11-56-43-3836/0/tfdir', 'calc_test_accuracy': True, 'state_logging': True, 'data_path': 'data/rff/radar/', 'loader': 'task_incremental_loader', 'samples_per_task': 256, 'shuffle_tasks': False, 'classes_per_it': 4, 'iterations': 5000, 'dataset': 'iq', 'workers': 3, 'validation': 0.3, 'class_order': 'random', 'increment': 5, 'test_batch_size': 100000, 'nc_per_task': None, 'nc_per_task_list': '', 'val_rate': 10, 'opt_lr': 0.1, 'opt_wt': 0.1, 'alpha_init': 0.001, 'learn_lr': False, 'sync_update': False, 'grad_clip_norm': 2.0, 'cifar_batches': 3, 'use_old_task_memory': False, 'second_order': False, 'n_memories': 0, 'memory_strength': 0, 'steps_per_sample': 1, 'gamma': 1.0, 'beta': 1.0, 's': 1, 'batches_per_example': 1, 'bgd_optimizer': 'bgd', 'optimizer_params': '{}', 'train_mc_iters': 5, 'std_init': 0.05, 'mean_eta': 1, 'fisher_gamma': 0.95, 'rln': 7, 'update_steps': 10, 'meta_lr': 0.001, 'update_lr': 0.1, 'ctn_lr': 0.01, 'ctn_beta': 0.05, 'ctn_n_meta': 2, 'ctn_inner_steps': 2, 'ctn_temperature': 5, 'ctn_n_memories': 50, 'ctn_alpha_init': 0.1, 'ctn_memory_strength': 0.5, 'ctn_task_emb': 64, 'bcl_n_memories': 5192, 'bcl_memory_strength': 1.0, 'bcl_temperature': 2.0, 'bcl_inner_steps': 5, 'bcl_n_meta': 5, 'bcl_adapt_lr': 0.1, 'classes_per_task': [6, 6]} # val: 0.276 0.273 -0.003 0.001 # test: 0.276 0.273 -0.003 0.000 # 32.998735189437866
+[STATE 2025-12-23 11:57:16] Results saved; total runtime 33.00s
+New Experiment Starting...
+Running model:  bcl_dual
+[STATE 2025-12-23 11:57:19] Experiment 'bcl_basic_test' starting with model 'bcl_dual' (seed 0)
+Set seed 0
+Loaded task0.npz: Unique train labels: [2 3 5 7 8]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4]. Size: 8400)
+Loaded task1.npz: Unique train labels: [0 1 4 6 9]
+Loaded task1.npz: Remapped labels: [5 6 7 8 9]. Size: 8400)
+Built classes_per_task: [5, 5]
+Classes per task: [5, 5]
+[STATE 2025-12-23 11:57:21] Loader 'task_incremental_loader' ready: 4096 inputs, 10 outputs, 2 tasks
+n_outputs: 10 	n_tasks: 2
+[STATE 2025-12-23 11:57:21] Logging to logs//bcl_dual/bcl_basic_test-2025-12-23_11-57-21-2482/0
+True
+Model device: cuda:0
+[STATE 2025-12-23 11:57:21] Model initialized on device cuda:0
+[STATE 2025-12-23 11:57:21] Invoking continual life experience flow
+[STATE 2025-12-23 11:57:21] Life experience start: 2 tasks queued
+[STATE 2025-12-23 11:57:21] Starting task 0 (1/2)
+[STATE 2025-12-23 11:57:21] Task 0 Epoch 1/1: entering train loop
+[STATE 2025-12-23 11:57:21] Task 0 Epoch 1/1 Iter 0: running validation
+---- Eval at Epoch 0: [0.20223174171316582, 0.19551432864298363] ----
+Task 0 Epoch 1/1 | Loss 6.3001 | Train Acc 0.6802 | Val Acc 0.2022 | Epoch Time 9.24s (Eval 1.19s, Train 8.05s)
+[STATE 2025-12-23 11:57:30] Task 0 Epoch 1/1 complete: 9.24s total (1.19s eval/8.05s train)
+[STATE 2025-12-23 11:57:30] Task 0: running final validation.
+[STATE 2025-12-23 11:57:32] Completed task 0 (1/2)
+[STATE 2025-12-23 11:57:32] Starting task 1 (2/2)
+[STATE 2025-12-23 11:57:32] Task 1 Epoch 1/1: entering train loop
+[STATE 2025-12-23 11:57:32] Task 1 Epoch 1/1 Iter 0: running validation
+---- Eval at Epoch 0: [0.24564549297865426, 0.21452540732210504] ----
+Task 1 Epoch 1/1 | Loss 2.3444 | Train Acc 0.4740 | Val Acc 0.2145 | Epoch Time 9.94s (Eval 1.08s, Train 8.86s)
+[STATE 2025-12-23 11:57:42] Task 1 Epoch 1/1 complete: 9.94s total (1.08s eval/8.86s train)
+[STATE 2025-12-23 11:57:42] Task 1: running final validation.
+[STATE 2025-12-23 11:57:44] Completed task 1 (2/2)
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.23962047234321054 
+ Individual Accuracy: [0.21481558832178024, 0.2644253563646409]
+[STATE 2025-12-23 11:57:44] Saving results to logs//bcl_dual/bcl_basic_test-2025-12-23_11-57-21-2482/0/results
+logs//bcl_dual/bcl_basic_test-2025-12-23_11-57-21-2482/0/results: {'expt_name': 'bcl_basic_test', 'model': 'bcl_dual', 'arch': 'resnet1d', 'n_hiddens': 100, 'n_layers': 2, 'xav_init': True, 'glances': 1, 'n_epochs': 1, 'batch_size': 64, 'replay_batch_size': 10.0, 'memories': 400, 'lr': 0.03, 'cuda': True, 'seed': 0, 'log_every': 3125, 'log_dir': 'logs//bcl_dual/bcl_basic_test-2025-12-23_11-57-21-2482/0', 'tf_dir': 'logs//bcl_dual/bcl_basic_test-2025-12-23_11-57-21-2482/0/tfdir', 'calc_test_accuracy': False, 'state_logging': True, 'data_path': 'data/rff/rfmls', 'loader': 'task_incremental_loader', 'samples_per_task': 256, 'shuffle_tasks': False, 'classes_per_it': 6, 'iterations': 5000, 'dataset': 'iq', 'workers': 3, 'validation': 0.2, 'class_order': 'random', 'increment': 5, 'test_batch_size': 100000, 'nc_per_task': None, 'nc_per_task_list': '', 'val_rate': 10, 'opt_lr': 0.1, 'opt_wt': 0.1, 'alpha_init': 0.1, 'learn_lr': False, 'sync_update': False, 'grad_clip_norm': 5.0, 'cifar_batches': 3, 'use_old_task_memory': False, 'second_order': True, 'n_memories': 5192, 'memory_strength': 1.0, 'steps_per_sample': 1, 'gamma': 1.0, 'beta': 0.1, 's': 1, 'batches_per_example': 1.0, 'bgd_optimizer': 'bgd', 'optimizer_params': '{}', 'train_mc_iters': 2, 'std_init': 0.02, 'mean_eta': 50.0, 'fisher_gamma': 0.95, 'rln': 7, 'update_steps': 10, 'meta_lr': 0.001, 'update_lr': 0.1, 'ctn_lr': 0.01, 'ctn_beta': 0.05, 'ctn_n_meta': 2, 'ctn_inner_steps': 2, 'ctn_temperature': 5, 'ctn_n_memories': 50, 'ctn_alpha_init': 0.1, 'ctn_memory_strength': 0.5, 'ctn_task_emb': 64, 'bcl_n_memories': 2000, 'bcl_memory_strength': 1.0, 'bcl_temperature': 2.0, 'bcl_inner_steps': 5, 'bcl_n_meta': 5, 'bcl_adapt_lr': 0.1, 'classes_per_task': [5, 5]} # val: 0.255 0.240 -0.015 0.010 # 23.55050754547119
+[STATE 2025-12-23 11:57:45] Results saved; total runtime 23.55s
