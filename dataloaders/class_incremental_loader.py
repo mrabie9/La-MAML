@@ -62,6 +62,10 @@ class IncrementalLoader:
         else:
             self._setup_test_tasks(validation_split)
 
+        # Persist per-task class counts for downstream components.
+        self.classes_per_task = list(self.increments)
+        self._opt.classes_per_task = self.classes_per_task
+
     @property
     def n_tasks(self):
         return len(self.increments)

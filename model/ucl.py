@@ -25,6 +25,7 @@ import torch.nn.functional as F
 
 from model.resnet1d import ResNet1D
 from utils.training_metrics import macro_recall
+from utils import misc_utils
 
 
 def _calculate_fan_in_and_fan_out(tensor: torch.Tensor) -> Tuple[int, int]:
@@ -117,11 +118,18 @@ class BayesianClassifier(nn.Module):
     """ResNet1D feature extractor followed by per-task Bayesian heads."""
 
     def __init__(self, n_inputs: int, n_outputs: int, n_tasks: int,
-                 cfg: UCLConfig, args: object | None) -> None:
+                 cfg: UCLConfig, args: object | None, classes_per_task: Optional[List[int]] = None) -> None:
         super().__init__()
         self.cfg = cfg
         self.n_tasks = n_tasks
         self.n_outputs = n_outputs
+        if classes_per_task is None:
+            classes_per_task = misc_utils.build_task_class_list(
+                n_tasks,
+                n_outputs,
+                nc_per_task=None,
+                classes_per_task=None,
+            )
 
         # Feature extractor (deterministic)
         self.feature_net = ResNet1D(n_outputs, args)
@@ -130,10 +138,9 @@ class BayesianClassifier(nn.Module):
         # Replace the original classifier; heads operate on extracted features.
         self.feature_net.model.fc = nn.Identity()
 
-        classes_per_task = n_outputs // n_tasks
         self.heads = nn.ModuleList(
-            [BayesianLinear(self.feature_dim, classes_per_task, ratio=cfg.ratio)
-             for _ in range(n_tasks)]
+            [BayesianLinear(self.feature_dim, c, ratio=cfg.ratio)
+             for c in classes_per_task]
         )
 
         self.split = cfg.split
@@ -157,15 +164,20 @@ class Net(nn.Module):
 
         self.cfg = UCLConfig.from_args(args)
         assert n_tasks > 0, "Number of tasks must be positive for UCL"
-        assert n_outputs % n_tasks == 0, "UCL expects balanced class splits per task"
 
         self.args = args
         self.n_inputs = n_inputs
         self.n_outputs = n_outputs
         self.n_tasks = n_tasks
-        self.nc_per_task = n_outputs//n_tasks
+        self.classes_per_task = misc_utils.build_task_class_list(
+            n_tasks,
+            n_outputs,
+            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            classes_per_task=getattr(args, "classes_per_task", None),
+        )
+        self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
 
-        self.model = BayesianClassifier(n_inputs, n_outputs, n_tasks, self.cfg, args)
+        self.model = BayesianClassifier(n_inputs, n_outputs, n_tasks, self.cfg, args, self.classes_per_task)
         self.split = self.cfg.split
 
         # Optimiser: deterministic layers + Bayesian mu share lr, rho parameters get lr_rho
@@ -195,8 +207,7 @@ class Net(nn.Module):
     # ------------------------------------------------------------------
     def compute_offsets(self, task):
             if self.is_task_incremental:
-                offset1 = task * self.nc_per_task
-                offset2 = (task + 1) * self.nc_per_task
+                offset1, offset2 = misc_utils.compute_offsets(task, self.classes_per_task)
             else:
                 offset1 = 0
                 offset2 = self.n_outputs
@@ -225,8 +236,9 @@ class Net(nn.Module):
             offset1, offset2 = self.compute_offsets(t)
             y_local = y.clone()
             y_local = y_local - offset1
-            if (y_local.min() < 0 ) or (y_local.max() >= self.nc_per_task):
-                raise ValueError(f"Labels out of range for task {t}: expected in [0, {self.nc_per_task-1}] after offset, got [{int(y_local.min())}, {int(y_local.max())}]")
+            task_classes = self.classes_per_task[t]
+            if (y_local.min() < 0 ) or (y_local.max() >= task_classes):
+                raise ValueError(f"Labels out of range for task {t}: expected in [0, {task_classes-1}] after offset, got [{int(y_local.min())}, {int(y_local.max())}]")
             y = y_local
 
         x = x.to(device)

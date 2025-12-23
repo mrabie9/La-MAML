@@ -18,6 +18,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from utils.training_metrics import macro_recall
+from utils import misc_utils
 
 
 @dataclass
@@ -409,6 +410,13 @@ class Net(nn.Module):
         self.cfg = HatConfig.from_args(args)
         self.n_tasks = n_tasks
         self.n_outputs = n_outputs
+        self.classes_per_task = misc_utils.build_task_class_list(
+            n_tasks,
+            n_outputs,
+            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            classes_per_task=getattr(args, "classes_per_task", None),
+        )
+        self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         self.real_epoch = 0
 
         self.bridge = HatBackbone(n_inputs, n_tasks, n_outputs, self.cfg, args)
@@ -503,7 +511,13 @@ class Net(nn.Module):
         logits = self.bridge.forward(
             self._task_tensor(t, device), x, s or self.smax, return_masks=False
         )
-        return logits
+        offset1, offset2 = misc_utils.compute_offsets(t, self.classes_per_task)
+        masked = logits.clone()
+        if offset1 > 0:
+            masked[:, :offset1] = -1e9
+        if offset2 < self.n_outputs:
+            masked[:, offset2:] = -1e9
+        return masked
 
     def log_gate_stats(self, task_id, epoch, batch, masks):
         lines = [f"[task={task_id} epoch={epoch} iter={batch}]"]
@@ -539,9 +553,12 @@ class Net(nn.Module):
 
         # for mask in masks:
         #     print(mask.mean(), mask.min())
-        loss, _ = self._criterion(logits, y, masks)
-        preds = torch.argmax(logits, dim=1)
-        tr_acc = macro_recall(preds, y)
+        offset1, offset2 = misc_utils.compute_offsets(t, self.classes_per_task)
+        logits_task = logits[:, offset1:offset2]
+        targets = (y - offset1).long()
+        loss, _ = self._criterion(logits_task, targets, masks)
+        preds = torch.argmax(logits_task, dim=1)
+        tr_acc = macro_recall(preds, targets)
         loss.backward()
 
         if self.mask_back:

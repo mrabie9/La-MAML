@@ -20,6 +20,7 @@ import torch.nn.functional as F
 
 from model.resnet1d import ResNet1D
 from utils.training_metrics import macro_recall
+from utils import misc_utils
 
 
 @dataclass
@@ -75,8 +76,13 @@ class Net(nn.Module):
 
         self.n_outputs = n_outputs
         self.n_tasks = n_tasks
-        default_nc = n_outputs // n_tasks if n_tasks > 0 else n_outputs
-        self.nc_per_task = getattr(args, "nc_per_task", default_nc)
+        self.classes_per_task = misc_utils.build_task_class_list(
+            n_tasks,
+            n_outputs,
+            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            classes_per_task=getattr(args, "classes_per_task", None),
+        )
+        self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         self.is_task_incremental = True
 
         self.net = self._build_backbone(n_inputs, n_outputs, args)
@@ -170,9 +176,8 @@ class Net(nn.Module):
 
     # ------------------------------------------------------------------
     def _compute_offsets(self, task: int) -> Tuple[int, int]:
-        offset1 = task * self.nc_per_task
-        offset2 = min(self.n_outputs, offset1 + self.nc_per_task)
-        return offset1, offset2
+        offset1, offset2 = misc_utils.compute_offsets(task, self.classes_per_task)
+        return offset1, min(self.n_outputs, offset2)
 
     # ------------------------------------------------------------------
     def _distillation_loss(

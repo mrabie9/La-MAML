@@ -16,6 +16,7 @@ import torch.nn as nn
 
 from model.resnet1d import ResNet1D
 from utils.training_metrics import macro_recall
+from utils import misc_utils
 
 
 @dataclass
@@ -59,12 +60,17 @@ class Net(nn.Module):
         del n_inputs  # ResNet1D fixes its own receptive field
 
         assert n_tasks > 0, "SI requires at least one task"
-        assert n_outputs % n_tasks == 0, "Balanced classes per task assumed"
 
         self.cfg = SiConfig.from_args(args)
         self.n_outputs = n_outputs
         self.n_tasks = n_tasks
-        self.nc_per_task = n_outputs // n_tasks
+        self.classes_per_task = misc_utils.build_task_class_list(
+            n_tasks,
+            n_outputs,
+            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            classes_per_task=getattr(args, "classes_per_task", None),
+        )
+        self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         self.is_task_incremental = True
 
         self.net = ResNet1D(n_outputs, args)
@@ -204,9 +210,8 @@ class Net(nn.Module):
 
     # ------------------------------------------------------------------
     def _compute_offsets(self, task: int) -> Tuple[int, int]:
-        offset1 = task * self.nc_per_task
-        offset2 = min(self.n_outputs, (task + 1) * self.nc_per_task)
-        return offset1, offset2
+        offset1, offset2 = misc_utils.compute_offsets(task, self.classes_per_task)
+        return offset1, min(self.n_outputs, offset2)
 
     # ------------------------------------------------------------------
     def _device(self) -> torch.device:

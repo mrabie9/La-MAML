@@ -21,6 +21,7 @@ class IncrementalLoader:
         validation_split=args.validation
         increment=args.increment
 
+        self.classes_per_task = []
         self._setup_data(
             class_order_type=args.class_order,
             seed=seed,
@@ -196,6 +197,12 @@ class IncrementalLoader:
                 N = self.test_dataset[t][1].shape[0]
                 p_te = np.random.permutation(N)[:n]
                 self.sample_permutations.append([p_tr, p_te])
+
+            # Track per-task class counts for downstream models.
+            self.classes_per_task = [int(np.unique(task[2]).size) for task in self.train_dataset]
+            print("Built classes_per_task:", self.classes_per_task)
+            # Persist on args for convenience.
+            self._args.classes_per_task = self.classes_per_task
         else:
             self.train_dataset, self.test_dataset = torch.load(os.path.join(self._args.data_path, self._args.dataset + ".pt"))
 
@@ -211,3 +218,8 @@ class IncrementalLoader:
 
                 p = torch.randperm(N)[0:n]
                 self.sample_permutations.append(p)
+            self.classes_per_task = [
+                int(torch.unique(task[2]).numel()) if hasattr(torch, "unique") else len(np.unique(task[2]))
+                for task in self.train_dataset
+            ]
+            self._args.classes_per_task = self.classes_per_task

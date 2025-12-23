@@ -22,6 +22,7 @@ import quadprog
 
 from model.resnet1d import ResNet1D
 from utils.training_metrics import macro_recall
+from utils import misc_utils
 
 
 @dataclass
@@ -54,13 +55,7 @@ def compute_offsets(task, nc_per_task, is_cifar):
         Compute offsets for cifar to determine which
         outputs to select for a given task.
     """
-    if is_cifar:
-        offset1 = task * nc_per_task
-        offset2 = (task + 1) * nc_per_task
-    else:
-        offset1 = task * nc_per_task
-        offset2 = (task + 1) * nc_per_task
-    return offset1, offset2
+    return misc_utils.compute_offsets(task, nc_per_task)
 
 
 def store_grad(pp, grads, grad_dims, tid):
@@ -170,6 +165,11 @@ class Net(nn.Module):
             self.memory_data = self.memory_data.cuda()
             self.memory_labs = self.memory_labs.cuda()
 
+        # track how many exemplars each task has actually written
+        self.task_mem_filled = torch.zeros(n_tasks, dtype=torch.long)
+        if self.gpu:
+            self.task_mem_filled = self.task_mem_filled.cuda()
+
         # --- GEM gradient buffers ---
         self.grad_dims = [p.data.numel() for p in self.parameters()]
         self.grads = torch.Tensor(sum(self.grad_dims), n_tasks)
@@ -180,10 +180,13 @@ class Net(nn.Module):
         self.observed_tasks = []
         self.old_task = -1
         self.mem_cnt = 0
-        if self.is_cifar:
-            self.nc_per_task = int(n_outputs / n_tasks)
-        else:
-            self.nc_per_task = int(n_outputs / n_tasks)
+        self.classes_per_task = misc_utils.build_task_class_list(
+            n_tasks,
+            n_outputs,
+            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            classes_per_task=getattr(args, "classes_per_task", None),
+        )
+        self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
 
         if self.gpu:
             self.cuda()
@@ -217,8 +220,7 @@ class Net(nn.Module):
 
         if self.is_cifar:
             # class-masking within current task
-            offset1 = int(t * self.nc_per_task)
-            offset2 = int((t + 1) * self.nc_per_task)
+            offset1, offset2 = compute_offsets(t, self.classes_per_task, self.is_cifar)
             if offset1 > 0:
                 output[:, :offset1].data.fill_(-10e10)
             if offset2 < self.n_outputs:
@@ -240,6 +242,9 @@ class Net(nn.Module):
         # track tasks
         if t != self.old_task:
             self.observed_tasks.append(t)
+            if self.old_task >= 0:
+                self.task_mem_filled[self.old_task] = min(self.mem_cnt, self.n_memories)
+            self.mem_cnt = 0  # start writing new task from the beginning
             self.old_task = t
 
         tr_acc = []
@@ -273,16 +278,24 @@ class Net(nn.Module):
                 for tt in range(len(self.observed_tasks) - 1):
                     self.zero_grad()
                     past_task = self.observed_tasks[tt]
-                    offset1, offset2 = compute_offsets(past_task, self.nc_per_task, self.is_cifar)
+                    offset1, offset2 = compute_offsets(past_task, self.classes_per_task, self.is_cifar)
+                    filled = int(self.task_mem_filled[past_task].item())
+                    if filled == 0:
+                        continue  # nothing stored for this task yet
 
                     # replay batch (shape already in memory)
-                    mem_x = Variable(self.memory_data[past_task])          # (mem, F) or (mem, 2, L)
-                    mem_y = Variable(self.memory_labs[past_task])          # (mem,)
+                    mem_x = Variable(self.memory_data[past_task, :filled])          # (mem, F) or (mem, 2, L)
+                    mem_y = Variable(self.memory_labs[past_task, :filled])          # (mem,)
 
-                    ptloss = self.ce(
-                        self.forward(mem_x, past_task)[:, offset1:offset2],
-                        mem_y - offset1
-                    )
+                    logits_replay = self.forward(mem_x, past_task)[:, offset1:offset2]
+                    targets_replay = mem_y - offset1
+                    if targets_replay.min() < 0 or targets_replay.max() >= logits_replay.size(1):
+                        raise ValueError(
+                            f"GEM replay target out of range for task {past_task}: "
+                            f"min={int(targets_replay.min())}, max={int(targets_replay.max())}, "
+                            f"classes={logits_replay.size(1)}, offset=({offset1},{offset2})"
+                        )
+                    ptloss = self.ce(logits_replay, targets_replay)
                     ptloss.backward()
                     if self.cfg.grad_clip_norm:
                         torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.cfg.grad_clip_norm)
@@ -290,9 +303,15 @@ class Net(nn.Module):
 
             # current batch
             self.zero_grad()
-            offset1, offset2 = compute_offsets(t, self.nc_per_task, self.is_cifar)
+            offset1, offset2 = compute_offsets(t, self.classes_per_task, self.is_cifar)
             logits = self.forward(x, t)[:, offset1:offset2]
             targets = y - offset1
+            if targets.min() < 0 or targets.max() >= logits.size(1):
+                raise ValueError(
+                    f"GEM target out of range for task {t}: "
+                    f"min={int(targets.min())}, max={int(targets.max())}, classes={logits.size(1)}, "
+                    f"offset=({offset1},{offset2})"
+                )
             preds = torch.argmax(logits, dim=1)
             tr_acc.append(macro_recall(preds, targets))
             loss = self.ce(logits, targets)

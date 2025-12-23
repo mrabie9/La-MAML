@@ -88,8 +88,10 @@ def get_parser():
                         help="number of classes to increment by in class incremental loader")
     parser.add_argument('--test_batch_size', type=int, default=100000 ,
                         help='batch size to use during testing.')
-    parser.add_argument('--nc_per_task', type=int, default=5,
-                        help='number of classes per task')
+    parser.add_argument('--nc_per_task', type=int, default=None,
+                        help='number of classes per task (uniform). Ignored if nc_per_task_list is provided.')
+    parser.add_argument('--nc_per_task_list', type=str, default='',
+                        help='comma-separated class counts per task (overrides nc_per_task)')
     parser.add_argument('--val_rate', type=int, default=10,
                         help='frequency (in epochs) of validation')
 

@@ -14,6 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from utils.training_metrics import macro_recall
+from utils import misc_utils
 
 
 @dataclass
@@ -63,8 +64,14 @@ class Net(torch.nn.Module):
         # setup losses
         self.bce = torch.nn.CrossEntropyLoss()
 
+        self.classes_per_task = misc_utils.build_task_class_list(
+            n_tasks,
+            n_outputs,
+            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            classes_per_task=getattr(args, "classes_per_task", None),
+        )
         if self.is_task_incremental:
-            self.nc_per_task = int(n_outputs / n_tasks)
+            self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         else:
             self.nc_per_task = n_outputs
         # setup memories
@@ -74,9 +81,9 @@ class Net(torch.nn.Module):
         self.n_memories = self.cfg.bcl_n_memories
         self.mem_cnt = 0       
         
-        self.memx = torch.FloatTensor(n_tasks, self.n_memories, 2, n_inputs//2)
-        self.memy = torch.LongTensor(n_tasks, self.n_memories)
-        self.mem_feat = torch.FloatTensor(n_tasks, self.n_memories, self.nc_per_task)
+        self.memx = torch.FloatTensor(n_tasks, self.n_memories, 2, n_inputs//2).fill_(0)
+        self.memy = torch.LongTensor(n_tasks, self.n_memories).fill_(-1)
+        self.mem_feat = torch.FloatTensor(n_tasks, self.n_memories, self.nc_per_task).fill_(0)
         self.mem = {}
         if self.cfg.cuda:
             self.memx = self.memx.cuda()
@@ -85,6 +92,9 @@ class Net(torch.nn.Module):
         self.mem_cnt = 0
         self.n_memories = self.cfg.n_memories or self.n_memories
         self.bsz = self.cfg.batch_size
+        self.task_mem_filled = torch.zeros(n_tasks, dtype=torch.long)
+        if self.cfg.cuda:
+            self.task_mem_filled = self.task_mem_filled.cuda()
         
         self.n_outputs = n_outputs
 
@@ -100,12 +110,9 @@ class Net(torch.nn.Module):
 
     def compute_offsets(self, task):
         if self.is_task_incremental:
-            offset1 = task * self.nc_per_task
-            offset2 = (task + 1) * self.nc_per_task
+            return misc_utils.compute_offsets(task, self.classes_per_task)
         else:
-            offset1 = 0
-            offset2 = self.n_outputs
-        return int(offset1), int(offset2)
+            return 0, self.n_outputs
 
     def forward(self, x, t, return_feat= False):
         output = self.net(x)
@@ -121,22 +128,36 @@ class Net(torch.nn.Module):
         return output
     
     def memory_sampling(self,t):
-        mem_x = self.memx[:t,:]
-        mem_y = self.memy[:t,:]
-        mem_feat = self.mem_feat[:t,:]
-        sz = int(min(self.n_memories, self.sz))
-        idx = np.random.choice(int(t * self.n_memories), sz, False)
-        t_idx = torch.from_numpy(idx // self.n_memories)
-        s_idx = torch.from_numpy( idx % self.n_memories)
+        filled_counts = [int(self.task_mem_filled[i].item()) for i in range(t)]
+        total = sum(filled_counts)
+        if total == 0:
+            return None
+        sz = int(min(total, self.sz))
+        flat_indices = np.random.choice(total, sz, replace=False)
 
-        offsets = torch.tensor([self.compute_offsets(i) for i in t_idx]).cuda()
-        xx = mem_x[t_idx, s_idx]
-        yy = mem_y[t_idx, s_idx] - offsets[:,0]
-        feat = mem_feat[t_idx, s_idx]
-        mask = torch.zeros(xx.size(0), self.nc_per_task)
+        # map flat indices to task/sample indices
+        t_idx_list = []
+        s_idx_list = []
+        cum = np.cumsum([0] + filled_counts)
+        for fi in flat_indices:
+            task_idx = max(i for i in range(len(cum)-1) if cum[i] <= fi)
+            sample_idx = fi - cum[task_idx]
+            t_idx_list.append(task_idx)
+            s_idx_list.append(sample_idx)
+
+        t_idx = torch.tensor(t_idx_list, dtype=torch.long, device=self.memx.device)
+        s_idx = torch.tensor(s_idx_list, dtype=torch.long, device=self.memx.device)
+
+        offsets = torch.tensor([self.compute_offsets(int(i)) for i in t_idx.tolist()], device=self.memx.device)
+        xx = self.memx[t_idx, s_idx]
+        yy = self.memy[t_idx, s_idx] - offsets[:,0]
+        feat = self.mem_feat[t_idx, s_idx]
+        mask = torch.zeros(xx.size(0), self.nc_per_task, device=self.memx.device)
         for j in range(mask.size(0)):
-            mask[j] = torch.arange(offsets[j][0], offsets[j][1])
-        return xx,yy, feat , mask.long().cuda()
+            cls_size = offsets[j][1] - offsets[j][0]
+            mask[j, :cls_size] = torch.arange(offsets[j][0], offsets[j][1], device=self.memx.device)
+        sizes = (offsets[:, 1] - offsets[:, 0]).long()
+        return xx,yy, feat , mask.long(), sizes
     def observe(self, x, y, t):
         #t = info[0]
         #idx = info[1]
@@ -147,6 +168,7 @@ class Net(torch.nn.Module):
         self.memx[t, self.mem_cnt: endcnt].copy_(x.data[: effbsz])
         self.memy[t, self.mem_cnt: endcnt].copy_(y.data[: effbsz])
         self.mem_cnt += effbsz
+        self.task_mem_filled[t] = min(self.n_memories, self.mem_cnt)
         if self.mem_cnt == self.n_memories:
             self.mem_cnt = 0
 
@@ -169,14 +191,30 @@ class Net(torch.nn.Module):
             pred = self.forward(x,t, True)
             logits = pred[:, offset1:offset2]
             targets = y - offset1
+            if targets.min() < 0 or targets.max() >= logits.size(1):
+                raise ValueError(
+                    f"Target out of range for task {t}: "
+                    f"min={int(targets.min())}, max={int(targets.max())}, "
+                    f"class_count={logits.size(1)}, offset=({offset1},{offset2})"
+                )
             preds = torch.argmax(logits, dim=1)
             tr_acc.append(macro_recall(preds, targets))
             loss1 = self.bce(logits, targets)
             if t > 0:
-                xx, yy, target, mask = self.memory_sampling(t)
+                sampled = self.memory_sampling(t)
+                if sampled is not None:
+                    xx, yy, target, mask, class_sizes = sampled
                 pred_ = self.net(xx)
                 pred = torch.gather(pred_, 1, mask)
-                loss2 += self.bce(pred, yy)
+                for row, size in enumerate(class_sizes):
+                    if size < pred.size(1):
+                        pred[row, size:] = -1e9
+                    if yy.min() < 0 or yy.max() >= pred.size(1):
+                        raise ValueError(
+                            f"Replay target out of range: min={int(yy.min())}, max={int(yy.max())}, "
+                            f"class_count={pred.size(1)}, sizes={class_sizes.tolist()}"
+                        )
+                    loss2 += self.bce(pred, yy)
                 
             loss = loss1 + loss2
             loss.backward()

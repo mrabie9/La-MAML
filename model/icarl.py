@@ -19,6 +19,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../dataloaders')))
 from iq_data_loader import ensure_iq_two_channel
 from utils.training_metrics import macro_recall
+from utils import misc_utils
 
 if not sys.warnoptions:
     import warnings
@@ -103,7 +104,13 @@ class Net(torch.nn.Module):
         self.mem_class_y = {}
 
         self.gpu = self.cfg.cuda
-        self.nc_per_task = int(n_outputs / n_tasks)
+        self.classes_per_task = misc_utils.build_task_class_list(
+            n_tasks,
+            n_outputs,
+            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            classes_per_task=getattr(args, "classes_per_task", None),
+        )
+        self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         self.n_outputs = n_outputs
 
     def netforward(self, x):
@@ -120,35 +127,34 @@ class Net(torch.nn.Module):
         return self.net.forward(x)
 
     def compute_offsets(self, task):
-        offset1 = task * self.nc_per_task
-        offset2 = (task + 1) * self.nc_per_task
+        offset1, offset2 = misc_utils.compute_offsets(task, self.classes_per_task)
         return int(offset1), int(offset2)
 
     def forward(self, x, t):
         # nearest neighbor
         nd = self.n_feat
         ns = x.size(0)
-        if t * self.nc_per_task not in self.mem_class_x.keys():
+        task_classes = self.classes_per_task[t]
+        offset1, offset2 = self.compute_offsets(t)
+        if offset1 not in self.mem_class_x.keys():
             # no exemplar in memory yet, output uniform distr. over classes in
             # task t above, we check presence of first class for this task, we
             # should check them all
             out = torch.Tensor(ns, self.n_classes).fill_(-10e10)
-            out[:, int(t * self.nc_per_task): int((t + 1) * self.nc_per_task)].fill_(
-                1.0 / self.nc_per_task)
+            out[:, offset1: offset2].fill_(1.0 / max(task_classes, 1))
             if self.gpu:
                 out = out.cuda()
             return out
-        means = torch.ones(self.nc_per_task, nd) * float('inf')
+        means = torch.ones(task_classes, nd) * float('inf')
         if self.gpu:
             means = means.cuda()
-        offset1, offset2 = self.compute_offsets(t)
         for cc in range(offset1, offset2):
             means[cc -
                   offset1] =self.netforward(self.mem_class_x[cc]).data.mean(0)
         classpred = torch.LongTensor(ns)
         preds = self.netforward(x).data.clone()
         for ss in range(ns):
-            dist = (means - preds[ss].expand(self.nc_per_task, nd)).norm(2, 1)
+            dist = (means - preds[ss].expand(task_classes, nd)).norm(2, 1)
             _, ii = dist.min(0)
             ii = ii.squeeze()
             classpred[ss] = ii.item() + offset1
@@ -210,13 +216,14 @@ class Net(torch.nn.Module):
                 for tt in range(t):
                     # first generate a minibatch with one example per class from
                     # previous tasks
-                    inp_dist = torch.zeros(self.nc_per_task, x.size(1))
-                    target_dist = torch.zeros(self.nc_per_task, self.n_feat)
+                    task_classes = self.classes_per_task[tt]
+                    inp_dist = torch.zeros(task_classes, x.size(1))
+                    target_dist = torch.zeros(task_classes, self.n_feat)
                     offset1, offset2 = self.compute_offsets(tt)
                     if self.gpu:
                         inp_dist = inp_dist.cuda()
                         target_dist = target_dist.cuda()
-                    for cc in range(self.nc_per_task):
+                    for cc in range(task_classes):
                         indx = random.randint(0, len(self.mem_class_x[cc + offset1]) - 1)
                         inp_dist[cc] = self.mem_class_x[cc + offset1][indx].clone()
                         target_dist[cc] = self.mem_class_y[cc +
@@ -225,7 +232,7 @@ class Net(torch.nn.Module):
                     loss += self.reg * self.kl(
                         self.lsm(self.netforward(inp_dist)
                                  [:, offset1: offset2]),
-                        self.sm(target_dist[:, offset1: offset2])) * self.nc_per_task
+                        self.sm(target_dist[:, offset1: offset2])) * task_classes
             # bprop and update
             loss.backward()
             if self.cfg.grad_clip_norm:
@@ -257,7 +264,8 @@ class Net(torch.nn.Module):
             
             print("num_classes", num_classes, "nc_per_task", self.nc_per_task,
                   offset1, offset2)
-            assert(num_classes == self.nc_per_task)
+            current_task_classes = self.classes_per_task[t]
+            assert num_classes == current_task_classes
             # Reduce exemplar set by updating value of num. exemplars per class
             self.num_exemplars = int(self.n_memories /
                                      (num_classes + len(self.mem_class_x.keys())))
@@ -268,7 +276,7 @@ class Net(torch.nn.Module):
                 # Construct exemplar set for last task
                 mean_feature = self.netforward(cdata)[
                     :, offset1: offset2].data.clone().mean(0) # mean of task-sliced logits for current label
-                nd = self.nc_per_task # num classes per task
+                nd = num_classes # num classes in current task
                 exemplars = torch.zeros(self.num_exemplars, x.size(1))
                 if self.gpu:
                     exemplars = exemplars.cuda()

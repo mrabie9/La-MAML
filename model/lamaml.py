@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 from model.lamaml_base import *
 from utils.training_metrics import macro_recall
+from utils import misc_utils
 
 
 class Net(BaseNet):
@@ -21,7 +22,7 @@ class Net(BaseNet):
                                  n_tasks,           
                                  args)
 
-        self.nc_per_task = n_outputs
+        self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
 
     def forward(self, x, t):
         output = self.net.forward(x)

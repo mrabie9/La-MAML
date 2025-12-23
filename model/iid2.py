@@ -7,6 +7,7 @@ import random
 import sys
 from utils.training_metrics import macro_recall
 from model.resnet1d import ResNet1D
+from utils import misc_utils
 
 if not sys.warnoptions:
     import warnings
@@ -62,12 +63,17 @@ class Net(torch.nn.Module):
         self.loss = torch.nn.CrossEntropyLoss()
 
         self.gpu = self.cfg.cuda
-        self.nc_per_task = int(n_outputs / n_tasks)
+        self.classes_per_task = misc_utils.build_task_class_list(
+            n_tasks,
+            n_outputs,
+            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            classes_per_task=getattr(args, "classes_per_task", None),
+        )
+        self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         self.n_outputs = n_outputs
 
     def compute_offsets(self, task):
-        offset1 = task * self.nc_per_task
-        offset2 = (task + 1) * self.nc_per_task
+        offset1, offset2 = misc_utils.compute_offsets(task, self.classes_per_task)
         return int(offset1), int(offset2)
 
     def take_multitask_loss(self, bt, logits, y):
