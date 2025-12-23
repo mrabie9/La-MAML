@@ -1,0 +1,10 @@
+# La-MAML specific defaults
+model: lamaml
+opt_lr: 0.1
+opt_wt: 0.1
+alpha_init: 0.1
+learn_lr: false
+sync_update: false
+cifar_batches: 3
+use_old_task_memory: false
+second_order: true

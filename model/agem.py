@@ -25,7 +25,7 @@ class AgemConfig:
     memory_strength: float = 0.0
     glances: int = 1
     memories: int = 5120
-    n_memories: int = 0
+    n_memories: int = 5120
     alpha_init: float = 1e-3
 
     ## Generic hyperparameters
@@ -152,7 +152,6 @@ class Net(nn.Module):
         if self.cfg.arch != 'resnet1d':
             raise ValueError(f"Unsupported arch {self.cfg.arch}; only resnet1d is available now.")
         self.net = ResNet1D(n_outputs, args)
-        self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
 
         self.ce = nn.CrossEntropyLoss()
         self.bce = torch.nn.CrossEntropyLoss()
@@ -161,7 +160,7 @@ class Net(nn.Module):
 
         self.opt = optim.SGD(self.parameters(), self.cfg.lr)
 
-        self.n_memories = self.cfg.n_memories
+        self.n_memories = int(self.cfg.memories/n_tasks)
         self.gpu = self.cfg.cuda
 
         self.age = 0

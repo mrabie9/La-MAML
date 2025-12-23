@@ -1,0 +1,14 @@
+# MER-Alg1 specific defaults
+model: meralg1
+n_memories: 200
+memory_strength: 1.0
+steps_per_sample: 1
+memories: 400
+lr: 0.03
+batch_size: 128
+
+# MER hyperparameters
+gamma: 1.0
+beta: 0.1
+s: 1.0
+batches_per_example: 1.0

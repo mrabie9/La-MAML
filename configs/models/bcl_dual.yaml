@@ -1,0 +1,9 @@
+# BCL-Dual defaults
+model: bcl_dual
+beta: 1.0
+bcl_temperature: 5
+bcl_memory_strength: 100
+bcl_n_meta: 2
+bcl_inner_steps: 2
+bcl_adapt_lr: 0.01
+bcl_n_memories: 400

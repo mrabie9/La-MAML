@@ -1,0 +1,32 @@
+# Shared experiment defaults
+expt_name: default_experiment
+arch: resnet1d
+loader: task_incremental_loader
+data_path: data/rff/radar
+dataset: iq
+shuffle_tasks: false
+classes_per_it: 6
+iterations: 5000
+workers: 0
+validation: 0.5
+class_order: random
+increment: 5
+test_batch_size: 100000
+cuda: true
+seed: 0
+log_every: 10
+log_dir: logs/
+tf_dir: ""
+calc_test_accuracy: false
+state_logging: false
+samples_per_task: -1
+nc_per_task: 6
+
+# Optimizer defaults
+glances: 1
+n_epochs: 1
+batch_size: 128
+replay_batch_size: 10
+memories: 400
+grad_clip_norm: 5.0
+lr: 0.03
