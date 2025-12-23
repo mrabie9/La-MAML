@@ -1,6 +1,9 @@
 # coding=utf-8
 import os
 import argparse
+from pathlib import Path
+from typing import Iterable, List, Sequence
+
 import yaml
 
 def get_parser():
@@ -200,26 +203,48 @@ def get_parser():
 
     return parser
 
-def parse_args_from_yaml(yaml_path):
-    """
-    Load arguments from a YAML configuration file.
+def _expanded_config_paths(config_sources: Sequence[str] | None) -> List[Path]:
+    """Resolve config file and directory inputs into a concrete ordered list."""
 
-    Parameters
-    ----------
-    yaml_path : str
-        Path to the YAML file containing argument values.
+    if not config_sources:
+        return []
 
-    Returns
-    -------
-    argparse.Namespace
-        Namespace populated with the defaults from `get_parser` and
-        any values specified in the YAML file.
-    """
+    paths: List[Path] = []
+    for source in config_sources:
+        if not source:
+            continue
+        path = Path(source).expanduser()
+        if path.is_dir():
+            candidates = list(path.glob("*.yaml")) + list(path.glob("*.yml"))
+            for candidate in sorted(candidate for candidate in candidates if candidate.is_file()):
+                paths.append(candidate)
+            continue
+        if not path.exists():
+            raise FileNotFoundError(f"Config source '{source}' does not exist")
+        paths.append(path)
+    return paths
+
+
+def _apply_config_overrides(args: argparse.Namespace, config_paths: Iterable[Path]) -> argparse.Namespace:
+    """Apply YAML overrides from the provided config files to the namespace."""
+
+    for path in config_paths:
+        with path.open("r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+        for key, value in data.items():
+            if hasattr(args, key):
+                setattr(args, key, value)
+    return args
+
+
+def parse_args_from_yaml(config_sources: Sequence[str] | str | None):
+    """Load arguments from one or more YAML configuration files."""
+
     parser = get_parser()
     args = parser.parse_args([])
-    with open(yaml_path, "r") as f:
-        data = yaml.safe_load(f) or {}
-    for key, value in data.items():
-        if hasattr(args, key):
-            setattr(args, key, value)
-    return args
+    if isinstance(config_sources, str) or isinstance(config_sources, os.PathLike):
+        config_list: Sequence[str] = [str(config_sources)]
+    else:
+        config_list = config_sources or []
+    config_paths = _expanded_config_paths(config_list)
+    return _apply_config_overrides(args, config_paths)

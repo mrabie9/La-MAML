@@ -12,10 +12,11 @@ GridSpec = Dict[str, TypeSpec]
 
 
 COMMON_TYPE_HINTS: Dict[str, type] = {
+    "batch_size": int,
     "lr": float,
     "memory_strength": float,
-    "n_memories": int,
     "memories": int,
+    "n_memories": int,
     "replay_batch_size": float,
     "beta": float,
     "gamma": float,
@@ -30,6 +31,7 @@ COMMON_TYPE_HINTS: Dict[str, type] = {
     "std_init": float,
     "train_mc_iters": int,
     "bgd_optimizer": str,
+    "bcl_adapt_lr": float,
     "bcl_temperature": float,
     "bcl_memory_strength": float,
     "bcl_n_memories": int,
@@ -140,27 +142,31 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
+                "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
+                    "values": [32, 64, 128, 256]},
                 "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-3, 
                        "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
-                "memory_strength": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.1, "fallback": 1.0},
-                "n_memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 64, "fallback": 256},
+                "memory_strength": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.1, "fallback": 0.5,
+                                    "values":[0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]},
+                "memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 64, "fallback": 256,
+                             "values": [1024, 2048, 5120]},
             }
         ),
     ),
-    "anml": TuningPreset(
-        model_name="anml",
-        description="Run grid or random search over ANML hyperparameters.",
-        default_output_root="logs/tuning/anml",
-        type_hints=COMMON_TYPE_HINTS,
-        grid_factory=make_grid_factory(
-            {
-                "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-3,
-                       "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
-                "meta_lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 1e-3},
-                "update_lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.01, "fallback": 0.1},
-            }
-        ),
-    ),
+    # "anml": TuningPreset(
+    #     model_name="anml",
+    #     description="Run grid or random search over ANML hyperparameters.",
+    #     default_output_root="logs/tuning/anml",
+    #     type_hints=COMMON_TYPE_HINTS,
+    #     grid_factory=make_grid_factory(
+    #         {
+    #             "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-3,
+    #                    "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
+    #             "meta_lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 1e-3},
+    #             "update_lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.01, "fallback": 0.1},
+    #         }
+    #     ),
+    # ),
     "bcl_dual": TuningPreset(
         model_name="bcl_dual",
         description="Run grid or random search over BCL-Dual hyperparameters.",
@@ -168,12 +174,24 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
+                "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
+                    "values": [32, 64, 128, 256]},
                 "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-3,
                        "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
-                "beta": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.1, "fallback": 1.0},
-                "bcl_temperature": {"kind": "float", "factors": (0.5, 1.0, 1.5), "min": 0.5, "fallback": 2.0},
-                "bcl_memory_strength": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.1, "fallback": 1.0},
-                "bcl_n_memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 128, "fallback": 2000},
+                "bcl_adapt_lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-3,
+                       "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
+                "bcl_n_memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 128, "fallback": 2000,
+                             "values": [1024, 2048, 5120]},
+                "beta": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.1, "fallback": 1.0,
+                         "values": [0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
+                "bcl_temperature": {"kind": "float", "factors": (0.5, 1.0, 1.5), "min": 0.5, "fallback": 2.0,
+                                    "values": [2, 5, 10, 20]},
+                "bcl_memory_strength": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.1, "fallback": 1.0,
+                                        "values":[1,10,100,1000,10000]},
+                "bcl_inner_steps": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
+                                        "values": [1, 2,3]},
+                "bcl_n_meta": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
+                                        "values": [1, 2,3]},
             }
         ),
     ),
@@ -184,15 +202,22 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
+                "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
+                    "values": [32, 64, 128, 256]},
                 "ctn_lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.01,
-                       "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
-                "ctn_beta": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.05},
-                "ctn_n_meta": {"kind": "int", "factors": (1.0, 2.0, 3.0), "min": 1, "fallback": 2},
-                "ctn_inner_steps": {"kind": "int", "factors": (1.0, 2.0, 3.0), "min": 1, "fallback": 2},
-                "ctn_temperature": {"kind": "float", "factors": (0.5, 1.0, 1.5), "min": 1.0, "fallback": 5.0},
-                "ctn_n_memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 50, "fallback": 50},
-                "ctn_memory_strength": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1.0, "fallback": 100.0},
-                "ctn_alpha_init": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.01, "fallback": 0.1},
+                       "values":[0.01, 0.03, 0.05, 0.1, 0.3]},
+                "ctn_beta": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.05,
+                             "values": [0.01, 0.03, 0.05, 0.1, 0.3]},
+                "ctn_n_meta": {"kind": "int", "factors": (1.0, 2.0, 3.0), "min": 1, "fallback": 2,
+                               "values": [1, 2, 3, 4]},
+                "ctn_inner_steps": {"kind": "int", "factors": (1.0, 2.0, 3.0), "min": 1, "fallback": 2,
+                               "values": [1, 2, 3, 4]},
+                "ctn_temperature": {"kind": "float", "factors": (0.5, 1.0, 1.5), "min": 1.0, "fallback": 5.0,
+                                    "values": [1,2,5,10]},
+                "ctn_memory_strength": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1.0, "fallback": 100.0,
+                                        "values": [1,10,25,50,100]},
+                "replay_batch_size": {"kind": "int", "factors": (1.0, 2.0, 3.0), "min": 1, "fallback": 2,
+                                      "values" :[32,64,128]}
             }
         ),
     ),
@@ -203,12 +228,16 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
+                "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
+                    "values": [32, 64, 128, 256]},
                 "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-2,
                        "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
-                "memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 100, "fallback": 400},
-                "replay_batch_size": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 4.0, "fallback": 10.0},
-                "opt_lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1},
-                "alpha_init": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.01, "fallback": 0.1},
+                "memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 100, "fallback": 400,
+                             "values": [1024, 2048, 5120]},
+                "replay_batch_size": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 4.0, "fallback": 10.0,
+                    "values": [32, 64, 128]},
+                "opt_lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1,
+                           "values": [0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
             }
         ),
     ),
@@ -219,10 +248,14 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
+                "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
+                    "values": [32, 64, 128, 256]},
                 "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-2,
                        "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
-                "memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 100, "fallback": 400},
-                "replay_batch_size": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 4.0, "fallback": 10.0},
+                "memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 100, "fallback": 400,
+                             "values": [1024, 2048, 5120]},
+                "replay_batch_size": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 4.0, "fallback": 10.0,
+                    "values": [32, 64, 128]},
             }
         ),
     ),
@@ -233,12 +266,14 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
+                "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
+                    "values": [32, 64, 128, 256]},
                 "lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-5, "fallback": 3e-2,
                        "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
                 "lamb": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-2, "fallback": 1.0,
                          "values":[1,10,100,1000,10000]},
-                "clipgrad": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1.0, "fallback": 100.0},
-                "momentum": {"kind": "float", "factors": (0.0, 1.0, 2.0), "extra": [0.9], "fallback": 0.0},
+                "momentum": {"kind": "float", "factors": (0.0, 1.0, 2.0), "extra": [0.9], "fallback": 0.0,
+                             "values": [0.7, 0.9]},
             }
         ),
     ),
@@ -249,12 +284,14 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
+                "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
+                    "values": [32, 64, 128, 256]},
                 "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-2,
                        "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
                 "memory_strength": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.1, "fallback": 0.5,
-                                    "values":[0.0,0.1,0.2,0.5,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]},
+                                    "values":[0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]},
                 "n_memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 32, "fallback": 256,
-                                    "values":[200,1280,2560,5120]},
+                             "values": [1024, 2048, 5120]},
             }
         ),
     ),
@@ -265,11 +302,14 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
+                "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
+                    "values": [32, 64, 128, 256]},
                 "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-2,
-                       "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
+                       "values":[0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0]},
                 "memory_strength": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.1, "fallback": 0.5,
-                                    "values":[0.1,0.3,1,3,10,30]},
-                "n_memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 64, "fallback": 256},
+                                    "values":[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]},
+                "n_memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 64, "fallback": 256,
+                             "values": [1024, 2048, 5120]},
             }
         ),
     ),
@@ -290,11 +330,12 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
-                "lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-5, "fallback": 1e-3,
-                       "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
-                "opt_lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1},
-                "opt_wt": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1},
-                "alpha_init": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.01, "fallback": 0.1},
+                "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
+                    "values": [32, 64, 128, 256]},
+                "opt_lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1,
+                           "values": [0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
+                "opt_wt": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1,
+                           "values": [0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
             }
         ),
     ),
@@ -305,44 +346,50 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
-                "lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-5, "fallback": 1e-3,
-                       "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
-                "opt_lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1},
-                "opt_wt": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1},
-                "alpha_init": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.01, "fallback": 0.1},
+                "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
+                    "values": [32, 64, 128, 256]},
+                "opt_lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1,
+                           "values": [0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
+                "opt_wt": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1,
+                           "values": [0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
             }
         ),
     ),
-    "meralg1": TuningPreset(
-        model_name="meralg1",
-        description="Run grid or random search over MER-Alg1 hyperparameters.",
-        default_output_root="logs/tuning/meralg1",
-        type_hints=COMMON_TYPE_HINTS,
-        grid_factory=make_grid_factory(
-            {
-                "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-3,
-                       "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
-                "beta": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-3, "fallback": 0.1},
-                "gamma": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-3, "fallback": 0.1},
-                "memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 100, "fallback": 400},
-                "batches_per_example": {"kind": "float", "factors": (1.0, 2.0, 3.0), "min": 1.0, "fallback": 1.0},
-            }
-        ),
-    ),
-    "meta-bgd": TuningPreset(
-        model_name="meta-bgd",
-        description="Run grid or random search over Meta-BGD hyperparameters.",
-        default_output_root="logs/tuning/meta_bgd",
-        type_hints=COMMON_TYPE_HINTS,
-        grid_factory=make_grid_factory(
-            {
-                "std_init": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 5e-2},
-                "mean_eta": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.1, "fallback": 1.0},
-                "train_mc_iters": {"kind": "int", "factors": (0.5, 1.0, 1.5), "min": 2, "fallback": 5},
-                "bgd_optimizer": {"values": ["bgd", "adam", "sgd"]},
-            }
-        ),
-    ),
+    # "meralg1": TuningPreset(
+    #     model_name="meralg1",
+    #     description="Run grid or random search over MER-Alg1 hyperparameters.",
+    #     default_output_root="logs/tuning/meralg1",
+    #     type_hints=COMMON_TYPE_HINTS,
+    #     grid_factory=make_grid_factory(
+    #         {
+    #             "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
+    #                 "values": [32, 64, 128, 256]},
+    #             "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-3,
+    #                    "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
+    #             "beta": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-3, "fallback": 0.1},
+    #             "gamma": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-3, "fallback": 0.1},
+    #             "memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 100, "fallback": 400,
+    #                          "values": [1024, 2048, 5120]},
+    #             "batches_per_example": {"kind": "float", "factors": (1.0, 2.0, 3.0), "min": 1.0, "fallback": 1.0},
+    #         }
+    #     ),
+    # ),
+    # "meta-bgd": TuningPreset(
+    #     model_name="meta-bgd",
+    #     description="Run grid or random search over Meta-BGD hyperparameters.",
+    #     default_output_root="logs/tuning/meta_bgd",
+    #     type_hints=COMMON_TYPE_HINTS,
+    #     grid_factory=make_grid_factory(
+    #         {
+    #             "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
+    #                 "values": [32, 64, 128, 256]},
+    #             "std_init": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 5e-2},
+    #             "mean_eta": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.1, "fallback": 1.0},
+    #             "train_mc_iters": {"kind": "int", "factors": (0.5, 1.0, 1.5), "min": 2, "fallback": 5},
+    #             "bgd_optimizer": {"values": ["bgd", "adam", "sgd"]},
+    #         }
+    #     ),
+    # ),
     "rwalk": TuningPreset(
         model_name="rwalk",
         description="Run grid or random search over RWalk hyperparameters.",
@@ -350,13 +397,16 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
+                "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
+                    "values": [32, 64, 128, 256]},
                 "lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-5, "fallback": 1e-3,
                        "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
                 "lamb": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-2, "fallback": 1.0,
                          "values":[0.1,1,10,100,1000]},
-                "alpha": {"kind": "float", "factors": (0.5, 1.0, 1.5), "min": 0.1, "fallback": 0.9},
-                "eps": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-3, "fallback": 0.01},
-                "clipgrad": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1.0, "fallback": 100.0},
+                "alpha": {"kind": "float", "factors": (0.5, 1.0, 1.5), "min": 0.1, "fallback": 0.9,
+                          "values": [0.1, 0.3, 0.5, 0.7, 0.9]},
+                "eps": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-3, "fallback": 0.01,
+                        "values": [1e-8, 1e-6, 1e-4, 1e-2]},
             }
         ),
     ),
@@ -367,11 +417,14 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
+                "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
+                    "values": [32, 64, 128, 256]},
                 "lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-5, "fallback": 1e-3,
                        "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
-                "si_c": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.01, "fallback": 0.1},
-                "si_epsilon": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.01},
-                "clipgrad": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1.0, "fallback": 100.0},
+                "si_c": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.01, "fallback": 0.1,
+                                "values":[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]},
+                "si_epsilon": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.01,
+                               "values": [1e-8, 1e-6, 1e-4, 1e-2]},
             }
         ),
     ),
@@ -382,13 +435,15 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
+                "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
+                    "values": [32, 64, 128, 256]},
                 "lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-5, "fallback": 1e-3,
-                       "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
+                       "values":[0.1,0.01,0.001,0.0001]},
                 "lr_rho": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 1e-2},
-                "beta": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-5, "fallback": 2e-4},
-                "alpha": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.05, "fallback": 0.3},
-                "ratio": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.05, "fallback": 0.125},
-                "clipgrad": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1.0, "fallback": 10.0},
+                "beta": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-5, "fallback": 2e-4,
+                         "values":[0.0001,0.001,0.01,0.02,0.03,0.04]},
+                # "alpha": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.05, "fallback": 0.3},
+                # "ratio": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.05, "fallback": 0.125},
             }
         ),
     ),

@@ -1,0 +1,214 @@
+python3 -u main.py $IQ --model gem --expt_name all_gem --n_memories 512 --batch_size 128 --n_epochs 15 
+                    --lr 0.03 --glances 1 --memory_strength 0.5   --increment 5 
+                    --log_every 3125 --class_order random --samples_per_task -1 
+                    --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3
+
+python3 -u main.py $IQ --model bcl_dual --expt_name bcl_basic_test --data_path data/rff/rfmls 
+                    --n_layers 2 --n_hiddens 100 --xav_init --glances 1 --n_epochs 20 
+                    --batch_size 64 --replay_batch_size 10 --memories 400 --lr 0.03 
+                    --increment 5 --log_every 3125 --class_order random 
+                    --seed $SEED --validation 0.2 --samples_per_task -1 --classes_per_it 6 
+                    --iterations 5000 --test_batch_size 100000 --n_memories 5192 --memory_strength 1.0 
+                    --steps_per_sample 1 --gamma 1.0 --beta 0.1 --batches_per_example 1 
+                    --opt_lr 0.1 --opt_wt 0.1 --alpha_init 0.1 --cifar_batches 3 --grad_clip_norm 5.0 
+                    --second_order --bcl_n_memories 2000 --bcl_memory_strength 1.0 --bcl_temperature 2.0 
+                    --bcl_inner_steps 5 --bcl_n_meta 5 --bcl_adapt_lr 0.1 --train_mc_iters 2 
+                    --std_init 0.02 --mean_eta 50.0 --fisher_gamma 0.95 --rln 7 --update_steps 10 
+                    --meta_lr 0.001 --update_lr 0.1 --ctn_lr 0.01 --ctn_beta 0.05 --ctn_n_meta 2 
+                    --ctn_inner_steps 2 --ctn_temperature 5 --ctn_n_memories 50 --ctn_alpha_init 0.1 
+                    --ctn_memory_strength 100 --ctn_task_emb 64
+
+python3 -u main.py $IQ --model meralg1 --expt_name all_meralg1 --batch_size 128 --memories 5192 --replay_batch_size 64 --n_epochs 15
+                    --lr 0.1 --beta 0.1 --gamma 1.0 --batches_per_example 10  --increment 5 
+                    --log_every 3125 --grad_clip_norm 10.0 --class_order random 
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+
+Logging IQ experiment suite to logs/iq_experiments/run_20251221_174947.log
+New Experiment Starting...
+Running model:  gem
+[STATE 2025-12-21 17:49:49] Experiment 'all_gem' starting with model 'gem' (seed 0)
+Set seed 0
+Loaded task0.npz: Unique train labels: [0 1 2 3 4 5]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 17294)
+Loaded task1.npz: Unique train labels: [ 0  6  7  8  9 10]
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11]. Size: 32208)
+[STATE 2025-12-21 17:49:50] Loader 'task_incremental_loader' ready: 1024 inputs, 12 outputs, 2 tasks
+n_outputs: 12 	n_tasks: 2
+[STATE 2025-12-21 17:49:50] Logging to logs//gem/all_gem-2025-12-21_17-49-50-8073/0
+True
+Model device: cuda:0
+[STATE 2025-12-21 17:49:51] Model initialized on device cuda:0
+[STATE 2025-12-21 17:49:51] Invoking continual life experience flow
+[STATE 2025-12-21 17:49:51] Life experience start: 2 tasks queued
+[STATE 2025-12-21 17:49:51] Starting task 0 (1/2)
+[STATE 2025-12-21 17:49:51] Task 0 Epoch 1/15: entering train loop
+[STATE 2025-12-21 17:49:51] Task 0 Epoch 1/15 Iter 0: running validation
+---- Eval at Epoch 0: [0.002781343602909713, 0.17995428361819601] ----
+Task 0 Epoch 1/15 | Loss 0.6264 | Train Acc 0.7037 | Val Acc 0.0028 | Epoch Time 19.81s (Eval 5.16s, Train 14.65s)
+[STATE 2025-12-21 17:50:10] Task 0 Epoch 1/15 complete: 19.81s total (5.16s eval/14.65s train)
+[STATE 2025-12-21 17:50:10] Task 0 Epoch 2/15: entering train loop
+Task 0 Epoch 2/15 | Loss 0.2286 | Train Acc 0.8905 | Val Acc 0.0028 | Epoch Time 14.57s (Eval 0.00s, Train 14.57s)
+[STATE 2025-12-21 17:50:25] Task 0 Epoch 2/15 complete: 14.57s total (0.00s eval/14.57s train)
+[STATE 2025-12-21 17:50:25] Task 0 Epoch 3/15: entering train loop
+Task 0 Epoch 3/15 | Loss 0.1670 | Train Acc 0.9160 | Val Acc 0.0028 | Epoch Time 14.37s (Eval 0.00s, Train 14.37s)
+[STATE 2025-12-21 17:50:39] Task 0 Epoch 3/15 complete: 14.37s total (0.00s eval/14.37s train)
+[STATE 2025-12-21 17:50:39] Task 0 Epoch 4/15: entering train loop
+Task 0 Epoch 4/15 | Loss 0.1319 | Train Acc 0.9315 | Val Acc 0.0028 | Epoch Time 14.10s (Eval 0.00s, Train 14.10s)
+[STATE 2025-12-21 17:50:53] Task 0 Epoch 4/15 complete: 14.10s total (0.00s eval/14.10s train)
+[STATE 2025-12-21 17:50:53] Task 0 Epoch 5/15: entering train loop
+Task 0 Epoch 5/15 | Loss 0.1060 | Train Acc 0.9465 | Val Acc 0.0028 | Epoch Time 14.35s (Eval 0.00s, Train 14.35s)
+[STATE 2025-12-21 17:51:08] Task 0 Epoch 5/15 complete: 14.35s total (0.00s eval/14.35s train)
+[STATE 2025-12-21 17:51:08] Task 0 Epoch 6/15: entering train loop
+Task 0 Epoch 6/15 | Loss 0.0887 | Train Acc 0.9569 | Val Acc 0.0028 | Epoch Time 14.06s (Eval 0.00s, Train 14.06s)
+[STATE 2025-12-21 17:51:22] Task 0 Epoch 6/15 complete: 14.06s total (0.00s eval/14.06s train)
+[STATE 2025-12-21 17:51:22] Task 0 Epoch 7/15: entering train loop
+Task 0 Epoch 7/15 | Loss 0.0723 | Train Acc 0.9679 | Val Acc 0.0028 | Epoch Time 14.54s (Eval 0.00s, Train 14.54s)
+[STATE 2025-12-21 17:51:36] Task 0 Epoch 7/15 complete: 14.54s total (0.00s eval/14.54s train)
+[STATE 2025-12-21 17:51:36] Task 0 Epoch 8/15: entering train loop
+Task 0 Epoch 8/15 | Loss 0.0592 | Train Acc 0.9728 | Val Acc 0.0028 | Epoch Time 14.65s (Eval 0.00s, Train 14.65s)
+[STATE 2025-12-21 17:51:51] Task 0 Epoch 8/15 complete: 14.65s total (0.00s eval/14.65s train)
+[STATE 2025-12-21 17:51:51] Task 0 Epoch 9/15: entering train loop
+Task 0 Epoch 9/15 | Loss 0.0522 | Train Acc 0.9772 | Val Acc 0.0028 | Epoch Time 14.15s (Eval 0.00s, Train 14.15s)
+[STATE 2025-12-21 17:52:05] Task 0 Epoch 9/15 complete: 14.15s total (0.00s eval/14.15s train)
+[STATE 2025-12-21 17:52:05] Task 0 Epoch 10/15: entering train loop
+Task 0 Epoch 10/15 | Loss 0.0376 | Train Acc 0.9858 | Val Acc 0.0028 | Epoch Time 14.39s (Eval 0.00s, Train 14.39s)
+[STATE 2025-12-21 17:52:20] Task 0 Epoch 10/15 complete: 14.39s total (0.00s eval/14.39s train)
+[STATE 2025-12-21 17:52:20] Task 0 Epoch 11/15: entering train loop
+[STATE 2025-12-21 17:52:20] Task 0 Epoch 11/15 Iter 0: running validation
+---- Eval at Epoch 10: [0.43802252680739895, 0.0] ----
+Task 0 Epoch 11/15 | Loss 0.0326 | Train Acc 0.9880 | Val Acc 0.4380 | Epoch Time 19.46s (Eval 5.09s, Train 14.37s)
+[STATE 2025-12-21 17:52:39] Task 0 Epoch 11/15 complete: 19.46s total (5.09s eval/14.37s train)
+[STATE 2025-12-21 17:52:39] Task 0 Epoch 12/15: entering train loop
+Task 0 Epoch 12/15 | Loss 0.0285 | Train Acc 0.9889 | Val Acc 0.4380 | Epoch Time 14.50s (Eval 0.00s, Train 14.50s)
+[STATE 2025-12-21 17:52:54] Task 0 Epoch 12/15 complete: 14.50s total (0.00s eval/14.50s train)
+[STATE 2025-12-21 17:52:54] Task 0 Epoch 13/15: entering train loop
+Task 0 Epoch 13/15 | Loss 0.0296 | Train Acc 0.9880 | Val Acc 0.4380 | Epoch Time 14.58s (Eval 0.00s, Train 14.58s)
+[STATE 2025-12-21 17:53:08] Task 0 Epoch 13/15 complete: 14.58s total (0.00s eval/14.58s train)
+[STATE 2025-12-21 17:53:08] Task 0 Epoch 14/15: entering train loop
+Task 0 Epoch 14/15 | Loss 0.0276 | Train Acc 0.9901 | Val Acc 0.4380 | Epoch Time 14.47s (Eval 0.00s, Train 14.47s)
+[STATE 2025-12-21 17:53:23] Task 0 Epoch 14/15 complete: 14.47s total (0.00s eval/14.47s train)
+[STATE 2025-12-21 17:53:23] Task 0 Epoch 15/15: entering train loop
+Task 0 Epoch 15/15 | Loss 0.0226 | Train Acc 0.9926 | Val Acc 0.4380 | Epoch Time 13.94s (Eval 0.00s, Train 13.94s)
+[STATE 2025-12-21 17:53:37] Task 0 Epoch 15/15 complete: 13.94s total (0.00s eval/13.94s train)
+[STATE 2025-12-21 17:53:37] Task 0: running final validation.
+[STATE 2025-12-21 17:53:51] Completed task 0 (1/2)
+[STATE 2025-12-21 17:53:51] Starting task 1 (2/2)
+[STATE 2025-12-21 17:53:51] Task 1 Epoch 1/15: entering train loop
+[STATE 2025-12-21 17:53:51] Task 1 Epoch 1/15 Iter 0: running validation
+---- Eval at Epoch 0: [0.44225491751850293, 0.0] ----
+Task 1 Epoch 1/15 | Loss 0.4335 | Train Acc 0.8361 | Val Acc 0.0000 | Epoch Time 133.13s (Eval 4.92s, Train 128.21s)
+[STATE 2025-12-21 17:56:04] Task 1 Epoch 1/15 complete: 133.13s total (4.92s eval/128.21s train)
+[STATE 2025-12-21 17:56:04] Task 1 Epoch 2/15: entering train loop
+Task 1 Epoch 2/15 | Loss 0.3060 | Train Acc 0.8823 | Val Acc 0.0000 | Epoch Time 127.79s (Eval 0.00s, Train 127.79s)
+[STATE 2025-12-21 17:58:12] Task 1 Epoch 2/15 complete: 127.79s total (0.00s eval/127.79s train)
+[STATE 2025-12-21 17:58:12] Task 1 Epoch 3/15: entering train loop
+Task 1 Epoch 3/15 | Loss 0.2683 | Train Acc 0.8970 | Val Acc 0.0000 | Epoch Time 128.04s (Eval 0.00s, Train 128.04s)
+[STATE 2025-12-21 18:00:20] Task 1 Epoch 3/15 complete: 128.04s total (0.00s eval/128.04s train)
+[STATE 2025-12-21 18:00:20] Task 1 Epoch 4/15: entering train loop
+Task 1 Epoch 4/15 | Loss 0.2476 | Train Acc 0.9067 | Val Acc 0.0000 | Epoch Time 128.54s (Eval 0.00s, Train 128.54s)
+[STATE 2025-12-21 18:02:29] Task 1 Epoch 4/15 complete: 128.54s total (0.00s eval/128.54s train)
+[STATE 2025-12-21 18:02:29] Task 1 Epoch 5/15: entering train loop
+Task 1 Epoch 5/15 | Loss 0.2242 | Train Acc 0.9151 | Val Acc 0.0000 | Epoch Time 127.57s (Eval 0.00s, Train 127.57s)
+[STATE 2025-12-21 18:04:36] Task 1 Epoch 5/15 complete: 127.57s total (0.00s eval/127.57s train)
+[STATE 2025-12-21 18:04:36] Task 1 Epoch 6/15: entering train loop
+Task 1 Epoch 6/15 | Loss 0.2030 | Train Acc 0.9241 | Val Acc 0.0000 | Epoch Time 125.46s (Eval 0.00s, Train 125.46s)
+[STATE 2025-12-21 18:06:42] Task 1 Epoch 6/15 complete: 125.46s total (0.00s eval/125.46s train)
+[STATE 2025-12-21 18:06:42] Task 1 Epoch 7/15: entering train loop
+Task 1 Epoch 7/15 | Loss 0.1835 | Train Acc 0.9316 | Val Acc 0.0000 | Epoch Time 126.67s (Eval 0.00s, Train 126.67s)
+[STATE 2025-12-21 18:08:48] Task 1 Epoch 7/15 complete: 126.67s total (0.00s eval/126.67s train)
+[STATE 2025-12-21 18:08:48] Task 1 Epoch 8/15: entering train loop
+Task 1 Epoch 8/15 | Loss 0.1690 | Train Acc 0.9359 | Val Acc 0.0000 | Epoch Time 124.13s (Eval 0.00s, Train 124.13s)
+[STATE 2025-12-21 18:10:52] Task 1 Epoch 8/15 complete: 124.13s total (0.00s eval/124.13s train)
+[STATE 2025-12-21 18:10:52] Task 1 Epoch 9/15: entering train loop
+Task 1 Epoch 9/15 | Loss 0.1492 | Train Acc 0.9434 | Val Acc 0.0000 | Epoch Time 129.71s (Eval 0.00s, Train 129.71s)
+[STATE 2025-12-21 18:13:02] Task 1 Epoch 9/15 complete: 129.71s total (0.00s eval/129.71s train)
+[STATE 2025-12-21 18:13:02] Task 1 Epoch 10/15: entering train loop
+Task 1 Epoch 10/15 | Loss 0.1396 | Train Acc 0.9477 | Val Acc 0.0000 | Epoch Time 126.34s (Eval 0.00s, Train 126.34s)
+[STATE 2025-12-21 18:15:08] Task 1 Epoch 10/15 complete: 126.34s total (0.00s eval/126.34s train)
+[STATE 2025-12-21 18:15:08] Task 1 Epoch 11/15: entering train loop
+[STATE 2025-12-21 18:15:08] Task 1 Epoch 11/15 Iter 0: running validation
+---- Eval at Epoch 10: [0.1251965303523193, 0.4310589941028334] ----
+Task 1 Epoch 11/15 | Loss 0.1281 | Train Acc 0.9520 | Val Acc 0.4311 | Epoch Time 133.00s (Eval 4.91s, Train 128.09s)
+[STATE 2025-12-21 18:17:21] Task 1 Epoch 11/15 complete: 133.00s total (4.91s eval/128.09s train)
+[STATE 2025-12-21 18:17:21] Task 1 Epoch 12/15: entering train loop
+Task 1 Epoch 12/15 | Loss 0.1187 | Train Acc 0.9559 | Val Acc 0.4311 | Epoch Time 125.65s (Eval 0.00s, Train 125.65s)
+[STATE 2025-12-21 18:19:27] Task 1 Epoch 12/15 complete: 125.65s total (0.00s eval/125.65s train)
+[STATE 2025-12-21 18:19:27] Task 1 Epoch 13/15: entering train loop
+Task 1 Epoch 13/15 | Loss 0.1101 | Train Acc 0.9591 | Val Acc 0.4311 | Epoch Time 126.07s (Eval 0.00s, Train 126.07s)
+[STATE 2025-12-21 18:21:33] Task 1 Epoch 13/15 complete: 126.07s total (0.00s eval/126.07s train)
+[STATE 2025-12-21 18:21:33] Task 1 Epoch 14/15: entering train loop
+Task 1 Epoch 14/15 | Loss 0.0959 | Train Acc 0.9646 | Val Acc 0.4311 | Epoch Time 128.91s (Eval 0.00s, Train 128.91s)
+[STATE 2025-12-21 18:23:42] Task 1 Epoch 14/15 complete: 128.91s total (0.00s eval/128.91s train)
+[STATE 2025-12-21 18:23:42] Task 1 Epoch 15/15: entering train loop
+Task 1 Epoch 15/15 | Loss 0.0911 | Train Acc 0.9665 | Val Acc 0.4311 | Epoch Time 128.98s (Eval 0.00s, Train 128.98s)
+[STATE 2025-12-21 18:25:51] Task 1 Epoch 15/15 complete: 128.98s total (0.00s eval/128.98s train)
+[STATE 2025-12-21 18:25:51] Task 1: running final validation.
+[STATE 2025-12-21 18:26:05] Completed task 1 (2/2)
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.31435375906492413 
+ Individual Accuracy: [0.1072583191776239, 0.5214491989522243]
+####Final Test Accuracy####
+Final Results:- 
+ Total Accuracy: 0.31435375906492413 
+ Individual Accuracy: [0.1072583191776239, 0.5214491989522243]
+[STATE 2025-12-21 18:26:05] Saving results to logs//gem/all_gem-2025-12-21_17-49-50-8073/0/results
+logs//gem/all_gem-2025-12-21_17-49-50-8073/0/results: {'expt_name': 'all_gem', 'model': 'gem', 'arch': 'resnet1d', 'n_hiddens': 100, 'n_layers': 2, 'xav_init': False, 'glances': 1, 'n_epochs': 15, 'batch_size': 128, 'replay_batch_size': 20, 'memories': 5120, 'lr': 0.03, 'cuda': True, 'seed': 0, 'log_every': 3125, 'log_dir': 'logs//gem/all_gem-2025-12-21_17-49-50-8073/0', 'tf_dir': 'logs//gem/all_gem-2025-12-21_17-49-50-8073/0/tfdir', 'calc_test_accuracy': True, 'state_logging': True, 'data_path': 'data/rff/radar/', 'loader': 'task_incremental_loader', 'samples_per_task': -1, 'shuffle_tasks': False, 'classes_per_it': 4, 'iterations': 5000, 'dataset': 'iq', 'workers': 3, 'validation': 0.3, 'class_order': 'random', 'increment': 5, 'test_batch_size': 100000, 'nc_per_task': 5, 'val_rate': 10, 'opt_lr': 0.1, 'opt_wt': 0.1, 'alpha_init': 0.001, 'learn_lr': False, 'sync_update': False, 'grad_clip_norm': 5.0, 'cifar_batches': 3, 'use_old_task_memory': False, 'second_order': False, 'n_memories': 512, 'memory_strength': 0.5, 'steps_per_sample': 1, 'gamma': 1.0, 'beta': 1.0, 's': 1, 'batches_per_example': 1, 'bgd_optimizer': 'bgd', 'optimizer_params': '{}', 'train_mc_iters': 5, 'std_init': 0.05, 'mean_eta': 1, 'fisher_gamma': 0.95, 'rln': 7, 'update_steps': 10, 'meta_lr': 0.001, 'update_lr': 0.1, 'ctn_lr': 0.01, 'ctn_beta': 0.05, 'ctn_n_meta': 2, 'ctn_inner_steps': 2, 'ctn_temperature': 5, 'ctn_n_memories': 50, 'ctn_alpha_init': 0.1, 'ctn_memory_strength': 0.5, 'ctn_task_emb': 64, 'bcl_n_memories': 2000, 'bcl_memory_strength': 1.0, 'bcl_temperature': 2.0, 'bcl_inner_steps': 5, 'bcl_n_meta': 5, 'bcl_adapt_lr': 0.1} # val: 0.482 0.314 -0.167 -0.090 # test: 0.482 0.314 -0.167 0.000 # 2174.2881467342377
+[STATE 2025-12-21 18:26:05] Results saved; total runtime 2174.29s
+New Experiment Starting...
+Running model:  bcl_dual
+[STATE 2025-12-21 18:26:08] Experiment 'bcl_basic_test' starting with model 'bcl_dual' (seed 0)
+Set seed 0
+Loaded task0.npz: Unique train labels: [2 3 5 7 8]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4]. Size: 8400)
+Loaded task1.npz: Unique train labels: [0 1 4 6 9]
+Loaded task1.npz: Remapped labels: [5 6 7 8 9]. Size: 8400)
+[STATE 2025-12-21 18:26:09] Loader 'task_incremental_loader' ready: 4096 inputs, 10 outputs, 2 tasks
+n_outputs: 10 	n_tasks: 2
+[STATE 2025-12-21 18:26:09] Logging to logs//bcl_dual/bcl_basic_test-2025-12-21_18-26-09-4901/0
+True
+Model device: cuda:0
+[STATE 2025-12-21 18:26:09] Model initialized on device cuda:0
+[STATE 2025-12-21 18:26:09] Invoking continual life experience flow
+[STATE 2025-12-21 18:26:09] Life experience start: 2 tasks queued
+[STATE 2025-12-21 18:26:09] Starting task 0 (1/2)
+[STATE 2025-12-21 18:26:09] Task 0 Epoch 1/20: entering train loop
+[STATE 2025-12-21 18:26:09] Task 0 Epoch 1/20 Iter 0: running validation
+---- Eval at Epoch 0: [0.20223174171316585, 0.1955143286429836] ----
+Traceback (most recent call last):
+  File "/home/lunet/wsmr11/repos/La-MAML/main.py", line 381, in <module>
+    main()
+  File "/home/lunet/wsmr11/repos/La-MAML/main.py", line 371, in main
+    result_val_t, result_val_a, result_test_t, result_test_a, spent_time = life_experience(
+                                                                           ^^^^^^^^^^^^^^^^
+  File "/home/lunet/wsmr11/repos/La-MAML/main.py", line 217, in life_experience
+    loss, tr_acc = model.observe(Variable(v_x), Variable(v_y), task_info["task"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/lunet/wsmr11/repos/La-MAML/model/bcl_dual.py", line 276, in observe
+    xval, yval, _, mask_val, list_t = self.memory_sampling(tt, valid = True)  
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/lunet/wsmr11/repos/La-MAML/model/bcl_dual.py", line 180, in memory_sampling
+    idx = np.random.choice(t* self.n_val,sz, False)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "numpy/random/mtrand.pyx", line 1047, in numpy.random.mtrand.RandomState.choice
+TypeError: expected a sequence of integers or a single integer, got '10.0'
+New Experiment Starting...
+Running model:  meralg1
+[STATE 2025-12-21 18:26:14] Experiment 'all_meralg1' starting with model 'meralg1' (seed 0)
+Set seed 0
+Loaded task0.npz: Unique train labels: [0 1 2 3 4 5]
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 17294)
+Loaded task1.npz: Unique train labels: [ 0  6  7  8  9 10]
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11]. Size: 32208)
+[STATE 2025-12-21 18:26:15] Loader 'task_incremental_loader' ready: 1024 inputs, 12 outputs, 2 tasks
+n_outputs: 12 	n_tasks: 2
+[STATE 2025-12-21 18:26:15] Logging to logs//meralg1/all_meralg1-2025-12-21_18-26-15-7915/0
+True
+Model device: cuda:0
+[STATE 2025-12-21 18:26:16] Model initialized on device cuda:0
+[STATE 2025-12-21 18:26:16] Invoking continual life experience flow
+[STATE 2025-12-21 18:26:16] Life experience start: 2 tasks queued
+[STATE 2025-12-21 18:26:16] Starting task 0 (1/2)
+[STATE 2025-12-21 18:26:16] Task 0 Epoch 1/15: entering train loop
+[STATE 2025-12-21 18:26:16] Task 0 Epoch 1/15 Iter 0: running validation
+---- Eval at Epoch 0: [0.002781343602909713, 0.17995428361819601] ----

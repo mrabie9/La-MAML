@@ -103,7 +103,7 @@ class Net(nn.Module):
 
     def forward(self, x, t):
         output = self.netforward(x)
-        if self.is_cifar:
+        if self.is_iq:
             offset1, offset2 = self.compute_offsets(t)
             if offset1 > 0:
                 output[:, :offset1].data.fill_(-10e10)
@@ -118,8 +118,11 @@ class Net(nn.Module):
             return 0, self.n_outputs
 
     def _clone_model_state(self):
-        # Use the underlying model to keep state_dict keys aligned with _apply_meta_update
-        return {name: tensor.detach().clone() for name, tensor in self.net.model.state_dict().items()}
+        """Snapshot only the backbone weights/buffers used by meta updates."""
+        return {
+            name: tensor.detach().clone()
+            for name, tensor in self.net.model.state_dict().items()
+        }
 
     def _apply_meta_update(self, base_state, target_state, mix):
         own_params = dict(self.net.model.named_parameters())
@@ -185,7 +188,7 @@ class Net(nn.Module):
                     by = bys[idx] 
                     bt = bts[idx]
 
-                    if self.is_cifar:
+                    if self.is_iq:
                         offset1, offset2 = self.compute_offsets(bt)
                         prediction = (self.netforward(bx)[:, offset1:offset2])
                         loss = self.bce(prediction,
