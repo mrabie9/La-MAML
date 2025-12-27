@@ -141,24 +141,46 @@ class IncrementalLoader:
                             return data[k]
                     return None
 
-                x_train = _get(['x_train', 'X_train', 'Xtr', 'X', 'xtr'])
-                y_train = _get(['y_train', 'Y_train', 'ytr', 'y'])
-                x_test = _get(['x_test', 'X_test', 'Xte', 'X', 'xte'])
-                y_test = _get(['y_test', 'Y_test', 'yte', 'y'])
+                x_train = _get(['x_train', 'X_train', 'Xtr', 'xtr', 'Xcv', 'xcv'])
+                y_train = _get(['y_train', 'Y_train', 'ytr', 'y', 'ycv'])
+                x_test = _get(['x_test', 'X_test', 'Xte', 'xte'])
+                y_test = _get(['y_test', 'Y_test', 'yte'])
 
+                if x_train is None or y_train is None or x_test is None or y_test is None:
+                    missing = []
+                    training_set = True
+                    testing_set = True
+                    if x_train is None:
+                        missing.append("x_train")
+                        training_set = False
+                    if y_train is None:
+                        missing.append("y_train")
+                        training_set = False
+                    if training_set:
+                        from sklearn.model_selection import train_test_split
+                        x_train, x_test, y_train, y_test = train_test_split(
+                                                            x_train, y_train, test_size=validation_split, 
+                                                            random_state=42, stratify=y_train)
+                        break
+                    if x_test is None:
+                        missing.append("x_test")
+                        testing_set = False
+                    if y_test is None:
+                        missing.append("y_test")
+                        testing_set = False
+                    available = ", ".join(sorted(data.keys()))
+                    if not testing_set or not training_set: 
+                        raise ValueError(
+                            f"Missing dataset entries ({', '.join(missing)}) in {fname}. "
+                            f"Available keys: {available}"
+                        )
+                
                 size_tr = x_train.shape[0]
                 size_te = min(x_test.shape[0], int(size_tr * validation_split)) if validation_split > 0. else x_test.shape[0]
                 x_test = x_test[:size_te]
                 y_test = y_test[:size_te]
 
                 print(f"Loaded {fname}: Unique train labels: {np.unique(y_train)}")
-
-                for data in [x_train, x_test, y_train, y_test]:
-                    if data is None:
-                        raise ValueError(f"Data {data} not found in {fname}")
-
-                if y_train is None or y_test is None:
-                    raise ValueError(f"Labels not found in {fname}")
 
                 y_train = np.asarray(y_train, dtype=np.int64)
                 y_test = np.asarray(y_test, dtype=np.int64)
