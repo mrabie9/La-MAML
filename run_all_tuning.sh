@@ -30,10 +30,11 @@ PYTHON_BIN="${PYTHON:-python3}"
 SCRIPTS_ROOT="tuning"
 CONFIG_FILE="configs/tuning_defaults.yaml"
 MODEL_CONFIG_DIR="configs/models"
-LOG_ROOT="logs/tuning/suites"
 KEEP_GOING=0
 DRY_RUN=0
 LIST_ONLY=0
+LOG_ROOT="logs/tuning/suites"
+PYTHONPATH_OVERRIDE=""
 declare -a MODE_FILTER=()
 declare -a EXCLUDE_FILTER=()
 declare -a EXTRA_ARGS=()
@@ -161,6 +162,10 @@ if [[ $LIST_ONLY -eq 1 ]]; then
 fi
 
 mkdir -p "$LOG_ROOT"
+PYTHONPATH_OVERRIDE="$SCRIPT_DIR"
+if [[ -n "${PYTHONPATH:-}" ]]; then
+    PYTHONPATH_OVERRIDE="$PYTHONPATH_OVERRIDE:$PYTHONPATH"
+fi
 timestamp=$(date +"%Y%m%d_%H%M%S")
 LOG_FILE="${LOG_ROOT}/tuning_suite_${timestamp}.log"
 exec > >(tee -a "$LOG_FILE") 2>&1
@@ -198,7 +203,7 @@ for idx in "${!SELECTED_SCRIPTS[@]}"; do
         continue
     fi
 
-    if "${cmd[@]}"; then
+    if PYTHONPATH="$PYTHONPATH_OVERRIDE" "${cmd[@]}"; then
         SUCCESSES+=("$model")
     else
         FAILURES+=("$model")
