@@ -179,8 +179,8 @@ class IncrementalLoader:
                             return data[k]
                     return None
 
-                x_train = _get(['x_train', 'X_train', 'Xtr', 'xtr', 'Xcv', 'xcv'])
-                y_train = _get(['y_train', 'Y_train', 'ytr', 'ycv'])
+                x_train = _get(['x_train', 'X_train', 'Xtr', 'xtr', 'Xcv', 'xcv', 'x', 'X'])
+                y_train = _get(['y_train', 'Y_train', 'ytr', 'ycv', 'y', 'Y'])
                 x_test = _get(['x_test', 'X_test', 'Xte', 'xte'])
                 y_test = _get(['y_test', 'Y_test', 'yte'])
 
