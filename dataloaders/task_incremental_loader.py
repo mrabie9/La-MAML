@@ -227,12 +227,15 @@ class IncrementalLoader:
                 y_train = np.asarray(y_train, dtype=np.int64)
                 y_test = np.asarray(y_test, dtype=np.int64)
 
-                # Remap labels to a contiguous range starting from 0
+                # Remap labels to a contiguous global range starting from 0
                 unique_labels = np.unique(y_train)
                 needs_remap = not np.array_equal(unique_labels, np.arange(unique_labels.size))
                 if needs_remap:
                     y_train = unique_labels.searchsorted(y_train) + labels_offset
                     y_test = unique_labels.searchsorted(y_test) + labels_offset
+                else:
+                    y_train = y_train + labels_offset
+                    y_test = y_test + labels_offset
                 labels_offset += unique_labels.size
                 print(f"Loaded {fname}: Remapped labels: {np.unique(y_train)}. Size: {x_train.shape[0]})")
 
