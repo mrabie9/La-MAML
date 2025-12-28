@@ -127,6 +127,8 @@ class Net(nn.Module):
     def _apply_meta_update(self, base_state, target_state, mix):
         own_params = dict(self.net.model.named_parameters())
         own_params.update(dict(self.net.model.named_buffers()))
+        own_params = dict(self.net.model.named_parameters())
+        own_params.update(dict(self.net.model.named_buffers()))
         with torch.no_grad():
             for name, tensor in own_params.items():
                 tensor.copy_(base_state[name] + (target_state[name] - base_state[name]) * mix)

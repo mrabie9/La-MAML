@@ -1,0 +1,5 @@
+Logging tuning sweep to logs/tuning/suites/tuning_suite_20251228_181343.log
+Using config: configs/tuning_defaults.yaml
+
+[ 1 / 7 ] Running agem via tuning/Alpha/tune_agem.py
+Command: python3 tuning/Alpha/tune_agem.py --config configs/tuning_defaults.yaml --config configs/models/agem.yaml

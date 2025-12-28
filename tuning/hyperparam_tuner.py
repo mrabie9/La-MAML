@@ -80,7 +80,7 @@ def build_cli(preset: TuningPreset) -> argparse.ArgumentParser:
     parser.add_argument(
         "--config-dir",
         action="append",
-        default=[],
+        default=["configs/tuning_defaults.yaml"],
         metavar="DIR",
         help="Directory of YAML config fragments to apply (alphabetical order).",
     )

@@ -9,6 +9,44 @@ from dataloaders.iq_data_loader import IQDataGenerator
 import os
 
 
+def _normalize_label_array(labels, expected_len, source):
+    """Ensure label arrays align with the sample dimension.
+
+    Some of the IQ datasets store labels in a (n_classes, n_samples) layout or
+    keep an extra singleton dimension which confuses sklearn utilities during
+    validation splits.  This helper reshapes the labels to a 1-D vector of
+    length ``expected_len`` and converts one-hot encodings to class indices.
+    """
+
+    if labels is None:
+        return labels
+
+    arr = np.asarray(labels)
+    if arr.size == expected_len:
+        arr = arr.reshape(expected_len)
+    else:
+        arr = np.squeeze(arr)
+        if arr.ndim == 0:
+            arr = arr.reshape(1)
+        if arr.shape and arr.shape[0] != expected_len:
+            axis = next((idx for idx, size in enumerate(arr.shape) if size == expected_len), None)
+            if axis is None:
+                raise ValueError(
+                    f"{source} labels have shape {arr.shape}, which is incompatible with "
+                    f"{expected_len} samples."
+                )
+            if axis != 0:
+                arr = np.moveaxis(arr, axis, 0)
+        if arr.ndim > 1:
+            arr = arr.reshape(expected_len, -1)
+            if arr.shape[1] == 1:
+                arr = arr[:, 0]
+            else:
+                arr = np.argmax(arr, axis=1)
+
+    return arr.astype(np.int64, copy=False)
+
+
 class IncrementalLoader:
 
     def __init__(
@@ -141,11 +179,44 @@ class IncrementalLoader:
                             return data[k]
                     return None
 
-                x_train = _get(['x_train', 'X_train', 'Xtr', 'X', 'xtr'])
-                y_train = _get(['y_train', 'Y_train', 'ytr', 'y'])
-                x_test = _get(['x_test', 'X_test', 'Xte', 'X', 'xte'])
-                y_test = _get(['y_test', 'Y_test', 'yte', 'y'])
+                x_train = _get(['x_train', 'X_train', 'Xtr', 'xtr', 'Xcv', 'xcv', 'x', 'X'])
+                y_train = _get(['y_train', 'Y_train', 'ytr', 'ycv', 'y', 'Y'])
+                x_test = _get(['x_test', 'X_test', 'Xte', 'xte'])
+                y_test = _get(['y_test', 'Y_test', 'yte'])
 
+                if x_train is not None and y_train is not None:
+                    y_train = _normalize_label_array(y_train, x_train.shape[0], f"{fname} train")
+                if x_test is not None and y_test is not None:
+                    y_test = _normalize_label_array(y_test, x_test.shape[0], f"{fname} test")
+
+                if x_train is None or y_train is None or x_test is None or y_test is None:
+                    missing = []
+                    training_set = True
+                    testing_set = True
+                    if x_train is None:
+                        missing.append("x_train")
+                        training_set = False
+                    if y_train is None:
+                        missing.append("y_train")
+                        training_set = False
+                    if training_set:
+                        from sklearn.model_selection import train_test_split
+                        x_train, x_test, y_train, y_test = train_test_split(
+                                                            x_train, y_train, test_size=validation_split, 
+                                                            random_state=42, stratify=y_train)
+                    if x_test is None:
+                        missing.append("x_test")
+                        testing_set = False
+                    if y_test is None:
+                        missing.append("y_test")
+                        testing_set = False
+                    available = ", ".join(sorted(data.keys()))
+                    if not testing_set or not training_set: 
+                        raise ValueError(
+                            f"Missing dataset entries ({', '.join(missing)}) in {fname}. "
+                            f"Available keys: {available}"
+                        )
+                
                 size_tr = x_train.shape[0]
                 size_te = min(x_test.shape[0], int(size_tr * validation_split)) if validation_split > 0. else x_test.shape[0]
                 x_test = x_test[:size_te]
@@ -153,22 +224,18 @@ class IncrementalLoader:
 
                 print(f"Loaded {fname}: Unique train labels: {np.unique(y_train)}")
 
-                for data in [x_train, x_test, y_train, y_test]:
-                    if data is None:
-                        raise ValueError(f"Data {data} not found in {fname}")
-
-                if y_train is None or y_test is None:
-                    raise ValueError(f"Labels not found in {fname}")
-
                 y_train = np.asarray(y_train, dtype=np.int64)
                 y_test = np.asarray(y_test, dtype=np.int64)
 
-                # Remap labels to a contiguous range starting from 0
+                # Remap labels to a contiguous global range starting from 0
                 unique_labels = np.unique(y_train)
                 needs_remap = not np.array_equal(unique_labels, np.arange(unique_labels.size))
                 if needs_remap:
                     y_train = unique_labels.searchsorted(y_train) + labels_offset
                     y_test = unique_labels.searchsorted(y_test) + labels_offset
+                else:
+                    y_train = y_train + labels_offset
+                    y_test = y_test + labels_offset
                 labels_offset += unique_labels.size
                 print(f"Loaded {fname}: Remapped labels: {np.unique(y_train)}. Size: {x_train.shape[0]})")
 
