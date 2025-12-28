@@ -204,7 +204,6 @@ class IncrementalLoader:
                         x_train, x_test, y_train, y_test = train_test_split(
                                                             x_train, y_train, test_size=validation_split, 
                                                             random_state=42, stratify=y_train)
-                        break
                     if x_test is None:
                         missing.append("x_test")
                         testing_set = False
