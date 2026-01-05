@@ -143,6 +143,17 @@ def build_cli(preset: TuningPreset) -> argparse.ArgumentParser:
         action="store_true",
         help="Do not alter the experiment name from the base config.",
     )
+    parser.add_argument(
+        "--lr-first",
+        action="store_true",
+        help="Tune the learning rate first, then tune remaining parameters.",
+    )
+    parser.add_argument(
+        "--lr-key",
+        type=str,
+        default="lr",
+        help="Comma-separated parameter names treated as learning rates for --lr-first.",
+    )
     return parser
 
 
@@ -257,6 +268,11 @@ def expand_trials(
     if max_trials is not None:
         combos = combos[:max_trials]
     return combos or [{}]
+
+
+def parse_lr_keys(raw: str) -> List[str]:
+    keys = [item.strip() for item in raw.split(",") if item.strip()]
+    return keys or ["lr"]
 
 
 def format_value_for_slug(value: Any) -> str:
@@ -394,6 +410,8 @@ def dump_summary(session_dir: Path, summary: Dict[str, Any], successes: List[Dic
         return
 
     field_names = ["trial", "val_mean", "test_mean", "duration_sec", "log_dir"]
+    if any("stage" in trial for trial in successes):
+        field_names.insert(1, "stage")
     param_keys = sorted({key for trial in successes for key in trial["params"].keys()})
     field_names.extend(param_keys)
     csv_path = session_dir / "summary.csv"
@@ -408,6 +426,8 @@ def dump_summary(session_dir: Path, summary: Dict[str, Any], successes: List[Dic
                 "duration_sec": trial["duration_sec"],
                 "log_dir": trial["log_dir"],
             }
+            if "stage" in field_names:
+                row["stage"] = trial.get("stage")
             for key in param_keys:
                 row[key] = trial["params"].get(key)
             writer.writerow(row)
@@ -441,15 +461,43 @@ def run_tuning(preset: TuningPreset) -> None:
         if key in constant_overrides:
             del search_space[key]
 
+    lr_keys = parse_lr_keys(cli.lr_key)
+    lr_first = bool(cli.lr_first)
+    lr_space = {key: search_space[key] for key in lr_keys if key in search_space}
+
+    if lr_first and not lr_space:
+        print(
+            "LR-first tuning requested but no learning-rate keys exist in the search space."
+            " Proceeding with the full grid."
+        )
+        lr_first = False
+
+    full_search_space = {key: values[:] for key, values in search_space.items()}
     trials = expand_trials(search_space, cli.num_samples, cli.search_seed, cli.max_trials, cli.shuffle)
 
     if cli.dry_run:
         print("Planned trials (dry-run):")
-        for idx, tr in enumerate(trials):
-            merged = dict(constant_overrides)
-            merged.update(tr)
-            print(f"  #{idx:03d}: {merged}")
-        print(f"Total: {len(trials)} trials")
+        if lr_first:
+            lr_trials = expand_trials(lr_space, cli.num_samples, cli.search_seed, cli.max_trials, cli.shuffle)
+            rest_space = {k: v for k, v in search_space.items() if k not in lr_space}
+            rest_trials = expand_trials(rest_space, cli.num_samples, cli.search_seed, cli.max_trials, cli.shuffle)
+            total_trials = len(lr_trials) + len(rest_trials)
+            for idx, tr in enumerate(lr_trials):
+                merged = dict(constant_overrides)
+                merged.update(tr)
+                print(f"  [lr] #{idx:03d}: {merged}")
+            offset = len(lr_trials)
+            for idx, tr in enumerate(rest_trials):
+                merged = dict(constant_overrides)
+                merged.update(tr)
+                print(f"  [rest] #{idx + offset:03d}: {merged}")
+            print(f"Total: {total_trials} trials")
+        else:
+            for idx, tr in enumerate(trials):
+                merged = dict(constant_overrides)
+                merged.update(tr)
+                print(f"  #{idx:03d}: {merged}")
+            print(f"Total: {len(trials)} trials")
         return
 
     session_timestamp = misc_utils.get_date_time()
@@ -459,34 +507,70 @@ def run_tuning(preset: TuningPreset) -> None:
 
     results: List[Dict[str, Any]] = []
 
-    for idx, trial_params in enumerate(trials):
-        try:
-            outcome = run_single_trial(
-                base_args,
-                constant_overrides,
-                trial_params,
-                idx,
-                session_timestamp,
-                runs_root,
-                cli.seed_offset,
-                cli.keep_expt_name,
-                preset.model_name,
-            )
-        except Exception as exc:  # pylint: disable=broad-except
-            trace = traceback.format_exc()
-            outcome = {
-                "status": "failed",
-                "trial": idx,
-                "params": dict(constant_overrides, **trial_params),
-                "error": str(exc),
-                "traceback": trace,
-            }
-            print(f"Trial {idx} failed: {exc}")
+    def run_trials(
+        trial_list: List[Dict[str, Any]],
+        overrides: Dict[str, Any],
+        stage: str | None,
+        start_idx: int,
+    ) -> List[Dict[str, Any]]:
+        stage_results: List[Dict[str, Any]] = []
+        for offset, trial_params in enumerate(trial_list):
+            trial_idx = start_idx + offset
+            try:
+                outcome = run_single_trial(
+                    base_args,
+                    overrides,
+                    trial_params,
+                    trial_idx,
+                    session_timestamp,
+                    runs_root,
+                    cli.seed_offset,
+                    cli.keep_expt_name,
+                    preset.model_name,
+                )
+            except Exception as exc:  # pylint: disable=broad-except
+                trace = traceback.format_exc()
+                outcome = {
+                    "status": "failed",
+                    "trial": trial_idx,
+                    "params": dict(overrides, **trial_params),
+                    "error": str(exc),
+                    "traceback": trace,
+                }
+                if stage:
+                    outcome["stage"] = stage
+                print(f"Trial {trial_idx} failed: {exc}")
+            else:
+                if stage:
+                    outcome["stage"] = stage
+                    print(
+                        f"[{stage}] Trial {trial_idx} finished | val_mean={outcome['val_mean']:.4f} |"
+                        f" params={trial_params}"
+                    )
+                else:
+                    print(
+                        f"Trial {trial_idx} finished | val_mean={outcome['val_mean']:.4f} |"
+                        f" params={trial_params}"
+                    )
+            stage_results.append(outcome)
+        return stage_results
+
+    lr_first_best: Dict[str, Any] | None = None
+    if lr_first:
+        lr_trials = expand_trials(lr_space, cli.num_samples, cli.search_seed, cli.max_trials, cli.shuffle)
+        results.extend(run_trials(lr_trials, constant_overrides, "lr", 0))
+        lr_successes = [r for r in results if r.get("status") == "ok" and r.get("stage") == "lr"]
+        lr_best = max(lr_successes, key=lambda r: r["val_mean"]) if lr_successes else None
+        if lr_best:
+            lr_first_best = {key: lr_best["trial_params"].get(key) for key in lr_space}
+            stage2_overrides = dict(constant_overrides, **lr_first_best)
+            rest_space = {k: v for k, v in search_space.items() if k not in lr_space}
+            rest_trials = expand_trials(rest_space, cli.num_samples, cli.search_seed, cli.max_trials, cli.shuffle)
+            results.extend(run_trials(rest_trials, stage2_overrides, "rest", len(lr_trials)))
         else:
-            print(
-                f"Trial {idx} finished | val_mean={outcome['val_mean']:.4f} | params={trial_params}"
-            )
-        results.append(outcome)
+            print("LR-first stage recorded no successful trials; skipping remaining parameters.")
+    else:
+        results.extend(run_trials(trials, constant_overrides, None, 0))
 
     successes = [r for r in results if r.get("status") == "ok"]
     best = max(successes, key=lambda r: r["val_mean"]) if successes else None
@@ -499,8 +583,11 @@ def run_tuning(preset: TuningPreset) -> None:
         "session_dir": str(session_dir.resolve()),
         "timestamp": session_timestamp,
         "fixed_overrides": constant_overrides,
-        "search_space": search_space,
-        "num_trials": len(trials),
+        "search_space": full_search_space,
+        "lr_first": lr_first,
+        "lr_first_keys": lr_keys if lr_first else None,
+        "lr_first_best": lr_first_best,
+        "num_trials": len(results),
         "results": results,
         "best": best,
     }
