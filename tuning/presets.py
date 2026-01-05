@@ -146,10 +146,6 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                     "values": [32, 64, 128, 256]},
                 "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-3, 
                        "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
-                "memory_strength": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.1, "fallback": 0.5,
-                                    "values":[0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]},
-                "memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 64, "fallback": 256,
-                             "values": [1024, 2048, 5120]},
             }
         ),
     ),

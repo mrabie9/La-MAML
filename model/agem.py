@@ -23,11 +23,8 @@ from utils import misc_utils
 class AgemConfig:
     ## AGEM-specific hyperparameters
     lr: float = 1e-3
-    memory_strength: float = 0.0
     glances: int = 1
     memories: int = 5120
-    n_memories: int = 5120
-    alpha_init: float = 1e-3
 
     ## Generic hyperparameters
     arch: str = "resnet1d"
@@ -135,7 +132,6 @@ class Net(nn.Module):
         super(Net, self).__init__()
         self.cfg = AgemConfig.from_args(args)
 
-        self.margin = self.cfg.memory_strength
         self.is_cifar = (
             (self.cfg.dataset == 'cifar100') or (self.cfg.dataset == 'tinyimagenet')
         )
