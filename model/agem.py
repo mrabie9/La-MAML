@@ -326,8 +326,13 @@ class Net(nn.Module):
             if len(self.observed_tasks) > 1:
                 # copy gradient
                 store_grad(self.parameters, self.grads, self.grad_dims, t)
-                indx = torch.cuda.LongTensor(self.observed_tasks[:-1]) if self.gpu \
-                    else torch.LongTensor(self.observed_tasks[:-1])
+                # Build index tensor on the same device as stored gradients.
+                indx_device = self.grads.device if hasattr(self.grads, "device") else None
+                indx = torch.tensor(
+                    self.observed_tasks[:-1],
+                    dtype=torch.long,
+                    device=indx_device,
+                )
 
                 projectgrad(self.grads[:, t].unsqueeze(1),                                           
                               self.grads.index_select(1, indx), self.margin, oiter = self.iter)
