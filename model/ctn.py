@@ -26,7 +26,7 @@ class CtnConfig:
     ctn_temperature: float = 5.0
     arch: str = "resnet1d"
     ctn_task_emb: int = 64
-    ctn_lr: float = 0.01
+    lr: float = 0.01
     ctn_beta: float = 0.05
     ctn_n_memories: int = 50
     validation: float = 0.0
@@ -65,7 +65,7 @@ class Net(torch.nn.Module):
             raise NotImplementedError(f"Unsupported arch {self.cfg.arch}; only resnet1d is available now.")
 
         self.is_task_incremental = True 
-        self.inner_lr = self.cfg.ctn_lr
+        self.inner_lr = self.cfg.lr
         self.outer_lr = self.cfg.ctn_beta
         self.opt = torch.optim.SGD(self.net.parameters(), lr=self.outer_lr)
         # setup losses
