@@ -44,6 +44,8 @@ def get_parser():
                         help='number of total memories stored in a reservoir sampling based buffer')
     parser.add_argument('--lr', type=float, default=1e-3,
                         help='learning rate (For baselines)')
+    parser.add_argument('--optimizer', type=str, default='sgd',
+                        help='optimizer name for models that support switching')
 
     
     # experiment parameters
@@ -164,8 +166,6 @@ def get_parser():
                         help='inner learning rate')
     
     # CTN parameters
-    parser.add_argument('--ctn_lr', type=float, default=0.01,
-                        help='learning rate for CTN')
     parser.add_argument('--ctn_beta', type=float, default=0.05,
                         help='Beta parameter for CTN')
     parser.add_argument('--ctn_n_meta', type=int, default=2,
@@ -194,9 +194,6 @@ def get_parser():
                         help='Number of inner updates for BCL-Dual')
     parser.add_argument('--bcl_n_meta', type=int, default=5,
                         help='Number of meta-updates for BCL-Dual')
-    parser.add_argument('--bcl_adapt_lr', type=float, default=0.1,
-                        help='Learning rate for adapting the model in BCL-Dual')
-    
     # Parameters for HAT
     
 
