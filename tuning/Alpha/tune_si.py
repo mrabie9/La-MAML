@@ -3,9 +3,15 @@
 
 from __future__ import annotations
 import sys
-sys.path.append("tuning/")  # to import from parent directory
-from tuning.hyperparam_tuner import make_main
-from tuning.presets import TUNING_PRESETS
+from pathlib import Path
+try:
+    from tuning.hyperparam_tuner import make_main
+    from tuning.presets import TUNING_PRESETS
+except ModuleNotFoundError:
+    repo_root = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(repo_root))
+    from tuning.hyperparam_tuner import make_main
+    from tuning.presets import TUNING_PRESETS
 
 main = make_main(TUNING_PRESETS["si"])
 
