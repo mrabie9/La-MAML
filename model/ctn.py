@@ -67,7 +67,7 @@ class Net(torch.nn.Module):
         self.is_task_incremental = True 
         self.inner_lr = self.cfg.lr
         self.outer_lr = self.cfg.ctn_beta
-        self.opt = torch.optim.SGD(self.net.parameters(), lr=self.outer_lr)
+        self.opt = torch.optim.SGD(self.net.parameters(), lr=self.outer_lr, momentum=0.9)
         # setup losses
         self.bce = torch.nn.CrossEntropyLoss()
         self.classes_per_task = misc_utils.build_task_class_list(

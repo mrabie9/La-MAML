@@ -12,6 +12,7 @@ Options:
   --exclude "m3,m4"    Skip the listed models.
   --scripts-root DIR   Directory that contains tune_*.py files (default: tuning).
   --config FILE        Base config applied to every run (default: configs/tuning_defaults.yaml).
+  --tune-only PARAM    Restrict grid to one or more hyperparameters (repeatable).
   --python PATH        Python interpreter to invoke (default: $PYTHON or python3).
   --log-dir DIR        Directory for aggregated log files (default: logs/tuning/suites).
   --dry-run            Print the commands without executing them.
@@ -63,6 +64,11 @@ while [[ $# -gt 0 ]]; do
         --config)
             [[ $# -ge 2 ]] || { echo "Missing value for --config" >&2; exit 1; }
             CONFIG_FILE="$2"
+            shift 2
+            ;;
+        --tune-only)
+            [[ $# -ge 2 ]] || { echo "Missing value for --tune-only" >&2; exit 1; }
+            EXTRA_ARGS+=( "--tune-only" "$2" )
             shift 2
             ;;
         --python)

@@ -164,15 +164,14 @@ class Net(nn.Module):
         params = self.net.parameters()
         optim_name = (self.cfg.optimizer or "adam").lower()
         lr = float(self.cfg.lr)
-        wd = float(self.cfg.weight_decay)
 
         if optim_name in {"adam", "adamw"}:
             opt_cls = torch.optim.AdamW if optim_name == "adamw" else torch.optim.Adam
-            return opt_cls(params, lr=lr, weight_decay=wd)
+            return opt_cls(params, lr=lr)
         if optim_name == "adagrad":
-            return torch.optim.Adagrad(params, lr=lr, weight_decay=wd)
-        momentum = float(self.cfg.momentum)
-        return torch.optim.SGD(params, lr=lr, momentum=momentum, weight_decay=wd)
+            return torch.optim.Adagrad(params, lr=lr)
+        
+        return torch.optim.SGD(params, lr=lr, momentum=0.9)
 
     # ------------------------------------------------------------------
     def _compute_offsets(self, task: int) -> Tuple[int, int]:

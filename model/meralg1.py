@@ -83,7 +83,7 @@ class Net(nn.Module):
         # else:
         #     self.nc_per_task = n_outputs
 
-        self.opt = optim.SGD(self.parameters(), self.cfg.lr)
+        self.opt = optim.SGD(self.parameters(), self.cfg.lr, momentum=0.9)
         self.batchSize = int(self.cfg.replay_batch_size)
 
         self.memories = self.cfg.memories

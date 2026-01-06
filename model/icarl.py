@@ -88,7 +88,7 @@ class Net(torch.nn.Module):
         self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
 
         # setup optimizer
-        self.opt = torch.optim.SGD(self.parameters(), lr=self.cfg.lr)
+        self.opt = torch.optim.SGD(self.parameters(), lr=self.cfg.lr, momentum=0.9)
 
         # setup losses
         self.bce = torch.nn.CrossEntropyLoss()

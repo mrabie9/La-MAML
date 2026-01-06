@@ -156,17 +156,16 @@ class Net(nn.Module):
         params = self.net.parameters()
         optim = (self.cfg.optimizer or "adam").lower()
         lr = float(self.cfg.lr)
-        wd = float(self.cfg.weight_decay)
 
         if optim in {"adam", "adamw"}:
             opt_cls = torch.optim.AdamW if optim == "adamw" else torch.optim.Adam
-            return opt_cls(params, lr=lr, weight_decay=wd)
+            return opt_cls(params, lr=lr)
         if optim == "adagrad":
-            return torch.optim.Adagrad(params, lr=lr, weight_decay=wd)
+            return torch.optim.Adagrad(params, lr=lr)
         if optim in {"sgd", "sgd_momentum_decay"}:
             momentum = float(self.cfg.momentum)
-            return torch.optim.SGD(params, lr=lr, momentum=momentum, weight_decay=wd)
-        return torch.optim.Adam(params, lr=lr, weight_decay=wd)
+            return torch.optim.SGD(params, lr=lr, momentum=0.9)
+        return torch.optim.Adam(params, lr=lr)
 
     # ------------------------------------------------------------------
     def _initialise_state(self) -> None:

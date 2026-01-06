@@ -70,10 +70,10 @@ class Net(nn.Module):
         self.net = ResNet1D(n_outputs, args)
         self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
 
-        self.opt_wt = optim.SGD(self.parameters(), lr=self.cfg.lr)
+        self.opt_wt = optim.SGD(self.parameters(), lr=self.cfg.lr, momentum=0.9)
 
         if self.cfg.learn_lr:
-            self.opt_lr = torch.optim.SGD(list(self.net.alpha_lr.parameters()), lr=self.cfg.opt_lr)          
+            self.opt_lr = torch.optim.SGD(list(self.net.alpha_lr.parameters()), lr=self.cfg.opt_lr, momentum=0.9)    
 
         self.loss = CrossEntropyLoss()
         self.is_cifar = ((self.cfg.dataset == 'cifar100') or (self.cfg.dataset == 'tinyimagenet'))
