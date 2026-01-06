@@ -154,6 +154,13 @@ def build_cli(preset: TuningPreset) -> argparse.ArgumentParser:
         default="lr",
         help="Comma-separated parameter names treated as learning rates for --lr-first.",
     )
+    parser.add_argument(
+        "--tune-only",
+        action="append",
+        default=[],
+        metavar="PARAM",
+        help="Restrict the grid to specific hyperparameter(s). May be repeated or comma-separated.",
+    )
     return parser
 
 
@@ -273,6 +280,19 @@ def expand_trials(
 def parse_lr_keys(raw: str) -> List[str]:
     keys = [item.strip() for item in raw.split(",") if item.strip()]
     return keys or ["lr"]
+
+
+def parse_tune_only(specs: Sequence[str]) -> List[str]:
+    keys: List[str] = []
+    seen: set[str] = set()
+    for spec in specs:
+        for item in spec.split(","):
+            key = item.strip()
+            if not key or key in seen:
+                continue
+            keys.append(key)
+            seen.add(key)
+    return keys
 
 
 def format_value_for_slug(value: Any) -> str:
@@ -460,6 +480,16 @@ def run_tuning(preset: TuningPreset) -> None:
     for key in list(search_space.keys()):
         if key in constant_overrides:
             del search_space[key]
+
+    tune_only = parse_tune_only(cli.tune_only)
+    if tune_only:
+        missing = [key for key in tune_only if key not in search_space]
+        if missing:
+            raise ValueError(
+                "Tune-only parameter(s) not found in the search space: "
+                + ", ".join(missing)
+            )
+        search_space = {key: search_space[key] for key in tune_only}
 
     lr_keys = parse_lr_keys(cli.lr_key)
     lr_first = bool(cli.lr_first)
