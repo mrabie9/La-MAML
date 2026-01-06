@@ -425,7 +425,7 @@ class Net(nn.Module):
         if self.cfg.optimizer.lower() == "adam":
             self.opt = torch.optim.Adam(params, lr=self.cfg.lr)
         else:
-            self.opt = torch.optim.SGD(params, lr=self.cfg.lr)
+            self.opt = torch.optim.SGD(params, lr=self.cfg.lr, momentum=0.9)
 
         self.ce = nn.CrossEntropyLoss()
         self.smax = float(self.cfg.smax)

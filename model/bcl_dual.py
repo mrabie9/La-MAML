@@ -134,7 +134,7 @@ class Net(torch.nn.Module):
                 continue
             xx = self.memx[t]
             yy = self.memy[t]
-            opt = torch.optim.SGD(model.parameters(), self.adapt_lr)
+            opt = torch.optim.SGD(model.parameters(), self.adapt_lr, momentum=0.9)
             train = torch.utils.data.TensorDataset(xx, yy)
             loader = DataLoader(train, batch_size = self.bsz, shuffle = True, num_workers =0)
             for _ in range(self.glances):

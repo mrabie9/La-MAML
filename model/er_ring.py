@@ -59,7 +59,7 @@ class Net(torch.nn.Module):
         #if self.is_task_incremental:
         #    self.opt = torch.optim.Adam(self.net.parameters(), lr='self.lr)
         #else:
-        self.opt = torch.optim.SGD(self.net.parameters(), lr=self.lr)
+        self.opt = torch.optim.SGD(self.net.parameters(), lr=self.lr, momentum=0.9)
         
         # setup losses
         self.bce = torch.nn.CrossEntropyLoss()

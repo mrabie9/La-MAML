@@ -57,7 +57,7 @@ class Net(torch.nn.Module):
         self.net = ResNet1D(n_outputs, args)
 
         # setup optimizer
-        self.opt = torch.optim.SGD(self.parameters(), lr=self.cfg.lr)
+        self.opt = torch.optim.SGD(self.parameters(), lr=self.cfg.lr, momentum=0.9)
 
         # setup losses
         self.loss = torch.nn.CrossEntropyLoss()

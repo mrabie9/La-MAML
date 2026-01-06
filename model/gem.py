@@ -145,7 +145,7 @@ class Net(nn.Module):
         self.n_outputs = n_outputs
         self.glances = self.cfg.glances
 
-        self.opt = optim.SGD(self.parameters(), self.cfg.lr)
+        self.opt = optim.SGD(self.parameters(), self.cfg.lr, momentum=0.9)
 
         self.n_memories = self.cfg.n_memories
         self.gpu = self.cfg.cuda

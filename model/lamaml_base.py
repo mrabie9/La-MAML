@@ -58,8 +58,8 @@ class BaseNet(torch.nn.Module):
         self.net = ResNet1D(n_outputs, args)
         self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
 
-        self.opt_wt = torch.optim.SGD(list(self.net.parameters()), lr=self.cfg.opt_wt)     
-        self.opt_lr = torch.optim.SGD(list(self.net.alpha_lr.parameters()), lr=self.cfg.opt_lr) 
+        self.opt_wt = torch.optim.SGD(list(self.net.parameters()), lr=self.cfg.opt_wt, momentum=0.9)
+        self.opt_lr = torch.optim.SGD(list(self.net.alpha_lr.parameters()), lr=self.cfg.opt_lr, momentum=0.9)
 
         self.epoch = 0
         # allocate buffer
