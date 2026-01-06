@@ -159,7 +159,7 @@ class Net(nn.Module):
         self.memories = self.cfg.memories
         self.grad_align = []
         self.grad_task_align = {}
-        self.current_task = 0
+        self.current_task = None
 
         # --- Episodic memory allocation ---
         if self.is_iq:
@@ -275,11 +275,8 @@ class Net(nn.Module):
                 #     self.mem_cnt = 0
 
                 if effbsz > 0:
-                    if self.is_iq:
-                        # shapes: mem slice (effbsz, 2, L) <- x[:effbsz]
-                        self.memory_data[t, self.mem_cnt:endcnt].copy_(x.data[:effbsz])
-                    else:
-                        self.memory_data[t, self.mem_cnt:endcnt].copy_(x.data[:effbsz])
+                
+                    self.memory_data[t, self.mem_cnt:endcnt].copy_(x.data[:effbsz])
 
                     if bsz == 1:
                         self.memory_labs[t, self.mem_cnt] = y.data[0]
