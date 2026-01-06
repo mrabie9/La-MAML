@@ -28,7 +28,7 @@ glances: 1
 n_epochs: 5
 optimizer: sgd
 bgd_optimizer: sgd
-# batch_size: 128
+batch_size: 128
 # replay_batch_size: 64
 # memories: 1024
 # grad_clip_norm: 5.0
