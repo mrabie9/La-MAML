@@ -2,7 +2,8 @@
 """Hyperparameter tuning harness for the HAT learner."""
 
 from __future__ import annotations
-
+import sys
+sys.path.append("tuning/")  # to import from parent directory
 from tuning.hyperparam_tuner import TuningPreset, make_main
 
 DEFAULT_GRID = {
