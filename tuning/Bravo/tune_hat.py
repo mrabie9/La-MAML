@@ -2,9 +2,15 @@
 """Hyperparameter tuning harness for the HAT learner."""
 
 from __future__ import annotations
+
 import sys
-sys.path.append("tuning/")  # to import from parent directory
-from tuning.hyperparam_tuner import TuningPreset, make_main
+from pathlib import Path
+try:
+    from tuning.hyperparam_tuner import make_main, TuningPreset
+except ModuleNotFoundError:
+    repo_root = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(repo_root))
+    from tuning.hyperparam_tuner import make_main, TuningPreset
 
 DEFAULT_GRID = {
     "lr": [1e-3, 1e-2, 1e-1],
