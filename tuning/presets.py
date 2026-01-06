@@ -143,7 +143,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                 # "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
                 #     "values": [32, 64, 128, 256]},
                 "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-3, 
-                       "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
+                       "values":[0.03,0.01,0.003,0.001,0.0003,0.0001,0.00003,0.00001]},
             }
         ),
     ),
@@ -155,7 +155,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
     #     grid_factory=make_grid_factory(
     #         {
     #             "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-3,
-    #                    "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
+    #                    "values":[0.03,0.01,0.003,0.001,0.0003,0.0001,0.00003,0.00001]},
     #             "meta_lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 1e-3},
     #             "update_lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.01, "fallback": 0.1},
     #         }
@@ -171,7 +171,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                 # "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
                 #     "values": [32, 64, 128, 256]},
                 "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-3,
-                       "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
+                       "values":[0.03,0.01,0.003,0.001,0.0003,0.0001,0.00003,0.00001]},
                 "bcl_n_memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 128, "fallback": 2000,
                              "values": [1024, 2048, 5120]},
                 "beta": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.1, "fallback": 1.0,
@@ -223,7 +223,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                 # "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
                 #     "values": [32, 64, 128, 256]},
                 "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-2,
-                       "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
+                       "values":[0.03,0.01,0.003,0.001,0.0003,0.0001,0.00003,0.00001]},
                 "memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 100, "fallback": 400,
                              "values": [1024, 2048, 5120]},
                 "replay_batch_size": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 4.0, "fallback": 10.0,
@@ -243,7 +243,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                 # "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
                 #     "values": [32, 64, 128, 256]},
                 "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-2,
-                       "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
+                       "values":[0.03,0.01,0.003,0.001,0.0003,0.0001,0.00003,0.00001]},
                 "memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 100, "fallback": 400,
                              "values": [1024, 2048, 5120]},
                 "replay_batch_size": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 4.0, "fallback": 10.0,
@@ -261,7 +261,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                 # "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
                 #     "values": [32, 64, 128, 256]},
                 "lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-5, "fallback": 3e-2,
-                       "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
+                       "values":[0.03,0.01,0.003,0.001,0.0003,0.0001,0.00003,0.00001]},
                 "lamb": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-2, "fallback": 1.0,
                          "values":[1,10,100,1000,10000]},
                 "momentum": {"kind": "float", "factors": (0.0, 1.0, 2.0), "extra": [0.9], "fallback": 0.0,
@@ -279,7 +279,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                 # "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
                 #     "values": [32, 64, 128, 256]},
                 "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-2,
-                       "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
+                       "values":[0.03,0.01,0.003,0.001,0.0003,0.0001,0.00003,0.00001]},
                 "memory_strength": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.1, "fallback": 0.5,
                                     "values":[0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]},
                 "n_memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 32, "fallback": 256,
@@ -312,7 +312,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {"lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-2,
-                       "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},}
+                       "values":[0.03,0.01,0.003,0.001,0.0003,0.0001,0.00003,0.00001]},}
         ),
     ),
     "lamaml": TuningPreset(
@@ -357,7 +357,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
     #             "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
     #                 "values": [32, 64, 128, 256]},
     #             "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-3,
-    #                    "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
+    #                    "values":[0.03,0.01,0.003,0.001,0.0003,0.0001,0.00003,0.00001]},
     #             "beta": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-3, "fallback": 0.1},
     #             "gamma": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-3, "fallback": 0.1},
     #             "memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 100, "fallback": 400,
@@ -392,7 +392,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                 # "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
                 #     "values": [32, 64, 128, 256]},
                 "lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-5, "fallback": 1e-3,
-                       "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
+                       "values":[0.03,0.01,0.003,0.001,0.0003,0.0001,0.00003,0.00001]},
                 "lamb": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-2, "fallback": 1.0,
                          "values":[0.1,1,10,100,1000]},
                 "alpha": {"kind": "float", "factors": (0.5, 1.0, 1.5), "min": 0.1, "fallback": 0.9,
@@ -412,7 +412,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                 # "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
                 #     "values": [32, 64, 128, 256]},
                 "lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-5, "fallback": 1e-3,
-                       "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
+                       "values":[0.03,0.01,0.003,0.001,0.0003,0.0001,0.00003,0.00001]},
                 "si_c": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.01, "fallback": 0.1,
                                 "values":[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]},
                 "si_epsilon": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.01,
