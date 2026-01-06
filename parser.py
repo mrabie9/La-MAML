@@ -35,7 +35,7 @@ def get_parser():
                         help="Number of times the model is allowed to train over a set of samples in the single pass setting") 
     parser.add_argument('--n_epochs', type=int, default=1,
                         help='Number of epochs per task')
-    parser.add_argument('--batch_size', type=int, default=1,
+    parser.add_argument('--batch_size', type=int, default=128,
                         help='the amount of items received by the algorithm at one time (set to 1 across all ' +
                         'experiments). Variable name is from GEM project.')
     parser.add_argument('--replay_batch_size', type=float, default=20,
