@@ -107,7 +107,7 @@ echo "Logging IQ experiment suite to $LOG_FILE"
 ##### CTN #####
 python3 -u main.py $IQ --model ctn --expt_name all_ctn --batch_size 128 --replay_batch_size 64 --n_epochs 50 \
                     --increment 5 \
-                    --ctn_n_memories 5192 --ctn_lr 0.01 --ctn_beta 0.05 --ctn_inner_steps 2 --ctn_n_meta 2 \
+                    --ctn_n_memories 5192 --lr 0.01 --ctn_beta 0.05 --ctn_inner_steps 2 --ctn_n_meta 2 \
                     --log_every 3125 --class_order random \
                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
 

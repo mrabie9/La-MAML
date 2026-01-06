@@ -28,7 +28,6 @@ class BclDualConfig:
     bcl_n_memories: int = 2000
     bcl_inner_steps: int = 5
     bcl_n_meta: int = 5
-    bcl_adapt_lr: float = 0.1
 
     cuda: bool = True
     batch_size: int = 1
@@ -120,7 +119,7 @@ class Net(torch.nn.Module):
         self.count = 0
         self.val_count = 0
         self.adapt_ = False #args.adapt
-        self.adapt_lr = self.cfg.bcl_adapt_lr
+        self.adapt_lr = self.cfg.lr
         self.models={}
 
     def on_epoch_end(self):  

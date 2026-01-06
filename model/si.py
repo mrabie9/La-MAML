@@ -24,7 +24,7 @@ class SiConfig:
     """Hyper-parameters with sensible fallbacks pulled from ``args``."""
 
     lr: float = 0.001
-    optimizer: str = "adam"
+    optimizer: str = "sgd"
     momentum: float = 0.0
     weight_decay: float = 0.0
     clipgrad: Optional[float] = 100.0

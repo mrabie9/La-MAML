@@ -23,11 +23,8 @@ from utils import misc_utils
 class AgemConfig:
     ## AGEM-specific hyperparameters
     lr: float = 1e-3
-    memory_strength: float = 0.0
     glances: int = 1
     memories: int = 5120
-    n_memories: int = 5120
-    alpha_init: float = 1e-3
 
     ## Generic hyperparameters
     arch: str = "resnet1d"
@@ -135,7 +132,6 @@ class Net(nn.Module):
         super(Net, self).__init__()
         self.cfg = AgemConfig.from_args(args)
 
-        self.margin = self.cfg.memory_strength
         self.is_cifar = (
             (self.cfg.dataset == 'cifar100') or (self.cfg.dataset == 'tinyimagenet')
         )
@@ -339,7 +335,7 @@ class Net(nn.Module):
                 )
 
                 projectgrad(self.grads[:, t].unsqueeze(1),                                           
-                              self.grads.index_select(1, indx), self.margin, oiter = self.iter)
+                              self.grads.index_select(1, indx), oiter = self.iter)
                 # copy gradients back
                 overwrite_grad(self.parameters, self.grads[:, t],
                                self.grad_dims)

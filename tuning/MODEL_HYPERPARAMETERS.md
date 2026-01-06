@@ -7,8 +7,8 @@ The table below lists the hyperparameters that are explicitly defined for each m
 | `agem` | `lr` (0.001), `memory_strength` (0.0), `glances` (1), `memories` (5120), `n_memories` (0), `alpha_init` (0.001) | `model/agem.py` |
 | `anml` | `update_lr` (0.1), `meta_lr` (0.001), `update_steps` (10), `replay_batch_size` (20), `memories` (5120), `rln` (7), `use_old_task_memory` (false) | `model/anml.py` |
 | `anml_base` | `alpha_init` (0.001) | `model/anml_base.py` |
-| `bcl_dual` | `bcl_memory_strength` (1.0), `bcl_temperature` (2.0), `alpha_init` (0.001), `lr` (0.001), `beta` (1.0), `bcl_n_memories` (2000), `replay_batch_size` (20), `bcl_inner_steps` (5), `bcl_n_meta` (5), `bcl_adapt_lr` (0.1) | `model/bcl_dual.py` |
-| `ctn` | `ctn_memory_strength` (0.5), `ctn_temperature` (5.0), `ctn_task_emb` (64), `ctn_lr` (0.01), `ctn_beta` (0.05), `ctn_n_memories` (50), `replay_batch_size` (20), `ctn_inner_steps` (2), `ctn_n_meta` (2) | `model/ctn.py` |
+| `bcl_dual` | `bcl_memory_strength` (1.0), `bcl_temperature` (2.0), `alpha_init` (0.001), `lr` (0.001), `beta` (1.0), `bcl_n_memories` (2000), `replay_batch_size` (20), `bcl_inner_steps` (5), `bcl_n_meta` (5) | `model/bcl_dual.py` |
+| `ctn` | `ctn_memory_strength` (0.5), `ctn_temperature` (5.0), `ctn_task_emb` (64), `lr` (0.01), `ctn_beta` (0.05), `ctn_n_memories` (50), `replay_batch_size` (20), `ctn_inner_steps` (2), `ctn_n_meta` (2) | `model/ctn.py` |
 | `er_ring` | `bcl_memory_strength` (1.0), `bcl_temperature` (2.0), `alpha_init` (0.001), `lr` (0.001), `bcl_n_memories` (2000), `n_memories` (0), `replay_batch_size` (20), `bcl_inner_steps` (5) | `model/er_ring.py` |
 | `eralg4` | `alpha_init` (0.001), `lr` (0.001), `opt_lr` (0.1), `learn_lr` (false), `glances` (1), `memories` (5120), `replay_batch_size` (20), `second_order` (false), `cifar_batches` (3) | `model/eralg4.py` |
 | `ewc` | `lr` (0.03), `optimizer` (sgd), `momentum` (0.0), `weight_decay` (0.0), `lamb` (1.0), `clipgrad` (100.0) | `model/ewc.py` |

@@ -98,7 +98,7 @@ echo "Logging quick IQ experiment suite to $LOG_FILE"
 # ##### CTN #####
 # python3 -u main.py $IQ --model ctn --expt_name all_ctn --batch_size 128 --replay_batch_size 64 --n_epochs $N_EPOCHS \
 #                     --increment 5 \
-#                     --ctn_n_memories 5192 --ctn_lr 0.01 --ctn_beta 0.05 --ctn_inner_steps 2 --ctn_n_meta 2 \
+#                     --ctn_n_memories 5192 --lr 0.01 --ctn_beta 0.05 --ctn_inner_steps 2 --ctn_n_meta 2 \
 #                     --log_every 3125 --class_order random \
 #                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 256
 
@@ -155,6 +155,6 @@ python3 -u main.py $IQ --model meralg1 --expt_name all_meralg1 --batch_size 128 
 #                     --steps_per_sample 1 --gamma 1.0 --beta 0.1 --batches_per_example 1 \
 #                     --opt_lr 0.1 --opt_wt 0.1 --alpha_init 0.1 --cifar_batches 3 --grad_clip_norm 5.0 \
 #                     --second_order --bcl_n_memories 2000 --bcl_memory_strength 1.0 --bcl_temperature 2.0 \
-#                     --bcl_inner_steps 5 --bcl_n_meta 5 --bcl_adapt_lr 0.1 --train_mc_iters 2 \
+#                     --bcl_inner_steps 5 --bcl_n_meta 5 --train_mc_iters 2 \
 #                     --std_init 0.02 --mean_eta 50.0 --fisher_gamma 0.95 --rln 7 --update_steps 10 \
 #                     --meta_lr 0.001 --update_lr 0.1

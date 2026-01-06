@@ -30,3 +30,5 @@ replay_batch_size: 10
 memories: 400
 grad_clip_norm: 5.0
 lr: 0.03
+optimizer: sgd
+bgd_optimizer: sgd
