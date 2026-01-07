@@ -13,7 +13,7 @@ except ModuleNotFoundError:
     from tuning.hyperparam_tuner import make_main
     from tuning.presets import TUNING_PRESETS
 
-main = make_main(TUNING_PRESETS["ucl"])
+main = make_main(TUNING_PRESETS["ucl_bresnet"])
 
 if __name__ == "__main__":
     main()
