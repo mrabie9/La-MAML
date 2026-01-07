@@ -133,8 +133,8 @@ class Net(nn.Module):
 
         if optim == "adam":
             return torch.optim.Adam(params, lr=lr)
-        momentum = float(self.cfg.momentum)
-        return torch.optim.SGD(params, lr=lr, momentum=momentum, momentum=0.9)
+
+        return torch.optim.SGD(params, lr=lr, momentum=0.9)
 
     # ------------------------------------------------------------------
     def _compute_offsets(self, task: int) -> Tuple[int, int]:
