@@ -380,6 +380,7 @@ def main():
     Loader = importlib.import_module('dataloaders.' + args.loader)
     loader = Loader.IncrementalLoader(args, seed=args.seed)
     n_inputs, n_outputs, n_tasks = loader.get_dataset_info()
+    args.get_samples_per_task = getattr(loader, "get_samples_per_task", None)
     args.classes_per_task = getattr(loader, "classes_per_task", None)
     print("Classes per task:", args.classes_per_task)
     if args.classes_per_task is None or len(args.classes_per_task) == 0:
