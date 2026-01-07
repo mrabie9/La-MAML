@@ -137,6 +137,24 @@ class IncrementalLoader:
             self.n_outputs = n_outputs
             return n_inputs, n_outputs.item()+1, self.n_tasks
 
+    def get_samples_per_task(self, task_id=None, split="train"):
+        if task_id is None:
+            task_id = self._current_task
+        if self._args.samples_per_task > 0:
+            return int(self._args.samples_per_task)
+        if split not in ("train", "test"):
+            raise ValueError(f"Unknown split '{split}' (expected 'train' or 'test').")
+        perms = self.sample_permutations[task_id]
+        if isinstance(perms, (list, tuple)):
+            idx = 0 if split == "train" else 1
+            return int(len(perms[idx]))
+        if split == "train":
+            return int(len(perms))
+        test_data = self.test_dataset[task_id][1]
+        if isinstance(test_data, np.ndarray):
+            return int(test_data.shape[0])
+        return int(test_data.size(0))
+
 
     def _get_loader(self, x, y, shuffle=True, mode="train"):
         if mode == "train":

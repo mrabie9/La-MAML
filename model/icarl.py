@@ -71,8 +71,10 @@ class Net(torch.nn.Module):
         self.num_exemplars = 0
         self.n_feat = n_outputs
         self.n_classes = n_outputs
+        self.samples_per_task_resolver = getattr(args, "get_samples_per_task", None)
         self.samples_per_task = self.cfg.samples_per_task #* (1.0 - self.cfg.validation)
-        assert self.samples_per_task > 0, 'Samples per task is <= 0'
+        if self.samples_per_task_resolver is None:
+            assert self.samples_per_task > 0, 'Samples per task is <= 0'
         self.examples_seen = 0
 
         self.glances = self.cfg.glances
@@ -129,6 +131,11 @@ class Net(torch.nn.Module):
     def compute_offsets(self, task):
         offset1, offset2 = misc_utils.compute_offsets(task, self.classes_per_task)
         return int(offset1), int(offset2)
+
+    def _get_samples_per_task(self, task):
+        if self.samples_per_task_resolver is None:
+            return self.samples_per_task
+        return int(self.samples_per_task_resolver(task))
 
     def forward(self, x, t):
         # nearest neighbor
@@ -192,10 +199,12 @@ class Net(torch.nn.Module):
             # only make changes like pushing to buffer once per batch and not for every glance
             if(pass_itr==0):
                 self.examples_seen += x.size(0)
+                samples_per_task = self._get_samples_per_task(t)
+                assert samples_per_task > 0, 'Samples per task is <= 0'
 
                 # if not last batch of task, store samples in memx/memy
                 # Problem if batch_size <= samples_per_task
-                if self.examples_seen < self.samples_per_task:
+                if self.examples_seen < samples_per_task:
                     if self.memx is None:
                         self.memx = x.data.clone()
                         self.memy = y.data.clone()
@@ -242,7 +251,7 @@ class Net(torch.nn.Module):
 
         # check whether this is the last minibatch of the current task
         # We assume only 1 epoch!
-        target = int(self.cfg.n_epochs * self.samples_per_task)
+        target = int(self.cfg.n_epochs * self._get_samples_per_task(t))
         if self.examples_seen >= target:  # not ==
             self.examples_seen = 0
             # self._rebuild_exemplars_for_task(t, x.device)

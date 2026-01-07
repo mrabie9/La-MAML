@@ -131,32 +131,32 @@ python3 -u main.py $IQ --model er_ring --expt_name all_erring --batch_size 128 -
 #                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1 \
 #                     --rln 7 --update_steps 10 --meta_lr 0.001 --update_lr 0.1 
 
-# ##### La-MAML ##### [0.41, 0.48]
-# python3 -u main.py $IQ --model lamaml_cifar --expt_name all_lamaml --memories 5192 --batch_size 128 --replay_batch_size 64 --n_epochs 50 \
-#                     --opt_lr 0.25 --alpha_init 0.1 --opt_wt 0.1 --glances 1  --increment 5 \
-#                     --cifar_batches 5 --learn_lr --log_every 3125 --second_order --class_order random \
-#                     --seed $SEED --grad_clip_norm 1.0 --calc_test_accuracy --validation 0.3 --samples_per_task -1
+##### La-MAML ##### [0.41, 0.48]
+python3 -u main.py $IQ --model lamaml_cifar --expt_name all_lamaml --memories 5192 --batch_size 128 --replay_batch_size 64 --n_epochs 50 \
+                    --opt_lr 0.25 --alpha_init 0.1 --opt_wt 0.1 --glances 1  --increment 5 \
+                    --cifar_batches 5 --learn_lr --log_every 3125 --second_order --class_order random \
+                    --seed $SEED --grad_clip_norm 1.0 --calc_test_accuracy --validation 0.3 --samples_per_task -1
 
-# ##### sync ##### [0.52, 0.52]
-# python3 -u main.py $IQ --model lamaml_cifar --expt_name all_lamaml_sync --memories 1024 --batch_size 128 --replay_batch_size 64 --n_epochs 5 \
-#                     --opt_lr 0.35 --alpha_init 0.1 --opt_wt 0.1 --glances 1  --increment 5 \
-#                     --cifar_batches 5 --learn_lr --sync_update --log_every 3125 --second_order --class_order random \
-#                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+##### sync ##### [0.52, 0.52]
+python3 -u main.py $IQ --model lamaml_cifar --expt_name all_lamaml_sync --memories 1024 --batch_size 128 --replay_batch_size 64 --n_epochs 5 \
+                    --opt_lr 0.35 --alpha_init 0.1 --opt_wt 0.1 --glances 1  --increment 5 \
+                    --cifar_batches 5 --learn_lr --sync_update --log_every 3125 --second_order --class_order random \
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
 
-# ##### C-MAML ##### [0.45, 0.51]
-# python3 -u main.py $IQ --model lamaml_cifar --expt_name all_cmaml --memories 1024 --batch_size 128 --replay_batch_size 64 --n_epochs 5 \
-#                     --opt_lr 0.35 --alpha_init 0.075 --opt_wt 0.075 --glances 1  --increment 5 \
-#                     --cifar_batches 5 --sync_update --log_every 3125 --second_order --class_order random \
-#                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+##### C-MAML ##### [0.45, 0.51]
+python3 -u main.py $IQ --model lamaml_cifar --expt_name all_cmaml --memories 1024 --batch_size 128 --replay_batch_size 64 --n_epochs 5 \
+                    --opt_lr 0.35 --alpha_init 0.075 --opt_wt 0.075 --glances 1  --increment 5 \
+                    --cifar_batches 5 --sync_update --log_every 3125 --second_order --class_order random \
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
 
-# ##### MER ##### VEEEEERY SLOW
-# python3 -u main.py $IQ --model meralg1 --expt_name all_meralg1 --batch_size 128 --memories 5192 --replay_batch_size 64 \
-#                     --lr 0.1 --beta 0.1 --gamma 1.0 --batches_per_example 10  --increment 5 \
-#                     --log_every 3125 --grad_clip_norm 10.0 --class_order random \
-#                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
+##### MER ##### VEEEEERY SLOW
+python3 -u main.py $IQ --model meralg1 --expt_name all_meralg1 --batch_size 128 --memories 5192 --replay_batch_size 64 \
+                    --lr 0.1 --beta 0.1 --gamma 1.0 --batches_per_example 10  --increment 5 \
+                    --log_every 3125 --grad_clip_norm 10.0 --class_order random \
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
 
-# ##### Meta BGD ##### [0.24, 0.39] Problem
-# python3 -u main.py $IQ --model meta-bgd --expt_name all_meta-bgd --memories 5192 --batch_size 128 --replay_batch_size 64 --n_epochs 50 \
-#                     --alpha_init 0.1 --glances 1  --increment 5 \
-#                     --cifar_batches 3 --log_every 3125 --second_order --class_order random \
-#                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1 --xav_init  --std_init 0.02 --mean_eta 50. --train_mc_iters 2
+##### Meta BGD ##### [0.24, 0.39] Problem
+python3 -u main.py $IQ --model meta-bgd --expt_name all_meta-bgd --memories 5192 --batch_size 128 --replay_batch_size 64 --n_epochs 50 \
+                    --alpha_init 0.1 --glances 1  --increment 5 \
+                    --cifar_batches 3 --log_every 3125 --second_order --class_order random \
+                    --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1 --xav_init  --std_init 0.02 --mean_eta 50. --train_mc_iters 2
