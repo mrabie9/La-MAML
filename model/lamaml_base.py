@@ -16,20 +16,15 @@ from utils import misc_utils
 
 @dataclass
 class LamamlBaseConfig:
-    arch: str = "resnet1d"
-    n_layers: int = 2
-    n_hiddens: int = 100
     alpha_init: float = 1e-3
     opt_wt: float = 1e-1
     opt_lr: float = 1e-1
-    dataset: str = "tinyimagenet"
     glances: int = 1
     memories: int = 5120
     replay_batch_size: int = 20
     cuda: bool = True
     use_old_task_memory: bool = False
     learn_lr: bool = False
-    grad_clip_norm: Optional[float] = 2.0
     second_order: bool = False
     sync_update: bool = False
     cifar_batches: int = 3

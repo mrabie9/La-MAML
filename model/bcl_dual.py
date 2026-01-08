@@ -23,11 +23,11 @@ from utils import misc_utils
 class BclDualConfig:
     lr: float = 1e-3
     beta: float = 1.0
-    bcl_memory_strength: float = 1.0
-    bcl_temperature: float = 2.0
-    bcl_n_memories: int = 2000
-    bcl_inner_steps: int = 5
-    bcl_n_meta: int = 5
+    memory_strength: float = 1.0
+    temperature: float = 2.0
+    n_memories: int = 2000
+    inner_steps: int = 5
+    n_meta: int = 5
 
     cuda: bool = True
     replay_batch_size: int = 20
@@ -50,8 +50,8 @@ class Net(torch.nn.Module):
         super(Net, self).__init__()
         self.cfg = BclDualConfig.from_args(args)
         self.n_tasks = n_tasks
-        self.reg = self.cfg.bcl_memory_strength
-        self.temp = self.cfg.bcl_temperature
+        self.reg = self.cfg.memory_strength
+        self.temp = self.cfg.temperature
         # setup network
         self.is_task_incremental = True
         self.net = ResNet1D(n_outputs, args)
@@ -78,7 +78,7 @@ class Net(torch.nn.Module):
         self.current_task = 0
         self.fisher = {}
         self.optpar = {}
-        self.n_memories = self.cfg.bcl_n_memories
+        self.n_memories = self.cfg.n_memories
         self.mem_cnt = 0       
         
         self.n_val = int(self.n_memories * 0.2)
@@ -108,8 +108,8 @@ class Net(torch.nn.Module):
         self.kl = nn.KLDivLoss(reduction="batchmean")
         self.samples_seen = 0
         self.sz = int(self.cfg.replay_batch_size)
-        self.glances = self.cfg.bcl_inner_steps
-        self.n_meta = self.cfg.bcl_n_meta
+        self.glances = self.cfg.inner_steps
+        self.n_meta = self.cfg.n_meta
         self.count = 0
         self.val_count = 0
         self.adapt_ = False #args.adapt

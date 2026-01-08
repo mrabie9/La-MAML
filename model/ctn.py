@@ -10,7 +10,7 @@ import torch
 from torch.autograd import Variable
 # from .common import ContextMLP, ContextNet18
 # from .resnet import ResNet18 as ResNet18Full
-from model.ctn_base import ContextNet18
+from model.base import ContextNet18
 import pdb
 import torch.nn as nn
 import torch.nn.functional as F
@@ -22,20 +22,19 @@ from utils import misc_utils
 
 @dataclass
 class CtnConfig:
-    ctn_memory_strength: float = 0.5
-    ctn_temperature: float = 5.0
-    arch: str = "resnet1d"
-    ctn_task_emb: int = 64
+    memory_strength: float = 0.5
+    temperature: float = 5.0
+    task_emb: int = 64
     lr: float = 0.01
-    ctn_beta: float = 0.05
-    ctn_n_memories: int = 50
+    beta: float = 0.05
+    n_memories: int = 50
     validation: float = 0.0
     cuda: bool = True
     batch_size: int = 1
     samples_per_task: int = -1
     replay_batch_size: int = 20
-    ctn_inner_steps: int = 2
-    ctn_n_meta: int = 2
+    inner_steps: int = 2
+    n_meta: int = 2
 
     @staticmethod
     def from_args(args: object) -> "CtnConfig":
@@ -54,19 +53,19 @@ class Net(torch.nn.Module):
                  args):
         super(Net, self).__init__()
         self.cfg = CtnConfig.from_args(args)
-        self.reg = self.cfg.ctn_memory_strength
-        self.temp = self.cfg.ctn_temperature
+        self.reg = self.cfg.memory_strength
+        self.temp = self.cfg.temperature
         # setup network
         if  self.cfg.arch == 'resnet1d':
             # self.net = ResNet1D(n_outputs, args)
-            self.net = ContextNet18(n_outputs, n_tasks=n_tasks, task_emb=self.cfg.ctn_task_emb)
-        # self.net.define_task_lr_params(alpha_init=args.ctn_alpha_init)
+            self.net = ContextNet18(n_outputs, n_tasks=n_tasks, task_emb=self.cfg.task_emb)
+        # self.net.define_task_lr_params(alpha_init=args.alpha_init)
         else:
             raise NotImplementedError(f"Unsupported arch {self.cfg.arch}; only resnet1d is available now.")
 
         self.is_task_incremental = True 
         self.inner_lr = self.cfg.lr
-        self.outer_lr = self.cfg.ctn_beta
+        self.outer_lr = self.cfg.beta
         self.opt = torch.optim.SGD(self.net.parameters(), lr=self.outer_lr, momentum=0.9)
         # setup losses
         self.bce = torch.nn.CrossEntropyLoss()
@@ -84,7 +83,7 @@ class Net(torch.nn.Module):
         self.current_task = 0
         self.fisher = {}
         self.optpar = {}
-        self.n_memories = self.cfg.ctn_n_memories
+        self.n_memories = self.cfg.n_memories
         self.mem_cnt = 0       
         
         # set up the semantic memory
@@ -128,8 +127,8 @@ class Net(torch.nn.Module):
         self.samples_seen = 0
         self.samples_per_task = self.cfg.samples_per_task
         self.sz = int(self.cfg.replay_batch_size)
-        self.inner_steps = self.cfg.ctn_inner_steps
-        self.n_meta = self.cfg.ctn_n_meta
+        self.inner_steps = self.cfg.inner_steps
+        self.n_meta = self.cfg.n_meta
         self.count = 0
         self.val_count = 0
         self.counter = 0
