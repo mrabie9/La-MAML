@@ -37,20 +37,9 @@ class PackNetConfig:
     @staticmethod
     def from_args(args: object) -> "PackNetConfig":
         cfg = PackNetConfig()
-        # Override defaults with any args attributes that match
-        # for field in ("lr", "optimizer", "momentum", "weight_decay", "clipgrad"):
-        #     if hasattr(args, field):
-        #         value = getattr(args, field)
-        #         if value is not None:
-        #             setattr(cfg, field, value)
-        prune_fields = ("packnet_prune_perc", "prune_perc_per_layer", "packnet_prune_frac")
-        for field in prune_fields:
+        for field in cfg.__dataclass_fields__:
             if hasattr(args, field):
-                value = getattr(args, field)
-                if value is not None:
-                    cfg.prune_perc = float(value)
-                    break
-        cfg.prune_perc = float(max(0.0, min(1.0, cfg.prune_perc)))
+                setattr(cfg, field, getattr(args, field))
         return cfg
 
 

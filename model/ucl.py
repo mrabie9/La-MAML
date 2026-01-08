@@ -103,14 +103,9 @@ class UCLConfig:
     @staticmethod
     def from_args(args: object) -> "UCLConfig":
         cfg = UCLConfig()
-        # for field in cfg.__dataclass_fields__:
-        #     if hasattr(args, field):
-        #         setattr(cfg, field, getattr(args, field))
-        # fallbacks to legacy flag names
-        # if hasattr(args, "clipgrad"):
-        #     cfg.clipgrad = getattr(args, "clipgrad")
-        # if hasattr(args, "split"):
-        #     cfg.split = getattr(args, "split")
+        for field in cfg.__dataclass_fields__:
+            if hasattr(args, field):
+                setattr(cfg, field, getattr(args, field))
         return cfg
 
 

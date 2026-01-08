@@ -37,9 +37,9 @@ class HatConfig:
     def from_args(args: object) -> "HatConfig":
         cfg = HatConfig()
         # Override defaults with any args attributes that match
-        # for field in cfg.__dataclass_fields__:
-        #     if hasattr(args, field):
-        #         setattr(cfg, field, getattr(args, field))
+        for field in cfg.__dataclass_fields__:
+            if hasattr(args, field):
+                setattr(cfg, field, getattr(args, field))
         if hasattr(args, "clipgrad") and not hasattr(args, "grad_clip_norm"):
             cfg.grad_clip_norm = getattr(args, "clipgrad")
         return cfg

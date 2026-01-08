@@ -339,14 +339,9 @@ class UCLConfig:
     @staticmethod
     def from_args(args: object) -> "UCLConfig":
         cfg = UCLConfig()
-        # if hasattr(args, "clipgrad"):
-        #     cfg.clipgrad = getattr(args, "clipgrad")
-        # if hasattr(args, "split"):
-        #     cfg.split = getattr(args, "split")
-        # if hasattr(args, "ratio"):
-        #     cfg.ratio = getattr(args, "ratio")
-        # if hasattr(args, "eval_samples"):
-        #     cfg.eval_samples = max(1, int(getattr(args, "eval_samples")))
+        for field in cfg.__dataclass_fields__:
+            if hasattr(args, field):
+                setattr(cfg, field, getattr(args, field))
         return cfg
 
 

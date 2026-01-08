@@ -29,7 +29,7 @@ class LwfConfig:
 
     lr: float = 1e-3
     optimizer: str = "sgd"
-    momentum: float = 0.0
+    momentum: float = 0.9
     weight_decay: float = 0.0
     clipgrad: Optional[float] = 100.0
     temperature: float = 2.0
@@ -38,31 +38,10 @@ class LwfConfig:
     @staticmethod
     def from_args(args: object) -> "LwfConfig":
         cfg = LwfConfig()
-        # Override defaults with any args attributes that match
-        # for field in ("lr", "optimizer", "momentum", "weight_decay", "clipgrad"):
-        #     if hasattr(args, field):
-        #         value = getattr(args, field)
-        #         if value is not None:
-        #             setattr(cfg, field, value)
-        if getattr(cfg, "clipgrad", None) is None and hasattr(args, "grad_clip_norm"):
-            cfg.clipgrad = getattr(args, "grad_clip_norm")
-        # Allow multiple naming variants for the LwF knobs.
-        temperature_fields = ("temperature", "distill_temperature", "lwf_temperature")
-        lambda_fields = ("distill_lambda", "lwf_lambda", "lwf_distill_lambda")
-        for field in temperature_fields:
+        for field in cfg.__dataclass_fields__:
             if hasattr(args, field):
-                value = getattr(args, field)
-                if value is not None:
-                    cfg.temperature = float(value)
-                    break
-        for field in lambda_fields:
-            if hasattr(args, field):
-                value = getattr(args, field)
-                if value is not None:
-                    cfg.distill_lambda = float(value)
-                    break
+                setattr(cfg, field, getattr(args, field))
         return cfg
-
 
 class Net(nn.Module):
     """LwF learner that plugs directly into the repository training loop."""

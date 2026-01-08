@@ -30,11 +30,7 @@ class BclDualConfig:
     bcl_n_meta: int = 5
 
     cuda: bool = True
-    batch_size: int = 1
-    samples_per_task: int = -1
     replay_batch_size: int = 20
-    alpha_init: float = 1e-3
-    
 
     @staticmethod
     def from_args(args: object) -> "BclDualConfig":
@@ -59,13 +55,12 @@ class Net(torch.nn.Module):
         # setup network
         self.is_task_incremental = True
         self.net = ResNet1D(n_outputs, args)
-        self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
 
         # setup optimizer
         self.inner_lr = self.cfg.lr
         self.beta= self.cfg.beta
         #self.outer_opt = torch.optim.SGD(self.net.parameters(), lr=self.outer_lr)
-        self.inner_opt = torch.optim.SGD(self.net.parameters(), lr=self.inner_lr)
+        self.inner_opt = torch.optim.SGD(self.net.parameters(), lr=self.inner_lr, momentum=0.9)
         # setup losses
         self.bce = torch.nn.CrossEntropyLoss()
 
@@ -112,7 +107,6 @@ class Net(torch.nn.Module):
         # Use batchmean to match KL definition and remove PyTorch warning
         self.kl = nn.KLDivLoss(reduction="batchmean")
         self.samples_seen = 0
-        self.samples_per_task = self.cfg.samples_per_task
         self.sz = int(self.cfg.replay_batch_size)
         self.glances = self.cfg.bcl_inner_steps
         self.n_meta = self.cfg.bcl_n_meta

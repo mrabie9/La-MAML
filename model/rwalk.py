@@ -39,23 +39,9 @@ class RWalkConfig:
         if args is None:
             return cfg
 
-        # for field in ("lr", "optimizer", "momentum", "weight_decay", "lamb", "alpha", "eps"):
-        #     if hasattr(args, field):
-        #         value = getattr(args, field)
-        #         if value is not None:
-        #             setattr(cfg, field, value)
-        # if hasattr(args, "clipgrad") and getattr(args, "clipgrad") is not None:
-        #     cfg.clipgrad = getattr(args, "clipgrad")
-        # elif hasattr(args, "clipgrad_norm") and getattr(args, "clipgrad_norm") is not None:
-        #     cfg.clipgrad = getattr(args, "clipgrad_norm")
-
-        # parameter = getattr(args, "parameter", "")
-        # if isinstance(parameter, str) and parameter:
-        #     try:
-        #         cfg.lamb = float(parameter.split(",")[0])
-        #     except (ValueError, IndexError):
-        #         pass
-
+        for field in cfg.__dataclass_fields__:
+            if hasattr(args, field):
+                setattr(cfg, field, getattr(args, field))
         return cfg
 
 
