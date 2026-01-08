@@ -9,3 +9,4 @@ extra/
 la-maml_env/
 config.yaml
 *.yaml
+logs/*
