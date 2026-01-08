@@ -123,6 +123,11 @@ def build_cli(preset: TuningPreset) -> argparse.ArgumentParser:
         help="Added to the base seed for each trial index.",
     )
     parser.add_argument(
+        "--vary-seed",
+        action="store_true",
+        help="If set, add the trial index to the base seed.",
+    )
+    parser.add_argument(
         "--output-root",
         type=str,
         default=preset.resolve_output_root(),
@@ -352,6 +357,7 @@ def run_single_trial(
     session_timestamp: str,
     runs_root: Path,
     seed_offset: int,
+    vary_seed: bool,
     keep_expt_name: bool,
     model_name: str,
 ) -> Dict[str, Any]:
@@ -364,7 +370,8 @@ def run_single_trial(
     args.model = model_name
 
     args.log_dir = str(runs_root)
-    args.seed = int(getattr(base_args, "seed", 0) + seed_offset + trial_idx)
+    seed_base = int(getattr(base_args, "seed", 0) + seed_offset)
+    args.seed = seed_base + (trial_idx if vary_seed else 0)
 
     trial_slug = slugify_params(trial_overrides)
     if not keep_expt_name:
@@ -556,6 +563,7 @@ def run_tuning(preset: TuningPreset) -> None:
                     session_timestamp,
                     runs_root,
                     cli.seed_offset,
+                    cli.vary_seed,
                     cli.keep_expt_name,
                     preset.model_name,
                 )

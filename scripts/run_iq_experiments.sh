@@ -107,14 +107,14 @@ echo "Logging IQ experiment suite to $LOG_FILE"
 ##### CTN #####
 python3 -u main.py $IQ --model ctn --expt_name all_ctn --batch_size 128 --replay_batch_size 64 --n_epochs 50 \
                     --increment 5 \
-                    --ctn_n_memories 5192 --lr 0.01 --ctn_beta 0.05 --ctn_inner_steps 2 --ctn_n_meta 2 \
+                    --n_memories 5192 --lr 0.01 --beta 0.05 --inner_steps 2 --n_meta 2 \
                     --log_every 3125 --class_order random \
                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
 
 ##### ER-Ring #####
 python3 -u main.py $IQ --model er_ring --expt_name all_erring --batch_size 128 --replay_batch_size 64 --n_epochs 50 \
                     --lr 0.03 --increment 5 \
-                    --bcl_n_memories 5192 --bcl_temperature 2.0 --bcl_memory_strength 1.0 --bcl_inner_steps 5 \
+                    --n_memories 5192 --temperature 2.0 --memory_strength 1.0 --inner_steps 5 \
                     --log_every 3125 --class_order random \
                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
 

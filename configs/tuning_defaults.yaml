@@ -71,18 +71,18 @@ update_lr: 0.1
 # steps: 20000
 
 # Parameters specific to CTN
-ctn_beta: 0.05                        # Beta parameter for CTN
-ctn_n_meta: 2
-ctn_inner_steps: 2
-ctn_temperature: 5
-ctn_n_memories: 50  
-ctn_alpha_init: 0.1
-ctn_memory_strength: 100
-ctn_task_emb: 64
+beta: 0.05                        # Beta parameter for CTN
+n_meta: 2
+inner_steps: 2
+temperature: 5
+n_memories: 50  
+alpha_init: 0.1
+memory_strength: 100
+task_emb: 64
 
 # Parameters specific to BCL
-bcl_temperature: 5
-bcl_memory_strength: 100
-bcl_n_meta: 2
-bcl_inner_steps: 2
-bcl_n_memories: 400
+temperature: 5
+memory_strength: 100
+n_meta: 2
+inner_steps: 2
+n_memories: 400

@@ -166,33 +166,33 @@ def get_parser():
                         help='inner learning rate')
     
     # CTN parameters
-    parser.add_argument('--ctn_beta', type=float, default=0.05,
+    parser.add_argument('--beta', type=float, default=0.05,
                         help='Beta parameter for CTN')
-    parser.add_argument('--ctn_n_meta', type=int, default=2,
+    parser.add_argument('--n_meta', type=int, default=2,
                         help='Number of meta-updates for CTN')
-    parser.add_argument('--ctn_inner_steps', type=int, default=2,
+    parser.add_argument('--inner_steps', type=int, default=2,
                         help='Number of inner updates for CTN')
-    parser.add_argument('--ctn_temperature', type=float, default=5,
+    parser.add_argument('--temperature', type=float, default=5,
                         help='Temperature for CTN')
-    parser.add_argument('--ctn_n_memories', type=int, default=50,
+    parser.add_argument('--n_memories', type=int, default=50,
                         help='Number of memories for CTN')
-    parser.add_argument('--ctn_alpha_init', type=float, default=0.1,
+    parser.add_argument('--alpha_init', type=float, default=0.1,
                         help='Initial learning rate for CTN')
-    parser.add_argument('--ctn_memory_strength', type=float, default=0.5,
+    parser.add_argument('--memory_strength', type=float, default=0.5,
                         help='Memory strength for CTN')
-    parser.add_argument('--ctn_task_emb', type=int, default=64,
+    parser.add_argument('--task_emb', type=int, default=64,
                         help='Task embedding dimension for CTN')
     
     # BCL-Dual parameters
-    parser.add_argument('--bcl_n_memories', type=int, default=2000,
+    parser.add_argument('--n_memories', type=int, default=2000,
                         help='Number of memories for BCL-Dual')
-    parser.add_argument('--bcl_memory_strength', type=float, default=1.0,
+    parser.add_argument('--memory_strength', type=float, default=1.0,
                         help='Memory strength for BCL-Dual')
-    parser.add_argument('--bcl_temperature', type=float, default=2.0,
+    parser.add_argument('--temperature', type=float, default=2.0,
                         help='Temperature for BCL-Dual')
-    parser.add_argument('--bcl_inner_steps', type=int, default=5,
+    parser.add_argument('--inner_steps', type=int, default=5,
                         help='Number of inner updates for BCL-Dual')
-    parser.add_argument('--bcl_n_meta', type=int, default=5,
+    parser.add_argument('--n_meta', type=int, default=5,
                         help='Number of meta-updates for BCL-Dual')
     # Parameters for HAT
     

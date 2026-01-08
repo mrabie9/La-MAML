@@ -19,17 +19,17 @@ from utils import misc_utils
 
 @dataclass
 class ErRingConfig:
-    bcl_memory_strength: float = 1.0
-    bcl_temperature: float = 2.0
+    memory_strength: float = 1.0
+    temperature: float = 2.0
     alpha_init: float = 1e-3
     lr: float = 1e-3
-    bcl_n_memories: int = 2000
+    n_memories: int = 2000
     n_memories: int = 0
     cuda: bool = True
     batch_size: int = 1
     samples_per_task: int = -1
     replay_batch_size: int = 20
-    bcl_inner_steps: int = 5
+    inner_steps: int = 5
 
     @staticmethod
     def from_args(args: object) -> "ErRingConfig":
@@ -48,8 +48,8 @@ class Net(torch.nn.Module):
                  args):
         super(Net, self).__init__()
         self.cfg = ErRingConfig.from_args(args)
-        self.reg = self.cfg.bcl_memory_strength
-        self.temp = self.cfg.bcl_temperature
+        self.reg = self.cfg.memory_strength
+        self.temp = self.cfg.temperature
         # setup network
         self.is_task_incremental = True
         self.net = ResNet1D(n_outputs, args)
@@ -78,7 +78,7 @@ class Net(torch.nn.Module):
         self.current_task = 0
         self.fisher = {}
         self.optpar = {}
-        self.n_memories = self.cfg.bcl_n_memories
+        self.n_memories = self.cfg.n_memories
         self.mem_cnt = 0       
         
         self.memx = torch.FloatTensor(n_tasks, self.n_memories, 2, n_inputs//2).fill_(0)
@@ -104,7 +104,7 @@ class Net(torch.nn.Module):
         self.samples_seen = 0
         self.samples_per_task = self.cfg.samples_per_task
         self.sz = int(self.cfg.replay_batch_size)
-        self.inner_steps = self.cfg.bcl_inner_steps
+        self.inner_steps = self.cfg.inner_steps
     def on_epoch_end(self):  
         pass
 

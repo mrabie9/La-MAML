@@ -101,19 +101,19 @@ python3 -u main.py $IQ --model gem --expt_name all_gem --n_memories 512 --batch_
 # ##### CTN #####
 # python3 -u main.py $IQ --model ctn --expt_name all_ctn --batch_size 128 --replay_batch_size 64 --n_epochs 50 \
 #                     --increment 5 \
-#                     --ctn_n_memories 5192 --lr 0.01 --ctn_beta 0.05 --ctn_inner_steps 2 --ctn_n_meta 2 \
+#                     --n_memories 5192 --lr 0.01 --beta 0.05 --inner_steps 2 --n_meta 2 \
 #                     --log_every 3125 --class_order random \
 #                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
 
 # ##### ER-Ring #####
 # python3 -u main.py $IQ --model er_ring --expt_name all_erring --batch_size 128 --replay_batch_size 64 --n_epochs 50 \
 #                     --lr 0.03 --increment 5 \
-#                     --bcl_n_memories 5192 --bcl_temperature 2.0 --bcl_memory_strength 1.0 --bcl_inner_steps 5 \
+#                     --n_memories 5192 --temperature 2.0 --memory_strength 1.0 --inner_steps 5 \
 #                     --log_every 3125 --class_order random \
 #                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task -1
 
-##### BCL Dual ##### Hyperparams from logs/bcl_dual/training_parameters.json
-python3 -u main.py $IQ --model bcl_dual --expt_name bcl_basic_test --data_path data/rff/rfmls \
+##### BCL Dual ##### Hyperparams from logs/dual/training_parameters.json
+python3 -u main.py $IQ --model dual --expt_name basic_test --data_path data/rff/rfmls \
                     --n_layers 2 --n_hiddens 100 --xav_init --glances 1 --n_epochs 20 \
                     --batch_size 64 --replay_batch_size 10 --memories 400 --lr 0.03 \
                     --increment 5 --log_every 3125 --class_order random \
@@ -121,8 +121,8 @@ python3 -u main.py $IQ --model bcl_dual --expt_name bcl_basic_test --data_path d
                     --iterations 5000 --test_batch_size 100000 --n_memories 5192 --memory_strength 1.0 \
                     --steps_per_sample 1 --gamma 1.0 --beta 0.1 --batches_per_example 1 \
                     --opt_lr 0.1 --opt_wt 0.1 --alpha_init 0.1 --cifar_batches 3 --grad_clip_norm 5.0 \
-                    --second_order --bcl_n_memories 2000 --bcl_memory_strength 1.0 --bcl_temperature 2.0 \
-                    --bcl_inner_steps 5 --bcl_n_meta 5 --train_mc_iters 2 \
+                    --second_order --n_memories 2000 --memory_strength 1.0 --temperature 2.0 \
+                    --inner_steps 5 --n_meta 5 --train_mc_iters 2 \
                     --std_init 0.02 --mean_eta 50.0 --fisher_gamma 0.95 --rln 7 --update_steps 10 \
                     --meta_lr 0.001 --update_lr 0.1
 
