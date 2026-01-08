@@ -1,2 +1,4 @@
 # Model-specific overrides for ctn.
 model: ctn
+memory_strength: 0.5
+temperature: 5.0

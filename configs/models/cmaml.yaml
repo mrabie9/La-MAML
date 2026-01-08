@@ -7,3 +7,6 @@ learn_lr: false
 sync_update: true
 use_old_task_memory: false
 second_order: true
+memories: 5120
+replay_batch_size: 20
+glances: 1

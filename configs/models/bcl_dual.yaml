@@ -1,8 +1,10 @@
 # BCL-Dual defaults
 model: bcl_dual
+lr: 0.001
 beta: 1.0
 bcl_temperature: 5
 bcl_memory_strength: 100
 bcl_n_meta: 2
 bcl_inner_steps: 2
 bcl_n_memories: 400
+replay_batch_size: 20

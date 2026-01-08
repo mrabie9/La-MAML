@@ -381,6 +381,22 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
             }
         ),
     ),
+    "la-er": TuningPreset(
+        model_name="eralg4",
+        description="Run grid or random search over La-ER hyperparameters.",
+        default_output_root="logs/tuning/la-er",
+        type_hints=COMMON_TYPE_HINTS,
+        grid_factory=make_grid_factory(
+            {
+                # "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
+                #     "values": [32, 64, 128, 256]},
+                "learn_lr": {"kind": "bool", "values": [True]},
+                "opt_lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1,
+                           "values": [0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
+                
+            }
+        ),
+    ),
     # "meralg1": TuningPreset(
     #     model_name="meralg1",
     #     description="Run grid or random search over MER-Alg1 hyperparameters.",

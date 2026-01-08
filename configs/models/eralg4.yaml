@@ -1,2 +1,4 @@
 # Model-specific overrides for eralg4.
 model: eralg4
+learn_lr: false
+opt_lr: 0.1
