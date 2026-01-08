@@ -7,5 +7,5 @@ data/
 *.zip
 extra/
 la-maml_env/
+config.yaml
 *.yaml
-config_al.yaml

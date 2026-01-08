@@ -109,7 +109,7 @@ def fmt_float(value: Any, precision: int = 4) -> str:
 
 
 def print_header(summary: Dict[str, Any], rows: Sequence[Dict[str, Any]]) -> None:
-    print("\n=== HAT tuning summary ===")
+    print("\n=== Tuning summary ===")
     print(f"Config file      : {summary.get('config')}")
     print(f"Experiment name  : {summary.get('base_expt_name')}")
     print(f"Session directory: {summary.get('session_dir')}")

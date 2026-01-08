@@ -1,6 +1,6 @@
 # Experiment details
-expt_name: eralg4_hpt_test      # name of the experiment
-model: eralg4                   # algo to train
+expt_name: icarl_test_hpt        # name of the experiment
+model: icarl                   # algo to train
 arch: resnet1d                          # arch to use for training (choices: [resnet1d])
 # n_hiddens: 100                          # number of hidden neurons at each layer
 # n_layers: 2                             # number of hidden layers

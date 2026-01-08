@@ -132,7 +132,8 @@ def log_dir(opt, timestamp=None):
     mkdir(tfdir)
     
     with open(logdir + '/training_parameters.json', 'w') as f:
-        json.dump(vars(opt), f, indent=4)
+        params = {k: v for k, v in vars(opt).items() if not callable(v)}
+        json.dump(params, f, indent=4)
     
     return logdir, tfdir
 
