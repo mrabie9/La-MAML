@@ -1,13 +1,13 @@
 # Experiment details
-expt_name: mer_test_radar        # name of the experiment
-model: meralg1                   # algo to train
+expt_name: icarl_test_hpt        # name of the experiment
+model: icarl                   # algo to train
 arch: resnet1d                          # arch to use for training (choices: [resnet1d])
 # n_hiddens: 100                          # number of hidden neurons at each layer
 # n_layers: 2                             # number of hidden layers
 xav_init: true                          # Use xavier initialization
 
 # Data parameters
-data_path: data/rff/radar            # path where data is located
+data_path: data/rff/radar/hpt            # path where data is located
 loader: task_incremental_loader      # data loader to use
 shuffle_tasks: false                 # NOT USED present tasks in order
 classes_per_it: 6                    # number of classes in every batch
