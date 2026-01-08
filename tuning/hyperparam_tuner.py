@@ -381,6 +381,7 @@ def run_single_trial(
     loader_mod = importlib.import_module(f"dataloaders.{args.loader}")
     loader = loader_mod.IncrementalLoader(args, seed=args.seed)
     n_inputs, n_outputs, n_tasks = loader.get_dataset_info()
+    args.get_samples_per_task = getattr(loader, "get_samples_per_task", None)
 
     model_mod = importlib.import_module(f"model.{args.model}")
     model = model_mod.Net(n_inputs, n_outputs, n_tasks, args)
