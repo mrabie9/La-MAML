@@ -233,6 +233,24 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
             }
         ),
     ),
+    "lwf": TuningPreset(
+        model_name="lwf",
+        description="Run grid or random search over LWF hyperparameters.",
+        default_output_root="logs/tuning/lwf",
+        type_hints=COMMON_TYPE_HINTS,
+        grid_factory=make_grid_factory(
+            {
+                # "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
+                #     "values": [32, 64, 128, 256]},
+                "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-2,
+                       "values":[0.03,0.01,0.003,0.001,0.0003,0.0001,0.00003,0.00001]},
+                "temperature": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 100, "fallback": 400,
+                             "values": [2, 5, 10, 20]},
+                "distill_lambda": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 4.0, "fallback": 10.0,
+                    "values": [0.1, 1.0, 10.0]},
+            }
+        ),
+    ),
     "er_ring": TuningPreset(
         model_name="er_ring",
         description="Run grid or random search over ER-Ring hyperparameters.",
@@ -331,10 +349,26 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
             }
         ),
     ),
-    "lamaml_cifar": TuningPreset(
-        model_name="lamaml_cifar",
-        description="Run grid or random search over La-MAML-CIFAR hyperparameters.",
-        default_output_root="logs/tuning/lamaml_cifar",
+    "smaml": TuningPreset(
+        model_name="lamaml",
+        description="Run grid or random search over La-MAML hyperparameters.",
+        default_output_root="logs/tuning/smaml",
+        type_hints=COMMON_TYPE_HINTS,
+        grid_factory=make_grid_factory(
+            {
+                # "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
+                #     "values": [32, 64, 128, 256]},
+                "opt_lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1,
+                           "values": [0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
+                "opt_wt": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1,
+                           "values": [0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
+            }
+        ),
+    ),
+    "cmaml": TuningPreset(
+        model_name="lamaml",
+        description="Run grid or random search over La-MAML hyperparameters.",
+        default_output_root="logs/tuning/cmaml",
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {

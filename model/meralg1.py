@@ -96,8 +96,8 @@ class Net(nn.Module):
         self.age = 0
 
         # handle gpus if specified
-        self.cuda = self.cfg.cuda
-        if self.cuda:
+        self.use_cuda = self.cfg.cuda
+        if self.use_cuda:
             self.net = self.net.cuda()
 
 
@@ -149,7 +149,7 @@ class Net(nn.Module):
         for sx, sy, st in samples:
             bx = sx.unsqueeze(0).float()
             by = sy.view(1).long()
-            if self.cuda:
+            if self.use_cuda:
                 bx = bx.cuda(non_blocking=True)
                 by = by.cuda(non_blocking=True)
             bxs.append(bx)
