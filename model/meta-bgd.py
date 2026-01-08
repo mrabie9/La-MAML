@@ -75,8 +75,8 @@ class Net(torch.nn.Module):
         # define the lr params
         self.net.define_task_lr_params(alpha_init = self.cfg.alpha_init)
 
-        self.cuda = self.cfg.cuda
-        if self.cuda:
+        self.use_cuda = self.cfg.cuda
+        if self.use_cuda:
             self.net = self.net.cuda()
 
         # optimizer model
@@ -244,7 +244,7 @@ class Net(torch.nn.Module):
         bts = Variable(torch.from_numpy(np.array(bts))).long().view(-1)
         
         # handle gpus if specified
-        if self.cuda:
+        if self.use_cuda:
             bxs = bxs.cuda()
             bys = bys.cuda()
             bts = bts.cuda()

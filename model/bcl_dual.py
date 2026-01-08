@@ -99,7 +99,7 @@ class Net(torch.nn.Module):
 
         self.mem_cnt = 0
         self.val_cnt = 0
-        self.bsz = self.cfg.batch_size
+        self.bsz = args.batch_size
         self.valid_id = []
         self.n_outputs = n_outputs
 

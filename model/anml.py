@@ -347,7 +347,7 @@ class Net(nn.Module):
         bts = Variable(torch.from_numpy(np.array(bts))).long().view(-1)
         
         # handle gpus if specified
-        if self.cuda:
+        if self.use_cuda:
             bxs = bxs.cuda()
             bys = bys.cuda()
             bts = bts.cuda()

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hyperparameter tuning harness for the La-MAML CIFAR learner."""
+"""Hyperparameter tuning harness for the smaml learner."""
 
 from __future__ import annotations
 import sys
@@ -13,7 +13,7 @@ except ModuleNotFoundError:
     from tuning.hyperparam_tuner import make_main
     from tuning.presets import TUNING_PRESETS
 
-main = make_main(TUNING_PRESETS["lamaml_cifar"])
+main = make_main(TUNING_PRESETS["smaml"])
 
 if __name__ == "__main__":
     main()

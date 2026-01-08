@@ -78,8 +78,8 @@ class BaseNet(torch.nn.Module):
         self.memories = self.cfg.memories
         self.batchSize = int(self.cfg.replay_batch_size)
 
-        self.cuda = self.cfg.cuda
-        if self.cuda:
+        self.use_cuda = self.cfg.cuda
+        if self.use_cuda:
             self.net = self.net.cuda()
 
         self.n_outputs = n_outputs
@@ -168,7 +168,7 @@ class BaseNet(torch.nn.Module):
         bts = Variable(torch.from_numpy(np.array(bts))).long().view(-1)
         
         # handle gpus if specified
-        if self.cuda:
+        if self.use_cuda:
             bxs = bxs.cuda()
             bys = bys.cuda()
             bts = bts.cuda()
