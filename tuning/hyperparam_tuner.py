@@ -24,20 +24,24 @@ from utils import misc_utils
 
 Grid = Dict[str, List[Any]]
 TypeHints = Dict[str, type]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _default_config_chain(model_name: str, preset_default: str | None) -> List[str]:
     """Return the default stack of config fragments for a model."""
 
     chain: List[str] = []
-    base_cfg = Path("configs/base.yaml")
+    base_cfg = REPO_ROOT / "configs/base.yaml"
     if base_cfg.exists():
         chain.append(str(base_cfg))
-    model_cfg = Path("configs/models") / f"{model_name}.yaml"
+    model_cfg = REPO_ROOT / "configs/models" / f"{model_name}.yaml"
     if model_cfg.exists():
         chain.append(str(model_cfg))
     if not chain and preset_default:
-        chain.append(preset_default)
+        preset_path = Path(preset_default)
+        if not preset_path.is_absolute():
+            preset_path = REPO_ROOT / preset_path
+        chain.append(str(preset_path))
     return chain
 
 
@@ -61,7 +65,7 @@ class TuningPreset:
     def resolve_output_root(self) -> str:
         if self.default_output_root:
             return self.default_output_root
-        return f"logs/tuning/{self.model_name}"
+        return f"~/repos/La-MAML/logs/tuning/{self.model_name}"
 
 
 def build_cli(preset: TuningPreset) -> argparse.ArgumentParser:
@@ -80,7 +84,7 @@ def build_cli(preset: TuningPreset) -> argparse.ArgumentParser:
     parser.add_argument(
         "--config-dir",
         action="append",
-        default=["configs/tuning_defaults.yaml"],
+        default=[str(REPO_ROOT / "configs/tuning_defaults.yaml")],
         metavar="DIR",
         help="Directory of YAML config fragments to apply (alphabetical order).",
     )
@@ -384,6 +388,12 @@ def run_single_trial(
     log_dir, tf_dir = misc_utils.log_dir(args, trial_timestamp)
     args.log_dir = log_dir
     args.tf_dir = tf_dir
+    if hasattr(args, "data_path"):
+        data_path = Path(args.data_path).expanduser()
+        if not data_path.is_absolute() and not data_path.exists():
+            candidate = REPO_ROOT / data_path
+            if candidate.exists():
+                args.data_path = str(candidate)
 
     loader_mod = importlib.import_module(f"dataloaders.{args.loader}")
     loader = loader_mod.IncrementalLoader(args, seed=args.seed)
