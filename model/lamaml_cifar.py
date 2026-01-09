@@ -119,7 +119,7 @@ class Net(BaseNet):
                 self.current_task = t
 
             batch_sz = x.shape[0]
-            n_batches = self.cfg.cifar_batches
+            n_batches = self.cfg.meta_batches
             rough_sz = math.ceil(batch_sz/n_batches)
             fast_weights = None
             meta_losses = [0 for _ in range(n_batches)]

@@ -27,7 +27,13 @@ class LamamlBaseConfig:
     learn_lr: bool = False
     second_order: bool = False
     sync_update: bool = False
-    cifar_batches: int = 3
+    meta_batches: int = 3
+    arch: str = "resnet1d"
+    dataset: str = "tinyimagenet"
+    grad_clip_norm: Optional[float] = 2.0
+    n_layers: int = 2
+    n_hiddens: int = 100
+    input_channels: int = 1
 
     @staticmethod
     def from_args(args: object) -> "LamamlBaseConfig":
