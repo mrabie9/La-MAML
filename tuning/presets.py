@@ -334,7 +334,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         ),
     ),
     "lamaml": TuningPreset(
-        model_name="lamaml",
+        model_name="lamaml_cifar",
         description="Run grid or random search over La-MAML hyperparameters.",
         default_output_root="logs/tuning/lamaml",
         type_hints=COMMON_TYPE_HINTS,
@@ -344,13 +344,13 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                 #     "values": [32, 64, 128, 256]},
                 "opt_lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1,
                            "values": [0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
-                "opt_wt": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1,
-                           "values": [0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
+                "alpha_init": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1,
+                            "values": [0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
             }
         ),
     ),
     "smaml": TuningPreset(
-        model_name="lamaml",
+        model_name="lamaml_cifar",
         description="Run grid or random search over La-MAML hyperparameters.",
         default_output_root="logs/tuning/smaml",
         type_hints=COMMON_TYPE_HINTS,
@@ -362,11 +362,13 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                            "values": [0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
                 "opt_wt": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1,
                            "values": [0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
+                "alpha_init": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1,
+                            "values": [0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
             }
         ),
     ),
     "cmaml": TuningPreset(
-        model_name="lamaml",
+        model_name="lamaml_cifar",
         description="Run grid or random search over La-MAML hyperparameters.",
         default_output_root="logs/tuning/cmaml",
         type_hints=COMMON_TYPE_HINTS,
@@ -374,10 +376,10 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
             {
                 # "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
                 #     "values": [32, 64, 128, 256]},
-                "opt_lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1,
-                           "values": [0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
                 "opt_wt": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1,
                            "values": [0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
+                "alpha_init": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1,
+                            "values": [0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
             }
         ),
     ),

@@ -1,8 +1,7 @@
 # La-MAML specific defaults
-model: lamaml
-opt_lr: 0.1
-opt_wt: 0.1
-alpha_init: 0.1
+model: lamaml_cifar
+opt_lr: 0.1 # n
+alpha_init: 0.1 # alpha
 learn_lr: true
 sync_update: false
 use_old_task_memory: false
