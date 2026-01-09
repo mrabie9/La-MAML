@@ -1,9 +1,11 @@
 # La-MAML specific defaults
 model: lamaml
 opt_lr: 0.1
-opt_wt: 0.1
 alpha_init: 0.1
 learn_lr: true
 sync_update: false
 use_old_task_memory: false
 second_order: true
+memories: 5120
+replay_batch_size: 20
+glances: 1
