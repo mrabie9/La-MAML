@@ -48,7 +48,7 @@ class MetaBgdConfig:
     replay_batch_size: int = 20
     use_old_task_memory: bool = False
     grad_clip_norm: Optional[float] = 2.0
-    cifar_batches: int = 3
+    meta_batches: int = 3
 
     @staticmethod
     def from_args(args: object) -> "MetaBgdConfig":

@@ -20,16 +20,14 @@ from utils import misc_utils
 @dataclass
 class ErRingConfig:
     memory_strength: float = 1.0
-    temperature: float = 2.0
-    alpha_init: float = 1e-3
     lr: float = 1e-3
     n_memories: int = 2000
-    n_memories: int = 0
-    cuda: bool = True
-    batch_size: int = 1
-    samples_per_task: int = -1
     replay_batch_size: int = 20
     inner_steps: int = 5
+    
+    batch_size: int = 128
+    cuda: bool = True
+    # temperature: float = 2.0
 
     @staticmethod
     def from_args(args: object) -> "ErRingConfig":
@@ -49,11 +47,10 @@ class Net(torch.nn.Module):
         super(Net, self).__init__()
         self.cfg = ErRingConfig.from_args(args)
         self.reg = self.cfg.memory_strength
-        self.temp = self.cfg.temperature
+        # self.temp = self.cfg.temperature
         # setup network
         self.is_task_incremental = True
         self.net = ResNet1D(n_outputs, args)
-        self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
         # setup optimizer
         self.lr = self.cfg.lr
         #if self.is_task_incremental:
@@ -102,7 +99,6 @@ class Net(torch.nn.Module):
         # Use batchmean to align with KL math and silence PyTorch warning
         self.kl = nn.KLDivLoss(reduction="batchmean")
         self.samples_seen = 0
-        self.samples_per_task = self.cfg.samples_per_task
         self.sz = int(self.cfg.replay_batch_size)
         self.inner_steps = self.cfg.inner_steps
     def on_epoch_end(self):  
@@ -175,7 +171,7 @@ class Net(torch.nn.Module):
         if t != self.current_task:
             tt = self.current_task
             offset1, offset2 = self.compute_offsets(tt)
-            out = self.forward(self.memx[tt],tt, True)
+            # out = self.forward(self.memx[tt],tt, True)
             #self.mem_feat[tt] = F.softmax(out[:, offset1:offset2] / self.temp, dim=1 ).data.clone()
             self.current_task = t
             

@@ -31,21 +31,20 @@ from utils import misc_utils
 
 @dataclass
 class ErAlgConfig:
-    arch: str = "resnet1d"
-    n_layers: int = 2
-    n_hiddens: int = 100
     alpha_init: float = 1e-3
     lr: float = 1e-3
     opt_lr: float = 1e-1
     learn_lr: bool = False
-    dataset: str = "tinyimagenet"
     glances: int = 1
     memories: int = 5120
     replay_batch_size: int = 20
-    cuda: bool = True
     grad_clip_norm: Optional[float] = 2.0
     second_order: bool = False
-    cifar_batches: int = 3
+    meta_batches: int = 3
+
+    arch: str = "resnet1d"
+    dataset: str = "tinyimagenet"
+    cuda: bool = True
 
     @staticmethod
     def from_args(args: object) -> "ErAlgConfig":
@@ -88,8 +87,8 @@ class Net(nn.Module):
         self.age = 0
         
         # handle gpus if specified
-        self.is_cuda = self.cfg.cuda
-        if self.is_cuda:
+        self.use_cuda = self.cfg.cuda
+        if self.use_cuda:
             self.net = self.net.cuda()
 
         self.n_outputs = n_outputs
@@ -166,7 +165,7 @@ class Net(nn.Module):
         bts = Variable(torch.from_numpy(np.array(bts))).long().view(-1)
         
         # handle gpus if specified
-        if self.is_cuda:
+        if self.use_cuda:
             bxs = bxs.cuda()
             bys = bys.cuda()
             bts = bts.cuda()
@@ -291,7 +290,7 @@ class Net(nn.Module):
             y = y[perm]
 
             batch_sz = x.shape[0]
-            n_batches = self.cfg.cifar_batches
+            n_batches = self.cfg.meta_batches
             rough_sz = math.ceil(batch_sz/n_batches)
             fast_weights = None
             meta_losses = [0 for _ in range(n_batches)] 
