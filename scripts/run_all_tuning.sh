@@ -28,13 +28,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 PYTHON_BIN="${PYTHON:-python3}"
-SCRIPTS_ROOT="tuning"
-CONFIG_FILE="configs/tuning_defaults.yaml"
-MODEL_CONFIG_DIR="configs/models"
+SCRIPTS_ROOT="../tuning"
+CONFIG_FILE="../configs/tuning_defaults.yaml"
+MODEL_CONFIG_DIR="../configs/models"
 KEEP_GOING=0
 DRY_RUN=0
 LIST_ONLY=0
-LOG_ROOT="logs/tuning/suites"
+LOG_ROOT="../logs/tuning/suites"
 PYTHONPATH_OVERRIDE=""
 declare -a MODE_FILTER=()
 declare -a EXCLUDE_FILTER=()
