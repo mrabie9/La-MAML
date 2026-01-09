@@ -112,7 +112,7 @@ def get_parser():
 
     parser.add_argument('--grad_clip_norm', type=float, default=2.0,
                         help='Clip the gradients by this value')
-    parser.add_argument("--cifar_batches", default=3, type=int,
+    parser.add_argument("--meta_batches", default=3, type=int,
                         help="Number of batches in inner trajectory") 
     parser.add_argument('--use_old_task_memory', default=False, action='store_true', 
                         help='Use only old task samples for replay buffer data')    
@@ -121,7 +121,7 @@ def get_parser():
 
 
    # memory parameters for GEM | AGEM | ICARL 
-    parser.add_argument('--n_memories', type=int, default=0,
+    parser.add_argument('--n_memories', type=int, default=5120,
                         help='number of memories per task')
     parser.add_argument('--memory_strength', default=0, type=float,
                         help='memory strength (meaning depends on memory)')
@@ -129,15 +129,15 @@ def get_parser():
                         help='training steps per batch')
 
 
-    # parameters specific to MER 
-    parser.add_argument('--gamma', type=float, default=1.0,
-                        help='gamma learning rate parameter')
-    parser.add_argument('--beta', type=float, default=1.0,
-                        help='beta learning rate parameter')
-    parser.add_argument('--s', type=float, default=1,
-                        help='current example learning rate multiplier (s)')
-    parser.add_argument('--batches_per_example', type=float, default=1,
-                        help='the number of batch per incoming example')
+    # # parameters specific to MER 
+    # parser.add_argument('--gamma', type=float, default=1.0,
+    #                     help='gamma learning rate parameter')
+    # parser.add_argument('--beta', type=float, default=1.0,
+    #                     help='beta learning rate parameter')
+    # parser.add_argument('--s', type=float, default=1,
+    #                     help='current example learning rate multiplier (s)')
+    # parser.add_argument('--batches_per_example', type=float, default=1,
+    #                     help='the number of batch per incoming example')
 
 
     # parameters specific to Meta-BGD
@@ -174,26 +174,9 @@ def get_parser():
                         help='Number of inner updates for CTN')
     parser.add_argument('--temperature', type=float, default=5,
                         help='Temperature for CTN')
-    parser.add_argument('--n_memories', type=int, default=50,
-                        help='Number of memories for CTN')
-    parser.add_argument('--alpha_init', type=float, default=0.1,
-                        help='Initial learning rate for CTN')
-    parser.add_argument('--memory_strength', type=float, default=0.5,
-                        help='Memory strength for CTN')
     parser.add_argument('--task_emb', type=int, default=64,
                         help='Task embedding dimension for CTN')
     
-    # BCL-Dual parameters
-    parser.add_argument('--n_memories', type=int, default=2000,
-                        help='Number of memories for BCL-Dual')
-    parser.add_argument('--memory_strength', type=float, default=1.0,
-                        help='Memory strength for BCL-Dual')
-    parser.add_argument('--temperature', type=float, default=2.0,
-                        help='Temperature for BCL-Dual')
-    parser.add_argument('--inner_steps', type=int, default=5,
-                        help='Number of inner updates for BCL-Dual')
-    parser.add_argument('--n_meta', type=int, default=5,
-                        help='Number of meta-updates for BCL-Dual')
     # Parameters for HAT
     
 
