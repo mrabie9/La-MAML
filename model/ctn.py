@@ -29,9 +29,6 @@ class CtnConfig:
     beta: float = 0.05
     n_memories: int = 50
     validation: float = 0.0
-    cuda: bool = True
-    batch_size: int = 1
-    samples_per_task: int = -1
     replay_batch_size: int = 20
     inner_steps: int = 2
     n_meta: int = 2
@@ -125,7 +122,6 @@ class Net(torch.nn.Module):
         # Use batchmean to align with KL definition and silence PyTorch deprecation warning
         self.kl = nn.KLDivLoss(reduction="batchmean")
         self.samples_seen = 0
-        self.samples_per_task = self.cfg.samples_per_task
         self.sz = int(self.cfg.replay_batch_size)
         self.inner_steps = self.cfg.inner_steps
         self.n_meta = self.cfg.n_meta

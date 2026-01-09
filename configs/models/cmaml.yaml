@@ -1,5 +1,5 @@
 # La-MAML specific defaults
-model: lamaml
+model: lamaml_cifar
 opt_wt: 0.1 # beta
 alpha_init: 0.1 # alpha
 learn_lr: false
