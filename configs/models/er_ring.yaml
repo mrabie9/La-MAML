@@ -1,2 +1,6 @@
 # Model-specific overrides for er_ring.
 model: er_ring
+memory_strength: 1.0
+n_memories: 5120
+replay_batch_size: 20
+inner_steps: 1

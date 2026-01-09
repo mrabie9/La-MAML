@@ -2,3 +2,9 @@
 model: eralg4
 learn_lr: false
 opt_lr: 0.1
+lr: 0.001
+glances: 1
+memories: 5120
+replay_batch_size: 20
+alpha_init: 0.001
+meta_batches: 3

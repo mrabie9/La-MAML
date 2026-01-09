@@ -2,3 +2,11 @@
 model: ctn
 memory_strength: 0.5
 temperature: 5.0
+task_emb: 64
+lr: 0.01
+beta: 0.05
+n_memories: 50
+validation: 0.3
+replay_batch_size: 20
+inner_steps: 2
+n_meta: 2
