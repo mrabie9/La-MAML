@@ -1,2 +1,5 @@
 # Model-specific overrides for si.
 model: si
+lr: 0.001
+si_c: 0.1
+si_eps: 0.01

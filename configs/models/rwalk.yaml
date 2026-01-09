@@ -1,2 +1,6 @@
 # Model-specific overrides for rwalk.
 model: rwalk
+lr: 0.001
+lamb: 1.0
+alpha: 0.9
+eps: 0.01
