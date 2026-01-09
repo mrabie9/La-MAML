@@ -28,22 +28,19 @@ if not sys.warnoptions:
 
 @dataclass
 class IcarlConfig:
-    arch: str = "resnet1d"
-    n_layers: int = 2
-    n_hiddens: int = 100
+    lr: float = 1e-3
     memory_strength: float = 0.0
     n_memories: int = 0
-    samples_per_task: int = -1
-    validation: float = 0.0
     glances: int = 1
-    dataset: str = "tinyimagenet"
-    alpha_init: float = 1e-3
-    lr: float = 1e-3
-    cuda: bool = True
+
     grad_clip_norm: Optional[float] = 2.0
+    arch: str = "resnet1d"
+    dataset: str = "tinyimagenet"
+    cuda: bool = True
     n_epochs: int = 1
-    loader: str = "task_incremental_loader"
-    input_channels: int = 1
+    input_channels: int = 2
+    alpha_init: float = 1e-3
+    samples_per_task: int = -1
 
     @staticmethod
     def from_args(args: object) -> "IcarlConfig":

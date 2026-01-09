@@ -25,13 +25,12 @@ class RWalkConfig:
     """Hyper-parameters harvested from ``args`` with safe fallbacks."""
 
     lr: float = 0.001
-    optimizer: str = "sgd"
-    momentum: float = 0.0
-    weight_decay: float = 0.0
-    clipgrad: Optional[float] = 100.0
     lamb: float = 1.0
     alpha: float = 0.9
     eps: float = 0.01
+
+    optimizer: str = "sgd"
+    clipgrad: Optional[float] = 100.0
 
     @staticmethod
     def from_args(args: object | None) -> "RWalkConfig":
@@ -149,7 +148,6 @@ class Net(nn.Module):
         if optim == "adagrad":
             return torch.optim.Adagrad(params, lr=lr)
         if optim in {"sgd", "sgd_momentum_decay"}:
-            momentum = float(self.cfg.momentum)
             return torch.optim.SGD(params, lr=lr, momentum=0.9)
         return torch.optim.Adam(params, lr=lr)
 

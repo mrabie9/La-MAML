@@ -29,10 +29,9 @@ class PackNetConfig:
 
     lr: float = 0.01
     optimizer: str = "sgd"
-    momentum: float = 0.9
-    weight_decay: float = 0.0
-    clipgrad: Optional[float] = 100.0
+    n_tasks: int = 3
     prune_perc: float = 0.5  # fraction of currently used weights to prune
+    clipgrad: Optional[float] = 100.0
 
     @staticmethod
     def from_args(args: object) -> "PackNetConfig":
@@ -72,7 +71,7 @@ class Net(nn.Module):
         self.opt = self._build_optimizer()
 
         self.clipgrad = self.cfg.clipgrad
-        self.prune_perc = self.cfg.prune_perc
+        self.prune_perc = float(1/self.cfg.n_tasks)
 
         self.current_task: Optional[int] = None
         self._param_to_buffers: Dict[str, Tuple[str, str]] = {}

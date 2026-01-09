@@ -24,13 +24,14 @@ from utils import misc_utils
 @dataclass
 class HatConfig:
     lr: float = 1e-4
-    optimizer: str = "sgd"
     gamma: float = 0.75
     smax: float = 50
     grad_clip_norm: float = 10.0
+    
     cuda: bool = True
+    optimizer: str = "sgd"
     arch: str = "resnet1d"
-    dataset: str = ""
+    dataset: str = "iq"
     input_channels: int = 2
 
     @staticmethod

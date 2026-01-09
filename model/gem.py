@@ -27,14 +27,12 @@ from utils import misc_utils
 
 @dataclass
 class GemConfig:
-    arch: str = "resnet1d"
-    n_layers: int = 2
-    n_hiddens: int = 100
     memory_strength: float = 0.0 # lambda in the paper
-    dataset: str = "tinyimagenet"
     glances: int = 1
     lr: float = 1e-3
     n_memories: int = 0
+    arch: str = "resnet1d"
+    dataset: str = "tinyimagenet"
     cuda: bool = True
     alpha_init: float = 1e-3
     grad_clip_norm: Optional[float] = 2.0

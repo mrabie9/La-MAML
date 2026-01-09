@@ -332,9 +332,10 @@ class UCLConfig:
     beta: float = 0.0002
     alpha: float = 0.3
     ratio: float = 0.125
-    clipgrad: float = 10.0
+    
     split: bool = True
     eval_samples: int = 20
+    clipgrad: float = 10.0
 
     @staticmethod
     def from_args(args: object) -> "UCLConfig":

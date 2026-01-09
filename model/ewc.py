@@ -27,10 +27,8 @@ class EwcConfig:
 
     lr: float = 0.03
     optimizer: str = "sgd"
-    momentum: float = 0.0
-    weight_decay: float = 0.0
     lamb: float = 1.0
-    clipgrad: float = 100.0
+    clipgrad: float = 5.0
 
     @staticmethod
     def from_args(args: object) -> "EwcConfig":

@@ -24,12 +24,11 @@ class SiConfig:
     """Hyper-parameters with sensible fallbacks pulled from ``args``."""
 
     lr: float = 0.001
-    optimizer: str = "sgd"
-    momentum: float = 0.0
-    weight_decay: float = 0.0
-    clipgrad: Optional[float] = 100.0
     si_c: float = 0.1
     si_epsilon: float = 0.01
+    
+    optimizer: str = "sgd"
+    clipgrad: Optional[float] = 100.0
 
     @staticmethod
     def from_args(args: object) -> "SiConfig":
@@ -133,7 +132,6 @@ class Net(nn.Module):
         if optim == "adagrad":
             return torch.optim.Adagrad(params, lr=lr)
         if optim in {"sgd", "sgd_momentum_decay"}:
-            momentum = float(self.cfg.momentum)
             return torch.optim.SGD(params, lr=lr, momentum=0.9)
         return torch.optim.Adam(params, lr=lr)
 
