@@ -475,8 +475,9 @@ def run_tuning(preset: TuningPreset) -> None:
     cli = build_cli(preset).parse_args()
 
     config_sources: List[str] = []
-    config_sources.extend(cli.config)
+    # Apply defaults first so explicit model configs override them.
     config_sources.extend(cli.config_dir)
+    config_sources.extend(cli.config)
     if not config_sources:
         config_sources = _default_config_chain(preset.model_name, preset.default_config)
 
