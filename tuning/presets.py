@@ -162,8 +162,8 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
     #         }
     #     ),
     # ),
-    "dual_bcl": TuningPreset(
-        model_name="dual_bcl",
+    "bcl_dual": TuningPreset(
+        model_name="bcl_dual",
         description="Run grid or random search over BCL-Dual hyperparameters.",
         default_output_root="logs/tuning/dual",
         type_hints=COMMON_TYPE_HINTS,
@@ -297,7 +297,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                 "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-2,
                        "values":[0.03]},
                 "memory_strength": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.1, "fallback": 0.5,
-                                    "values":[0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]},
+                                    "values":[10,30, 100, 300, 1000, 3000]},
                 # "n_memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 32, "fallback": 256,
                 #              "values": [1024, 2048, 5120]},
             }
@@ -333,7 +333,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                 "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-2,
                        "values":[0.01]},
                 "memory_strength": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.1, "fallback": 0.5,
-                                    "values":[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]},
+                                    "values":[10,30, 100, 300, 1000, 3000]},
                 # "n_memories": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 64, "fallback": 256,
                 #              "values": [1024, 2048, 5120]},
             }
