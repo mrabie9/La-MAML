@@ -32,6 +32,11 @@ from typing import Iterable, List, Sequence
 
 import torch
 
+# Ensure the repo root is importable when running this script directly.
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 # Newer PyTorch releases enable "weights only" deserialization by default,
 # which blocks loading argparse.Namespace objects embedded in our checkpoints.
 # Allowlist that class when the helper is available so we can keep using the
