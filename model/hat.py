@@ -11,6 +11,7 @@ implementation are also preserved.
 from __future__ import annotations
 
 from collections import defaultdict
+import math
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -441,7 +442,13 @@ class Net(nn.Module):
         self._epoch_sizes: Dict[int, Optional[int]] = defaultdict(lambda: None)
         self._last_epoch: Dict[int, int] = defaultdict(lambda: -1)
 
-        self.num_batches = args.samples_per_task//args.batch_size
+        self.samples_per_task_resolver = getattr(args, "get_samples_per_task", None)
+        self.samples_per_task = int(getattr(args, "samples_per_task", -1))
+        self.batch_size = int(getattr(args, "batch_size", 1))
+        if self.samples_per_task > 0:
+            self.num_batches = max(int(self.samples_per_task) // self.batch_size, 1)
+        else:
+            self.num_batches = None
         self.batch_idx = 0
 
     # ------------------------------------------------------------------
@@ -477,6 +484,16 @@ class Net(nn.Module):
         progress = float(max(0.0, min(1.0, progress)))
         base = 1.0 / self.smax
         return base + progress * (self.smax - base)
+
+    def _total_batches_for_task(self, t: int) -> Optional[int]:
+        if self.samples_per_task_resolver is None:
+            if self.samples_per_task > 0:
+                return max(int(math.ceil(self.samples_per_task / self.batch_size)), 1)
+            return None
+        samples = int(self.samples_per_task_resolver(t))
+        if samples <= 0:
+            return None
+        return max(int(math.ceil(samples / self.batch_size)), 1)
 
     # ------------------------------------------------------------------
     def _finalise_task(self, t: Optional[int]) -> None:
@@ -542,7 +559,12 @@ class Net(nn.Module):
         device = x.device if x.is_cuda else self._device()
         batch_idx, total_batches = self._update_epoch_counters(t)
         self.batch_idx += 1
-        s = self._schedule_s(self.batch_idx, self.num_batches)
+        resolved_total = self._total_batches_for_task(t)
+        if resolved_total is None or resolved_total <= 0:
+            effective_total = total_batches
+        else:
+            effective_total = resolved_total
+        s = self._schedule_s(batch_idx, effective_total)
         # print(s, self.num_batches)
 
         self.bridge.set_bn_eval(self.bridge.freeze_bn_stats and self.mask_pre is not None)
