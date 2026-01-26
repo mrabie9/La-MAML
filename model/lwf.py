@@ -28,12 +28,13 @@ class LwfConfig:
     """Hyper-parameters with sensible fallbacks pulled from ``args``."""
 
     lr: float = 1e-3
+    temperature: float = 2.0
+    distill_lambda: float = 1.0
+
     optimizer: str = "sgd"
     momentum: float = 0.9
     weight_decay: float = 0.0
     clipgrad: Optional[float] = 100.0
-    temperature: float = 2.0
-    distill_lambda: float = 1.0
 
     @staticmethod
     def from_args(args: object) -> "LwfConfig":
