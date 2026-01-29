@@ -109,6 +109,10 @@ class IQDataGenerator(Dataset):
         if self.transform:
             iq_sample = self.transform(iq_sample)
 
+        if isinstance(label, (list, tuple)) and len(label) == 2:
+            return iq_sample, (label[0], label[1])
+        if isinstance(label, np.ndarray) and label.ndim == 1 and label.shape[0] == 2:
+            return iq_sample, (label[0], label[1])
         return iq_sample, label
 
     def _convert_to_spectrogram(self, iq_sample: np.ndarray) -> np.ndarray:

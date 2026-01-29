@@ -50,6 +50,10 @@ class DummyArrayDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         x, y = self.x[idx], self.y[idx]
 
+        if isinstance(y, (list, tuple)) and len(y) == 2:
+            return x, (y[0], y[1])
+        if isinstance(y, np.ndarray) and y.ndim == 1 and y.shape[0] == 2:
+            return x, (y[0], y[1])
         return x, y
 
 def _get_datasets(dataset_names):
