@@ -29,6 +29,8 @@ class EwcConfig:
     optimizer: str = "sgd"
     lamb: float = 1.0
     clipgrad: float = 5.0
+    det_lambda: float = 1.0
+    cls_lambda: float = 1.0
 
     @staticmethod
     def from_args(args: object) -> "EwcConfig":
@@ -67,9 +69,12 @@ class Net(nn.Module):
 
         self.opt = self._build_optimizer()
         self.ce = nn.CrossEntropyLoss()
+        self.det_loss = nn.BCEWithLogitsLoss()
 
         self.lamb = float(self.cfg.lamb)
         self.clipgrad = float(self.cfg.clipgrad) if self.cfg.clipgrad > 0 else None
+        self.det_lambda = float(self.cfg.det_lambda)
+        self.cls_lambda = float(self.cfg.cls_lambda)
 
         self.current_task: Optional[int] = None
         self._tasks_consolidated = 0
@@ -80,14 +85,16 @@ class Net(nn.Module):
         self._fisher_accum: Optional[Dict[str, torch.Tensor]] = None
         self._fisher_count: int = 0
     # ------------------------------------------------------------------
-    def forward(self, x: torch.Tensor, t: int) -> torch.Tensor:
-        logits = self.net(x)
+    def forward(self, x: torch.Tensor, t: int, return_det: bool = False) -> torch.Tensor:
+        det_logits, cls_logits = self._forward_heads(x)
         offset1, offset2 = self._compute_offsets(t)
-        masked = logits.clone()
+        masked = cls_logits.clone()
         if offset1 > 0:
             masked[:, :offset1] = masked[:, :offset1].new_full(masked[:, :offset1].shape, -1e9)
         if offset2 < self.n_outputs:
             masked[:, offset2:] = masked[:, offset2:].new_full(masked[:, offset2:].shape, -1e9)
+        if return_det:
+            return det_logits, masked
         return masked
 
     # ------------------------------------------------------------------
@@ -100,24 +107,36 @@ class Net(nn.Module):
 
         self.net.train()
 
-        logits = self.net(x)
+        y_cls, y_det = self._unpack_labels(y)
+        det_logits, cls_logits = self._forward_heads(x)
         offset1, offset2 = self._compute_offsets(t)
-        logits_task = logits[:, offset1:offset2]
-        targets = (y - offset1).long()
-        preds = torch.argmax(logits_task, dim=1)
-        tr_acc = macro_recall(preds, targets)
+        valid_mask = (y_det == 1) & (y_cls >= 0)
+        if valid_mask.any():
+            logits_task = cls_logits[valid_mask][:, offset1:offset2]
+            targets = (y_cls[valid_mask] - offset1).long()
+            preds = torch.argmax(logits_task, dim=1)
+            tr_acc = macro_recall(preds, targets)
+            loss_ce = self.ce(logits_task, targets)
+        else:
+            logits_task = cls_logits.new_empty((0, offset2 - offset1))
+            targets = y_cls.new_empty((0,), dtype=torch.long)
+            tr_acc = 0.0
+            loss_ce = cls_logits.new_zeros(1)
 
         self.opt.zero_grad()
-        loss_ce = self.ce(logits_task, targets)
-        loss_ce.backward(retain_graph=True)
-        self._accumulate_fisher(x.size(0))
+        if valid_mask.any():
+            loss_ce.backward(retain_graph=True)
+            self._accumulate_fisher(int(valid_mask.sum().item()))
 
         self.opt.zero_grad()
-        loss = loss_ce + 0.5 * self.lamb * self._ewc_penalty()
+        det_loss = self.det_loss(det_logits, y_det.float())
+        loss = (self.cls_lambda * loss_ce
+                + self.det_lambda * det_loss
+                + 0.5 * self.lamb * self._ewc_penalty())
         loss.backward()
 
         if self.clipgrad is not None:
-            torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.clipgrad)
+            torch.nn.utils.clip_grad_norm_(self.parameters(), self.clipgrad)
 
         self.opt.step()
 
@@ -125,7 +144,7 @@ class Net(nn.Module):
 
     # ------------------------------------------------------------------
     def _build_optimizer(self) -> torch.optim.Optimizer:
-        params = self.net.parameters()
+        params = list(self.net.parameters())
         optim = self.cfg.optimizer.lower()
         lr = float(self.cfg.lr)
 
@@ -143,18 +162,37 @@ class Net(nn.Module):
     def _device(self) -> torch.device:
         return next(self.net.parameters()).device
 
+    def _forward_heads(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        return self.net.forward_heads(x)
+
+    def _unpack_labels(self, y: torch.Tensor | Tuple[torch.Tensor, torch.Tensor] | Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
+        if isinstance(y, (tuple, list)) and len(y) == 2:
+            y_cls, y_det = y
+        elif isinstance(y, dict):
+            y_cls = y.get("y_cls", y.get("y"))
+            y_det = y.get("y_det")
+        else:
+            y_cls = y
+            y_det = None
+
+        if y_det is None:
+            y_det = torch.ones_like(y_cls, dtype=torch.float)
+        return y_cls, y_det
+
     # ------------------------------------------------------------------
     def _accumulate_fisher(self, batch_size: int) -> None:
         if self._fisher_accum is None:
             self._fisher_accum = {
                 name: torch.zeros_like(param, device=param.device)
                 for name, param in self.net.named_parameters()
-                if param.requires_grad
+                if param.requires_grad and not name.startswith("det_head")
             }
             self._fisher_count = 0
 
         for name, param in self.net.named_parameters():
             if not param.requires_grad:
+                continue
+            if name.startswith("det_head"):
                 continue
             grad = param.grad
             if grad is None:
@@ -171,6 +209,8 @@ class Net(nn.Module):
         scale = 1.0 / float(self._fisher_count)
         for name, param in self.net.named_parameters():
             if not param.requires_grad:
+                continue
+            if name.startswith("det_head"):
                 continue
             fisher_est = self._fisher_accum.get(name)
             if fisher_est is None:
