@@ -30,20 +30,78 @@ def log_state(enabled, message):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print("[STATE {}] {}".format(timestamp, message))
 
+def _split_labels(y):
+    y_det = None
+    if isinstance(y, (tuple, list)) and len(y) == 2:
+        return y[0], y[1]
+    if isinstance(y, np.ndarray) and y.ndim == 2 and y.shape[1] == 2:
+        y_cls = y[:, 0]
+        y_det = y[:, 1]
+    elif torch.is_tensor(y) and y.dim() == 2 and y.size(1) == 2:
+        y_cls = y[:, 0]
+        y_det = y[:, 1]
+    else:
+        y_cls = y
+    return y_cls, y_det
+
+def _split_eval_output(output):
+    if isinstance(output, (tuple, list)):
+        if len(output) == 3:
+            return output[0], output[1], output[2]
+        if len(output) == 2:
+            return output[0], output[1], None
+    return output, None, None
+
+def _get_det_logits(model, xb, t):
+    if hasattr(model, "forward_heads"):
+        det_logits, _ = model.forward_heads(xb)
+        return det_logits
+    if hasattr(model, "net") and hasattr(model.net, "forward_heads"):
+        det_logits, _ = model.net.forward_heads(xb)
+        return det_logits
+    if hasattr(model, "net") and hasattr(model.net, "forward_features") and hasattr(model.net, "forward_detection"):
+        feats = model.net.forward_features(xb)
+        return model.net.forward_detection(feats)
+    return None
+
+def _false_alarm_rate(preds: torch.Tensor, targets: torch.Tensor) -> float:
+    neg_mask = targets == 0
+    if not neg_mask.any():
+        return 0.0
+    neg_targets = targets[neg_mask]
+    neg_preds = preds[neg_mask]
+    fp = (neg_preds == 1).sum().item()
+    tn = (neg_targets == 0).sum().item() - fp
+    denom = fp + tn
+    return float(fp / denom) if denom > 0 else 0.0
+
 def eval_class_tasks(model, tasks, args):
 
     model.eval()
     result = []
     for t, task_loader in enumerate(tasks):
         correct = 0.0
+        total = 0.0
 
         for (i, (x, y)) in enumerate(task_loader):
+            y_cls, y_det = _split_labels(y)
+            if not torch.is_tensor(y_cls):
+                y_cls = torch.as_tensor(y_cls)
+            if y_det is not None and not torch.is_tensor(y_det):
+                y_det = torch.as_tensor(y_det)
             if args.cuda:
                 x = x.cuda()
             _, p = torch.max(model(x, t).data.cpu(), 1, keepdim=False)
-            correct += (p == y).float().sum().item()
+            if y_det is not None:
+                mask = (y_det == 1)
+                if mask.any():
+                    correct += (p[mask] == y_cls[mask]).float().sum().item()
+                    total += float(mask.sum().item())
+            else:
+                correct += (p == y_cls).float().sum().item()
+                total += float(y_cls.size(0))
 
-        result.append(correct / len(task_loader.dataset))
+        result.append(correct / total if total > 0 else 0.0)
     return result
 
 def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
@@ -58,15 +116,28 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
         tasks = [tasks[specific_task]]
         batch_size = 64
     
+    det_results = []
+    det_fa_results = []
+    det_metrics_active = False
     for i, task in enumerate(tasks):
         t = i
         x_data = task[1]
-        y = torch.as_tensor(task[2], dtype=torch.long)
+        y_cls_raw, y_det_raw = _split_labels(task[2])
+        y = torch.as_tensor(y_cls_raw, dtype=torch.long)
+        y_det = None
+        if y_det_raw is not None:
+            y_det = torch.as_tensor(y_det_raw, dtype=torch.long)
         if 'ucl' in args.model:
             offset1, offset2 = misc_utils.compute_offsets(
                 t, class_counts if class_counts is not None else args.nc_per_task
             )
-            y = y - offset1  # make labels start from 0 for each task
+            if y_det is not None:
+                y = y.clone()
+                mask = y_det == 1
+                if mask.any():
+                    y[mask] = y[mask] - offset1
+            else:
+                y = y - offset1  # make labels start from 0 for each task
 
         if isinstance(x_data, torch.Tensor):
             x_data_cpu = x_data.detach().cpu()
@@ -85,6 +156,8 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
         x = x.float()
 
         recalls = []
+        det_recalls = []
+        det_false_alarms = []
         N = x.size(0)
         epistemic_uncertainties = []
         eh = []
@@ -96,11 +169,26 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
                 xb = xb.view(xb.size(0), -1)
                 
             yb = y[b_from:b_to].to(device)
+            yb_det = None
+            if y_det is not None:
+                yb_det = y_det[b_from:b_to].to(device)
 
             logits = model(xb, t) if args.model != 'anml' else model(xb, fast_weights=None)
             pb = torch.argmax(logits, dim=1)
             # correct += (pb == yb).sum().item()
-            recalls.append(macro_recall(pb.cpu(), yb.cpu()))
+            if yb_det is not None:
+                cls_mask = yb_det == 1
+                if cls_mask.any():
+                    recalls.append(macro_recall(pb[cls_mask].cpu(), yb[cls_mask].cpu()))
+            else:
+                recalls.append(macro_recall(pb.cpu(), yb.cpu()))
+
+            if yb_det is not None:
+                det_logits = _get_det_logits(model, xb, t)
+                if det_logits is not None:
+                    det_pred = (det_logits >= 0).long()
+                    det_recalls.append(macro_recall(det_pred.cpu(), yb_det.cpu()))
+                    det_false_alarms.append(_false_alarm_rate(det_pred, yb_det))
             if eval_epistemic and 'ucl' in args.model:
                 p_mean, H_pred, EH, MI = model.mc_epistemic_classification(xb, t, S=30)
                 epistemic_uncertainties.append(MI.mean().cpu().item())
@@ -122,9 +210,18 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
             print("Task: {} | Epistemic: {} | Aleatoric: {} | Total: {} | F_eu | {}".format(
                 i, round(norm_avg_eu, 2), round(norm_avg_eh, 2), round(norm_avg_h_pred, 2), round(norm_avg_eu/norm_avg_h_pred, 2)))
 
-        results.append(sum(recalls) / len(recalls))
+        results.append(sum(recalls) / len(recalls) if recalls else 0.0)
+        if det_recalls:
+            det_results.append(sum(det_recalls) / len(det_recalls))
+            det_fa_results.append(sum(det_false_alarms) / len(det_false_alarms))
+            det_metrics_active = True
+        else:
+            det_results.append(0.0)
+            det_fa_results.append(0.0)
 
-    return results
+    if det_metrics_active:
+        return results, det_results, det_fa_results
+    return results, None
     
 # def eval_tasks(model, tasks, args):
 
@@ -160,6 +257,10 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
 def life_experience(model, inc_loader, args):
     result_val_a = []
     result_test_a = []
+    result_val_det_a = []
+    result_test_det_a = []
+    result_val_det_fa = []
+    result_test_det_fa = []
 
     result_val_t = []
     result_test_t = []
@@ -208,20 +309,38 @@ def life_experience(model, inc_loader, args):
                         ),
                     )
                     val_acc = evaluator(model, val_tasks, args)
+                    val_acc, val_det_acc, val_det_fa = _split_eval_output(val_acc)
                     epoch_eval_time += time.time() - eval_start
                     result_acc_val.append(val_acc)
                     result_val_a.append(val_acc)
+                    if val_det_acc is not None:
+                        result_val_det_a.append(val_det_acc)
+                    if val_det_fa is not None:
+                        result_val_det_fa.append(val_det_fa)
                     result_val_t.append(task_info["task"])
-                    print("---- Eval at Epoch {}: {} ----".format(ep, val_acc))
+                    if val_det_acc is not None:
+                        print("---- Eval at Epoch {}: cls {} | det_recall {} | det_fa {} ----".format(
+                            ep, val_acc, val_det_acc, val_det_fa
+                        ))
+                    else:
+                        print("---- Eval at Epoch {}: {} ----".format(ep, val_acc))
 
                 v_x = x
-                v_y = y
+                y_cls, y_det = _split_labels(y)
+                if not torch.is_tensor(y_cls):
+                    y_cls = torch.as_tensor(y_cls)
+                if y_det is not None and not torch.is_tensor(y_det):
+                    y_det = torch.as_tensor(y_det)
+                v_y = (y_cls, y_det) if y_det is not None else y_cls
                 if args.cuda:
                     v_x = v_x.cuda()
-                    v_y = v_y.cuda()
+                    if isinstance(v_y, (tuple, list)) and len(v_y) == 2:
+                        v_y = (v_y[0].cuda(), v_y[1].cuda())
+                    else:
+                        v_y = v_y.cuda()
                 model.train()
 
-                loss, tr_acc = model.observe(Variable(v_x), Variable(v_y), task_info["task"])
+                loss, tr_acc = model.observe(Variable(v_x), v_y, task_info["task"])
                 # logits = model(x, task_i) if args.model != 'anml' else model(x, task_i, fast_weights=None)
                 # pb = torch.argmax(logits, dim=1)
                 # correct += (pb == y).sum().item()
@@ -269,7 +388,13 @@ def life_experience(model, inc_loader, args):
                 )
         log_state(args.state_logging, "Task {}: running final validation.".format(current_task))
         evaluator(model, val_tasks, args, eval_epistemic=False)
-        result_val_a.append(evaluator(model, val_tasks, args))
+        val_acc = evaluator(model, val_tasks, args)
+        val_acc, val_det_acc, val_det_fa = _split_eval_output(val_acc)
+        result_val_a.append(val_acc)
+        if val_det_acc is not None:
+            result_val_det_a.append(val_det_acc)
+        if val_det_fa is not None:
+            result_val_det_fa.append(val_det_fa)
         result_val_t.append(task_info["task"])
 
         losses = np.array(result_epoch_loss)
@@ -279,20 +404,47 @@ def life_experience(model, inc_loader, args):
         result_acc_val = np.array([x.detach().cpu().item() if torch.is_tensor(x) else x for sublist in result_acc_val for x in sublist])
         logs_dir = os.path.join(args.log_dir, "metrics")
         os.makedirs(logs_dir, exist_ok=True)
-        np.savez(os.path.join(logs_dir, "task" + str(task_i)+".npz"), losses=losses, tr_acc=result_acc_tr, val_acc=result_acc_val) 
+        save_payload = {"losses": losses, "tr_acc": result_acc_tr, "val_acc": result_acc_val}
+        if result_val_det_a:
+            save_payload["val_det_acc"] = np.array(result_val_det_a[-1])
+        if result_val_det_fa:
+            save_payload["val_det_fa"] = np.array(result_val_det_fa[-1])
+        np.savez(os.path.join(logs_dir, "task" + str(task_i)+".npz"), **save_payload) 
 
         if args.calc_test_accuracy:
-            result_test_a.append(evaluator(model, test_tasks, args))
+            test_acc = evaluator(model, test_tasks, args)
+            test_acc, test_det_acc, test_det_fa = _split_eval_output(test_acc)
+            result_test_a.append(test_acc)
+            if test_det_acc is not None:
+                result_test_det_a.append(test_det_acc)
+            if test_det_fa is not None:
+                result_test_det_fa.append(test_det_fa)
             result_test_t.append(task_info["task"])
 
         log_state(args.state_logging, "Completed task {} ({}/{})".format(current_task, task_i + 1, inc_loader.n_tasks))
 
     print("####Final Validation Accuracy####")
     print("Final Results:- \n Total Accuracy: {} \n Individual Accuracy: {}".format(sum(result_val_a[-1])/len(result_val_a[-1]), result_val_a[-1]))
+    if result_val_det_a:
+        print("Final Detection Results:- \n Total Detection: {} \n Individual Detection: {}".format(
+            sum(result_val_det_a[-1]) / len(result_val_det_a[-1]), result_val_det_a[-1]
+        ))
+    if result_val_det_fa:
+        print("Final Detection False Alarm:- \n Total False Alarm: {} \n Individual False Alarm: {}".format(
+            sum(result_val_det_fa[-1]) / len(result_val_det_fa[-1]), result_val_det_fa[-1]
+        ))
 
     if args.calc_test_accuracy:
         print("####Final Test Accuracy####")
         print("Final Results:- \n Total Accuracy: {} \n Individual Accuracy: {}".format(sum(result_test_a[-1])/len(result_test_a[-1]), result_test_a[-1]))
+        if result_test_det_a:
+            print("Final Detection Results:- \n Total Detection: {} \n Individual Detection: {}".format(
+                sum(result_test_det_a[-1]) / len(result_test_det_a[-1]), result_test_det_a[-1]
+            ))
+        if result_test_det_fa:
+            print("Final Detection False Alarm:- \n Total False Alarm: {} \n Individual False Alarm: {}".format(
+                sum(result_test_det_fa[-1]) / len(result_test_det_fa[-1]), result_test_det_fa[-1]
+            ))
 
 
     time_end = time.time()
