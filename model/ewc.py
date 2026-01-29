@@ -11,6 +11,7 @@ training happens through ``observe`` so it plugs directly into
 from __future__ import annotations
 
 from dataclasses import dataclass
+import random
 from typing import Dict, Optional, Tuple
 
 import torch
@@ -31,6 +32,8 @@ class EwcConfig:
     clipgrad: float = 5.0
     det_lambda: float = 1.0
     cls_lambda: float = 1.0
+    det_memories: int = 2000
+    det_replay_batch: int = 32
 
     @staticmethod
     def from_args(args: object) -> "EwcConfig":
@@ -75,6 +78,8 @@ class Net(nn.Module):
         self.clipgrad = float(self.cfg.clipgrad) if self.cfg.clipgrad > 0 else None
         self.det_lambda = float(self.cfg.det_lambda)
         self.cls_lambda = float(self.cfg.cls_lambda)
+        self.det_memories = int(self.cfg.det_memories)
+        self.det_replay_batch = int(self.cfg.det_replay_batch)
 
         self.current_task: Optional[int] = None
         self._tasks_consolidated = 0
@@ -84,6 +89,10 @@ class Net(nn.Module):
 
         self._fisher_accum: Optional[Dict[str, torch.Tensor]] = None
         self._fisher_count: int = 0
+        self._det_mem_x: Optional[torch.Tensor] = None
+        self._det_mem_y: Optional[torch.Tensor] = None
+        self._det_mem_seen: int = 0
+        self._det_mem_count: int = 0
     # ------------------------------------------------------------------
     def forward(self, x: torch.Tensor, t: int, return_det: bool = False) -> torch.Tensor:
         det_logits, cls_logits = self._forward_heads(x)
@@ -108,6 +117,8 @@ class Net(nn.Module):
         self.net.train()
 
         y_cls, y_det = self._unpack_labels(y)
+        if y_det is not None and self.det_memories > 0:
+            self._update_det_memory(x, y_det)
         det_logits, cls_logits = self._forward_heads(x)
         offset1, offset2 = self._compute_offsets(t)
         valid_mask = (y_det == 1) & (y_cls >= 0)
@@ -130,6 +141,12 @@ class Net(nn.Module):
 
         self.opt.zero_grad()
         det_loss = self.det_loss(det_logits, y_det.float())
+        det_replay = self._sample_det_memory()
+        if det_replay is not None:
+            mem_x, mem_y = det_replay
+            mem_det_logits, _ = self._forward_heads(mem_x)
+            mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+            det_loss = 0.5 * (det_loss + mem_loss)
         loss = (self.cls_lambda * loss_ce
                 + self.det_lambda * det_loss
                 + 0.5 * self.lamb * self._ewc_penalty())
@@ -178,6 +195,48 @@ class Net(nn.Module):
         if y_det is None:
             y_det = torch.ones_like(y_cls, dtype=torch.float)
         return y_cls, y_det
+
+    def _init_det_memory(self, sample_x: torch.Tensor) -> None:
+        if self.det_memories <= 0:
+            return
+        sample_x = sample_x.detach().cpu()
+        self._det_mem_x = torch.zeros(
+            (self.det_memories,) + sample_x.shape[1:],
+            dtype=sample_x.dtype,
+        )
+        self._det_mem_y = torch.zeros((self.det_memories,), dtype=torch.long)
+        self._det_mem_seen = 0
+        self._det_mem_count = 0
+
+    def _update_det_memory(self, x: torch.Tensor, y_det: torch.Tensor) -> None:
+        if self.det_memories <= 0:
+            return
+        if self._det_mem_x is None or self._det_mem_y is None:
+            self._init_det_memory(x)
+        x_cpu = x.detach().cpu()
+        y_cpu = y_det.detach().cpu().long()
+        batch_size = x_cpu.size(0)
+        for i in range(batch_size):
+            self._det_mem_seen += 1
+            if self._det_mem_count < self.det_memories:
+                idx = self._det_mem_count
+                self._det_mem_count += 1
+            else:
+                j = random.randint(0, self._det_mem_seen - 1)
+                if j >= self.det_memories:
+                    continue
+                idx = j
+            self._det_mem_x[idx].copy_(x_cpu[i])
+            self._det_mem_y[idx] = y_cpu[i]
+
+    def _sample_det_memory(self) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
+        if self._det_mem_x is None or self._det_mem_count == 0:
+            return None
+        batch_size = min(self.det_replay_batch, self._det_mem_count)
+        indices = torch.randint(0, self._det_mem_count, (batch_size,))
+        mem_x = self._det_mem_x.index_select(0, indices).to(self._device())
+        mem_y = self._det_mem_y.index_select(0, indices).to(self._device())
+        return mem_x, mem_y
 
     # ------------------------------------------------------------------
     def _accumulate_fisher(self, batch_size: int) -> None:
