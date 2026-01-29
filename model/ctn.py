@@ -32,6 +32,9 @@ class CtnConfig:
     replay_batch_size: int = 20
     inner_steps: int = 2
     n_meta: int = 2
+    arch: str = "resnet1d"
+    cuda: bool = True
+    batch_size: int = 128
 
     @staticmethod
     def from_args(args: object) -> "CtnConfig":

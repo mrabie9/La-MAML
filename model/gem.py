@@ -35,8 +35,8 @@ class GemConfig:
     dataset: str = "tinyimagenet"
     cuda: bool = True
     alpha_init: float = 1e-3
-    grad_clip_norm: Optional[float] = 2.0
-    input_channels: int = 1
+    grad_clip_norm: Optional[float] = 100.0
+    input_channels: int = 2
 
     @staticmethod
     def from_args(args: object) -> "GemConfig":

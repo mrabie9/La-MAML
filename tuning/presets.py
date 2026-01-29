@@ -204,7 +204,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                 # "temperature": {"kind": "float", "factors": (0.5, 1.0, 1.5), "min": 1.0, "fallback": 5.0,
                 #             "values": [1,2,5,10]},
                 "memory_strength": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1.0, "fallback": 100.0,
-                            "values": [1,10,25,50,100]},
+                            "values": [10,30,100,300,1000,3000]},
                 # "n_meta": {"kind": "int", "factors": (1.0, 2.0, 3.0), "min": 1, "fallback": 2,
                 #                "values": [1, 2, 3, 4]},
                 # "inner_steps": {"kind": "int", "factors": (1.0, 2.0, 3.0), "min": 1, "fallback": 2,

@@ -33,7 +33,7 @@ class IcarlConfig:
     n_memories: int = 0
     glances: int = 1
 
-    grad_clip_norm: Optional[float] = 2.0
+    grad_clip_norm: Optional[float] = 100.0
     arch: str = "resnet1d"
     dataset: str = "tinyimagenet"
     cuda: bool = True
