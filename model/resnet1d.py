@@ -140,6 +140,8 @@ class ResNet1D(nn.Module):
             in_channels=in_channels,
             norm_layer=norm_layer,
         )
+        self.feature_dim = self.model.fc.in_features
+        self.det_head = nn.Linear(self.feature_dim, 1)
 
         # Ordered names for mapping fast weights
         self.param_names = [n for n, _ in self.model.named_parameters()]
@@ -165,10 +167,30 @@ class ResNet1D(nn.Module):
                     f"len(vars)={len(vars)} vs params={len(self.param_names)}"
                 )
                 param_dict = {n: p for n, p in zip(self.param_names, vars)}
-                out = functional_call(self.model, param_dict, (x,))
+                out = functional_call(
+                    self.model,
+                    param_dict,
+                    (x,),
+                    {"return_features": ret_feats, "classify_feats": classify_feats},
+                )
         finally:
             self.model.train(prev)
         return out
+
+    def forward_features(self, x: torch.Tensor, vars=None, bn_training: bool = True) -> torch.Tensor:
+        return self.forward(x, vars=vars, bn_training=bn_training, ret_feats=True)
+
+    def forward_classifier(self, feats: torch.Tensor, vars=None, bn_training: bool = True) -> torch.Tensor:
+        return self.forward(feats, vars=vars, bn_training=bn_training, classify_feats=True)
+
+    def forward_detection(self, feats: torch.Tensor) -> torch.Tensor:
+        return self.det_head(feats).squeeze(1)
+
+    def forward_heads(self, x: torch.Tensor, vars=None, bn_training: bool = True):
+        feats = self.forward_features(x, vars=vars, bn_training=bn_training)
+        det_logits = self.forward_detection(feats)
+        cls_logits = self.forward_classifier(feats, vars=vars, bn_training=bn_training)
+        return det_logits, cls_logits
 
     # Expose only the underlying model parameters, excluding alpha lrs
     def parameters(self, recurse: bool = True):
