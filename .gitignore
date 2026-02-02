@@ -10,3 +10,4 @@ la-maml_env/
 *.yaml
 logs/*
 .vscode/
+utils/plot_logs.py
