@@ -449,7 +449,17 @@ def life_experience(model, inc_loader, args):
 
     time_end = time.time()
     time_spent = time_end - time_start
-    return torch.Tensor(result_val_t), torch.Tensor(result_val_a), torch.Tensor(result_test_t), torch.Tensor(result_test_a), time_spent
+    return (
+        torch.Tensor(result_val_t),
+        torch.Tensor(result_val_a),
+        torch.Tensor(result_test_t),
+        torch.Tensor(result_test_a),
+        torch.Tensor(result_val_det_a),
+        torch.Tensor(result_val_det_fa),
+        torch.Tensor(result_test_det_a),
+        torch.Tensor(result_test_det_fa),
+        time_spent,
+    )
 
 def save_results(args, result_val_t, result_val_a, result_test_t, result_test_a, model, spent_time):
     fname = os.path.join(args.log_dir, 'results')
@@ -571,13 +581,15 @@ def main():
     if args.model == "iid2":
         # oracle baseline with all task data shown at same time
         log_state(args.state_logging, "Invoking iid life experience flow")
-        result_val_t, result_val_a, result_test_t, result_test_a, spent_time = life_experience_iid(
-            model, loader, args)
+        result_val_t, result_val_a, result_test_t, result_test_a, _, _, _, _, spent_time = (
+            life_experience_iid(model, loader, args)
+        )
     else:
         # for all the CL baselines
         log_state(args.state_logging, "Invoking continual life experience flow")
-        result_val_t, result_val_a, result_test_t, result_test_a, spent_time = life_experience(
-            model, loader, args)
+        result_val_t, result_val_a, result_test_t, result_test_a, _, _, _, _, spent_time = (
+            life_experience(model, loader, args)
+        )
 
         # save results in files or print on terminal
         save_results(args, result_val_t, result_val_a, result_test_t, result_test_a, model, spent_time)

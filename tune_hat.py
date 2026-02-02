@@ -308,19 +308,47 @@ def run_single_trial(
 
     try:
         if args.model == "iid2":
-            result_val_t, result_val_a, result_test_t, result_test_a, spent = life_experience_iid(
-                model, loader, args
-            )
+            (
+                result_val_t,
+                result_val_a,
+                result_test_t,
+                result_test_a,
+                result_val_det_a,
+                result_val_det_fa,
+                result_test_det_a,
+                result_test_det_fa,
+                spent,
+            ) = life_experience_iid(model, loader, args)
         else:
-            result_val_t, result_val_a, result_test_t, result_test_a, spent = life_experience(
-                model, loader, args
-            )
+            (
+                result_val_t,
+                result_val_a,
+                result_test_t,
+                result_test_a,
+                result_val_det_a,
+                result_val_det_fa,
+                result_test_det_a,
+                result_test_det_fa,
+                spent,
+            ) = life_experience(model, loader, args)
     finally:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
     val_scores = extract_final_scores(result_val_a)
     test_scores = extract_final_scores(result_test_a)
+    val_det_scores = extract_final_scores(result_val_det_a)
+    val_pfa_scores = extract_final_scores(result_val_det_fa)
+    test_det_scores = extract_final_scores(result_test_det_a)
+    test_pfa_scores = extract_final_scores(result_test_det_fa)
+
+    val_mean = compute_mean(val_scores)
+    det_mean = compute_mean(val_det_scores)
+    pfa_mean = compute_mean(val_pfa_scores)
+    if val_det_scores and val_pfa_scores:
+        score = val_mean * det_mean * (1.0 - pfa_mean)
+    else:
+        score = val_mean
 
     return {
         "status": "ok",
@@ -331,9 +359,18 @@ def run_single_trial(
         "trial_params": dict(trial_overrides),
         "fixed_params": dict(constant_overrides),
         "val_per_task": val_scores,
-        "val_mean": compute_mean(val_scores),
+        "val_mean": val_mean,
+        "val_det_per_task": val_det_scores,
+        "val_det_mean": det_mean,
+        "val_pfa_per_task": val_pfa_scores,
+        "val_pfa_mean": pfa_mean,
         "test_per_task": test_scores,
         "test_mean": compute_mean(test_scores),
+        "test_det_per_task": test_det_scores,
+        "test_det_mean": compute_mean(test_det_scores),
+        "test_pfa_per_task": test_pfa_scores,
+        "test_pfa_mean": compute_mean(test_pfa_scores),
+        "score": score,
         "duration_sec": float(spent),
     }
 
@@ -347,7 +384,18 @@ def dump_summary(session_dir: Path, summary: Dict[str, Any], successes: List[Dic
     if not successes:
         return
 
-    field_names = ["trial", "val_mean", "test_mean", "duration_sec", "log_dir"]
+    field_names = [
+        "trial",
+        "score",
+        "val_mean",
+        "val_det_mean",
+        "val_pfa_mean",
+        "test_mean",
+        "test_det_mean",
+        "test_pfa_mean",
+        "duration_sec",
+        "log_dir",
+    ]
     param_keys = sorted({key for trial in successes for key in trial["params"].keys()})
     field_names.extend(param_keys)
     csv_path = session_dir / "summary.csv"
@@ -357,8 +405,13 @@ def dump_summary(session_dir: Path, summary: Dict[str, Any], successes: List[Dic
         for trial in successes:
             row = {
                 "trial": trial["trial"],
-                "val_mean": trial["val_mean"],
-                "test_mean": trial["test_mean"],
+                "score": trial.get("score"),
+                "val_mean": trial.get("val_mean"),
+                "val_det_mean": trial.get("val_det_mean"),
+                "val_pfa_mean": trial.get("val_pfa_mean"),
+                "test_mean": trial.get("test_mean"),
+                "test_det_mean": trial.get("test_det_mean"),
+                "test_pfa_mean": trial.get("test_pfa_mean"),
                 "duration_sec": trial["duration_sec"],
                 "log_dir": trial["log_dir"],
             }
@@ -427,12 +480,12 @@ def main() -> None:
             print(f"Trial {idx} failed: {exc}")
         else:
             print(
-                f"Trial {idx} finished | val_mean={outcome['val_mean']:.4f} | params={trial_params}"
+                f"Trial {idx} finished | score={outcome['score']:.4f} | params={trial_params}"
             )
         results.append(outcome)
 
     successes = [r for r in results if r.get("status") == "ok"]
-    best = max(successes, key=lambda r: r["val_mean"]) if successes else None
+    best = max(successes, key=lambda r: r["score"]) if successes else None
 
     summary = {
         "config": str(Path(cli.config).resolve()),
@@ -450,7 +503,7 @@ def main() -> None:
 
     if best:
         print(
-            f"Best trial #{best['trial']} | val_mean={best['val_mean']:.4f} | params={best['trial_params']}"
+            f"Best trial #{best['trial']} | score={best['score']:.4f} | params={best['trial_params']}"
         )
         print(f"Logs stored in: {best['log_dir']}")
     else:

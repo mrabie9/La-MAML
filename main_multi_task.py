@@ -83,4 +83,15 @@ def life_experience_iid(model, inc_loader, args):
 
     time_end = time.time()
     time_spent = time_end - time_start
-    return torch.Tensor(result_val_t), torch.Tensor(result_val_a), torch.Tensor(result_test_t), torch.Tensor(result_test_a), time_spent
+    empty = torch.Tensor([])
+    return (
+        torch.Tensor(result_val_t),
+        torch.Tensor(result_val_a),
+        torch.Tensor(result_test_t),
+        torch.Tensor(result_test_a),
+        empty,
+        empty,
+        empty,
+        empty,
+        time_spent,
+    )
