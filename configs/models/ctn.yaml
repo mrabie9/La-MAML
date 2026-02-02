@@ -8,5 +8,5 @@ beta: 0.05
 n_memories: 5120
 validation: 0.3
 replay_batch_size: 20
-inner_steps: 2
-n_meta: 2
+inner_steps: 1
+n_meta: 1
