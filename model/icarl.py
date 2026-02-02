@@ -14,6 +14,7 @@ import random
 
 import sys
 from model.resnet1d import ResNet1D
+from model.detection_replay import DetectionReplayMixin
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../dataloaders')))
@@ -41,6 +42,10 @@ class IcarlConfig:
     input_channels: int = 2
     alpha_init: float = 1e-3
     samples_per_task: int = -1
+    det_lambda: float = 1.0
+    cls_lambda: float = 1.0
+    det_memories: int = 2000
+    det_replay_batch: int = 64
 
     @staticmethod
     def from_args(args: object) -> "IcarlConfig":
@@ -50,7 +55,7 @@ class IcarlConfig:
                 setattr(cfg, field, getattr(args, field))
         return cfg
 
-class Net(torch.nn.Module):
+class Net(DetectionReplayMixin, torch.nn.Module):
     # Re-implementation of
     # S.-A. Rebuffi, A. Kolesnikov, G. Sperl, and C. H. Lampert.
     # iCaRL: Incremental classifier and representation learning.
@@ -87,7 +92,8 @@ class Net(torch.nn.Module):
         self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
 
         # setup optimizer
-        self.opt = torch.optim.SGD(self.parameters(), lr=self.cfg.lr, momentum=0.9)
+        self.opt = torch.optim.SGD(self._ll_params(), lr=self.cfg.lr, momentum=0.9)
+        self.det_opt = torch.optim.SGD(self.net.det_head.parameters(), lr=self.cfg.lr, momentum=0.9)
 
         # setup losses
         self.bce = torch.nn.CrossEntropyLoss()
@@ -95,6 +101,9 @@ class Net(torch.nn.Module):
         self.kl = torch.nn.KLDivLoss(reduction="batchmean")  # for distillation
         self.lsm = torch.nn.LogSoftmax(dim=1)
         self.sm = torch.nn.Softmax(dim=1)
+        self.det_lambda = float(self.cfg.det_lambda)
+        self.cls_lambda = float(self.cfg.cls_lambda)
+        self._init_det_replay(self.cfg.det_memories, self.cfg.det_replay_batch)
 
         # memory
         self.memx = None  # stores raw inputs, PxD
@@ -111,6 +120,28 @@ class Net(torch.nn.Module):
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         self.n_outputs = n_outputs
+
+    def _ensure_iq_shape(self, x):
+        if x.dim() == 3:
+            return x
+        if x.dim() == 2:
+            B, F = x.shape
+            assert F % 2 == 0, f"Feature dim {F} not divisible by 2 for (2, L) reshape."
+            L = F // 2
+            return x.view(B, 2, L)
+        raise ValueError(f"Unexpected IQ input shape {tuple(x.shape)}; expected (B, 2, L) or (B, 2L).")
+
+    def _prepare_input(self, x):
+        if self.cfg.dataset == 'tinyimagenet':
+            return x.view(-1, 3, 64, 64)
+        if self.cfg.dataset == 'cifar100':
+            return x.view(-1, 3, 32, 32)
+        if self.is_iq:
+            return self._ensure_iq_shape(x)
+        return x
+
+    def _prepare_det_input(self, x: torch.Tensor) -> torch.Tensor:
+        return self._prepare_input(x)
 
     def netforward(self, x):
         if self.cfg.dataset == 'tinyimagenet':
@@ -170,6 +201,12 @@ class Net(torch.nn.Module):
             out[ss, classpred[ss]] = 1
         return out  # return 1-of-C code, ns x nc
 
+    def _ll_params(self):
+        for name, param in self.net.named_parameters():
+            if name.startswith("det_head"):
+                continue
+            yield param
+
     def forward_training(self, x, t):
         output = self.netforward(x)
         # make sure we predict classes within the current task
@@ -185,9 +222,30 @@ class Net(torch.nn.Module):
 
     def observe(self, x, y, t):
 
+        x_det = self._prepare_input(x)
         x = x.view(x.size(0), -1)
         self.net.train()
         if self.gpu: self.net.cuda()
+        y_cls, y_det = self._unpack_labels(y)
+        if y_det is not None and self.det_memories > 0:
+            self._update_det_memory(x, y_det)
+        signal_mask = (y_det == 1) & (y_cls >= 0)
+        if not signal_mask.any():
+            self.det_opt.zero_grad()
+            det_logits, _ = self.net.forward_heads(x_det)
+            det_loss = self.det_loss(det_logits, y_det.float())
+            det_replay = self._sample_det_memory()
+            if det_replay is not None:
+                mem_x, mem_y = det_replay
+                mem_det_logits, _ = self.net.forward_heads(mem_x)
+                mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+                det_loss = 0.5 * (det_loss + mem_loss)
+            det_loss.backward()
+            self.det_opt.step()
+            return float(det_loss.item()), 0.0
+
+        x = x[signal_mask]
+        y = y_cls[signal_mask]
 
         tr_acc = []
 
@@ -324,4 +382,15 @@ class Net(torch.nn.Module):
             # print(len(self.mem_class_x[0]))
 
         avg_tr_acc = sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
+        self.det_opt.zero_grad()
+        det_logits, _ = self.net.forward_heads(x_det)
+        det_loss = self.det_loss(det_logits, y_det.float())
+        det_replay = self._sample_det_memory()
+        if det_replay is not None:
+            mem_x, mem_y = det_replay
+            mem_det_logits, _ = self.net.forward_heads(mem_x)
+            mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+            det_loss = 0.5 * (det_loss + mem_loss)
+        det_loss.backward()
+        self.det_opt.step()
         return loss.item(), avg_tr_acc

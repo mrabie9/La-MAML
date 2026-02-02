@@ -5,10 +5,11 @@ import math
 import torch
 import torch.nn as nn
 from model.lamaml_base import *
+from model.detection_replay import DetectionReplayMixin
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 
-class Net(BaseNet):
+class Net(DetectionReplayMixin, BaseNet):
 
     def __init__(self,
                  n_inputs,
@@ -20,6 +21,12 @@ class Net(BaseNet):
                                  n_tasks,           
                                  args)
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
+        self.det_lambda = float(getattr(args, "det_lambda", 1.0))
+        self.cls_lambda = float(getattr(args, "cls_lambda", 1.0))
+        self._init_det_replay(
+            getattr(args, "det_memories", 2000),
+            getattr(args, "det_replay_batch", 64),
+        )
 
     def take_loss(self, t, logits, y):
         # compute loss on data from a single task
@@ -109,7 +116,29 @@ class Net(BaseNet):
             self.pass_itr = pass_itr
             perm = torch.randperm(x.size(0))
             x = x[perm]
-            y = y[perm]
+            y_cls, y_det = self._unpack_labels(y)
+            y_cls = y_cls[perm]
+            y_det = y_det[perm]
+            if y_det is not None and self.det_memories > 0:
+                self._update_det_memory(x, y_det)
+            signal_mask = (y_det == 1) & (y_cls >= 0)
+            if not signal_mask.any():
+                self.zero_grads()
+                det_logits, _ = self.net.forward_heads(x)
+                det_loss = self.det_loss(det_logits, y_det.float())
+                det_replay = self._sample_det_memory()
+                if det_replay is not None:
+                    mem_x, mem_y = det_replay
+                    mem_det_logits, _ = self.net.forward_heads(mem_x)
+                    mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+                    det_loss = 0.5 * (det_loss + mem_loss)
+                det_loss.backward()
+                self.opt_wt.step()
+                return float(det_loss.item()), 0.0
+
+            x_det = x
+            x = x[signal_mask]
+            y = y_cls[signal_mask]
 
             self.epoch += 1
             self.zero_grads()
@@ -159,7 +188,7 @@ class Net(BaseNet):
             # Taking the meta gradient step (will update the learning rates)
             self.zero_grads()
 
-            meta_loss = sum(meta_losses)/len(meta_losses)            
+            meta_loss = sum(meta_losses)/len(meta_losses)
             meta_loss.backward()
 
             if self.cfg.grad_clip_norm:
@@ -178,6 +207,18 @@ class Net(BaseNet):
                     p.data = p.data - p.grad * nn.functional.relu(self.net.alpha_lr[i])            
             self.net.zero_grad()
             self.net.alpha_lr.zero_grad()
+
+            det_logits, _ = self.net.forward_heads(x_det)
+            det_loss = self.det_loss(det_logits, y_det.float())
+            det_replay = self._sample_det_memory()
+            if det_replay is not None:
+                mem_x, mem_y = det_replay
+                mem_det_logits, _ = self.net.forward_heads(mem_x)
+                mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+                det_loss = 0.5 * (det_loss + mem_loss)
+            self.opt_wt.zero_grad()
+            det_loss.backward()
+            self.opt_wt.step()
 
         avg_tr_acc = sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
         return meta_loss.item(), avg_tr_acc

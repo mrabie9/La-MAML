@@ -15,6 +15,7 @@ import torch
 import torch.nn as nn
 
 from model.resnet1d import ResNet1D
+from model.detection_replay import DetectionReplayMixin
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 
@@ -29,6 +30,10 @@ class SiConfig:
     
     optimizer: str = "sgd"
     clipgrad: Optional[float] = 100.0
+    det_lambda: float = 1.0
+    cls_lambda: float = 1.0
+    det_memories: int = 2000
+    det_replay_batch: int = 64
 
     @staticmethod
     def from_args(args: object) -> "SiConfig":
@@ -38,7 +43,7 @@ class SiConfig:
                 setattr(cfg, field, getattr(args, field))
         return cfg
 
-class Net(nn.Module):
+class Net(DetectionReplayMixin, nn.Module):
     """Synaptic Intelligence continual learner built on ``ResNet1D``."""
 
     def __init__(self, n_inputs: int, n_outputs: int, n_tasks: int, args: object) -> None:
@@ -66,6 +71,9 @@ class Net(nn.Module):
         self.si_c = float(self.cfg.si_c)
         self.epsilon = float(self.cfg.si_epsilon)
         self.clipgrad = self.cfg.clipgrad
+        self.det_lambda = float(self.cfg.det_lambda)
+        self.cls_lambda = float(self.cfg.cls_lambda)
+        self._init_det_replay(self.cfg.det_memories, self.cfg.det_replay_batch)
 
         self.current_task: Optional[int] = None
         self._param_to_key: Dict[str, str] = {}
@@ -95,17 +103,35 @@ class Net(nn.Module):
         self.net.train()
         self.opt.zero_grad()
 
-        logits = self.net(x)
+        y_cls, y_det = self._unpack_labels(y)
+        if y_det is not None and self.det_memories > 0:
+            self._update_det_memory(x, y_det)
+        det_logits, cls_logits = self.net.forward_heads(x)
         offset1, offset2 = self._compute_offsets(t) if self.is_task_incremental else (0, self.n_outputs)
-        targets = y.long()
-        if self.is_task_incremental:
-            logits = logits[:, offset1:offset2]
-            targets = (targets - offset1).long()
+        valid_mask = (y_det == 1) & (y_cls >= 0)
+        if valid_mask.any():
+            logits = cls_logits[valid_mask]
+            targets = y_cls[valid_mask].long()
+            if self.is_task_incremental:
+                logits = logits[:, offset1:offset2]
+                targets = (targets - offset1).long()
+            loss_ce = self.ce(logits, targets)
+            preds = torch.argmax(logits, dim=1)
+            tr_acc = macro_recall(preds, targets)
+        else:
+            loss_ce = cls_logits.new_zeros(1)
+            tr_acc = 0.0
+        det_loss = self.det_loss(det_logits, y_det.float())
+        det_replay = self._sample_det_memory()
+        if det_replay is not None:
+            mem_x, mem_y = det_replay
+            mem_det_logits, _ = self.net.forward_heads(mem_x)
+            mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+            det_loss = 0.5 * (det_loss + mem_loss)
 
-        loss = self.ce(logits, targets)
-        preds = torch.argmax(logits, dim=1)
-        tr_acc = macro_recall(preds, targets)
-        loss = loss + self.si_c * self._surrogate_loss()
+        loss = (self.cls_lambda * loss_ce
+                + self.det_lambda * det_loss
+                + self.si_c * self._surrogate_loss())
 
         loss.backward()
         if self.clipgrad is not None:
@@ -140,6 +166,8 @@ class Net(nn.Module):
         for name, param in self.net.named_parameters():
             if not param.requires_grad:
                 continue
+            if name.startswith("det_head"):
+                continue
             key = name.replace('.', '__')
             self._param_to_key[name] = key
             initial = param.detach().clone()
@@ -152,6 +180,8 @@ class Net(nn.Module):
     def _update_path_integral(self) -> None:
         for name, param in self.net.named_parameters():
             if not param.requires_grad:
+                continue
+            if name.startswith("det_head"):
                 continue
             grad = param.grad
             if grad is None:
@@ -168,6 +198,8 @@ class Net(nn.Module):
             return
         for name, param in self.net.named_parameters():
             if not param.requires_grad:
+                continue
+            if name.startswith("det_head"):
                 continue
             key = self._param_to_key[name]
             prev = getattr(self, f"{key}_si_prev")
@@ -186,6 +218,8 @@ class Net(nn.Module):
         for name, param in self.net.named_parameters():
             if not param.requires_grad:
                 continue
+            if name.startswith("det_head"):
+                continue
             key = self._param_to_key[name]
             omega = getattr(self, f"{key}_si_omega")
             prev = getattr(self, f"{key}_si_prev")
@@ -200,6 +234,7 @@ class Net(nn.Module):
     # ------------------------------------------------------------------
     def _device(self) -> torch.device:
         return next(self.net.parameters()).device
+
 
 
 __all__ = ["Net"]

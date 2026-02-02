@@ -19,6 +19,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from model.resnet1d import ResNet1D
+from model.detection_replay import DetectionReplayMixin
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 
@@ -35,6 +36,10 @@ class LwfConfig:
     momentum: float = 0.9
     weight_decay: float = 0.0
     clipgrad: Optional[float] = 100.0
+    det_lambda: float = 1.0
+    cls_lambda: float = 1.0
+    det_memories: int = 2000
+    det_replay_batch: int = 64
 
     @staticmethod
     def from_args(args: object) -> "LwfConfig":
@@ -44,7 +49,7 @@ class LwfConfig:
                 setattr(cfg, field, getattr(args, field))
         return cfg
 
-class Net(nn.Module):
+class Net(DetectionReplayMixin, nn.Module):
     """LwF learner that plugs directly into the repository training loop."""
 
     def __init__(self, n_inputs: int, n_outputs: int, n_tasks: int, args: object) -> None:
@@ -73,6 +78,9 @@ class Net(nn.Module):
         self.temperature = float(self.cfg.temperature)
         self.distill_lambda = float(self.cfg.distill_lambda)
         self.clipgrad = self.cfg.clipgrad
+        self.det_lambda = float(self.cfg.det_lambda)
+        self.cls_lambda = float(self.cfg.cls_lambda)
+        self._init_det_replay(self.cfg.det_memories, self.cfg.det_replay_batch)
 
         self.current_task: Optional[int] = None
         self.teacher: Optional[nn.Module] = None
@@ -110,18 +118,38 @@ class Net(nn.Module):
             self.current_task = t
 
         self.net.train()
-        logits = self.net(x)
-        class_ids = self._update_task_classes(t, y)
-        current_logits = self._select_task_logits(logits, class_ids)
-        targets = self._map_labels_to_local(y, t)
+        y_cls, y_det = self._unpack_labels(y)
+        if y_det is not None and self.det_memories > 0:
+            self._update_det_memory(x, y_det)
+        det_logits, cls_logits = self.net.forward_heads(x)
 
-        preds = torch.argmax(current_logits, dim=1)
-        tr_acc = macro_recall(preds, targets)
+        valid_mask = (y_det == 1) & (y_cls >= 0)
+        if valid_mask.any():
+            cls_labels = y_cls[valid_mask]
+            class_ids = self._update_task_classes(t, cls_labels)
+            current_logits = self._select_task_logits(cls_logits[valid_mask], class_ids)
+            targets = self._map_labels_to_local(cls_labels, t)
+            preds = torch.argmax(current_logits, dim=1)
+            tr_acc = macro_recall(preds, targets)
+            loss_ce = self.ce(current_logits, targets)
+        else:
+            loss_ce = cls_logits.new_zeros(1)
+            tr_acc = 0.0
 
-        loss_ce = self.ce(current_logits, targets)
         prev_class_ids = self._collect_previous_class_ids(t)
-        distill_loss = self._distillation_loss(logits, x, prev_class_ids)
-        loss = loss_ce + self.distill_lambda * distill_loss
+        distill_loss = self._distillation_loss(cls_logits, x, prev_class_ids)
+
+        det_loss = self.det_loss(det_logits, y_det.float())
+        det_replay = self._sample_det_memory()
+        if det_replay is not None:
+            mem_x, mem_y = det_replay
+            mem_det_logits, _ = self.net.forward_heads(mem_x)
+            mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+            det_loss = 0.5 * (det_loss + mem_loss)
+
+        loss = (self.cls_lambda * loss_ce
+                + self.det_lambda * det_loss
+                + self.distill_lambda * distill_loss)
 
         self.opt.zero_grad()
         loss.backward()
@@ -185,7 +213,9 @@ class Net(nn.Module):
     def _update_task_classes(self, task: int, labels: torch.Tensor) -> List[int]:
         label_map = self.task_label_maps.setdefault(task, {})
         class_ids = self.task_class_ids.setdefault(task, [])
-        unique_labels = torch.unique(labels.detach().cpu()).tolist()
+        labels_np = labels.detach().cpu()
+        labels_np = labels_np[labels_np >= 0]
+        unique_labels = torch.unique(labels_np).tolist()
         for label in unique_labels:
             label = int(label)
             if label not in label_map:
@@ -218,6 +248,7 @@ class Net(nn.Module):
         device = self._device()
         self.teacher = copy.deepcopy(self.net)
         self.teacher.to(device)
+
         self.teacher.eval()
         for param in self.teacher.parameters():
             param.requires_grad = False

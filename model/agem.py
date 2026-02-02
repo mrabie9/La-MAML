@@ -15,6 +15,7 @@ import numpy as np
 import random
 
 from model.resnet1d import ResNet1D
+from model.detection_replay import DetectionReplayMixin
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 
@@ -34,6 +35,10 @@ class AgemConfig:
     cuda: bool = True
     grad_clip_norm: Optional[float] = 100.0
     input_channels: int = 1
+    det_lambda: float = 1.0
+    cls_lambda: float = 1.0
+    det_memories: int = 2000
+    det_replay_batch: int = 64
 
     @staticmethod
     def from_args(args: object) -> "AgemConfig":
@@ -123,7 +128,7 @@ def projectgrad(gradient, memories, margin=0.5, eps = 1e-3, oiter = 0):
         gradient.copy_(torch.Tensor(proj).view(-1, 1))
 
 
-class Net(nn.Module):
+class Net(DetectionReplayMixin, nn.Module):
     def __init__(self,
                  n_inputs,
                  n_outputs,
@@ -148,8 +153,12 @@ class Net(nn.Module):
         self.bce = torch.nn.CrossEntropyLoss()
         self.n_outputs = n_outputs
         self.glances = self.cfg.glances
+        self.det_lambda = float(self.cfg.det_lambda)
+        self.cls_lambda = float(self.cfg.cls_lambda)
+        self._init_det_replay(self.cfg.det_memories, self.cfg.det_replay_batch)
 
-        self.opt = optim.SGD(self.parameters(), self.cfg.lr, momentum=0.9)
+        self.opt = optim.SGD(self._ll_params(), self.cfg.lr, momentum=0.9)
+        self.det_opt = optim.SGD(self.net.det_head.parameters(), self.cfg.lr, momentum=0.9)
 
         self.n_memories = int(self.cfg.memories/n_tasks)
         self.gpu = self.cfg.cuda
@@ -178,7 +187,7 @@ class Net(nn.Module):
 
         # allocate temporary synaptic memory
         self.grad_dims = []
-        for param in self.parameters():
+        for param in self._ll_params():
             self.grad_dims.append(param.data.numel())
         self.grads = torch.Tensor(sum(self.grad_dims), n_tasks)
         if self.gpu:
@@ -236,6 +245,12 @@ class Net(nn.Module):
                 output[:, offset2:self.n_outputs].data.fill_(-10e10)
         return output
 
+    def _ll_params(self):
+        for name, param in self.net.named_parameters():
+            if name.startswith("det_head"):
+                continue
+            yield param
+
     def observe(self, x, y, t):
 
         self.iter +=1
@@ -247,6 +262,27 @@ class Net(nn.Module):
         else:
             # legacy: flatten non-IQ inputs
             x = x.view(x.size(0), -1)
+        y_cls, y_det = self._unpack_labels(y)
+        if y_det is not None and self.det_memories > 0:
+            self._update_det_memory(x, y_det)
+        x_det = x
+        signal_mask = (y_det == 1) & (y_cls >= 0)
+        if not signal_mask.any():
+            self.det_opt.zero_grad()
+            det_logits, _ = self.net.forward_heads(x_det)
+            det_loss = self.det_loss(det_logits, y_det.float())
+            det_replay = self._sample_det_memory()
+            if det_replay is not None:
+                mem_x, mem_y = det_replay
+                mem_det_logits, _ = self.net.forward_heads(mem_x)
+                mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+                det_loss = 0.5 * (det_loss + mem_loss)
+            det_loss.backward()
+            self.det_opt.step()
+            return float(det_loss.item()), 0.0
+
+        x = x[signal_mask]
+        y = y_cls[signal_mask]
 
         # update memory
         if t != self.current_task:
@@ -304,7 +340,7 @@ class Net(nn.Module):
                     if self.cfg.grad_clip_norm:
                         torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.cfg.grad_clip_norm)
 
-                    store_grad(self.parameters, self.grads, self.grad_dims,
+                    store_grad(self._ll_params, self.grads, self.grad_dims,
                                past_task)
 
             # now compute the grad on the current minibatch
@@ -322,7 +358,7 @@ class Net(nn.Module):
             # check if gradient violates constraints                                                           
             if len(self.observed_tasks) > 1:
                 # copy gradient
-                store_grad(self.parameters, self.grads, self.grad_dims, t)
+                store_grad(self._ll_params, self.grads, self.grad_dims, t)
                 # Build index tensor on the same device as stored gradients.
                 indx_device = self.grads.device if hasattr(self.grads, "device") else None
                 indx = torch.tensor(
@@ -334,7 +370,7 @@ class Net(nn.Module):
                 projectgrad(self.grads[:, t].unsqueeze(1),                                           
                               self.grads.index_select(1, indx), oiter = self.iter)
                 # copy gradients back
-                overwrite_grad(self.parameters, self.grads[:, t],
+                overwrite_grad(self._ll_params, self.grads[:, t],
                                self.grad_dims)
 
             self.opt.step()
@@ -351,6 +387,18 @@ class Net(nn.Module):
                 p = random.randint(0,self.age)
                 if p < self.memories:
                     self.M[p] = [xi[i],yi[i],t]
+
+        self.det_opt.zero_grad()
+        det_logits, _ = self.net.forward_heads(x_det)
+        det_loss = self.det_loss(det_logits, y_det.float())
+        det_replay = self._sample_det_memory()
+        if det_replay is not None:
+            mem_x, mem_y = det_replay
+            mem_det_logits, _ = self.net.forward_heads(mem_x)
+            mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+            det_loss = 0.5 * (det_loss + mem_loss)
+        det_loss.backward()
+        self.det_opt.step()
 
         avg_tr_acc = sum(tr_acc)/len(tr_acc) if tr_acc else 0.0
         return loss.item(), avg_tr_acc

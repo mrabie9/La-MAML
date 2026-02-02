@@ -24,6 +24,7 @@ import warnings
 import math
 
 from model.resnet1d import ResNet1D
+from model.detection_replay import DetectionReplayMixin
 warnings.filterwarnings("ignore")
 from utils.training_metrics import macro_recall
 from utils import misc_utils
@@ -45,6 +46,10 @@ class ErAlgConfig:
     arch: str = "resnet1d"
     dataset: str = "tinyimagenet"
     cuda: bool = True
+    det_lambda: float = 1.0
+    cls_lambda: float = 1.0
+    det_memories: int = 2000
+    det_replay_batch: int = 64
 
     @staticmethod
     def from_args(args: object) -> "ErAlgConfig":
@@ -54,7 +59,7 @@ class ErAlgConfig:
                 setattr(cfg, field, getattr(args, field))
         return cfg
 
-class Net(nn.Module):
+class Net(DetectionReplayMixin, nn.Module):
     def __init__(self,
                  n_inputs,
                  n_outputs,
@@ -69,7 +74,8 @@ class Net(nn.Module):
         self.net = ResNet1D(n_outputs, args)
         self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
 
-        self.opt_wt = optim.SGD(self.parameters(), lr=self.cfg.lr, momentum=0.9)
+        self.opt_wt = optim.SGD(self._ll_params(), lr=self.cfg.lr, momentum=0.9)
+        self.det_opt = optim.SGD(self.net.det_head.parameters(), lr=self.cfg.lr, momentum=0.9)
 
         if self.cfg.learn_lr:
             self.opt_lr = torch.optim.SGD(list(self.net.alpha_lr.parameters()), lr=self.cfg.opt_lr, momentum=0.9)    
@@ -77,6 +83,9 @@ class Net(nn.Module):
         self.loss = CrossEntropyLoss()
         self.is_cifar = ((self.cfg.dataset == 'cifar100') or (self.cfg.dataset == 'tinyimagenet'))
         self.glances = self.cfg.glances
+        self.det_lambda = float(self.cfg.det_lambda)
+        self.cls_lambda = float(self.cfg.cls_lambda)
+        self._init_det_replay(self.cfg.det_memories, self.cfg.det_replay_batch)
 
         self.current_task = 0
         self.memories = self.cfg.memories
@@ -107,6 +116,12 @@ class Net(nn.Module):
 
     def compute_offsets(self, task):
         return misc_utils.compute_offsets(task, self.classes_per_task)
+
+    def _ll_params(self):
+        for name, param in self.net.named_parameters():
+            if name.startswith("det_head"):
+                continue
+            yield param
             
     def take_multitask_loss(self, bt, logits, y):
         loss = 0.0
@@ -176,6 +191,27 @@ class Net(nn.Module):
     def observe(self, x, y, t):
         ### step through elements of x
 
+        y_cls, y_det = self._unpack_labels(y)
+        if y_det is not None and self.det_memories > 0:
+            self._update_det_memory(x, y_det)
+        x_det = x
+        signal_mask = (y_det == 1) & (y_cls >= 0)
+        if not signal_mask.any():
+            self.det_opt.zero_grad()
+            det_logits, _ = self.net.forward_heads(x_det)
+            det_loss = self.det_loss(det_logits, y_det.float())
+            det_replay = self._sample_det_memory()
+            if det_replay is not None:
+                mem_x, mem_y = det_replay
+                mem_det_logits, _ = self.net.forward_heads(mem_x)
+                mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+                det_loss = 0.5 * (det_loss + mem_loss)
+            det_loss.backward()
+            self.det_opt.step()
+            return float(det_loss.item()), 0.0
+
+        x = x[signal_mask]
+        y = y_cls[signal_mask]
         xi = x.data.cpu().numpy()
         yi = y.data.cpu().numpy()
 
@@ -197,6 +233,18 @@ class Net(nn.Module):
                 p = random.randint(0,self.age)
                 if p < self.memories:
                     self.M[p] = [xi[i], yi[i], t]
+
+        self.det_opt.zero_grad()
+        det_logits, _ = self.net.forward_heads(x_det)
+        det_loss = self.det_loss(det_logits, y_det.float())
+        det_replay = self._sample_det_memory()
+        if det_replay is not None:
+            mem_x, mem_y = det_replay
+            mem_det_logits, _ = self.net.forward_heads(mem_x)
+            mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+            det_loss = 0.5 * (det_loss + mem_loss)
+        det_loss.backward()
+        self.det_opt.step()
 
         return loss.item(), tr_acc
 
