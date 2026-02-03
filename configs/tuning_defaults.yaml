@@ -3,7 +3,7 @@ expt_name: tuning_sweep
 arch: resnet1d
 loader: task_incremental_loader
 
-data_path: data/rff/radar/hpt_det_cls
+data_path: data/rff/radar_det_cls/hpt
 dataset: iq
 shuffle_tasks: false
 classes_per_it: 6
