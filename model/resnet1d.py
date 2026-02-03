@@ -58,12 +58,13 @@ class _ResNet1D(nn.Module):
     """Internal utility that mirrors ``torchvision``'s ``ResNet`` logic."""
 
     def __init__(self, block: type[nn.Module], layers: list[int], num_classes: int,
-                 in_channels: int = 2, norm_layer=None) -> None:
+                 in_channels: int = 2, norm_layer=None, input_adapter: nn.Module | None = None) -> None:
         super().__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm1d
         self._norm_layer = norm_layer
         self.inplanes = 64
+        self.input_adapter = input_adapter or nn.Identity()
 
         self.conv1 = nn.Conv1d(
             in_channels, 64, kernel_size=7, stride=2, padding=1, bias=False
@@ -104,6 +105,8 @@ class _ResNet1D(nn.Module):
         if classify_feats:
             return self.fc(x)
         else:
+            if not isinstance(self.input_adapter, nn.Identity) and x.size(1) == 3:
+                x = self.input_adapter(x)
             x = self.conv1(x)
             x = self.bn1(x)
             x = self.relu(x)
@@ -131,14 +134,16 @@ class ResNet1D(nn.Module):
     def __init__(self, num_classes: int, args=None, in_channels: int = 2) -> None:
         super().__init__()
         self.args = args
-        use_linear_norm = bool(getattr(args, "model", "") == "packnet")
         norm_layer = self._build_norm_factory(args)
+        self.input_adapter = nn.Conv1d(3, 1, kernel_size=1, bias=False)
+        backbone_in = in_channels
         self.model = _ResNet1D(
             BasicBlock1D,
             [2, 2, 2, 2],
             num_classes,
-            in_channels=in_channels,
+            in_channels=backbone_in,
             norm_layer=norm_layer,
+            input_adapter=self.input_adapter,
         )
         self.feature_dim = self.model.fc.in_features
         self.det_head = nn.Linear(self.feature_dim, 1)
@@ -160,6 +165,8 @@ class ResNet1D(nn.Module):
         prev = self.model.training
         self.model.train(bn_training)
         try:
+            if not classify_feats:
+                x = self._prepare_input(x)
             if vars is None:
                 out = self.model(x, return_features=ret_feats, classify_feats=classify_feats)
             else:
@@ -203,6 +210,34 @@ class ResNet1D(nn.Module):
         self.alpha_lr = nn.ParameterList(
             [nn.Parameter(torch.ones_like(p) * alpha_init) for p in self.model.parameters()]
         )
+
+    # ------------------------------------------------------------------
+    def _prepare_input(self, x: torch.Tensor) -> torch.Tensor:
+        if x.dim() == 2:
+            batch, features = x.shape
+            if features % 2 == 0 and features % 3 != 0:
+                seq_len = features // 2
+                x = x.view(batch, 2, seq_len)
+            elif features % 3 == 0 and features % 2 != 0:
+                seq_len = features // 3
+                x = x.view(batch, 3, seq_len)
+            elif features % 2 == 0 and features % 3 == 0:
+                raise ValueError(
+                    f"Ambiguous flat input shape {tuple(x.shape)}; divisible by both 2 and 3. "
+                    "Provide an explicit (B, C, L) tensor with C=2 or C=3."
+                )
+            else:
+                x = x.unsqueeze(1)
+        elif x.dim() == 3:
+            if x.shape[1] not in (1, 2, 3) and x.shape[0] in (1, 2, 3):
+                x = x.permute(1, 0, 2).contiguous()
+            if x.shape[1] not in (1, 2, 3):
+                raise ValueError(
+                    f"Unexpected channel dimension (expected 1, 2, or 3); got shape {tuple(x.shape)}."
+                )
+        else:
+            raise ValueError(f"Unexpected input shape {tuple(x.shape)}; expected 2D or 3D tensor.")
+        return x
 
     # ------------------------------------------------------------------
     def _build_norm_factory(self, args):

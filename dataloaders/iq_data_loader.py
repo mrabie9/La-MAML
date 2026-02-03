@@ -90,16 +90,27 @@ class IQDataGenerator(Dataset):
 
     def __getitem__(self, index: int) -> Tuple[np.ndarray, int]:
         iq_sample = self.x[index, :]
-        
-        # Represent complex input as two channels: I and Q
-        if np.iscomplexobj(iq_sample):
-            i = iq_sample.real
-            q = iq_sample.imag
+
+        if iq_sample.ndim == 2:
+            if iq_sample.shape[0] in (2, 3):
+                iq_sample = iq_sample.astype(np.float32, copy=False)
+            elif iq_sample.shape[1] in (2, 3):
+                iq_sample = np.swapaxes(iq_sample, 0, 1).astype(np.float32, copy=False)
+            else:
+                flat = iq_sample.reshape(-1)
+                i = flat[0::2]
+                q = flat[1::2]
+                iq_sample = np.stack([i, q], axis=0).astype(np.float32)
         else:
-            i = iq_sample[0::2]
-            q = iq_sample[1::2]
-        
-        iq_sample = np.stack([i, q], axis=0).astype(np.float32)
+            # Represent complex input as two channels: I and Q
+            if np.iscomplexobj(iq_sample):
+                i = iq_sample.real
+                q = iq_sample.imag
+            else:
+                i = iq_sample[0::2]
+                q = iq_sample[1::2]
+
+            iq_sample = np.stack([i, q], axis=0).astype(np.float32)
 
         label = self.y[index]
 
