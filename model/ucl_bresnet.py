@@ -333,6 +333,7 @@ class UCLConfig:
     beta: float = 0.0002
     alpha: float = 0.3
     ratio: float = 0.125
+    det_lambda: float = 1.0
     
     split: bool = True
     eval_samples: int = 20
@@ -406,6 +407,7 @@ class Net(nn.Module):
         in_channels = getattr(args, "in_channels", 2)
         self.detector = ResNet1D(num_classes=1, args=args, in_channels=in_channels)
         self.det_loss = nn.BCEWithLogitsLoss()
+        self.det_lambda = float(self.cfg.det_lambda)
         self.det_optimizer = torch.optim.Adam(self.detector.parameters(), lr=self.cfg.lr)
 
         mu_params: List[nn.Parameter] = []
@@ -507,6 +509,7 @@ class Net(nn.Module):
                 det_logits = self.detector.forward_detection(self.detector.forward_features(x))
                 det_loss = self.det_loss(det_logits, y_det.float())
                 self.det_optimizer.zero_grad(set_to_none=True)
+                det_loss = self.det_lambda * det_loss
                 det_loss.backward()
                 if self.cfg.clipgrad > 0:
                     torch.nn.utils.clip_grad_norm_(self.detector.parameters(), self.cfg.clipgrad)
@@ -556,6 +559,7 @@ class Net(nn.Module):
             det_logits = self.detector.forward_detection(self.detector.forward_features(x))
             det_loss = self.det_loss(det_logits, y_det.float())
             self.det_optimizer.zero_grad(set_to_none=True)
+            det_loss = self.det_lambda * det_loss
             det_loss.backward()
             if self.cfg.clipgrad > 0:
                 torch.nn.utils.clip_grad_norm_(self.detector.parameters(), self.cfg.clipgrad)

@@ -277,6 +277,7 @@ class Net(DetectionReplayMixin, nn.Module):
                 mem_det_logits, _ = self.net.forward_heads(mem_x)
                 mem_loss = self.det_loss(mem_det_logits, mem_y.float())
                 det_loss = 0.5 * (det_loss + mem_loss)
+            det_loss = self.det_lambda * det_loss
             det_loss.backward()
             self.det_opt.step()
             return float(det_loss.item()), 0.0
@@ -397,6 +398,7 @@ class Net(DetectionReplayMixin, nn.Module):
             mem_det_logits, _ = self.net.forward_heads(mem_x)
             mem_loss = self.det_loss(mem_det_logits, mem_y.float())
             det_loss = 0.5 * (det_loss + mem_loss)
+        det_loss = self.det_lambda * det_loss
         det_loss.backward()
         self.det_opt.step()
 
