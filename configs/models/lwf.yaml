@@ -1,0 +1,4 @@
+model: lwf
+lr: 0.001
+distill_lambda: 1.0
+temperature: 2.0
