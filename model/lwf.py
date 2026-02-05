@@ -29,7 +29,7 @@ class LwfConfig:
     """Hyper-parameters with sensible fallbacks pulled from ``args``."""
 
     lr: float = 1e-3
-    temperature: float = 2.0
+    temperature: float = 5.0
     distill_lambda: float = 1.0
 
     optimizer: str = "sgd"
