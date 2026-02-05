@@ -25,9 +25,11 @@ calc_test_accuracy: false
 state_logging: false
 
 glances: 1
+n_meta: 1
+inner_steps: 1
+temperature: 5
 n_epochs: 5
 optimizer: sgd
-bgd_optimizer: sgd
 batch_size: 128
 # replay_batch_size: 64
 # memories: 1024
@@ -44,8 +46,8 @@ cifar_batches: 3                     # Number of batches in inner trajectory
 use_old_task_memory: false           # Use only old task samples for replay buffer data
 second_order: true                  # use second order MAML updates
 
-# Memory parameters for GEM | AGEM | ICARL
-n_memories: 200                        # number of memories per task
+# Memory parameters
+n_memories: 5120                        # number of memories per task
 memory_strength: 1.0                 # memory strength (meaning depends on memory)
 steps_per_sample: 1                  # training steps per batch
 
@@ -72,17 +74,8 @@ update_lr: 0.1
 
 # Parameters specific to CTN
 beta: 0.05                        # Beta parameter for CTN
-n_meta: 2
-inner_steps: 2
 temperature: 5
-n_memories: 50  
 alpha_init: 0.1
-memory_strength: 100
 task_emb: 64
 
 # Parameters specific to BCL
-temperature: 5
-memory_strength: 100
-n_meta: 2
-inner_steps: 2
-n_memories: 400
