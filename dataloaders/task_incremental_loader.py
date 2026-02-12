@@ -260,9 +260,9 @@ class IncrementalLoader:
                 y_test = y_test[:size_te]
 
                 if y_train.ndim == 2 and y_train.shape[1] == 2:
-                    train_unique = np.unique(y_train[:, 0])
+                    train_unique = np.unique_counts(y_train[:, 0])
                 else:
-                    train_unique = np.unique(y_train)
+                    train_unique = np.unique_counts(y_train)
                 print(f"Loaded {fname}: Unique train labels: {train_unique}")
 
                 y_train = np.asarray(y_train, dtype=np.int64)
@@ -274,6 +274,9 @@ class IncrementalLoader:
                     y_train_det = y_train[:, 1]
                     y_test_cls = y_test[:, 0]
                     y_test_det = y_test[:, 1]
+                    use_detector_arch = bool(getattr(self._args, "use_detector_arch", False))
+                    # print(f"Using detector architecture: {use_detector_arch}")
+                    has_negatives = (y_train_cls < 0).any() or (y_test_cls < 0).any()
 
                     unique_labels = np.unique(y_train_cls[y_train_cls >= 0])
                     needs_remap = (
@@ -294,18 +297,49 @@ class IncrementalLoader:
                     else:
                         y_train_cls_remap[mask_train] = y_train_cls[mask_train] + labels_offset
                         y_test_cls_remap[mask_test] = y_test_cls[mask_test] + labels_offset
-                    y_train = np.stack([y_train_cls_remap, y_train_det], axis=1)
-                    y_test = np.stack([y_test_cls_remap, y_test_det], axis=1)
-                else:
-                    unique_labels = np.unique(y_train)
-                    needs_remap = not np.array_equal(unique_labels, np.arange(unique_labels.size))
-                    if needs_remap:
-                        y_train = unique_labels.searchsorted(y_train) + labels_offset
-                        y_test = unique_labels.searchsorted(y_test) + labels_offset
+                    extra_class = 0
+                    if (not use_detector_arch) and has_negatives:
+                        extra_class = 1
+                        neg_label = labels_offset + unique_labels.size
+                        y_train_cls_remap[~mask_train] = neg_label
+                        y_test_cls_remap[~mask_test] = neg_label
+                    if use_detector_arch:
+                        y_train = np.stack([y_train_cls_remap, y_train_det], axis=1)
+                        y_test = np.stack([y_test_cls_remap, y_test_det], axis=1)
                     else:
-                        y_train = y_train + labels_offset
-                        y_test = y_test + labels_offset
-                labels_offset += unique_labels.size
+                        y_train = y_train_cls_remap
+                        y_test = y_test_cls_remap
+                else:
+                    use_detector_arch = bool(getattr(self._args, "use_detector_arch", False))
+                    has_negatives = (y_train < 0).any() or (y_test < 0).any()
+                    unique_labels = np.unique(y_train[y_train >= 0])
+                    needs_remap = (
+                        unique_labels.size > 0
+                        and not np.array_equal(unique_labels, np.arange(unique_labels.size))
+                    )
+                    y_train_remap = y_train.copy()
+                    y_test_remap = y_test.copy()
+                    mask_train = y_train >= 0
+                    mask_test = y_test >= 0
+                    if needs_remap:
+                        y_train_remap[mask_train] = (
+                            unique_labels.searchsorted(y_train[mask_train]) + labels_offset
+                        )
+                        y_test_remap[mask_test] = (
+                            unique_labels.searchsorted(y_test[mask_test]) + labels_offset
+                        )
+                    else:
+                        y_train_remap[mask_train] = y_train[mask_train] + labels_offset
+                        y_test_remap[mask_test] = y_test[mask_test] + labels_offset
+                    extra_class = 0
+                    if (not use_detector_arch) and has_negatives:
+                        extra_class = 1
+                        neg_label = labels_offset + unique_labels.size
+                        y_train_remap[~mask_train] = neg_label
+                        y_test_remap[~mask_test] = neg_label
+                    y_train = y_train_remap
+                    y_test = y_test_remap
+                labels_offset += unique_labels.size + extra_class
                 if y_train.ndim == 2 and y_train.shape[1] == 2:
                     remapped = np.unique(y_train[:, 0])
                 else:
