@@ -210,7 +210,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                 "memory_strength": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1.0, "fallback": 100.0,
                             "values": [10,30,100,300,1000,3000]},
                 "det_lambda": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.1, "fallback": 1.0,
-                            "values": [10,30,100,300,1000,3000]},
+                            "values": [0.1, 0.5, 1, 5, 10]},
                 # "n_meta": {"kind": "int", "factors": (1.0, 2.0, 3.0), "min": 1, "fallback": 2,
                 #                "values": [1, 2, 3, 4]},
                 # "inner_steps": {"kind": "int", "factors": (1.0, 2.0, 3.0), "min": 1, "fallback": 2,
@@ -429,10 +429,12 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                 # "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
                 #     "values": [32, 64, 128, 256]},
                 "lr": {"kind": "float", "factors": (0.3, 1.0, 3.0), "min": 1e-5, "fallback": 1e-2,
-                        "values":[0.03,0.01,0.003,0.001,0.0003,0.0001,0.00003,0.00001]},
+                        "values": [0.03]}, #[0.03,0.01,0.003,0.001,0.0003,0.0001,0.00003,0.00001]},
                 "learn_lr": {"kind": "bool", "values": [True]},
                 "opt_lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1,
                            "values": [0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
+                "det_lambda": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.1, "fallback": 1.0,
+                            "values":[0.1,1,10,100,1000]},
                 
             }
         ),
