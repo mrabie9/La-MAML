@@ -3,6 +3,4 @@ model: bcl_dual
 beta: 1.0
 temperature: 5
 memory_strength: 100
-n_meta: 2
-inner_steps: 2
 n_memories: 400

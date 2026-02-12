@@ -7,10 +7,7 @@
 import math
 import torch
 import torch.nn as nn
-from torch.nn.functional import relu, avg_pool2d, max_pool2d, normalize
-import numpy as np
-import pdb
-from torch.nn.utils import weight_norm as wn
+from torch.nn.functional import relu, normalize
 from itertools import chain
 from model.resnet1d import _ResNet1D, BasicBlock1D
 
@@ -69,6 +66,8 @@ class ContextNet(nn.Module):
         self.model = _ResNet1D(
             BasicBlock1D, [2, 2, 2, 2], num_classes, in_channels=in_channels
         )
+        self.feature_dim = self.model.fc.in_features
+        self.det_head = nn.Linear(self.feature_dim, 1)
         
         #self.film1 = nn.Linear(task_emb, nf * 1 * 2)
         #self.film2 = nn.Linear(task_emb, nf * 2 * 2)
@@ -87,7 +86,8 @@ class ContextNet(nn.Module):
     def base_param(self):
         base_iter = chain(self.model.conv1.parameters(), self.model.bn1.parameters(),
                     self.model.layer1.parameters(), self.model.layer2.parameters(), self.model.layer3.parameters(),
-                    self.model.layer4.parameters(), self.model.fc.parameters())
+                    self.model.layer4.parameters(), self.model.fc.parameters(),
+                    self.det_head.parameters())
         for param in base_iter:
             yield param
     
@@ -96,65 +96,67 @@ class ContextNet(nn.Module):
         for param in film_iter:
             yield param
 
-    def forward(self, x, t, use_all = True):
-        # tmp = torch.LongTensor(t+1)
-        # t = tmp.repeat(x.size(0)).cuda()
-        device = x.device
-        B = x.size(0)
+    def forward_h4(self, x):
+        return self.model.forward(x, return_h4=True)
 
-        if isinstance(t, int):
-            # one task id for the whole batch
+    def _apply_film(self, h4, t, use_all=True):
+        device = h4.device
+        B, C, _ = h4.shape
+
+        if t is None:
+            gamma4 = torch.zeros((B, C, 1), device=device, dtype=h4.dtype)
+            beta4 = torch.zeros((B, C, 1), device=device, dtype=h4.dtype)
+        elif isinstance(t, int):
             t = torch.full((B,), t, dtype=torch.long, device=device)
         else:
-            # list/tuple/tensor → tensor on the right device/dtype
             t = torch.as_tensor(t, dtype=torch.long, device=device)
             if t.ndim == 0 or t.numel() == 1:
-                # scalar or single-element → broadcast
                 t = t.view(1).expand(B)
             else:
                 t = t.view(-1)
                 if t.numel() != B:
                     raise ValueError(f"Expected {B} task ids, got {t.numel()}.")
-        t = self.emb(t)
-        # bsz = x.size(0)
-        # if x.dim() < 4:
-        #     x = x.view(bsz,3,32,32)
-        h4 = self.model.forward(x, return_h4=True)
-        # h0 = self.conv1(x)
-        # h0 = relu(self.bn1(h0))
-        # h0  = self.maxpool(h0)
-        # h1 = self.layer1(h0)
-        # h2 = self.layer2(h1)
-        # h3 = self.layer3(h2)
-        # h4 = self.layer4(h3)
-
-        B, C, L = h4.shape
-        film4 = self.film4(t)              # [B, 2*C]
-        gamma4, beta4 = film4.split(C, 1)   # [B, C], [B, C]
-        gamma4 = normalize(gamma4, p=2, dim=1).view(B, C, 1)
-        beta4  = normalize(beta4,  p=2, dim=1).view(B, C, 1)
-        h4_new = gamma4 * h4 + beta4        # -> [B, C, L]
-
-        # B, C, L = h4.shape
-        # film4 = self.film4(t)
-        # gamma4, beta4 = film4.split(C, 1)
-        # # gamma4 = film4[:, :self.nf*8]#.view(film4.size(0),-1,1,1)
-        # # beta4 = film4[:, self.nf*8:]#.view(film4.size(0),-1,1,1)
-        # gamma_norm = gamma4.norm(p=2, dim=1, keepdim = True).view(B, C, 1).detach()
-        # beta_norm = beta4.norm(p=2, dim=1, keepdim= True).view(B, C, 1).detach()
-        
-        # gamma4 = gamma4.div(gamma_norm).view(film4.size(0), -1,1,1) 
-        # beta4 = beta4.div(beta_norm).view(film4.size(0), -1, 1, 1)
-        # temp = gamma4*h4
-        # h4_new = temp + beta4
-        
-        if use_all:
-            h4 = relu(h4_new) + relu(h4)
+        if t is None:
+            h4_new = gamma4 * h4 + beta4
         else:
-            h4 = relu(h4_new)
+            t = self.emb(t)
+            film4 = self.film4(t)
+            gamma4, beta4 = film4.split(C, 1)
+            gamma4 = normalize(gamma4, p=2, dim=1).view(B, C, 1)
+            beta4  = normalize(beta4,  p=2, dim=1).view(B, C, 1)
+            h4_new = gamma4 * h4 + beta4
 
+        if use_all:
+            return relu(h4_new) + relu(h4)
+        return relu(h4_new)
+
+    def _pool_features(self, h4):
         out = self.model.avgpool(h4)
-        feat = out.view(out.size(0), -1)
+        return out.view(out.size(0), -1)
+
+    def forward_features(self, x, t=None, use_all = True):
+        h4 = self.forward_h4(x)
+        h4 = self._apply_film(h4, t, use_all=use_all)
+        return self._pool_features(h4)
+
+    def forward_heads(self, x, t=None, use_all = True):
+        h4 = self.forward_h4(x)
+        det_feat = self._pool_features(h4)
+        det_logits = self.det_head(det_feat).squeeze(1)
+        cls_h4 = self._apply_film(h4, t, use_all=use_all)
+        cls_feat = self._pool_features(cls_h4)
+        cls_logits = self.model.fc(cls_feat)
+        return det_logits, cls_logits
+
+    def forward_det_agnostic(self, x, use_all = True):
+        h4 = self.forward_h4(x)
+        feat = self._pool_features(h4)
+        return self.det_head(feat).squeeze(1)
+
+    def forward(self, x, t, use_all = True):
+        h4 = self.forward_h4(x)
+        h4 = self._apply_film(h4, t, use_all=use_all)
+        feat = self._pool_features(h4)
         y = self.model.fc(feat)       
         return y
 

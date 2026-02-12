@@ -21,6 +21,7 @@ import numpy as np
 import quadprog
 
 from model.resnet1d import ResNet1D
+from model.detection_replay import DetectionReplayMixin
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 
@@ -37,6 +38,10 @@ class GemConfig:
     alpha_init: float = 1e-3
     grad_clip_norm: Optional[float] = 100.0
     input_channels: int = 2
+    det_lambda: float = 1.0
+    cls_lambda: float = 1.0
+    det_memories: int = 2000
+    det_replay_batch: int = 64
 
     @staticmethod
     def from_args(args: object) -> "GemConfig":
@@ -117,7 +122,7 @@ def project2cone2(gradient, memories, margin=0.5, eps = 1e-3):
     gradient.copy_(torch.Tensor(x).view(-1, 1))
 
 
-class Net(nn.Module):
+class Net(DetectionReplayMixin, nn.Module):
     def __init__(self,
                  n_inputs,
                  n_outputs,
@@ -142,8 +147,12 @@ class Net(nn.Module):
         self.ce = nn.CrossEntropyLoss()
         self.n_outputs = n_outputs
         self.glances = self.cfg.glances
+        self.det_lambda = float(self.cfg.det_lambda)
+        self.cls_lambda = float(self.cfg.cls_lambda)
+        self._init_det_replay(self.cfg.det_memories, self.cfg.det_replay_batch)
 
-        self.opt = optim.SGD(self.parameters(), self.cfg.lr, momentum=0.9)
+        self.opt = optim.SGD(self._ll_params(), self.cfg.lr, momentum=0.9)
+        self.det_opt = optim.SGD(self.net.det_head.parameters(), self.cfg.lr, momentum=0.9)
 
         self.n_memories = self.cfg.n_memories
         self.gpu = self.cfg.cuda
@@ -169,7 +178,7 @@ class Net(nn.Module):
             self.task_mem_filled = self.task_mem_filled.cuda()
 
         # --- GEM gradient buffers ---
-        self.grad_dims = [p.data.numel() for p in self.parameters()]
+        self.grad_dims = [p.data.numel() for p in self._ll_params()]
         self.grads = torch.Tensor(sum(self.grad_dims), n_tasks)
         if self.gpu:
             self.grads = self.grads.cuda()
@@ -206,6 +215,12 @@ class Net(nn.Module):
         else:
             raise ValueError(f"Unexpected IQ input shape {tuple(x.shape)}; expected (B, 2, L) or (B, 2L).")
 
+    def _ll_params(self):
+        for name, param in self.net.named_parameters():
+            if name.startswith("det_head"):
+                continue
+            yield param
+
     def forward(self, x, t):
         if self.cfg.dataset == 'tinyimagenet':
             x = x.view(-1, 3, 64, 64)
@@ -236,6 +251,28 @@ class Net(nn.Module):
         else:
             # legacy: flatten non-IQ inputs
             x = x.view(x.size(0), -1)
+        y_cls, y_det = self._unpack_labels(y)
+        if y_det is not None and self.det_memories > 0:
+            self._update_det_memory(x, y_det)
+        x_det = x
+        signal_mask = (y_det == 1) & (y_cls >= 0)
+        if not signal_mask.any():
+            self.det_opt.zero_grad()
+            det_logits, _ = self.net.forward_heads(x_det)
+            det_loss = self.det_loss(det_logits, y_det.float())
+            det_replay = self._sample_det_memory()
+            if det_replay is not None:
+                mem_x, mem_y = det_replay
+                mem_det_logits, _ = self.net.forward_heads(mem_x)
+                mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+                det_loss = 0.5 * (det_loss + mem_loss)
+            det_loss = self.det_lambda * det_loss
+            det_loss.backward()
+            self.det_opt.step()
+            return float(det_loss.item()), 0.0
+
+        x = x[signal_mask]
+        y = y_cls[signal_mask]
 
         # track tasks
         if t != self.old_task:
@@ -297,7 +334,7 @@ class Net(nn.Module):
                     ptloss.backward()
                     if self.cfg.grad_clip_norm:
                         torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.cfg.grad_clip_norm)
-                    store_grad(self.parameters, self.grads, self.grad_dims, past_task)
+                    store_grad(self._ll_params, self.grads, self.grad_dims, past_task)
 
             # current batch
             self.zero_grad()
@@ -319,15 +356,27 @@ class Net(nn.Module):
 
             # GEM projection if needed
             if len(self.observed_tasks) > 1:
-                store_grad(self.parameters, self.grads, self.grad_dims, t)
+                store_grad(self._ll_params, self.grads, self.grad_dims, t)
                 device = torch.device("cuda") if self.gpu else torch.device("cpu")
                 indx = torch.tensor(self.observed_tasks[:-1], dtype=torch.long, device=device)
                 dotp = torch.mm(self.grads[:, t].unsqueeze(0), self.grads.index_select(1, indx))
                 if (dotp < 0).sum() != 0:
                     project2cone2(self.grads[:, t].unsqueeze(1),
                                   self.grads.index_select(1, indx), self.margin)
-                    overwrite_grad(self.parameters, self.grads[:, t], self.grad_dims)
+                    overwrite_grad(self._ll_params, self.grads[:, t], self.grad_dims)
 
             self.opt.step()
+        self.det_opt.zero_grad()
+        det_logits, _ = self.net.forward_heads(x_det)
+        det_loss = self.det_loss(det_logits, y_det.float())
+        det_replay = self._sample_det_memory()
+        if det_replay is not None:
+            mem_x, mem_y = det_replay
+            mem_det_logits, _ = self.net.forward_heads(mem_x)
+            mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+            det_loss = 0.5 * (det_loss + mem_loss)
+        det_loss = self.det_lambda * det_loss
+        det_loss.backward()
+        self.det_opt.step()
         avg_tr_acc = sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
         return loss.item(), avg_tr_acc

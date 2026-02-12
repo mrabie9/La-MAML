@@ -1,5 +1,6 @@
 # delete_bad_logs.py
-import argparse, shutil
+import argparse
+import shutil
 from pathlib import Path
 
 def main(base="logs", dry_run=True):

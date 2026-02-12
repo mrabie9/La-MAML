@@ -1,4 +1,6 @@
-import torch, sys, subprocess
+import torch
+import sys
+import subprocess
 print('torch', torch.__version__)
 print('torch cuda', torch.version.cuda)
 print('cudnn', torch.backends.cudnn.version())

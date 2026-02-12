@@ -1,5 +1,4 @@
 import logging
-import copy
 from dataclasses import dataclass
 from typing import Optional
 
@@ -8,7 +7,6 @@ import torch
 from torch import nn
 from torch import optim
 from torch.nn import functional as F
-import matplotlib.pyplot as plt
 # from model.resnet1d import ResNet1D
 from model.anml_base import NeuromodNet1D #as Learner
 from random import shuffle

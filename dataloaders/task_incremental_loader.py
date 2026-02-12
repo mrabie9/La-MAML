@@ -1,8 +1,6 @@
 import numpy as np
 import torch
-from PIL import Image
 from torch.utils.data import DataLoader
-from torchvision import datasets
 
 from dataloaders.idataset import DummyArrayDataset
 from dataloaders.iq_data_loader import IQDataGenerator
@@ -22,6 +20,10 @@ def _normalize_label_array(labels, expected_len, source):
         return labels
 
     arr = np.asarray(labels)
+    if arr.ndim == 2 and arr.shape[0] == expected_len and arr.shape[1] == 2:
+        return arr.astype(np.int64, copy=False)
+    if arr.ndim == 2 and arr.shape[0] == 2 and arr.shape[1] == expected_len:
+        return np.ascontiguousarray(arr.T).astype(np.int64, copy=False)
     if arr.size == expected_len:
         arr = arr.reshape(expected_len)
     else:
@@ -120,22 +122,37 @@ class IncrementalLoader:
             raise NotImplementedError("Unknown mode {}.".format(dataset_type))
 
     def get_dataset_info(self):
+        def _max_label_value(labels):
+            if isinstance(labels, np.ndarray):
+                arr = labels
+                if arr.ndim == 2 and arr.shape[1] == 2:
+                    arr = arr[:, 0]
+                arr = arr[arr >= 0]
+                return int(arr.max()) if arr.size else -1
+            if torch.is_tensor(labels):
+                tensor = labels
+                if tensor.dim() == 2 and tensor.size(1) == 2:
+                    tensor = tensor[:, 0]
+                tensor = tensor[tensor >= 0]
+                return int(tensor.max().item()) if tensor.numel() > 0 else -1
+            return int(np.max(labels))
+
         if isinstance(self.train_dataset[0][1], np.ndarray):
             n_inputs = self.train_dataset[0][1].shape[1] * (2 if np.iscomplexobj(self.train_dataset[0][1]) else 1)
             n_outputs = 0
             for i in range(len(self.train_dataset)):
-                n_outputs = max(n_outputs, int(self.train_dataset[i][2].max()))
-                n_outputs = max(n_outputs, int(self.test_dataset[i][2].max()))
+                n_outputs = max(n_outputs, _max_label_value(self.train_dataset[i][2]))
+                n_outputs = max(n_outputs, _max_label_value(self.test_dataset[i][2]))
             self.n_outputs = n_outputs
             return n_inputs, n_outputs + 1, self.n_tasks
         else:
             n_inputs = self.train_dataset[0][1].size(1)
             n_outputs = 0
             for i in range(len(self.train_dataset)):
-                n_outputs = max(n_outputs, self.train_dataset[i][2].max())
-                n_outputs = max(n_outputs, self.test_dataset[i][2].max())
+                n_outputs = max(n_outputs, _max_label_value(self.train_dataset[i][2]))
+                n_outputs = max(n_outputs, _max_label_value(self.test_dataset[i][2]))
             self.n_outputs = n_outputs
-            return n_inputs, n_outputs.item()+1, self.n_tasks
+            return n_inputs, n_outputs + 1, self.n_tasks
 
     def get_samples_per_task(self, task_id=None, split="train"):
         if task_id is None:
@@ -240,27 +257,101 @@ class IncrementalLoader:
                 x_test = x_test[:size_te]
                 y_test = y_test[:size_te]
 
-                print(f"Loaded {fname}: Unique train labels: {np.unique(y_train)}")
+                if y_train.ndim == 2 and y_train.shape[1] == 2:
+                    train_unique = np.unique_counts(y_train[:, 0])
+                else:
+                    train_unique = np.unique_counts(y_train)
+                print(f"Loaded {fname}: Unique train labels: {train_unique}")
 
                 y_train = np.asarray(y_train, dtype=np.int64)
                 y_test = np.asarray(y_test, dtype=np.int64)
 
                 # Remap labels to a contiguous global range starting from 0
-                unique_labels = np.unique(y_train)
-                needs_remap = not np.array_equal(unique_labels, np.arange(unique_labels.size))
-                if needs_remap:
-                    y_train = unique_labels.searchsorted(y_train) + labels_offset
-                    y_test = unique_labels.searchsorted(y_test) + labels_offset
+                if y_train.ndim == 2 and y_train.shape[1] == 2:
+                    y_train_cls = y_train[:, 0]
+                    y_train_det = y_train[:, 1]
+                    y_test_cls = y_test[:, 0]
+                    y_test_det = y_test[:, 1]
+                    use_detector_arch = bool(getattr(self._args, "use_detector_arch", False))
+                    # print(f"Using detector architecture: {use_detector_arch}")
+                    has_negatives = (y_train_cls < 0).any() or (y_test_cls < 0).any()
+
+                    unique_labels = np.unique(y_train_cls[y_train_cls >= 0])
+                    needs_remap = (
+                        unique_labels.size > 0
+                        and not np.array_equal(unique_labels, np.arange(unique_labels.size))
+                    )
+                    y_train_cls_remap = y_train_cls.copy()
+                    y_test_cls_remap = y_test_cls.copy()
+                    mask_train = y_train_cls >= 0
+                    mask_test = y_test_cls >= 0
+                    if needs_remap:
+                        y_train_cls_remap[mask_train] = (
+                            unique_labels.searchsorted(y_train_cls[mask_train]) + labels_offset
+                        )
+                        y_test_cls_remap[mask_test] = (
+                            unique_labels.searchsorted(y_test_cls[mask_test]) + labels_offset
+                        )
+                    else:
+                        y_train_cls_remap[mask_train] = y_train_cls[mask_train] + labels_offset
+                        y_test_cls_remap[mask_test] = y_test_cls[mask_test] + labels_offset
+                    extra_class = 0
+                    if (not use_detector_arch) and has_negatives:
+                        extra_class = 1
+                        neg_label = labels_offset + unique_labels.size
+                        y_train_cls_remap[~mask_train] = neg_label
+                        y_test_cls_remap[~mask_test] = neg_label
+                    if use_detector_arch:
+                        y_train = np.stack([y_train_cls_remap, y_train_det], axis=1)
+                        y_test = np.stack([y_test_cls_remap, y_test_det], axis=1)
+                    else:
+                        y_train = y_train_cls_remap
+                        y_test = y_test_cls_remap
                 else:
-                    y_train = y_train + labels_offset
-                    y_test = y_test + labels_offset
-                labels_offset += unique_labels.size
-                print(f"Loaded {fname}: Remapped labels: {np.unique(y_train)}. Size: {x_train.shape[0]})")
+                    use_detector_arch = bool(getattr(self._args, "use_detector_arch", False))
+                    has_negatives = (y_train < 0).any() or (y_test < 0).any()
+                    unique_labels = np.unique(y_train[y_train >= 0])
+                    needs_remap = (
+                        unique_labels.size > 0
+                        and not np.array_equal(unique_labels, np.arange(unique_labels.size))
+                    )
+                    y_train_remap = y_train.copy()
+                    y_test_remap = y_test.copy()
+                    mask_train = y_train >= 0
+                    mask_test = y_test >= 0
+                    if needs_remap:
+                        y_train_remap[mask_train] = (
+                            unique_labels.searchsorted(y_train[mask_train]) + labels_offset
+                        )
+                        y_test_remap[mask_test] = (
+                            unique_labels.searchsorted(y_test[mask_test]) + labels_offset
+                        )
+                    else:
+                        y_train_remap[mask_train] = y_train[mask_train] + labels_offset
+                        y_test_remap[mask_test] = y_test[mask_test] + labels_offset
+                    extra_class = 0
+                    if (not use_detector_arch) and has_negatives:
+                        extra_class = 1
+                        neg_label = labels_offset + unique_labels.size
+                        y_train_remap[~mask_train] = neg_label
+                        y_test_remap[~mask_test] = neg_label
+                    y_train = y_train_remap
+                    y_test = y_test_remap
+                labels_offset += unique_labels.size + extra_class
+                if y_train.ndim == 2 and y_train.shape[1] == 2:
+                    remapped = np.unique(y_train[:, 0])
+                else:
+                    remapped = np.unique(y_train)
+                print(f"Loaded {fname}: Remapped labels: {remapped}. Size: {x_train.shape[0]})")
 
                 # 3D array[task, split (xtr/yte/xte/yte), data]
                 raw_datasets.append((x_train, y_train, x_test, y_test))
-                all_labels.append(y_train.reshape(-1))
-                all_labels.append(y_test.reshape(-1))
+                if y_train.ndim == 2 and y_train.shape[1] == 2:
+                    all_labels.append(y_train[:, 0].reshape(-1))
+                    all_labels.append(y_test[:, 0].reshape(-1))
+                else:
+                    all_labels.append(y_train.reshape(-1))
+                    all_labels.append(y_test.reshape(-1))
 
             if not raw_datasets:
                 raise ValueError("No IQ datasets were loaded. Please check the data path.")
@@ -284,7 +375,13 @@ class IncrementalLoader:
                 self.sample_permutations.append([p_tr, p_te])
 
             # Track per-task class counts for downstream models.
-            self.classes_per_task = [int(np.unique(task[2]).size) for task in self.train_dataset]
+            def _task_class_count(task):
+                labels = task[2]
+                if labels.ndim == 2 and labels.shape[1] == 2:
+                    labels = labels[:, 0]
+                labels = labels[labels >= 0]
+                return int(np.unique(labels).size)
+            self.classes_per_task = [_task_class_count(task) for task in self.train_dataset]
             print("Built classes_per_task:", self.classes_per_task)
             # Persist on args for convenience.
             self._args.classes_per_task = self.classes_per_task

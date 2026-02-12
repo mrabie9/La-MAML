@@ -91,10 +91,15 @@ def flatten_results(results: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "trial": item.get("trial"),
                 "status": item.get("status"),
                 "params": params,
+                "score": item.get("score", float("nan")),
                 "val_mean": item.get("val_mean", float("nan")),
+                "val_det_mean": item.get("val_det_mean", float("nan")),
+                "val_pfa_mean": item.get("val_pfa_mean", float("nan")),
                 "val_min": val_min,
                 "val_max": val_max,
                 "val_std": val_std,
+                "test_det_mean": item.get("test_det_mean", float("nan")),
+                "test_pfa_mean": item.get("test_pfa_mean", float("nan")),
                 "duration_sec": item.get("duration_sec"),
                 "log_dir": item.get("log_dir"),
             }
@@ -137,6 +142,12 @@ def infer_param_names(summary: Dict[str, Any], rows: Sequence[Dict[str, Any]]) -
     return names
 
 
+def infer_primary_metric(rows: Sequence[Dict[str, Any]]) -> str:
+    if any(is_finite_number(row.get("score")) for row in rows):
+        return "score"
+    return "val_mean"
+
+
 def print_header(summary: Dict[str, Any], rows: Sequence[Dict[str, Any]], param_names: Sequence[str]) -> None:
     print("\n=== Tuning summary ===")
     print(f"Config file      : {summary.get('config')}")
@@ -147,7 +158,19 @@ def print_header(summary: Dict[str, Any], rows: Sequence[Dict[str, Any]], param_
     best = summary.get("best") or {}
     best_params = best.get("params") or {}
     print("Best trial (from summary)")
-    print(f"  trial #{best.get('trial')} | val_mean={fmt_float(best.get('val_mean'))}")
+    best_score = best.get("score")
+    if is_finite_number(best_score):
+        print(
+            "  trial #{} | score={} | val_mean={} | det_mean={} | pfa_mean={}".format(
+                best.get("trial"),
+                fmt_float(best_score),
+                fmt_float(best.get("val_mean")),
+                fmt_float(best.get("val_det_mean")),
+                fmt_float(best.get("val_pfa_mean")),
+            )
+        )
+    else:
+        print(f"  trial #{best.get('trial')} | val_mean={fmt_float(best.get('val_mean'))}")
     if param_names:
         param_text = ", ".join(
             f"{name}={fmt_value(best_params.get(name), 5)}"
@@ -159,18 +182,26 @@ def print_header(summary: Dict[str, Any], rows: Sequence[Dict[str, Any]], param_
     print(f"  duration: {fmt_float(best.get('duration_sec'), 2)} sec")
 
 
-def print_top_trials(rows: Sequence[Dict[str, Any]], k: int, param_names: Sequence[str]) -> None:
+def print_top_trials(
+    rows: Sequence[Dict[str, Any]],
+    k: int,
+    param_names: Sequence[str],
+    metric_key: str,
+) -> None:
     def sort_key(item: Dict[str, Any]) -> float:
-        value = item.get("val_mean")
+        value = item.get(metric_key)
         if is_finite_number(value):
             return float(value)
         return float("-inf")
 
     valid_rows = sorted(rows, key=sort_key, reverse=True)
-    print("\nTop trials by validation mean")
+    print(f"\nTop trials by {metric_key}")
     param_cols = [(name, max(len(name), 8)) for name in param_names]
     param_header = " ".join(f"{name:>{width}}" for name, width in param_cols)
-    header = f"{'rank':>4} {'trial':>5} {'val_mean':>10} {'val_std':>10} {'duration_s':>11}"
+    header = (
+        f"{'rank':>4} {'trial':>5} {metric_key:>10} {'val_mean':>10} "
+        f"{'det_mean':>10} {'pfa_mean':>10} {'val_std':>10} {'duration_s':>11}"
+    )
     if param_header:
         header = f"{header} {param_header}"
     print(header)
@@ -182,21 +213,27 @@ def print_top_trials(rows: Sequence[Dict[str, Any]], k: int, param_names: Sequen
             for name, width in param_cols
         )
         print(
-            f"{idx:>4} {row.get('trial', ''):>5} {fmt_float(row.get('val_mean')):>10} "
-            f"{fmt_float(row.get('val_std')):>10} {fmt_float(row.get('duration_sec'), 2):>11}"
+            f"{idx:>4} {row.get('trial', ''):>5} {fmt_float(row.get(metric_key)):>10} "
+            f"{fmt_float(row.get('val_mean')):>10} {fmt_float(row.get('val_det_mean')):>10} "
+            f"{fmt_float(row.get('val_pfa_mean')):>10} {fmt_float(row.get('val_std')):>10} "
+            f"{fmt_float(row.get('duration_sec'), 2):>11}"
             f"{' ' + param_values if param_values else ''}"
         )
 
 
-def summarise_by_param(rows: Iterable[Dict[str, Any]], param: str) -> List[Dict[str, Any]]:
+def summarise_by_param(
+    rows: Iterable[Dict[str, Any]],
+    param: str,
+    metric_key: str,
+) -> List[Dict[str, Any]]:
     grouped: Dict[Any, List[float]] = defaultdict(list)
     for row in rows:
         params = row.get("params") or {}
         value = params.get(param)
-        val_mean = row.get("val_mean")
-        if value is None or not is_finite_number(val_mean):
+        metric_value = row.get(metric_key)
+        if value is None or not is_finite_number(metric_value):
             continue
-        grouped[value].append(float(val_mean))
+        grouped[value].append(float(metric_value))
 
     summary_rows: List[Dict[str, Any]] = []
     for value, scores in grouped.items():
@@ -214,12 +251,16 @@ def summarise_by_param(rows: Iterable[Dict[str, Any]], param: str) -> List[Dict[
     return summary_rows
 
 
-def print_param_summaries(rows: Sequence[Dict[str, Any]], param_names: Sequence[str]) -> None:
+def print_param_summaries(
+    rows: Sequence[Dict[str, Any]],
+    param_names: Sequence[str],
+    metric_key: str,
+) -> None:
     for param in param_names:
-        summary_rows = summarise_by_param(rows, param)
+        summary_rows = summarise_by_param(rows, param, metric_key)
         if not summary_rows:
             continue
-        print(f"\nAverages grouped by {param}")
+        print(f"\nAverages grouped by {param} (metric={metric_key})")
         header = f"{param:>12} {'count':>7} {'mean':>10} {'std':>10} {'best':>10}"
         print(header)
         print("-" * len(header))
@@ -239,7 +280,12 @@ def collect_param_values(rows: Sequence[Dict[str, Any]], param: str) -> List[flo
     return sorted(values)
 
 
-def build_score_matrix(rows: Sequence[Dict[str, Any]], x_param: str, y_param: str):
+def build_score_matrix(
+    rows: Sequence[Dict[str, Any]],
+    x_param: str,
+    y_param: str,
+    metric_key: str,
+):
     x_values = collect_param_values(rows, x_param)
     y_values = collect_param_values(rows, y_param)
     if not x_values or not y_values:
@@ -253,15 +299,25 @@ def build_score_matrix(rows: Sequence[Dict[str, Any]], x_param: str, y_param: st
         params = row.get("params") or {}
         x_val = params.get(x_param)
         y_val = params.get(y_param)
-        val_mean = row.get("val_mean")
-        if not (is_finite_number(x_val) and is_finite_number(y_val) and is_finite_number(val_mean)):
+        metric_value = row.get(metric_key)
+        if not (
+            is_finite_number(x_val)
+            and is_finite_number(y_val)
+            and is_finite_number(metric_value)
+        ):
             continue
-        matrix[y_index[y_val]][x_index[x_val]] = float(val_mean)
+        matrix[y_index[y_val]][x_index[x_val]] = float(metric_value)
 
     return matrix, x_values, y_values
 
 
-def build_score_tensor(rows: Sequence[Dict[str, Any]], x_param: str, y_param: str, slice_param: str):
+def build_score_tensor(
+    rows: Sequence[Dict[str, Any]],
+    x_param: str,
+    y_param: str,
+    slice_param: str,
+    metric_key: str,
+):
     x_values = collect_param_values(rows, x_param)
     y_values = collect_param_values(rows, y_param)
     slice_values = collect_param_values(rows, slice_param)
@@ -281,15 +337,15 @@ def build_score_tensor(rows: Sequence[Dict[str, Any]], x_param: str, y_param: st
         x_val = params.get(x_param)
         y_val = params.get(y_param)
         slice_val = params.get(slice_param)
-        val_mean = row.get("val_mean")
+        metric_value = row.get(metric_key)
         if not (
             is_finite_number(x_val)
             and is_finite_number(y_val)
             and is_finite_number(slice_val)
-            and is_finite_number(val_mean)
+            and is_finite_number(metric_value)
         ):
             continue
-        tensor[slice_index[slice_val]][y_index[y_val]][x_index[x_val]] = float(val_mean)
+        tensor[slice_index[slice_val]][y_index[y_val]][x_index[x_val]] = float(metric_value)
 
     return tensor, x_values, y_values, slice_values
 
@@ -300,6 +356,7 @@ def plot_heatmap_2d(
     y_values: Sequence[float],
     x_label: str,
     y_label: str,
+    metric_key: str,
     output_path: Path,
     show: bool,
 ) -> None:
@@ -315,7 +372,7 @@ def plot_heatmap_2d(
     vmin, vmax = min(finite_scores), max(finite_scores)
 
     fig, ax = plt.subplots(figsize=(6.0, 4.8))
-    fig.suptitle("Validation mean heatmap")
+    fig.suptitle(f"{metric_key} heatmap")
 
     im = ax.imshow(matrix, origin="lower", aspect="auto", vmin=vmin, vmax=vmax, cmap="viridis")
     ax.set_xticks(range(len(x_values)))
@@ -331,7 +388,7 @@ def plot_heatmap_2d(
             if is_finite_number(value):
                 ax.text(x_idx, y_idx, f"{value:.3f}", ha="center", va="center", color="white", fontsize=8)
 
-    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="val_mean")
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label=metric_key)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout(rect=[0, 0.03, 1, 0.92])
@@ -351,6 +408,7 @@ def plot_heatmaps_3d(
     x_label: str,
     y_label: str,
     slice_label: str,
+    metric_key: str,
     output_path: Path,
     show: bool,
 ) -> None:
@@ -374,7 +432,7 @@ def plot_heatmaps_3d(
     cols = min(len(slice_values), 3)
     rows = int(math.ceil(len(slice_values) / cols))
     fig, axes = plt.subplots(rows, cols, figsize=(4.8 * cols, 4.0 * rows), squeeze=False)
-    fig.suptitle(f"Validation mean heatmaps by {slice_label}")
+    fig.suptitle(f"{metric_key} heatmaps by {slice_label}")
 
     for idx, slice_val in enumerate(slice_values):
         ax = axes[idx // cols][idx % cols]
@@ -394,7 +452,7 @@ def plot_heatmaps_3d(
                 if is_finite_number(value):
                     ax.text(x_idx, y_idx, f"{value:.3f}", ha="center", va="center", color="white", fontsize=8)
 
-        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="val_mean")
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label=metric_key)
 
     for idx in range(len(slice_values), rows * cols):
         axes[idx // cols][idx % cols].axis("off")
@@ -417,9 +475,10 @@ def main() -> None:
     rows = flatten_results(summary.get("results", []))
     param_names = infer_param_names(summary, rows)
 
+    metric_key = infer_primary_metric(rows)
     print_header(summary, rows, param_names)
-    print_top_trials(rows, args.top_k, param_names)
-    print_param_summaries(rows, param_names)
+    print_top_trials(rows, args.top_k, param_names, metric_key)
+    print_param_summaries(rows, param_names, metric_key)
 
     if args.no_plot:
         return
@@ -430,7 +489,7 @@ def main() -> None:
         plot_params = candidates[:3]
 
     if len(plot_params) == 2:
-        matrix_info = build_score_matrix(rows, plot_params[0], plot_params[1])
+        matrix_info = build_score_matrix(rows, plot_params[0], plot_params[1], metric_key)
         if matrix_info is None:
             print("Insufficient hyper-parameter coverage to build a heatmap.")
             return
@@ -438,11 +497,20 @@ def main() -> None:
         output_path = args.output
         if output_path is None:
             output_path = args.summary.parent / "tuning_heatmap.png"
-        plot_heatmap_2d(matrix, x_values, y_values, plot_params[0], plot_params[1], output_path, args.show)
+        plot_heatmap_2d(
+            matrix,
+            x_values,
+            y_values,
+            plot_params[0],
+            plot_params[1],
+            metric_key,
+            output_path,
+            args.show,
+        )
         return
 
     if len(plot_params) >= 3:
-        tensor_info = build_score_tensor(rows, plot_params[0], plot_params[1], plot_params[2])
+        tensor_info = build_score_tensor(rows, plot_params[0], plot_params[1], plot_params[2], metric_key)
         if tensor_info is None:
             print("Insufficient hyper-parameter coverage to build a heatmap.")
             return
@@ -458,6 +526,7 @@ def main() -> None:
             plot_params[0],
             plot_params[1],
             plot_params[2],
+            metric_key,
             output_path,
             args.show,
         )

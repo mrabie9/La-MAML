@@ -2,16 +2,12 @@ import random
 
 import numpy as np
 import torch
-from PIL import Image
 from torch.utils.data import DataLoader
-from torch.utils.data.sampler import SubsetRandomSampler
-from torchvision import datasets, transforms
+from torchvision import transforms
 
 from dataloaders.idataset import _get_datasets, DummyDataset
 from dataloaders.task_sampler import MultiTaskSampler
 
-import random
-import ipdb
 
 
 class IncrementalLoader:

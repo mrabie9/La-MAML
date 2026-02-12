@@ -1,16 +1,11 @@
 import random
 from random import shuffle
 import numpy as np
-import ipdb
-import math
 import torch
 from torch.autograd import Variable
-import torch.nn as nn
 from dataclasses import dataclass
 from typing import Optional
 from model.resnet1d import ResNet1D
-from scipy.stats import pearsonr
-import datetime
 from utils import misc_utils
 
 

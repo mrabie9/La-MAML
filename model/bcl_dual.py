@@ -7,9 +7,8 @@
 from dataclasses import dataclass
 
 import torch
-from torch.autograd import Variable
 from model.resnet1d import ResNet1D
-import pdb
+from model.detection_replay import DetectionReplayMixin
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
@@ -24,13 +23,17 @@ class BclDualConfig:
     lr: float = 1e-3
     beta: float = 1.0
     memory_strength: float = 1.0
-    temperature: float = 2.0
+    temperature: float = 5.0
     n_memories: int = 2000
     inner_steps: int = 5
     n_meta: int = 5
 
     cuda: bool = True
     replay_batch_size: int = 20
+    det_lambda: float = 10.0
+    cls_lambda: float = 1.0
+    det_memories: int = 2000
+    det_replay_batch: int = 64
 
     @staticmethod
     def from_args(args: object) -> "BclDualConfig":
@@ -40,7 +43,7 @@ class BclDualConfig:
                 setattr(cfg, field, getattr(args, field))
         return cfg
 
-class Net(torch.nn.Module):
+class Net(DetectionReplayMixin, torch.nn.Module):
 
     def __init__(self,
                  n_inputs,
@@ -63,6 +66,9 @@ class Net(torch.nn.Module):
         self.inner_opt = torch.optim.SGD(self.net.parameters(), lr=self.inner_lr, momentum=0.9)
         # setup losses
         self.bce = torch.nn.CrossEntropyLoss()
+        self.det_lambda = float(self.cfg.det_lambda)
+        self.cls_lambda = float(self.cfg.cls_lambda)
+        self._init_det_replay(self.cfg.det_memories, self.cfg.det_replay_batch)
 
         self.classes_per_task = misc_utils.build_task_class_list(
             n_tasks,
@@ -204,11 +210,40 @@ class Net(torch.nn.Module):
         sizes = (offsets[:, 1] - offsets[:, 0]).long()
         return xx,yy, feat , mask, t_idx.tolist(), sizes
     def observe(self, x, y, t):
+        y_cls, y_det = self._unpack_labels(y)
+        if self.current_task is None:
+            self.current_task = t
+        if self.current_task == t and self.mem_cnt == 0 and y_det is not None:
+            det_mean = float(y_det.float().mean().item())
+            if det_mean >= 0.99:
+                print("[WARN][BCL_Dual] y_det mean ~1.0; detection may be missing negatives.")
+        if y_det is not None and self.det_memories > 0:
+            self._update_det_memory(x, y_det)
+        x_det = x
+        signal_mask = (y_det == 1) & (y_cls >= 0)
+        if not signal_mask.any():
+            det_logits, _ = self.net.forward_heads(x_det)
+            det_loss = self.det_loss(det_logits, y_det.float())
+            det_replay = self._sample_det_memory()
+            if det_replay is not None:
+                mem_x, mem_y = det_replay
+                mem_det_logits, _ = self.net.forward_heads(mem_x)
+                mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+                det_loss = 0.5 * (det_loss + mem_loss)
+            self.zero_grad()
+            det_loss.backward()
+            self.inner_opt.step()
+            return float(det_loss.item()), 0.0
+        x = x[signal_mask]
+        y = y_cls[signal_mask]
         if t != self.current_task:
             tt = self.current_task
             offset1, offset2 = self.compute_offsets(tt)
             out = self.forward(self.memx[tt],tt, True)
-            self.mem_feat[tt] = F.softmax(out[:, offset1:offset2] / self.temp, dim=1 ).data.clone()
+            cls_size = int(offset2 - offset1)
+            feat = self.mem_feat[tt]
+            feat.zero_()
+            feat[:, :cls_size] = F.softmax(out[:, offset1:offset2] / self.temp, dim=1).data.clone()
             self.current_task = t
             self.mem_cnt = 0
             self.val_cnt = 0
@@ -264,6 +299,14 @@ class Net(torch.nn.Module):
                 preds = torch.argmax(logits, dim=1)
                 tr_acc.append(macro_recall(preds, targets))
                 loss1 = self.bce(logits, targets)
+                det_logits, _ = self.net.forward_heads(x_det)
+                det_loss = self.det_loss(det_logits, y_det.float())
+                det_replay = self._sample_det_memory()
+                if det_replay is not None:
+                    mem_x, mem_y = det_replay
+                    mem_det_logits, _ = self.net.forward_heads(mem_x)
+                    mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+                    det_loss = 0.5 * (det_loss + mem_loss)
                 if t > 0:
                     xx, yy, feat, mask, list_t, class_sizes = self.memory_sampling(t)
                     pred_ = self.net(xx)
@@ -273,9 +316,11 @@ class Net(torch.nn.Module):
                             pred[row, size:] = -1e9
                     loss2 = self.bce(pred, yy)
                     loss3 = self.reg * self.kl(F.log_softmax(pred / self.temp, dim = 1), feat)
-                    loss = loss1 + loss2 + loss3
+                    loss = (self.cls_lambda * loss1
+                            + self.det_lambda * det_loss
+                            + loss2 + loss3)
                 else:
-                    loss = loss1
+                    loss = self.cls_lambda * loss1 + self.det_lambda * det_loss
                 loss.backward()
                 self.inner_opt.step()
             xval, yval, _, mask_val, list_t, class_sizes_val = self.memory_sampling(tt, valid = True)  

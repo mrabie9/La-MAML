@@ -7,11 +7,10 @@
 from dataclasses import dataclass
 
 import torch
-from torch.autograd import Variable
 # from .common import ContextMLP, ContextNet18
 # from .resnet import ResNet18 as ResNet18Full
 from model.ctn_base import ContextNet18
-import pdb
+from model.detection_replay import DetectionReplayMixin
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
@@ -35,6 +34,10 @@ class CtnConfig:
     arch: str = "resnet1d"
     cuda: bool = True
     batch_size: int = 128
+    det_lambda: float = 1.0
+    cls_lambda: float = 1.0
+    det_memories: int = 2000
+    det_replay_batch: int = 64
 
     @staticmethod
     def from_args(args: object) -> "CtnConfig":
@@ -44,7 +47,7 @@ class CtnConfig:
                 setattr(cfg, field, getattr(args, field))
         return cfg
 
-class Net(torch.nn.Module):
+class Net(DetectionReplayMixin, torch.nn.Module):
 
     def __init__(self,
                  n_inputs,
@@ -69,6 +72,9 @@ class Net(torch.nn.Module):
         self.opt = torch.optim.SGD(self.net.parameters(), lr=self.outer_lr, momentum=0.9)
         # setup losses
         self.bce = torch.nn.CrossEntropyLoss()
+        self.det_lambda = float(self.cfg.det_lambda)
+        self.cls_lambda = float(self.cfg.cls_lambda)
+        self._init_det_replay(self.cfg.det_memories, self.cfg.det_replay_batch)
         self.classes_per_task = misc_utils.build_task_class_list(
             n_tasks,
             n_outputs,
@@ -195,13 +201,39 @@ class Net(torch.nn.Module):
             return xx,yy, feat , mask.long().cuda(), t_idx.tolist(), sizes
         
     def observe(self, x, y, t):
+        y_cls, y_det = self._unpack_labels(y)
+        if y_det is not None and self.det_memories > 0:
+            self._update_det_memory(x, y_det)
+        x_det = x
+        signal_mask = (y_det == 1) & (y_cls >= 0)
+        if not signal_mask.any():
+            det_logits = self.net.forward_det_agnostic(x_det)
+            det_loss = self.det_loss(det_logits, y_det.float())
+            det_replay = self._sample_det_memory()
+            if det_replay is not None:
+                mem_x, mem_y = det_replay
+                mem_det_logits = self.net.forward_det_agnostic(mem_x)
+                mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+                det_loss = 0.5 * (det_loss + mem_loss)
+            self.zero_grad()
+            grads = torch.autograd.grad(det_loss, self.net.base_param(), create_graph=False)
+            for param, grad in zip(self.net.base_param(), grads):
+                new_param = param.data.clone()
+                new_param = new_param - self.inner_lr * grad
+                param.data.copy_(new_param)
+            return float(det_loss.item()), 0.0
+        x = x[signal_mask]
+        y = y_cls[signal_mask]
 
         # if task has changed, run model on val set of previous task to get soft targets 
         if t != self.current_task:
             tt = self.current_task
             offset1, offset2 = self.compute_offsets(tt)
             out = self.forward(self.memx[tt],tt, True)
-            self.mem_feat[tt] = F.softmax(out[:, offset1:offset2] / self.temp, dim=1 ).data.clone() # store soft targets
+            cls_size = int(offset2 - offset1)
+            feat = self.mem_feat[tt]
+            feat.zero_()
+            feat[:, :cls_size] = F.softmax(out[:, offset1:offset2] / self.temp, dim=1).data.clone() # store soft targets
             self.current_task = t
             self.mem_cnt = 0
             self.val_cnt = 0
@@ -246,6 +278,29 @@ class Net(torch.nn.Module):
         if self.mem_cnt >= self.n_memories:
             self.mem_cnt = 0
 
+        det_logits = self.net.forward_det_agnostic(x_det)
+        det_loss = self.det_loss(det_logits, y_det.float())
+        det_replay = self._sample_det_memory()
+        if det_replay is not None:
+            mem_x, mem_y = det_replay
+            mem_det_logits = self.net.forward_det_agnostic(mem_x)
+            mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+            det_loss = 0.5 * (det_loss + mem_loss)
+        det_loss_value = det_loss.detach()
+        det_loss = self.det_lambda * det_loss
+        det_grads = torch.autograd.grad(
+            det_loss,
+            self.net.base_param(),
+            create_graph=False,
+            allow_unused=True,
+        )
+        for param, grad in zip(self.net.base_param(), det_grads):
+            if grad is None:
+                continue
+            new_param = param.data.clone()
+            new_param = new_param - self.inner_lr * grad
+            param.data.copy_(new_param)
+
         self.zero_grad()   
         meta_grad_init = [0 for _ in range(len(self.net.state_dict()))]
         #for _ in range(self.inner_steps):
@@ -275,14 +330,23 @@ class Net(torch.nn.Module):
                             pred[row, size:] = -1e9
                     loss2 = self.bce(pred, yy)
                     loss3 = self.reg * self.kl(F.log_softmax(pred / self.temp, dim = 1), feat)
-                    loss = loss1 + loss2 + loss3
+                    loss = (self.cls_lambda * loss1
+                            + self.det_lambda * det_loss_value
+                            + loss2 + loss3)
                 else:
-                    loss = loss1
+                    loss = self.cls_lambda * loss1 + self.det_lambda * det_loss_value
              
-                grads = torch.autograd.grad(loss, self.net.base_param(), create_graph=True)
+                grads = torch.autograd.grad(
+                    loss,
+                    self.net.base_param(),
+                    create_graph=True,
+                    allow_unused=True,
+                )
                 
                 # SGD update only the BASE NETWORK
                 for param, grad in zip(self.net.base_param(), grads):
+                    if grad is None:
+                        continue
                     new_param = param.data.clone()
                     new_param = new_param - self.inner_lr * grad
                     param.data.copy_(new_param)

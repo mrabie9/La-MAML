@@ -90,16 +90,27 @@ class IQDataGenerator(Dataset):
 
     def __getitem__(self, index: int) -> Tuple[np.ndarray, int]:
         iq_sample = self.x[index, :]
-        
-        # Represent complex input as two channels: I and Q
-        if np.iscomplexobj(iq_sample):
-            i = iq_sample.real
-            q = iq_sample.imag
+
+        if iq_sample.ndim == 2:
+            if iq_sample.shape[0] in (2, 3):
+                iq_sample = iq_sample.astype(np.float32, copy=False)
+            elif iq_sample.shape[1] in (2, 3):
+                iq_sample = np.swapaxes(iq_sample, 0, 1).astype(np.float32, copy=False)
+            else:
+                flat = iq_sample.reshape(-1)
+                i = flat[0::2]
+                q = flat[1::2]
+                iq_sample = np.stack([i, q], axis=0).astype(np.float32)
         else:
-            i = iq_sample[0::2]
-            q = iq_sample[1::2]
-        
-        iq_sample = np.stack([i, q], axis=0).astype(np.float32)
+            # Represent complex input as two channels: I and Q
+            if np.iscomplexobj(iq_sample):
+                i = iq_sample.real
+                q = iq_sample.imag
+            else:
+                i = iq_sample[0::2]
+                q = iq_sample[1::2]
+
+            iq_sample = np.stack([i, q], axis=0).astype(np.float32)
 
         label = self.y[index]
 
@@ -109,6 +120,10 @@ class IQDataGenerator(Dataset):
         if self.transform:
             iq_sample = self.transform(iq_sample)
 
+        if isinstance(label, (list, tuple)) and len(label) == 2:
+            return iq_sample, (label[0], label[1])
+        if isinstance(label, np.ndarray) and label.ndim == 1 and label.shape[0] == 2:
+            return iq_sample, (label[0], label[1])
         return iq_sample, label
 
     def _convert_to_spectrogram(self, iq_sample: np.ndarray) -> np.ndarray:

@@ -11,3 +11,4 @@ la-maml_env/
 logs/*
 .vscode/
 utils/plot_logs.py
+AGENTS.md

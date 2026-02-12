@@ -14,7 +14,7 @@ import random
 
 import sys
 from model.resnet1d import ResNet1D
-import sys
+from model.detection_replay import DetectionReplayMixin
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../dataloaders')))
 from iq_data_loader import ensure_iq_two_channel
@@ -29,7 +29,7 @@ if not sys.warnoptions:
 @dataclass
 class IcarlConfig:
     lr: float = 1e-3
-    memory_strength: float = 0.0
+    memory_strength: float = 0.5
     n_memories: int = 0
     glances: int = 1
 
@@ -41,6 +41,10 @@ class IcarlConfig:
     input_channels: int = 2
     alpha_init: float = 1e-3
     samples_per_task: int = -1
+    det_lambda: float = 1.0
+    cls_lambda: float = 1.0
+    det_memories: int = 2000
+    det_replay_batch: int = 64
 
     @staticmethod
     def from_args(args: object) -> "IcarlConfig":
@@ -50,7 +54,7 @@ class IcarlConfig:
                 setattr(cfg, field, getattr(args, field))
         return cfg
 
-class Net(torch.nn.Module):
+class Net(DetectionReplayMixin, torch.nn.Module):
     # Re-implementation of
     # S.-A. Rebuffi, A. Kolesnikov, G. Sperl, and C. H. Lampert.
     # iCaRL: Incremental classifier and representation learning.
@@ -87,7 +91,8 @@ class Net(torch.nn.Module):
         self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
 
         # setup optimizer
-        self.opt = torch.optim.SGD(self.parameters(), lr=self.cfg.lr, momentum=0.9)
+        self.opt = torch.optim.SGD(self._ll_params(), lr=self.cfg.lr, momentum=0.9)
+        self.det_opt = torch.optim.SGD(self.net.det_head.parameters(), lr=self.cfg.lr, momentum=0.9)
 
         # setup losses
         self.bce = torch.nn.CrossEntropyLoss()
@@ -95,6 +100,10 @@ class Net(torch.nn.Module):
         self.kl = torch.nn.KLDivLoss(reduction="batchmean")  # for distillation
         self.lsm = torch.nn.LogSoftmax(dim=1)
         self.sm = torch.nn.Softmax(dim=1)
+        self.det_lambda = float(self.cfg.det_lambda)
+        self.cls_lambda = float(self.cfg.cls_lambda)
+        print(self.n_memories, self.reg, self.det_lambda, self.samples_per_task)
+        self._init_det_replay(self.cfg.det_memories, self.cfg.det_replay_batch)
 
         # memory
         self.memx = None  # stores raw inputs, PxD
@@ -111,6 +120,28 @@ class Net(torch.nn.Module):
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         self.n_outputs = n_outputs
+
+    def _ensure_iq_shape(self, x):
+        if x.dim() == 3:
+            return x
+        if x.dim() == 2:
+            B, F = x.shape
+            assert F % 2 == 0, f"Feature dim {F} not divisible by 2 for (2, L) reshape."
+            L = F // 2
+            return x.view(B, 2, L)
+        raise ValueError(f"Unexpected IQ input shape {tuple(x.shape)}; expected (B, 2, L) or (B, 2L).")
+
+    def _prepare_input(self, x):
+        if self.cfg.dataset == 'tinyimagenet':
+            return x.view(-1, 3, 64, 64)
+        if self.cfg.dataset == 'cifar100':
+            return x.view(-1, 3, 32, 32)
+        if self.is_iq:
+            return self._ensure_iq_shape(x)
+        return x
+
+    def _prepare_det_input(self, x: torch.Tensor) -> torch.Tensor:
+        return self._prepare_input(x)
 
     def netforward(self, x):
         if self.cfg.dataset == 'tinyimagenet':
@@ -170,6 +201,12 @@ class Net(torch.nn.Module):
             out[ss, classpred[ss]] = 1
         return out  # return 1-of-C code, ns x nc
 
+    def _ll_params(self):
+        for name, param in self.net.named_parameters():
+            if name.startswith("det_head"):
+                continue
+            yield param
+
     def forward_training(self, x, t):
         output = self.netforward(x)
         # make sure we predict classes within the current task
@@ -185,9 +222,41 @@ class Net(torch.nn.Module):
 
     def observe(self, x, y, t):
 
+        x_det = self._prepare_input(x)
+        batch_count = x.size(0)
         x = x.view(x.size(0), -1)
         self.net.train()
         if self.gpu: self.net.cuda()
+        det_provided = False
+        if isinstance(y, (tuple, list)) and len(y) == 2:
+            det_provided = True
+        elif isinstance(y, dict) and "y_det" in y:
+            det_provided = True
+        elif isinstance(y, np.ndarray) and y.ndim == 2 and y.shape[1] == 2:
+            det_provided = True
+        elif torch.is_tensor(y) and y.dim() == 2 and y.size(1) == 2:
+            det_provided = True
+        y_cls, y_det = self._unpack_labels(y)
+        if y_det is not None and self.det_memories > 0:
+            self._update_det_memory(x, y_det)
+        signal_mask = (y_det == 1) & (y_cls >= 0)
+        if not signal_mask.any():
+            self.det_opt.zero_grad()
+            det_logits, _ = self.net.forward_heads(x_det)
+            det_loss = self.det_loss(det_logits, y_det.float())
+            det_replay = self._sample_det_memory()
+            if det_replay is not None:
+                mem_x, mem_y = det_replay
+                mem_det_logits, _ = self.net.forward_heads(mem_x)
+                mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+                det_loss = 0.5 * (det_loss + mem_loss)
+            det_loss = self.det_lambda * det_loss
+            det_loss.backward()
+            self.det_opt.step()
+            return float(det_loss.item()), 0.0
+
+        x = x[signal_mask]
+        y = y_cls[signal_mask]
 
         tr_acc = []
 
@@ -195,7 +264,7 @@ class Net(torch.nn.Module):
 
             # only make changes like pushing to buffer once per batch and not for every glance
             if(pass_itr==0):
-                self.examples_seen += x.size(0)
+                self.examples_seen += x.size(0) if det_provided else batch_count
                 samples_per_task = self._get_samples_per_task(t)
                 assert samples_per_task > 0, 'Samples per task is <= 0'
 
@@ -249,7 +318,10 @@ class Net(torch.nn.Module):
         # check whether this is the last minibatch of the current task
         # We assume only 1 epoch!
         target = int(self.cfg.n_epochs * self._get_samples_per_task(t))
+        # print(f"Samples per task: {self._get_samples_per_task(t)}, n_epochs: {self.cfg.n_epochs}")
+        # print(f"Target samples for task {t}: {target}, examples seen: {self.examples_seen}")
         if self.examples_seen >= target:  # not ==
+            # print(f"Final batch for task {t} reached. Updating exemplar memory.")
             self.examples_seen = 0
             # self._rebuild_exemplars_for_task(t, x.device)
 
@@ -261,67 +333,102 @@ class Net(torch.nn.Module):
                 all_labs = torch.LongTensor(np.unique(self.memy.cpu().numpy()))
             else:
                 all_labs = torch.LongTensor(np.unique(self.memy.numpy()))
-            
-            num_classes = all_labs.size(0)
-            # if self.cfg.loader == 'class_incremental_loader':
-            #     num_classes = all_labs.size(0)
-            # else:
-            #     num_classes = all_labs[offset1:offset2].size(0)
-            
-            print("num_classes", num_classes, "nc_per_task", self.nc_per_task,
+
+            # Only count labels that belong to the current task slice.
+            in_task = (all_labs >= offset1) & (all_labs < offset2)
+            task_labs = all_labs[in_task]
+            num_classes = task_labs.size(0)
+
+            print("num_classes", num_classes, "nc_per_task", self.nc_per_task, "offsets",
                   offset1, offset2)
             current_task_classes = self.classes_per_task[t]
-            assert num_classes == current_task_classes
-            # Reduce exemplar set by updating value of num. exemplars per class
-            self.num_exemplars = int(self.n_memories /
-                                     (num_classes + len(self.mem_class_x.keys())))
-            for ll in range(num_classes):
-                label = all_labs[ll]#.cuda() # current label
-                indxs = (self.memy == label).nonzero().squeeze() # indices of current label
-                cdata = self.memx.index_select(0, indxs) # grab training data for current label
-                # Construct exemplar set for last task
-                mean_feature = self.netforward(cdata)[
-                    :, offset1: offset2].data.clone().mean(0) # mean of task-sliced logits for current label
-                nd = num_classes # num classes in current task
-                exemplars = torch.zeros(self.num_exemplars, x.size(1))
-                if self.gpu:
-                    exemplars = exemplars.cuda()
-                ntr = cdata.size(0) # num data points for current label
-                # used to keep track of which examples we have already used
-                taken = torch.zeros(ntr)
-                model_output = self.netforward(cdata)[
-                    :, offset1: offset2].data.clone() # clone model output for current label
-                for ee in range(self.num_exemplars): # herding loop
-                    prev = torch.zeros(1, nd)
+            if num_classes != current_task_classes:
+                print(
+                    "[WARN][iCaRL] Task {} expected {} classes, found {} in memory.".format(
+                        t, current_task_classes, num_classes
+                    )
+                )
+            if num_classes > 0:
+                # Reduce exemplar set by updating value of num. exemplars per class
+                self.num_exemplars = int(self.n_memories /
+                                         (num_classes + len(self.mem_class_x.keys())))
+                for ll in range(num_classes):
+                    label = task_labs[ll]  # current label
+                    indxs = (self.memy == label).nonzero().squeeze() # indices of current label
+                    cdata = self.memx.index_select(0, indxs) # grab training data for current label
+                    # Construct exemplar set for last task
+                    mean_feature = self.netforward(cdata)[
+                        :, offset1: offset2].data.clone().mean(0) # mean of task-sliced logits for current label
+                    nd = num_classes # num classes in current task
+                    exemplars = torch.zeros(self.num_exemplars, x.size(1))
                     if self.gpu:
-                        prev = prev.cuda()
-                    if ee > 0:
-                        prev = self.netforward(exemplars[:ee])[
-                            :, offset1: offset2].data.clone().sum(0)
-                    cost = (mean_feature.expand(ntr, nd) - (model_output
-                                                            + prev.expand(ntr, nd)) / (ee + 1)).norm(2, 1).squeeze()
-                    _, indx = cost.sort(0) # sort by ascending cost
-                    winner = 0
-                    while winner < indx.size(0) and taken[indx[winner]] == 1:
-                        winner += 1
-                    if winner < indx.size(0):
-                        taken[indx[winner]] = 1
-                        exemplars[ee] = cdata[indx[winner]].clone()
-                    else:
-                        exemplars = exemplars[:indx.size(0), :].clone()
-                        self.num_exemplars = indx.size(0)
-                        break
-                # update memory with exemplars
-                self.mem_class_x[label.item()] = exemplars.clone()
+                        exemplars = exemplars.cuda()
+                    ntr = cdata.size(0) # num data points for current label
+                    # used to keep track of which examples we have already used
+                    taken = torch.zeros(ntr)
+                    model_output = self.netforward(cdata)[
+                        :, offset1: offset2].data.clone() # clone model output for current label
+                    for ee in range(self.num_exemplars): # herding loop
+                        prev = torch.zeros(1, nd)
+                        if self.gpu:
+                            prev = prev.cuda()
+                        if ee > 0:
+                            prev = self.netforward(exemplars[:ee])[
+                                :, offset1: offset2].data.clone().sum(0)
+                        cost = (mean_feature.expand(ntr, nd) - (model_output
+                                                                + prev.expand(ntr, nd)) / (ee + 1)).norm(2, 1).squeeze()
+                        _, indx = cost.sort(0) # sort by ascending cost
+                        winner = 0
+                        while winner < indx.size(0) and taken[indx[winner]] == 1:
+                            winner += 1
+                        if winner < indx.size(0):
+                            taken[indx[winner]] = 1
+                            exemplars[ee] = cdata[indx[winner]].clone()
+                        else:
+                            exemplars = exemplars[:indx.size(0), :].clone()
+                            self.num_exemplars = indx.size(0)
+                            break
+                    # update memory with exemplars
+                    self.mem_class_x[label.item()] = exemplars.clone()
 
-            # recompute outputs for distillation purposes
-            for cc in self.mem_class_x.keys():
-                self.mem_class_x[cc] = self.mem_class_x[cc][:self.num_exemplars]
-                self.mem_class_y[cc] = self.netforward(
-                    self.mem_class_x[cc]).data.clone()
+                # recompute outputs for distillation purposes
+                for cc in self.mem_class_x.keys():
+                    self.mem_class_x[cc] = self.mem_class_x[cc][:self.num_exemplars]
+                    self.mem_class_y[cc] = self.netforward(
+                        self.mem_class_x[cc]).data.clone()
             self.memx = None
             self.memy = None
             # print(len(self.mem_class_x[0]))
 
         avg_tr_acc = sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
-        return loss.item(), avg_tr_acc
+        self.det_opt.zero_grad()
+        det_logits, _ = self.net.forward_heads(x_det)
+        det_loss = self.det_loss(det_logits, y_det.float())
+        det_replay = self._sample_det_memory()
+        if det_replay is not None:
+            mem_x, mem_y = det_replay
+            mem_det_logits, _ = self.net.forward_heads(mem_x)
+            mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+            det_loss = 0.5 * (det_loss + mem_loss)
+        det_loss = self.det_lambda * det_loss
+        det_loss.backward()
+        self.det_opt.step()
+        total_loss = float(loss.item()) + float(det_loss.item())
+        # det_pred = (det_logits >= 0).long()
+        # det_recall = macro_recall(det_pred, y_det.long())
+        # neg_mask = y_det == 0
+        # if neg_mask.any():
+        #     neg_preds = det_pred[neg_mask]
+        #     fp = (neg_preds == 1).sum().item()
+        #     tn = (neg_preds == 0).sum().item()
+        #     denom = fp + tn
+        #     det_pfa = float(fp / denom) if denom > 0 else 0.0
+        # else:
+        #     det_pfa = 0.0
+        # score = avg_tr_acc * det_recall * (1.0 - det_pfa)
+        # print(
+        #     f"Task {t} | Score: {score:.4f} | Loss: {total_loss:.4f} | Cls Loss: {loss.item():.4f} "
+        #     f"| Det Loss: {det_loss.item():.4f} | Det Recall: {det_recall:.4f} | Det PFA: {det_pfa:.4f} "
+        #     f"| Det_lambda: {self.det_lambda} | Memory Strength: {self.reg}"
+        # )
+        return total_loss, avg_tr_acc

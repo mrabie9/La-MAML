@@ -27,6 +27,15 @@ def get_parser():
                         help='number of hidden layers')
     parser.add_argument('--xav_init', default=False , action='store_true',
                         help='Use xavier initialization')
+    
+    parser.add_argument('--debug', default=False , action='store_true',
+                        help='Debug mode with more frequent logging and smaller data splits')
+    parser.add_argument(
+        '--use_detector_arch',
+        default=False,
+        action='store_true',
+        help='Enable the detector architecture; when disabled, treat -1 class labels as an extra task class.',
+    )
 
 
 
