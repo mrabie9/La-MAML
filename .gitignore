@@ -10,3 +10,4 @@ la-maml_env/
 *.yaml
 logs/*
 .vscode/
+AGENTS.md
