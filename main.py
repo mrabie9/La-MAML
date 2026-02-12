@@ -75,6 +75,13 @@ def _false_alarm_rate(preds: torch.Tensor, targets: torch.Tensor) -> float:
     denom = fp + tn
     return float(fp / denom) if denom > 0 else 0.0
 
+def _noise_label_for_task(args, task_idx: int) -> int | None:
+    class_counts = getattr(args, "classes_per_task", None)
+    if class_counts is None:
+        return None
+    _, offset2 = misc_utils.compute_offsets(task_idx, class_counts)
+    return offset2 - 1
+
 def eval_class_tasks(model, tasks, args):
 
     model.eval()
@@ -82,6 +89,7 @@ def eval_class_tasks(model, tasks, args):
     for t, task_loader in enumerate(tasks):
         correct = 0.0
         total = 0.0
+        noise_label = _noise_label_for_task(args, t)
 
         for (i, (x, y)) in enumerate(task_loader):
             y_cls, y_det = _split_labels(y)
@@ -94,6 +102,11 @@ def eval_class_tasks(model, tasks, args):
             _, p = torch.max(model(x, t).data.cpu(), 1, keepdim=False)
             if y_det is not None:
                 mask = (y_det == 1)
+                if mask.any():
+                    correct += (p[mask] == y_cls[mask]).float().sum().item()
+                    total += float(mask.sum().item())
+            elif noise_label is not None:
+                mask = y_cls != noise_label
                 if mask.any():
                     correct += (p[mask] == y_cls[mask]).float().sum().item()
                     total += float(mask.sum().item())
@@ -110,11 +123,11 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
     results = []
     is_iq = getattr(args, 'dataset', '').lower() == 'iq'
     class_counts = getattr(args, "classes_per_task", None)
-    batch_size = getattr(args, 'eval_batch_size', 64)
+    batch_size = getattr(args, 'eval_batch_size', 256)
 
     if specific_task is not None:
         tasks = [tasks[specific_task]]
-        batch_size = 64
+        batch_size = 256
     
     det_results = []
     det_fa_results = []
@@ -127,6 +140,7 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
         y_det = None
         if y_det_raw is not None:
             y_det = torch.as_tensor(y_det_raw, dtype=torch.long)
+        noise_label = _noise_label_for_task(args, t)
         if 'ucl' in args.model:
             offset1, offset2 = misc_utils.compute_offsets(
                 t, class_counts if class_counts is not None else args.nc_per_task
@@ -138,6 +152,8 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
                     y[mask] = y[mask] - offset1
             else:
                 y = y - offset1  # make labels start from 0 for each task
+                if noise_label is not None:
+                    noise_label = noise_label - offset1
 
         if isinstance(x_data, torch.Tensor):
             x_data_cpu = x_data.detach().cpu()
@@ -180,6 +196,10 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
                 cls_mask = yb_det == 1
                 if cls_mask.any():
                     recalls.append(macro_recall(pb[cls_mask].cpu(), yb[cls_mask].cpu()))
+            elif noise_label is not None:
+                cls_mask = yb != noise_label
+                if cls_mask.any():
+                    recalls.append(macro_recall(pb[cls_mask].cpu(), yb[cls_mask].cpu()))
             else:
                 recalls.append(macro_recall(pb.cpu(), yb.cpu()))
 
@@ -189,6 +209,11 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
                     det_pred = (det_logits >= 0).long()
                     det_recalls.append(macro_recall(det_pred.cpu(), yb_det.cpu()))
                     det_false_alarms.append(_false_alarm_rate(det_pred, yb_det))
+            elif noise_label is not None:
+                det_targets = (yb != noise_label).long()
+                det_pred = (pb != noise_label).long()
+                det_recalls.append(macro_recall(det_pred.cpu(), det_targets.cpu()))
+                det_false_alarms.append(_false_alarm_rate(det_pred, det_targets))
             if eval_epistemic and 'ucl' in args.model:
                 p_mean, H_pred, EH, MI = model.mc_epistemic_classification(xb, t, S=30)
                 epistemic_uncertainties.append(MI.mean().cpu().item())
