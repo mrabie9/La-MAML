@@ -1,7 +1,6 @@
 # TODO: update to work with ResNet PLN
 
 import logging
-import matplotlib.pyplot as plt
 from dataclasses import dataclass
 
 import numpy as np
@@ -229,9 +228,7 @@ class Learner(nn.Module):
         return self.vars
     
 
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 class NeuromodNet1D(nn.Module):
     """

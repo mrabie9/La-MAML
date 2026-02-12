@@ -8,7 +8,6 @@
 
 from __future__ import print_function
 
-import ipdb
 import os
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt

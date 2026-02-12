@@ -1,8 +1,6 @@
 import torch
 from dataclasses import dataclass
 
-import numpy as np
-import random
 
 import sys
 from utils.training_metrics import macro_recall

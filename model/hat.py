@@ -17,7 +17,6 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 

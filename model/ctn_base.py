@@ -7,10 +7,7 @@
 import math
 import torch
 import torch.nn as nn
-from torch.nn.functional import relu, avg_pool2d, max_pool2d, normalize
-import numpy as np
-import pdb
-from torch.nn.utils import weight_norm as wn
+from torch.nn.functional import relu, normalize
 from itertools import chain
 from model.resnet1d import _ResNet1D, BasicBlock1D
 

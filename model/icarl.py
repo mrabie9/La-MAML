@@ -15,7 +15,6 @@ import random
 import sys
 from model.resnet1d import ResNet1D
 from model.detection_replay import DetectionReplayMixin
-import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../dataloaders')))
 from iq_data_loader import ensure_iq_two_channel

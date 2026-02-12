@@ -4,11 +4,10 @@ import numpy as np
 import ipdb
 import math
 from dataclasses import dataclass, field
-from typing import List, Optional, Sequence
+from typing import Optional, Sequence
 
 import torch
 from torch.autograd import Variable
-import torch.nn as nn
 
 from model.optimizers_lib import optimizers_lib
 from ast import literal_eval

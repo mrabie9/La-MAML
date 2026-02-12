@@ -1,13 +1,8 @@
-import math
 import torch
 import torch.nn as nn
 from torchvision.models import resnet18
-from torch.nn.utils import stateless
 
 
-import torch
-import torch.nn as nn
-from torchvision.models import resnet18
 from torch.func import functional_call  # use this on torch 1.12.x
 
 class ResNet18(nn.Module):

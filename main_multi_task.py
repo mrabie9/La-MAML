@@ -1,5 +1,4 @@
 import time
-import os
 from tqdm import tqdm
 
 import torch

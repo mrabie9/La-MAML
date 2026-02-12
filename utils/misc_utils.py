@@ -3,10 +3,8 @@ import glob
 import json
 import os
 import random
-import ipdb
 import numpy as np
 import torch
-from tqdm import tqdm
 
 def _parse_class_list(value):
     """Convert string/list/tuple values into a list of ints."""

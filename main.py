@@ -9,7 +9,6 @@ import sys
 from pathlib import Path
 from typing import List
 
-import ipdb
 from tqdm import tqdm
 
 import numpy as np
@@ -19,7 +18,7 @@ from torch.autograd import Variable
 import parser as file_parser
 from metrics.metrics import confusion_matrix
 from utils import misc_utils
-from main_multi_task import life_experience_iid, eval_iid_tasks
+from main_multi_task import life_experience_iid
 from dataloaders.iq_data_loader import ensure_iq_two_channel
 from utils.training_metrics import macro_recall
 

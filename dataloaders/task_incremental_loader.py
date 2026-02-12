@@ -1,8 +1,6 @@
 import numpy as np
 import torch
-from PIL import Image
 from torch.utils.data import DataLoader
-from torchvision import datasets
 
 from dataloaders.idataset import DummyArrayDataset
 from dataloaders.iq_data_loader import IQDataGenerator

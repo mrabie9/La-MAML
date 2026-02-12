@@ -3,7 +3,6 @@ import numpy as np
 from PIL import Image
 import torch
 from torchvision import datasets, transforms
-import os
 from dataloaders import cifar_info
 
 class DummyDataset(torch.utils.data.Dataset):

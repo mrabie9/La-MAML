@@ -12,7 +12,7 @@ import random
 import traceback
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any, Dict, List, Sequence
 
 import torch
 

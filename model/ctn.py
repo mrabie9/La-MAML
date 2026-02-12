@@ -7,12 +7,10 @@
 from dataclasses import dataclass
 
 import torch
-from torch.autograd import Variable
 # from .common import ContextMLP, ContextNet18
 # from .resnet import ResNet18 as ResNet18Full
 from model.ctn_base import ContextNet18
 from model.detection_replay import DetectionReplayMixin
-import pdb
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np

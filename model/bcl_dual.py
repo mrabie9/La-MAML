@@ -7,10 +7,8 @@
 from dataclasses import dataclass
 
 import torch
-from torch.autograd import Variable
 from model.resnet1d import ResNet1D
 from model.detection_replay import DetectionReplayMixin
-import pdb
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
