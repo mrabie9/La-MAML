@@ -232,7 +232,10 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             tt = self.current_task
             offset1, offset2 = self.compute_offsets(tt)
             out = self.forward(self.memx[tt],tt, True)
-            self.mem_feat[tt] = F.softmax(out[:, offset1:offset2] / self.temp, dim=1 ).data.clone() # store soft targets
+            cls_size = int(offset2 - offset1)
+            feat = self.mem_feat[tt]
+            feat.zero_()
+            feat[:, :cls_size] = F.softmax(out[:, offset1:offset2] / self.temp, dim=1).data.clone() # store soft targets
             self.current_task = t
             self.mem_cnt = 0
             self.val_cnt = 0
@@ -286,6 +289,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             mem_loss = self.det_loss(mem_det_logits, mem_y.float())
             det_loss = 0.5 * (det_loss + mem_loss)
         det_loss_value = det_loss.detach()
+        det_loss = self.det_lambda * det_loss
         det_grads = torch.autograd.grad(
             det_loss,
             self.net.base_param(),
