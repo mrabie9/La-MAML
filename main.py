@@ -519,8 +519,9 @@ def main():
 
     config_chain: List[str] = []
     if not config_cli.no_config:
-        config_chain.extend(config_cli.config)
+        # Apply defaults first so explicit model configs override them.
         config_chain.extend(config_cli.config_dir)
+        config_chain.extend(config_cli.config)
         if not config_chain:
             config_chain = _default_main_config_chain()
 

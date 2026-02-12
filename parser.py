@@ -27,6 +27,9 @@ def get_parser():
                         help='number of hidden layers')
     parser.add_argument('--xav_init', default=False , action='store_true',
                         help='Use xavier initialization')
+    
+    parser.add_argument('--debug', default=False , action='store_true',
+                        help='Debug mode with more frequent logging and smaller data splits')
 
 
 

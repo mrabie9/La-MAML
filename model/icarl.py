@@ -30,7 +30,7 @@ if not sys.warnoptions:
 @dataclass
 class IcarlConfig:
     lr: float = 1e-3
-    memory_strength: float = 0.0
+    memory_strength: float = 0.5
     n_memories: int = 0
     glances: int = 1
 
@@ -103,6 +103,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.sm = torch.nn.Softmax(dim=1)
         self.det_lambda = float(self.cfg.det_lambda)
         self.cls_lambda = float(self.cfg.cls_lambda)
+        print(self.n_memories, self.reg, self.det_lambda, self.samples_per_task)
         self._init_det_replay(self.cfg.det_memories, self.cfg.det_replay_batch)
 
         # memory
@@ -395,4 +396,22 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         det_loss = self.det_lambda * det_loss
         det_loss.backward()
         self.det_opt.step()
-        return loss.item(), avg_tr_acc
+        total_loss = float(loss.item()) + float(det_loss.item())
+        # det_pred = (det_logits >= 0).long()
+        # det_recall = macro_recall(det_pred, y_det.long())
+        # neg_mask = y_det == 0
+        # if neg_mask.any():
+        #     neg_preds = det_pred[neg_mask]
+        #     fp = (neg_preds == 1).sum().item()
+        #     tn = (neg_preds == 0).sum().item()
+        #     denom = fp + tn
+        #     det_pfa = float(fp / denom) if denom > 0 else 0.0
+        # else:
+        #     det_pfa = 0.0
+        # score = avg_tr_acc * det_recall * (1.0 - det_pfa)
+        # print(
+        #     f"Task {t} | Score: {score:.4f} | Loss: {total_loss:.4f} | Cls Loss: {loss.item():.4f} "
+        #     f"| Det Loss: {det_loss.item():.4f} | Det Recall: {det_recall:.4f} | Det PFA: {det_pfa:.4f} "
+        #     f"| Det_lambda: {self.det_lambda} | Memory Strength: {self.reg}"
+        # )
+        return total_loss, avg_tr_acc

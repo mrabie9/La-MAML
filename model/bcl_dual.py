@@ -25,7 +25,7 @@ class BclDualConfig:
     lr: float = 1e-3
     beta: float = 1.0
     memory_strength: float = 1.0
-    temperature: float = 2.0
+    temperature: float = 5.0
     n_memories: int = 2000
     inner_steps: int = 5
     n_meta: int = 5

@@ -572,7 +572,7 @@ class Net(nn.Module):
 
     # ------------------------------------------------------------------
     def _snapshot_model(self) -> BayesianClassifier:
-        clone = BayesianClassifier(self.n_outputs, self.n_tasks, self.cfg, self.args)
+        clone = BayesianClassifier(self.n_outputs, self.n_tasks, self.cfg, self.args, self.classes_per_task)
         clone.load_state_dict(self.model.state_dict())
         clone.to(self._device())
         clone.eval()

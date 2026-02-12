@@ -242,12 +242,12 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 for row, size in enumerate(class_sizes):
                     if size < pred.size(1):
                         pred[row, size:] = -1e9
-                    if yy.min() < 0 or yy.max() >= pred.size(1):
-                        raise ValueError(
-                            f"Replay target out of range: min={int(yy.min())}, max={int(yy.max())}, "
-                            f"class_count={pred.size(1)}, sizes={class_sizes.tolist()}"
-                        )
-                    loss2 += self.bce(pred, yy)
+                if yy.min() < 0 or yy.max() >= pred.size(1):
+                    raise ValueError(
+                        f"Replay target out of range: min={int(yy.min())}, max={int(yy.max())}, "
+                        f"class_count={pred.size(1)}, sizes={class_sizes.tolist()}"
+                    )
+                loss2 += self.bce(pred, yy)
                 
             loss = loss1 + loss2
             loss.backward()
