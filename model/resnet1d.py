@@ -135,8 +135,12 @@ class ResNet1D(nn.Module):
         super().__init__()
         self.args = args
         norm_layer = self._build_norm_factory(args)
-        self.input_adapter = nn.Conv1d(3, 1, kernel_size=1, bias=False)
-        backbone_in = in_channels
+        if in_channels == 3:
+            self.input_adapter = nn.Conv1d(3, 1, kernel_size=1, bias=False)
+            backbone_in = 1
+        else:
+            self.input_adapter = nn.Identity()
+            backbone_in = in_channels
         self.model = _ResNet1D(
             BasicBlock1D,
             [2, 2, 2, 2],
