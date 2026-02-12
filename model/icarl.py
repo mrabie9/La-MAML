@@ -224,9 +224,19 @@ class Net(DetectionReplayMixin, torch.nn.Module):
     def observe(self, x, y, t):
 
         x_det = self._prepare_input(x)
+        batch_count = x.size(0)
         x = x.view(x.size(0), -1)
         self.net.train()
         if self.gpu: self.net.cuda()
+        det_provided = False
+        if isinstance(y, (tuple, list)) and len(y) == 2:
+            det_provided = True
+        elif isinstance(y, dict) and "y_det" in y:
+            det_provided = True
+        elif isinstance(y, np.ndarray) and y.ndim == 2 and y.shape[1] == 2:
+            det_provided = True
+        elif torch.is_tensor(y) and y.dim() == 2 and y.size(1) == 2:
+            det_provided = True
         y_cls, y_det = self._unpack_labels(y)
         if y_det is not None and self.det_memories > 0:
             self._update_det_memory(x, y_det)
@@ -255,7 +265,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
 
             # only make changes like pushing to buffer once per batch and not for every glance
             if(pass_itr==0):
-                self.examples_seen += x.size(0)
+                self.examples_seen += x.size(0) if det_provided else batch_count
                 samples_per_task = self._get_samples_per_task(t)
                 assert samples_per_task > 0, 'Samples per task is <= 0'
 
@@ -309,7 +319,10 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         # check whether this is the last minibatch of the current task
         # We assume only 1 epoch!
         target = int(self.cfg.n_epochs * self._get_samples_per_task(t))
+        # print(f"Samples per task: {self._get_samples_per_task(t)}, n_epochs: {self.cfg.n_epochs}")
+        # print(f"Target samples for task {t}: {target}, examples seen: {self.examples_seen}")
         if self.examples_seen >= target:  # not ==
+            # print(f"Final batch for task {t} reached. Updating exemplar memory.")
             self.examples_seen = 0
             # self._rebuild_exemplars_for_task(t, x.device)
 
@@ -321,64 +334,69 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 all_labs = torch.LongTensor(np.unique(self.memy.cpu().numpy()))
             else:
                 all_labs = torch.LongTensor(np.unique(self.memy.numpy()))
-            
-            num_classes = all_labs.size(0)
-            # if self.cfg.loader == 'class_incremental_loader':
-            #     num_classes = all_labs.size(0)
-            # else:
-            #     num_classes = all_labs[offset1:offset2].size(0)
-            
-            print("num_classes", num_classes, "nc_per_task", self.nc_per_task,
+
+            # Only count labels that belong to the current task slice.
+            in_task = (all_labs >= offset1) & (all_labs < offset2)
+            task_labs = all_labs[in_task]
+            num_classes = task_labs.size(0)
+
+            print("num_classes", num_classes, "nc_per_task", self.nc_per_task, "offsets",
                   offset1, offset2)
             current_task_classes = self.classes_per_task[t]
-            assert num_classes == current_task_classes
-            # Reduce exemplar set by updating value of num. exemplars per class
-            self.num_exemplars = int(self.n_memories /
-                                     (num_classes + len(self.mem_class_x.keys())))
-            for ll in range(num_classes):
-                label = all_labs[ll]#.cuda() # current label
-                indxs = (self.memy == label).nonzero().squeeze() # indices of current label
-                cdata = self.memx.index_select(0, indxs) # grab training data for current label
-                # Construct exemplar set for last task
-                mean_feature = self.netforward(cdata)[
-                    :, offset1: offset2].data.clone().mean(0) # mean of task-sliced logits for current label
-                nd = num_classes # num classes in current task
-                exemplars = torch.zeros(self.num_exemplars, x.size(1))
-                if self.gpu:
-                    exemplars = exemplars.cuda()
-                ntr = cdata.size(0) # num data points for current label
-                # used to keep track of which examples we have already used
-                taken = torch.zeros(ntr)
-                model_output = self.netforward(cdata)[
-                    :, offset1: offset2].data.clone() # clone model output for current label
-                for ee in range(self.num_exemplars): # herding loop
-                    prev = torch.zeros(1, nd)
+            if num_classes != current_task_classes:
+                print(
+                    "[WARN][iCaRL] Task {} expected {} classes, found {} in memory.".format(
+                        t, current_task_classes, num_classes
+                    )
+                )
+            if num_classes > 0:
+                # Reduce exemplar set by updating value of num. exemplars per class
+                self.num_exemplars = int(self.n_memories /
+                                         (num_classes + len(self.mem_class_x.keys())))
+                for ll in range(num_classes):
+                    label = task_labs[ll]  # current label
+                    indxs = (self.memy == label).nonzero().squeeze() # indices of current label
+                    cdata = self.memx.index_select(0, indxs) # grab training data for current label
+                    # Construct exemplar set for last task
+                    mean_feature = self.netforward(cdata)[
+                        :, offset1: offset2].data.clone().mean(0) # mean of task-sliced logits for current label
+                    nd = num_classes # num classes in current task
+                    exemplars = torch.zeros(self.num_exemplars, x.size(1))
                     if self.gpu:
-                        prev = prev.cuda()
-                    if ee > 0:
-                        prev = self.netforward(exemplars[:ee])[
-                            :, offset1: offset2].data.clone().sum(0)
-                    cost = (mean_feature.expand(ntr, nd) - (model_output
-                                                            + prev.expand(ntr, nd)) / (ee + 1)).norm(2, 1).squeeze()
-                    _, indx = cost.sort(0) # sort by ascending cost
-                    winner = 0
-                    while winner < indx.size(0) and taken[indx[winner]] == 1:
-                        winner += 1
-                    if winner < indx.size(0):
-                        taken[indx[winner]] = 1
-                        exemplars[ee] = cdata[indx[winner]].clone()
-                    else:
-                        exemplars = exemplars[:indx.size(0), :].clone()
-                        self.num_exemplars = indx.size(0)
-                        break
-                # update memory with exemplars
-                self.mem_class_x[label.item()] = exemplars.clone()
+                        exemplars = exemplars.cuda()
+                    ntr = cdata.size(0) # num data points for current label
+                    # used to keep track of which examples we have already used
+                    taken = torch.zeros(ntr)
+                    model_output = self.netforward(cdata)[
+                        :, offset1: offset2].data.clone() # clone model output for current label
+                    for ee in range(self.num_exemplars): # herding loop
+                        prev = torch.zeros(1, nd)
+                        if self.gpu:
+                            prev = prev.cuda()
+                        if ee > 0:
+                            prev = self.netforward(exemplars[:ee])[
+                                :, offset1: offset2].data.clone().sum(0)
+                        cost = (mean_feature.expand(ntr, nd) - (model_output
+                                                                + prev.expand(ntr, nd)) / (ee + 1)).norm(2, 1).squeeze()
+                        _, indx = cost.sort(0) # sort by ascending cost
+                        winner = 0
+                        while winner < indx.size(0) and taken[indx[winner]] == 1:
+                            winner += 1
+                        if winner < indx.size(0):
+                            taken[indx[winner]] = 1
+                            exemplars[ee] = cdata[indx[winner]].clone()
+                        else:
+                            exemplars = exemplars[:indx.size(0), :].clone()
+                            self.num_exemplars = indx.size(0)
+                            break
+                    # update memory with exemplars
+                    self.mem_class_x[label.item()] = exemplars.clone()
 
-            # recompute outputs for distillation purposes
-            for cc in self.mem_class_x.keys():
-                self.mem_class_x[cc] = self.mem_class_x[cc][:self.num_exemplars]
-                self.mem_class_y[cc] = self.netforward(
-                    self.mem_class_x[cc]).data.clone()
+                # recompute outputs for distillation purposes
+                for cc in self.mem_class_x.keys():
+                    self.mem_class_x[cc] = self.mem_class_x[cc][:self.num_exemplars]
+                    self.mem_class_y[cc] = self.netforward(
+                        self.mem_class_x[cc]).data.clone()
             self.memx = None
             self.memy = None
             # print(len(self.mem_class_x[0]))
