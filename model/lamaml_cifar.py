@@ -92,8 +92,11 @@ class Net(DetectionReplayMixin, BaseNet):
             p.requires_grad_(True)
 
         grads = torch.autograd.grad(
-            loss, fast_weights, create_graph=graph_required, retain_graph=graph_required
-            # , allow_unused=True  # only if you truly have gated/unused params
+            loss,
+            fast_weights,
+            create_graph=graph_required,
+            retain_graph=graph_required,
+            allow_unused=False,
         )
 
         # Clip
