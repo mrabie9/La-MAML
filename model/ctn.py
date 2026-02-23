@@ -25,7 +25,7 @@ class CtnConfig:
     temperature: float = 5.0
     task_emb: int = 64
     lr: float = 0.01
-    beta: float = 0.05
+    ctx_lr: float = 0.05
     n_memories: int = 50
     validation: float = 0.0
     replay_batch_size: int = 20
@@ -68,7 +68,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
 
         self.is_task_incremental = True 
         self.inner_lr = self.cfg.lr
-        self.outer_lr = self.cfg.beta
+        self.outer_lr = self.cfg.ctx_lr
         self.opt = torch.optim.SGD(self.net.parameters(), lr=self.outer_lr, momentum=0.9)
         # setup losses
         self.bce = torch.nn.CrossEntropyLoss()

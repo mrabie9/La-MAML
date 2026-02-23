@@ -175,8 +175,8 @@ def get_parser():
                         help='inner learning rate')
     
     # CTN parameters
-    parser.add_argument('--beta', type=float, default=0.05,
-                        help='Beta parameter for CTN')
+    parser.add_argument('--ctx_lr', type=float, default=0.05,
+                        help='Context learning rate for CTN')
     parser.add_argument('--n_meta', type=int, default=2,
                         help='Number of meta-updates for CTN')
     parser.add_argument('--inner_steps', type=int, default=2,

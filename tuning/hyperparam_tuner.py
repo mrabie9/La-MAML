@@ -158,6 +158,11 @@ def build_cli(preset: TuningPreset) -> argparse.ArgumentParser:
         help="Tune the learning rate first, then tune remaining parameters.",
     )
     parser.add_argument(
+        "--hierarchical",
+        action="store_true",
+        help="Tune each hyperparameter sequentially, carrying forward the best value.",
+    )
+    parser.add_argument(
         "--lr-key",
         type=str,
         default="lr",
@@ -563,6 +568,9 @@ def run_tuning(preset: TuningPreset) -> None:
             )
         search_space = {key: search_space[key] for key in tune_only}
 
+    if cli.hierarchical and cli.lr_first:
+        raise ValueError("Choose either --hierarchical or --lr-first, not both.")
+
     lr_keys = parse_lr_keys(cli.lr_key)
     lr_first = bool(cli.lr_first)
     lr_space = {key: search_space[key] for key in lr_keys if key in search_space}
@@ -579,7 +587,23 @@ def run_tuning(preset: TuningPreset) -> None:
 
     if cli.dry_run:
         print("Planned trials (dry-run):")
-        if lr_first:
+        if cli.hierarchical:
+            total_trials = 0
+            trial_idx = 0
+            stage_overrides: Dict[str, Any] = dict(constant_overrides)
+            for key in search_space.keys():
+                stage_space = {key: search_space[key]}
+                stage_trials = expand_trials(
+                    stage_space, cli.num_samples, cli.search_seed, cli.max_trials, cli.shuffle
+                )
+                for trial in stage_trials:
+                    merged = dict(stage_overrides)
+                    merged.update(trial)
+                    print(f"  [{key}] #{trial_idx:03d}: {merged}")
+                    trial_idx += 1
+                total_trials += len(stage_trials)
+            print(f"Total: {total_trials} trials")
+        elif lr_first:
             lr_trials = expand_trials(lr_space, cli.num_samples, cli.search_seed, cli.max_trials, cli.shuffle)
             rest_space = {k: v for k, v in search_space.items() if k not in lr_space}
             rest_trials = expand_trials(rest_space, cli.num_samples, cli.search_seed, cli.max_trials, cli.shuffle)
@@ -659,7 +683,27 @@ def run_tuning(preset: TuningPreset) -> None:
         return stage_results
 
     lr_first_best: Dict[str, Any] | None = None
-    if lr_first:
+    if cli.hierarchical:
+        trial_idx = 0
+        stage_overrides: Dict[str, Any] = dict(constant_overrides)
+        for key in search_space.keys():
+            stage_space = {key: search_space[key]}
+            stage_trials = expand_trials(
+                stage_space, cli.num_samples, cli.search_seed, cli.max_trials, cli.shuffle
+            )
+            stage_results = run_trials(stage_trials, stage_overrides, key, trial_idx)
+            results.extend(stage_results)
+            trial_idx += len(stage_trials)
+
+            stage_successes = [
+                r for r in stage_results if r.get("status") == "ok" and r.get("stage") == key
+            ]
+            stage_best = max(stage_successes, key=lambda r: r["score"]) if stage_successes else None
+            if stage_best is None:
+                print(f"Hierarchical stage '{key}' recorded no successful trials; stopping.")
+                break
+            stage_overrides[key] = stage_best["trial_params"].get(key)
+    elif lr_first:
         lr_trials = expand_trials(lr_space, cli.num_samples, cli.search_seed, cli.max_trials, cli.shuffle)
         results.extend(run_trials(lr_trials, constant_overrides, "lr", 0))
         lr_successes = [r for r in results if r.get("status") == "ok" and r.get("stage") == "lr"]
@@ -687,6 +731,7 @@ def run_tuning(preset: TuningPreset) -> None:
         "timestamp": session_timestamp,
         "fixed_overrides": constant_overrides,
         "search_space": full_search_space,
+        "hierarchical": bool(cli.hierarchical),
         "lr_first": lr_first,
         "lr_first_keys": lr_keys if lr_first else None,
         "lr_first_best": lr_first_best,

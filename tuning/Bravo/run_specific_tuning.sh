@@ -9,10 +9,18 @@
 # python3 tuning/Bravo/tune_smaml.py --config configs/models/smaml.yaml --tune-only "opt_wt,opt_lr,alpha_init" 
 # python3 tuning/Bravo/tune_hat.py --config configs/models/hat.yaml --lr-first 
 
-# python3 tuning/Bravo/tune_ewc.py --config configs/models/ewc.yaml #--lr-first #--dry-run
+# python3 tuning/Bravo/tune_ewc.py --config configs/models/ewc.yaml --lr-first #--dry-run
 # python3 tuning/Bravo/tune_si.py --config configs/models/si.yaml --lr-first #--dry-run
-python3 tuning/Bravo/tune_bcl.py --config configs/models/bcl_dual.yaml --lr-first #--dry-run
-python3 tuning/Bravo/tune_lwf.py --config configs/models/lwf.yaml --lr-first #--dry-run
+# python3 tuning/Bravo/tune_bcl.py --config configs/models/bcl_dual.yaml --lr-first #--dry-run
+# python3 tuning/Bravo/tune_lwf.py --config configs/models/lwf.yaml --lr-first #--dry-run
 # python3 tuning/Bravo/tune_rwalk.py --config configs/models/rwalk.yaml --lr-first #--dry-run
 # python3 tuning/Bravo/tune_la-er.py --config configs/models/la-er.yaml --lr-first --lr-key "opt_lr" #--dry-run
-python3 tuning/Bravo/tune_ctn.py --config configs/models/ctn.yaml --lr-first #--dry-run
+
+python3 tuning/Bravo/tune_ctn.py --config configs/models/ctn.yaml --tune-only "ctx_lr, memory_strength" --hierarchical
+python3 tuning/Bravo/tune_cmaml.py --config configs/models/cmaml.yaml --hierarchical
+# python3 tuning/Bravo/tune_smaml.py --config configs/models/smaml.yaml --hierarchical
+python3 tuning/Bravo/tune_hat.py --config configs/models/hat.yaml --hierarchical
+python3 tuning/Bravo/tune_packnet.py --config configs/models/packnet.yaml --hierarchical
+python3 tuning/Bravo/tune_ucl.py --config configs/models/ucl.yaml --tune-only "beta"
+
+#--dry-run

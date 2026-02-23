@@ -1,6 +1,7 @@
 # BCL-Dual defaults
 model: bcl_dual
+lr: 0.0003
 beta: 1.0
 temperature: 5
 memory_strength: 100
-n_memories: 400
+n_memories: 5120
