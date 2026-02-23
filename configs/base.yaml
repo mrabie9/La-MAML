@@ -3,10 +3,11 @@ expt_name: eclresm_test
 arch: resnet1d
 loader: task_incremental_loader
 data_path: data/rff/radar/uclresm
-data-scaling: normalize
+data_scaling: normalize
 dataset: iq
 shuffle_tasks: false
 classes_per_it: 6
+val_rate: 5
 iterations: 5000
 workers: 0
 validation: 0.5
