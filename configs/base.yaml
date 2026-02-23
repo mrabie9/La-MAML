@@ -1,8 +1,9 @@
 # Shared experiment defaults
-expt_name: det_cls_test
+expt_name: eclresm_test
 arch: resnet1d
 loader: task_incremental_loader
-data_path: data/rff/radar_det_cls
+data_path: data/rff/radar/uclresm
+data-scaling: normalize
 dataset: iq
 shuffle_tasks: false
 classes_per_it: 6
@@ -24,10 +25,10 @@ nc_per_task: 6
 
 # Optimizer defaults
 glances: 1
-n_epochs: 5
+n_epochs: 60
 batch_size: 128
 replay_batch_size: 10
-memories: 400
+memories: 5120
 grad_clip_norm: 5.0
 lr: 0.03
 optimizer: sgd

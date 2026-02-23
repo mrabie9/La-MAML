@@ -1,5 +1,5 @@
 # Model-specific overrides for ewc.
 model: ewc
-lr: 0.03
-lamb: 1.0
+lr: 0.01
+lamb: 10000
 clipgrad: 5.0

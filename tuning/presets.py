@@ -377,9 +377,9 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                 # "batch_size": {"kind": "int", "factors": (0.5, 1.0, 2.0), "min": 16, "fallback": 64,
                 #     "values": [32, 64, 128, 256]},
                 "opt_lr": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1,
-                           "values": [0.01]},#[0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
+                           "values": [0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
                 "alpha_init": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 0.1,
-                            "values": [0.1]},#[0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
+                            "values": [0.0001,0.0003,0.001,0.003,0.01,0.03,0.1,0.3]},
 #                 "det_lambda": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.1, "fallback": 1.0,
 #                             "values": [1,10,100,1000,10000]},
             }

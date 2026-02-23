@@ -130,6 +130,7 @@ class Net(DetectionReplayMixin, nn.Module):
 
         self.opt.zero_grad()
         if valid_mask.any():
+            torch.autograd.set_detect_anomaly(True)
             loss_ce.backward(retain_graph=True)
             self._accumulate_fisher(int(valid_mask.sum().item()))
 

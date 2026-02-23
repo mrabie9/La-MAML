@@ -225,6 +225,26 @@ class Net(DetectionReplayMixin, nn.Module):
             return x.view(B, 2, L)
         else:
             raise ValueError(f"Unexpected IQ input shape {tuple(x.shape)}; expected (B, 2, L) or (B, 2L).")
+
+    def _adapt_for_memory(self, x: torch.Tensor) -> torch.Tensor:
+        """Ensure inputs stored in memory are (B, 2, L)."""
+        if x.dim() == 4 and x.size(1) == 3 and x.size(2) == 2:
+            return self.net.model.input_adapter(x)
+        if x.dim() == 3 and x.size(1) == 3:
+            if x.size(2) % 2 != 0:
+                raise ValueError(
+                    f"Expected even length for 3-ADC IQ input; got shape {tuple(x.shape)}."
+                )
+            seq_len = x.size(2) // 2
+            x4 = x.view(x.size(0), 3, 2, seq_len)
+            return self.net.model.input_adapter(x4)
+        if x.dim() == 2:
+            features = x.size(1)
+            if features % 6 == 0:
+                seq_len = features // 6
+                x4 = x.view(x.size(0), 3, 2, seq_len)
+                return self.net.model.input_adapter(x4)
+        return self._ensure_iq_shape(x)
     
     def forward(self, x, t):
         if self.cfg.dataset == 'tinyimagenet':
@@ -312,7 +332,7 @@ class Net(DetectionReplayMixin, nn.Module):
                 #     self.mem_cnt = 0
 
                 if effbsz > 0:
-                
+                    # mem_x = self._adapt_for_memory(x.data[:effbsz])
                     self.memory_data[t, self.mem_cnt:endcnt].copy_(x.data[:effbsz])
 
                     if bsz == 1:

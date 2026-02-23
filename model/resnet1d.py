@@ -53,6 +53,31 @@ class BasicBlock1D(nn.Module):
         return out
 
 
+class AdcIqAdapter(nn.Module):
+    """Reduce 3 ADC channels into 2 IQ channels.
+
+    Expects input of shape (B, 3, 2, L) and returns (B, 2, L).
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(torch.empty(2, 3))
+        self.bias = nn.Parameter(torch.zeros(2))
+        nn.init.xavier_uniform_(self.weight)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.dim() != 4 or x.size(1) != 3 or x.size(2) != 2:
+            raise ValueError(
+                f"ADC adapter expects (B, 3, 2, L); got shape {tuple(x.shape)}."
+            )
+        # (B, 3, 2, L) -> (B, 2, 3, L)
+        x = x.permute(0, 2, 1, 3)
+        # Mix ADCs per IQ channel: (B, 2, 3, L) x (2, 3) -> (B, 2, L)
+        y = torch.einsum("bial,ia->bil", x, self.weight)
+        y = y + self.bias.view(1, 2, 1)
+        return y
+
+
 class _ResNet1D(nn.Module):
     """Internal utility that mirrors ``torchvision``'s ``ResNet`` logic."""
 
@@ -65,17 +90,19 @@ class _ResNet1D(nn.Module):
         self.inplanes = 64
         self.input_adapter = input_adapter or nn.Identity()
 
-        self.conv1 = nn.Conv1d(
-            in_channels, 64, kernel_size=7, stride=2, padding=1, bias=False
-        )
+        self.conv1 = nn.Conv1d(2, 64, kernel_size=7, stride=2, padding=1, bias=False)
         self.bn1 = norm_layer(64)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
 
         self.layer1 = self._make_layer(block, 64, layers[0])
+        self.drop1 = nn.Dropout(p=0.2)
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
+        self.drop2 = nn.Dropout(p=0.2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
+        self.drop3 = nn.Dropout(p=0.2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
+        self.drop4 = nn.Dropout(p=0.2)
 
         self.avgpool = nn.AdaptiveAvgPool1d(1)
         out_dim = 512 * block.expansion
@@ -104,17 +131,24 @@ class _ResNet1D(nn.Module):
         if classify_feats:
             return self.fc(x)
         else:
-            if not isinstance(self.input_adapter, nn.Identity) and x.size(1) == 3:
-                x = self.input_adapter(x)
-            x = self.conv1(x)
-            x = self.bn1(x)
+            if x.dim() == 4:
+                if not isinstance(self.input_adapter, nn.Identity):
+                    x = self.input_adapter(x)
+                else:
+                    raise ValueError("Received 4D input but no adapter is configured.")
+
+            x = self.bn1(self.conv1(x))
             x = self.relu(x)
             x = self.maxpool(x)
 
             x = self.layer1(x)
+            x = self.drop1(x)
             x = self.layer2(x)
+            x = self.drop2(x)
             x = self.layer3(x)
+            x = self.drop3(x)
             x = self.layer4(x)
+            x = self.drop4(x)
 
             if return_h4:
                 return x
@@ -134,17 +168,12 @@ class ResNet1D(nn.Module):
         super().__init__()
         self.args = args
         norm_layer = self._build_norm_factory(args)
-        if in_channels == 3:
-            self.input_adapter = nn.Conv1d(3, 1, kernel_size=1, bias=False)
-            backbone_in = 1
-        else:
-            self.input_adapter = nn.Identity()
-            backbone_in = in_channels
+        self.input_adapter = AdcIqAdapter()
         self.model = _ResNet1D(
             BasicBlock1D,
             [2, 2, 2, 2],
             num_classes,
-            in_channels=backbone_in,
+            in_channels=in_channels,
             norm_layer=norm_layer,
             input_adapter=self.input_adapter,
         )
@@ -234,12 +263,28 @@ class ResNet1D(nn.Module):
         elif x.dim() == 3:
             if x.shape[1] not in (1, 2, 3) and x.shape[0] in (1, 2, 3):
                 x = x.permute(1, 0, 2).contiguous()
-            if x.shape[1] not in (1, 2, 3):
+            if x.shape[1] == 3:
+                if x.shape[2] % 2 != 0:
+                    raise ValueError(
+                        f"Expected even length for 3-ADC IQ input; got shape {tuple(x.shape)}."
+                    )
+                seq_len = x.shape[2] // 2
+                x = x.view(x.shape[0], 3, 2, seq_len)
+                return x
+            if x.shape[1] not in (1, 2):
                 raise ValueError(
                     f"Unexpected channel dimension (expected 1, 2, or 3); got shape {tuple(x.shape)}."
                 )
+        elif x.dim() == 4:
+            if x.shape[1] == 3 and x.shape[2] == 2:
+                return x
+            raise ValueError(
+                f"Unexpected 4D input shape {tuple(x.shape)}; expected (B, 3, 2, L)."
+            )
         else:
-            raise ValueError(f"Unexpected input shape {tuple(x.shape)}; expected 2D or 3D tensor.")
+            raise ValueError(
+                f"Unexpected input shape {tuple(x.shape)}; expected 2D, 3D, or 4D tensor."
+            )
         return x
 
     # ------------------------------------------------------------------

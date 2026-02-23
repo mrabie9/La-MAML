@@ -92,6 +92,16 @@ def get_parser():
                         help="Number of workers preprocessing the data.")
     parser.add_argument("--validation", default=0., type=float,
                         help="Validation split (0. <= x <= 1.).")
+    parser.add_argument(
+        "--data_scaling",
+        default="none",
+        type=str,
+        choices=["none", "normalize", "standardize"],
+        help=(
+            "Apply scaling to IQ data: 'normalize' uses min/max scaling and "
+            "'standardize' applies z-score based on training data."
+        ),
+    )
     parser.add_argument("-order", "--class_order", default="old", type=str,
                         help="define classes order of increment ",
                         choices = ["random", "chrono", "old", "super"])
