@@ -49,6 +49,101 @@ def _normalize_label_array(labels, expected_len, source):
     return arr.astype(np.int64, copy=False)
 
 
+def _compute_scaling_offset_and_scale(
+    data: np.ndarray,
+    scaling_mode: str,
+    epsilon: float = 1e-8,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compute offset and scale arrays for data normalization.
+
+    Args:
+        data: Training samples to derive scaling statistics.
+        scaling_mode: Either ``normalize`` (min/max) or ``standardize`` (z-score).
+        epsilon: Small value to avoid division by zero.
+
+    Returns:
+        Tuple of (offset, scale) arrays that can be applied as
+        ``(data - offset) / scale``.
+    """
+
+    if scaling_mode not in ("normalize", "standardize"):
+        raise ValueError(f"Unsupported scaling_mode '{scaling_mode}'.")
+
+    if scaling_mode == "normalize":
+        minimum_values = data.min(axis=0, keepdims=True)
+        maximum_values = data.max(axis=0, keepdims=True)
+        scale = np.maximum(maximum_values - minimum_values, epsilon)
+        offset = minimum_values
+    else:
+        mean_values = data.mean(axis=0, keepdims=True)
+        standard_deviation = data.std(axis=0, keepdims=True)
+        scale = np.maximum(standard_deviation, epsilon)
+        offset = mean_values
+
+    return offset, scale
+
+
+def _apply_data_scaling(
+    training_samples: np.ndarray,
+    test_samples: np.ndarray,
+    scaling_mode: str,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Apply normalization or standardization to IQ samples.
+
+    Args:
+        training_samples: Training samples array.
+        test_samples: Test samples array.
+        scaling_mode: ``normalize`` or ``standardize``.
+
+    Returns:
+        Tuple containing scaled training and test arrays.
+    """
+
+    if scaling_mode == "none":
+        return training_samples, test_samples
+
+    if np.iscomplexobj(training_samples) or np.iscomplexobj(test_samples):
+        train_real = training_samples.real
+        train_imag = training_samples.imag
+        test_real = test_samples.real
+        test_imag = test_samples.imag
+
+        real_offset, real_scale = _compute_scaling_offset_and_scale(train_real, scaling_mode)
+        imag_offset, imag_scale = _compute_scaling_offset_and_scale(train_imag, scaling_mode)
+
+        scaled_train = (train_real - real_offset) / real_scale
+        scaled_test = (test_real - real_offset) / real_scale
+        scaled_train = scaled_train + 1j * ((train_imag - imag_offset) / imag_scale)
+        scaled_test = scaled_test + 1j * ((test_imag - imag_offset) / imag_scale)
+        return scaled_train.astype(np.complex64, copy=False), scaled_test.astype(np.complex64, copy=False)
+
+    offset, scale = _compute_scaling_offset_and_scale(training_samples, scaling_mode)
+    scaled_training = (training_samples - offset) / scale
+    scaled_test = (test_samples - offset) / scale
+    return scaled_training.astype(np.float32, copy=False), scaled_test.astype(np.float32, copy=False)
+
+
+def _maybe_move_sample_axis(x, y, source):
+    """Ensure samples are the first dimension to match label length."""
+    if x is None or not hasattr(x, "ndim"):
+        return x
+    if x.ndim < 2:
+        return x
+    if y is None:
+        return x
+    y_arr = np.asarray(y)
+    if y_arr.ndim == 0:
+        return x
+    sample_len = y_arr.shape[0]
+    if x.shape[0] == sample_len:
+        return x
+    if x.ndim >= 2 and x.shape[1] == sample_len:
+        return np.moveaxis(x, 1, 0)
+    if x.ndim >= 3 and x.shape[2] == sample_len:
+        return np.moveaxis(x, 2, 0)
+    return x
+
+
 class IncrementalLoader:
 
     def __init__(
@@ -138,7 +233,23 @@ class IncrementalLoader:
             return int(np.max(labels))
 
         if isinstance(self.train_dataset[0][1], np.ndarray):
-            n_inputs = self.train_dataset[0][1].shape[1] * (2 if np.iscomplexobj(self.train_dataset[0][1]) else 1)
+            sample = self.train_dataset[0][1]
+            if self._args.dataset.lower() == "iq":
+                if sample.ndim == 2:
+                    n_inputs = sample.shape[1] * (2 if np.iscomplexobj(sample) else 1)
+                elif sample.ndim == 3:
+                    if sample.shape[1] == 2:
+                        n_inputs = 2 * sample.shape[2]
+                    elif sample.shape[1] == 3 and sample.shape[2] % 2 == 0:
+                        n_inputs = sample.shape[2]
+                    else:
+                        n_inputs = sample.shape[-1]
+                elif sample.ndim == 4 and sample.shape[2] == 2:
+                    n_inputs = 2 * sample.shape[3]
+                else:
+                    n_inputs = sample.shape[1] if sample.ndim > 1 else int(sample.size)
+            else:
+                n_inputs = sample.shape[1] * (2 if np.iscomplexobj(sample) else 1)
             n_outputs = 0
             for i in range(len(self.train_dataset)):
                 n_outputs = max(n_outputs, _max_label_value(self.train_dataset[i][2]))
@@ -220,9 +331,23 @@ class IncrementalLoader:
                 y_test = _get(['y_test', 'Y_test', 'yte'])
 
                 if x_train is not None and y_train is not None:
+                    before = x_train.shape
+                    x_train = _maybe_move_sample_axis(x_train, y_train, f"{fname} train")
+                    after = x_train.shape
+                    if before != after:
+                        print(f"{fname} train: moved sample axis {before} -> {after}")
+                if x_test is not None and y_test is not None:
+                    before = x_test.shape
+                    x_test = _maybe_move_sample_axis(x_test, y_test, f"{fname} test")
+                    after = x_test.shape
+                    if before != after:
+                        print(f"{fname} test: moved sample axis {before} -> {after}")
+                if x_train is not None and y_train is not None:
                     y_train = _normalize_label_array(y_train, x_train.shape[0], f"{fname} train")
+                    print(f"{fname} train: x={x_train.shape}, y={np.asarray(y_train).shape}")
                 if x_test is not None and y_test is not None:
                     y_test = _normalize_label_array(y_test, x_test.shape[0], f"{fname} test")
+                    print(f"{fname} test: x={x_test.shape}, y={np.asarray(y_test).shape}")
 
                 if x_train is None or y_train is None or x_test is None or y_test is None:
                     missing = []
@@ -251,6 +376,11 @@ class IncrementalLoader:
                             f"Missing dataset entries ({', '.join(missing)}) in {fname}. "
                             f"Available keys: {available}"
                         )
+
+                scaling_mode = getattr(self._args, "data_scaling", "none")
+                if scaling_mode != "none":
+                    x_train, x_test = _apply_data_scaling(x_train, x_test, scaling_mode)
+                    print(f"{fname}: applied data scaling mode '{scaling_mode}'.")
                 
                 size_tr = x_train.shape[0]
                 size_te = min(x_test.shape[0], int(size_tr * validation_split)) if validation_split > 0. else x_test.shape[0]
@@ -265,6 +395,8 @@ class IncrementalLoader:
 
                 y_train = np.asarray(y_train, dtype=np.int64)
                 y_test = np.asarray(y_test, dtype=np.int64)
+
+                print(f"Noise labels ratio in {fname} train: {(y_train < 0).mean():.2f}, test: {(y_test < 0).mean():.2f}")
 
                 # Remap labels to a contiguous global range starting from 0
                 if y_train.ndim == 2 and y_train.shape[1] == 2:

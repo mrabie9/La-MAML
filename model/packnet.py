@@ -150,16 +150,35 @@ class Net(nn.Module):
 
     # ------------------------------------------------------------------
     def _compute_non_prunable_params(self) -> set[str]:
+        """Return the set of parameter names that should never be pruned.
+
+        This includes:
+        - All BatchNorm / GroupNorm affine parameters
+        - Final classifier parameters
+        - Parameters of any input adapters (e.g., ADC IQ adapters)
+        """
         names: set[str] = set()
         module_dict = dict(self.net.named_modules())
+
+        # Normalization layers: keep all affine params trainable and unpruned.
         for module_name, module in module_dict.items():
             if isinstance(module, (_BatchNorm, nn.GroupNorm)):
                 for param_name, _ in module.named_parameters(recurse=False):
                     full = f"{module_name}.{param_name}" if module_name else param_name
                     names.add(full)
+
+        # Final classifier layer(s): never prune.
         for name, param in self.net.named_parameters():
             if self._is_classifier_param(name, param, module_dict):
                 names.add(name)
+
+        # Input adapters (e.g., ADC IQ adapter): do not prune or partition.
+        for module_name, module in module_dict.items():
+            if module_name.endswith("input_adapter"):
+                for param_name, _ in module.named_parameters(recurse=False):
+                    full = f"{module_name}.{param_name}" if module_name else param_name
+                    names.add(full)
+
         return names
 
     # ------------------------------------------------------------------

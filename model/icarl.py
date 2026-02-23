@@ -339,12 +339,12 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             task_labs = all_labs[in_task]
             num_classes = task_labs.size(0)
 
-            print("num_classes", num_classes, "nc_per_task", self.nc_per_task, "offsets",
-                  offset1, offset2)
+            # print("num_classes", num_classes, "nc_per_task", self.nc_per_task, "offsets",
+            #       offset1, offset2)
             current_task_classes = self.classes_per_task[t]
             if num_classes != current_task_classes:
                 print(
-                    "[WARN][iCaRL] Task {} expected {} classes, found {} in memory.".format(
+                    "[WARNING][iCaRL] Task {} expected {} classes, found {} in memory.".format(
                         t, current_task_classes, num_classes
                     )
                 )

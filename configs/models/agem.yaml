@@ -1,5 +1,5 @@
 # Model-specific overrides for agem.
 model: agem
-lr: 0.001
+lr: 0.01
 glances: 1
-memories: 5120
+memories: 200

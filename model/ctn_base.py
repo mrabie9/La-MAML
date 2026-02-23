@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 from torch.nn.functional import relu, normalize
 from itertools import chain
-from model.resnet1d import _ResNet1D, BasicBlock1D
+from model.resnet1d import _ResNet1D, BasicBlock1D, AdcIqAdapter
 
 def Xavier(m):
     if m.__class__.__name__ == 'Linear':
@@ -64,7 +64,11 @@ class ContextNet(nn.Module):
         # self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         # self.linear = nn.Linear(nf * 8 * block.expansion, int(num_classes))
         self.model = _ResNet1D(
-            BasicBlock1D, [2, 2, 2, 2], num_classes, in_channels=in_channels
+            BasicBlock1D,
+            [2, 2, 2, 2],
+            num_classes,
+            in_channels=in_channels,
+            input_adapter=AdcIqAdapter(),
         )
         self.feature_dim = self.model.fc.in_features
         self.det_head = nn.Linear(self.feature_dim, 1)
@@ -84,10 +88,18 @@ class ContextNet(nn.Module):
         return nn.Sequential(*layers)
 
     def base_param(self):
-        base_iter = chain(self.model.conv1.parameters(), self.model.bn1.parameters(),
-                    self.model.layer1.parameters(), self.model.layer2.parameters(), self.model.layer3.parameters(),
-                    self.model.layer4.parameters(), self.model.fc.parameters(),
-                    self.det_head.parameters())
+        base_iter = chain(
+            self.model.conv1_1.parameters(),
+            self.model.bn1_1.parameters(),
+            self.model.conv1_2.parameters(),
+            self.model.bn1_2.parameters(),
+            self.model.layer1.parameters(),
+            self.model.layer2.parameters(),
+            self.model.layer3.parameters(),
+            self.model.layer4.parameters(),
+            self.model.fc.parameters(),
+            self.det_head.parameters(),
+        )
         for param in base_iter:
             yield param
     
