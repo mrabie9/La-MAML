@@ -503,8 +503,14 @@ def save_results(args, result_val_t, result_val_a, result_test_t, result_test_a,
     print(fname + ': ' + one_liner + ' # ' + str(spent_time))
 
     # save all results in binary file
-    torch.save((result_val_t, result_val_a, model.state_dict(),
-                val_stats, one_liner, args), fname + '.pt')
+    # NOTE: avoid serializing the full ``args`` namespace because it may contain
+    # loader methods and dataset references, which can make the pickle several
+    # gigabytes in size. The stringified config in ``one_liner`` already
+    # captures the experiment setup for later inspection.
+    torch.save(
+        (result_val_t, result_val_a, model.state_dict(), val_stats, one_liner),
+        fname + ".pt",
+    )
     return val_stats, test_stats
 
 def _default_main_config_chain() -> List[str]:
