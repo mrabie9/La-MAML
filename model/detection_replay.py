@@ -59,7 +59,10 @@ class DetectionReplayMixin:
         if not torch.is_tensor(y_cls):
             y_cls = torch.as_tensor(y_cls)
         if y_det is None:
-            if use_detector_arch is False and noise_label is not None:
+            if use_detector_arch is False:
+                # No detector head: include all samples (including noise) in cls loss.
+                y_det = torch.ones_like(y_cls, dtype=torch.float)
+            elif noise_label is not None:
                 y_det = (y_cls != noise_label).long()
             else:
                 y_det = torch.ones_like(y_cls, dtype=torch.float)
