@@ -151,6 +151,7 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
             det_recalls = []
             det_false_alarms = []
             noise_label = _noise_label_for_task(args, t)
+            # print("Evaluating Task {} with dataloader, noise label: {}".format(t, noise_label))
             for batch in task:
                 if isinstance(batch, (list, tuple)) and len(batch) == 3:
                     xb, yb, _ = batch
@@ -162,7 +163,9 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
                 yb_cls, yb_det = _split_labels(yb)
                 if not torch.is_tensor(yb_cls):
                     yb_cls = torch.as_tensor(yb_cls)
-                if yb_det is not None and not torch.is_tensor(yb_det):
+                if not getattr(args, "use_detector_arch", False):
+                    yb_det = None
+                elif yb_det is not None and not torch.is_tensor(yb_det):
                     yb_det = torch.as_tensor(yb_det)
 
                 logits = model(xb, t) if args.model != "anml" else model(xb, fast_weights=None)
@@ -175,6 +178,7 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
                         recalls.append(macro_recall(pb[cls_mask], yb_cls_cpu[cls_mask]))
                 elif noise_label is not None:
                     cls_mask = yb_cls_cpu != noise_label
+                    # print("Task {}: noise_label {}, cls_mask sum {}, yb_cls unique {}, pb unique {}".format(t, noise_label, cls_mask.sum().item(), yb_cls_cpu.unique().tolist(), pb.unique().tolist()))
                     if cls_mask.any():
                         recalls.append(macro_recall(pb[cls_mask], yb_cls_cpu[cls_mask]))
                 else:
@@ -203,7 +207,7 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
                     #         det_pred.float().mean().item(),
                     #     )
                     # )
-                    # det_recalls.append(macro_recall(det_pred, det_targets))
+                    det_recalls.append(macro_recall(det_pred, det_targets))
                     det_false_alarms.append(_false_alarm_rate(det_pred, det_targets))
 
             results.append(sum(recalls) / len(recalls) if recalls else 0.0)
@@ -219,6 +223,8 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
         y_cls_raw, y_det_raw = _split_labels(task[2])
         y = torch.as_tensor(y_cls_raw, dtype=torch.long)
         y_det = None
+        if not getattr(args, "use_detector_arch", False):
+            y_det_raw = None
         if y_det_raw is not None:
             y_det = torch.as_tensor(y_det_raw, dtype=torch.long)
         # if y_det is None: print("Warning: y_det is None for Task {}, defaulting to all ones (all samples treated as CLS).".format(t))
@@ -602,10 +608,10 @@ def life_experience(model, inc_loader, args):
         _pad_results(result_val_a),
         torch.Tensor(result_test_t),
         _pad_results(result_test_a),
-        torch.Tensor(result_val_det_a),
-        torch.Tensor(result_val_det_fa),
-        torch.Tensor(result_test_det_a),
-        torch.Tensor(result_test_det_fa),
+        _pad_results(result_val_det_a),
+        _pad_results(result_val_det_fa),
+        _pad_results(result_test_det_a),
+        _pad_results(result_test_det_fa),
         time_spent,
     )
 
