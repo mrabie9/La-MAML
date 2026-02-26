@@ -149,7 +149,7 @@ class IncrementalLoader:
     def __init__(
         self,
         args,
-        shuffle=True,
+        shuffle=False,
         seed=1,
     ):
         self._args = args
@@ -182,6 +182,7 @@ class IncrementalLoader:
             raise Exception("No more tasks.")
 
         p_tr, p_te = self.sample_permutations[self._current_task]
+        print(f"Task {self._current_task}: {len(p_tr)} training samples, {len(p_te)} test samples.")
         x_train, y_train = self.train_dataset[self._current_task][1][p_tr], self.train_dataset[self._current_task][2][p_tr]
         x_test, y_test = self.test_dataset[self._current_task][1][p_te], self.test_dataset[self._current_task][2][p_te]
 
@@ -210,11 +211,32 @@ class IncrementalLoader:
 
     def get_tasks(self, dataset_type='test'):
         if dataset_type == 'test':
-            return self.test_dataset
+            dataset = self.test_dataset
+            perm_index = 1
         elif dataset_type == 'val':
-            return self.test_dataset
+            dataset = self.test_dataset
+            perm_index = 1
+        elif dataset_type == 'train':
+            dataset = self.train_dataset
+            perm_index = 0
         else:
             raise NotImplementedError("Unknown mode {}.".format(dataset_type))
+
+        if self._args.samples_per_task <= 0:
+            return dataset
+
+        trimmed = []
+        for task_id, task in enumerate(dataset):
+            perms = self.sample_permutations[task_id]
+            if isinstance(perms, (list, tuple)):
+                perm = perms[perm_index]
+            else:
+                perm = perms if dataset_type == 'train' else None
+            if perm is None:
+                trimmed.append(task)
+                continue
+            trimmed.append((task[0], task[1][perm], task[2][perm]))
+        return trimmed
 
     def get_dataset_info(self):
         def _max_label_value(labels):
@@ -284,7 +306,7 @@ class IncrementalLoader:
         return int(test_data.size(0))
 
 
-    def _get_loader(self, x, y, shuffle=True, mode="train"):
+    def _get_loader(self, x, y, shuffle=False, mode="train"):
         if mode == "train":
             batch_size = self._batch_size
         elif mode == "test":
@@ -336,12 +358,16 @@ class IncrementalLoader:
                     after = x_train.shape
                     if before != after:
                         print(f"{fname} train: moved sample axis {before} -> {after}")
+                        # x_train = x_train[:,[0,2],:]
+                        # print("Dropped ADC channel from train data, new shape:", x_train.shape)
                 if x_test is not None and y_test is not None:
                     before = x_test.shape
                     x_test = _maybe_move_sample_axis(x_test, y_test, f"{fname} test")
                     after = x_test.shape
                     if before != after:
                         print(f"{fname} test: moved sample axis {before} -> {after}")
+                        # x_test = x_test[:,[0,2],:]
+                        # print("Dropped ADC channel from test data, new shape:", x_test.shape)
                 if x_train is not None and y_train is not None:
                     y_train = _normalize_label_array(y_train, x_train.shape[0], f"{fname} train")
                     print(f"{fname} train: x={x_train.shape}, y={np.asarray(y_train).shape}")
@@ -381,6 +407,8 @@ class IncrementalLoader:
                 if scaling_mode != "none":
                     x_train, x_test = _apply_data_scaling(x_train, x_test, scaling_mode)
                     print(f"{fname}: applied data scaling mode '{scaling_mode}'.")
+                else:
+                    raise ValueError(f"Unsupported data scaling mode '{scaling_mode}'.")
                 
                 size_tr = x_train.shape[0]
                 size_te = min(x_test.shape[0], int(size_tr * validation_split)) if validation_split > 0. else x_test.shape[0]
@@ -501,6 +529,7 @@ class IncrementalLoader:
                 else:
                     n = min(self._args.samples_per_task, N)
                 # randomly shuffle data
+                print(f"Task {t}: {N} training samples, using {n} samples for training and testing.")
                 p_tr = np.random.permutation(N)[:n]
                 N = self.test_dataset[t][1].shape[0]
                 p_te = np.random.permutation(N)[:n]
@@ -529,9 +558,15 @@ class IncrementalLoader:
                     n = N
                 else:
                     n = min(self._args.samples_per_task, N)
+                p_tr = torch.randperm(N)[0:n]
 
-                p = torch.randperm(N)[0:n]
-                self.sample_permutations.append(p)
+                N_test = self.test_dataset[t][1].size(0)
+                if self._args.samples_per_task <= 0:
+                    n_test = N_test
+                else:
+                    n_test = min(self._args.samples_per_task, N_test)
+                p_te = torch.randperm(N_test)[0:n_test]
+                self.sample_permutations.append([p_tr, p_te])
             self.classes_per_task = [
                 int(torch.unique(task[2]).numel()) if hasattr(torch, "unique") else len(np.unique(task[2]))
                 for task in self.train_dataset
