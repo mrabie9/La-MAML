@@ -235,6 +235,8 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         x_det = x
         signal_mask = (y_det == 1) & (y_cls >= 0)
         if not signal_mask.any():
+            if not getattr(self, "det_enabled", True):
+                return 0.0, 0.0
             det_logits, _ = self.net.forward_heads(x_det)
             det_loss = self.det_loss(det_logits, y_det.float())
             det_replay = self._sample_det_memory()

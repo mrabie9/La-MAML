@@ -5,6 +5,7 @@ loader: task_incremental_loader
 
 data_path: data/rff/radar_det_cls/hpt
 dataset: iq
+data_scaling: normalize
 shuffle_tasks: false
 classes_per_it: 6
 iterations: 5000
@@ -12,9 +13,9 @@ workers: 0
 validation: 0.3
 class_order: random
 increment: 5
-test_batch_size: 100000
+test_batch_size: 128
 samples_per_task: -1
-val_rate: 5
+val_rate: 3
 
 cuda: true
 seed: 0

@@ -592,15 +592,49 @@ def life_experience(model, inc_loader, args):
     time_end = time.time()
     time_spent = time_end - time_start
 
-    def _pad_results(result_list: list[list[float]], pad_value: float = 0.0) -> torch.Tensor:
+    def _pad_results(result_list: list[object], pad_value: float = 0.0) -> torch.Tensor:
+        """Pad ragged per-task results into a dense 2D tensor.
+
+        Args:
+            result_list: Sequence of per-eval results, each being a list/array/tensor
+                of task metrics or a scalar.
+            pad_value: Value used to pad missing task entries.
+
+        Returns:
+            A 2D tensor of shape (num_evals, max_tasks).
+
+        Usage:
+            results = _pad_results([[0.1, 0.2], [0.3]])
+        """
         if not result_list:
             return torch.empty((0, 0), dtype=torch.float)
-        max_len = max(len(row) for row in result_list)
-        padded = torch.full((len(result_list), max_len), float(pad_value), dtype=torch.float)
-        for row_idx, row in enumerate(result_list):
-            if not row:
+
+        def _flatten_to_floats(value: object) -> list[float]:
+            if isinstance(value, torch.Tensor):
+                return [float(x) for x in value.detach().cpu().flatten().tolist()]
+            if isinstance(value, np.ndarray):
+                return [float(x) for x in value.flatten().tolist()]
+            if isinstance(value, (list, tuple)):
+                flattened: list[float] = []
+                for item in value:
+                    flattened.extend(_flatten_to_floats(item))
+                return flattened
+            return [float(value)]
+
+        normalized_rows: list[torch.Tensor] = []
+        for row in result_list:
+            if row is None:
+                row_tensor = torch.empty((0,), dtype=torch.float)
+            else:
+                row_tensor = torch.as_tensor(_flatten_to_floats(row), dtype=torch.float)
+            normalized_rows.append(row_tensor)
+
+        max_len = max(row.numel() for row in normalized_rows)
+        padded = torch.full((len(normalized_rows), max_len), float(pad_value), dtype=torch.float)
+        for row_idx, row_tensor in enumerate(normalized_rows):
+            if row_tensor.numel() == 0:
                 continue
-            padded[row_idx, : len(row)] = torch.as_tensor(row, dtype=torch.float)
+            padded[row_idx, : row_tensor.numel()] = row_tensor
         return padded
 
     return (
@@ -633,13 +667,11 @@ def save_results(args, result_val_t, result_val_a, result_test_t, result_test_a,
     print(fname + ': ' + one_liner + ' # ' + str(spent_time))
 
     # save all results in binary file
-    # NOTE: avoid serializing the full ``args`` namespace because it may contain
-    # loader methods and dataset references, which can make the pickle several
-    # gigabytes in size. The stringified config in ``one_liner`` already
-    # captures the experiment setup for later inspection.
+
     torch.save(
-        (result_val_t, result_val_a, model.state_dict(), val_stats, one_liner),
+        (result_val_t, result_val_a, model.state_dict(), val_stats, one_liner, args),
         fname + ".pt",
+        pickle_protocol=4,
     )
     return val_stats, test_stats
 

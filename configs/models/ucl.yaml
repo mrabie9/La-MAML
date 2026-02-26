@@ -1,6 +1,6 @@
 # Model-specific overrides for ucl.
 model: ucl_bresnet
-lr: 0.03
+lr: 0.01
 lr_rho: 0.01
 beta: 0.0002
 alpha: 0.3

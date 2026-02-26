@@ -133,6 +133,8 @@ class Net(DetectionReplayMixin, BaseNet):
                 self._update_det_memory(x, y_det)
             signal_mask = (y_det == 1) & (y_cls >= 0)
             if not signal_mask.any():
+                if not getattr(self, "det_enabled", True):
+                    return 0.0, 0.0
                 self.zero_grads()
                 det_logits, _ = self.net.forward_heads(x)
                 det_loss = self.det_loss(det_logits, y_det.float())
@@ -219,18 +221,19 @@ class Net(DetectionReplayMixin, BaseNet):
             self.net.zero_grad()
             self.net.alpha_lr.zero_grad()
 
-            det_logits, _ = self.net.forward_heads(x_det)
-            det_loss = self.det_loss(det_logits, y_det.float())
-            det_replay = self._sample_det_memory()
-            if det_replay is not None:
-                mem_x, mem_y = det_replay
-                mem_det_logits, _ = self.net.forward_heads(mem_x)
-                mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-                det_loss = 0.5 * (det_loss + mem_loss)
-            self.opt_wt.zero_grad()
-            det_loss = self.det_lambda * det_loss
-            det_loss.backward()
-            self.opt_wt.step()
+            if getattr(self, "det_enabled", True):
+                det_logits, _ = self.net.forward_heads(x_det)
+                det_loss = self.det_loss(det_logits, y_det.float())
+                det_replay = self._sample_det_memory()
+                if det_replay is not None:
+                    mem_x, mem_y = det_replay
+                    mem_det_logits, _ = self.net.forward_heads(mem_x)
+                    mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+                    det_loss = 0.5 * (det_loss + mem_loss)
+                self.opt_wt.zero_grad()
+                det_loss = self.det_lambda * det_loss
+                det_loss.backward()
+                self.opt_wt.step()
 
         avg_tr_acc = sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
         return meta_loss.item(), avg_tr_acc

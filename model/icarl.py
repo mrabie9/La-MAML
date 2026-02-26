@@ -254,6 +254,8 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             self._update_det_memory(x, y_det)
         signal_mask = (y_det == 1) & (y_cls >= 0)
         if not signal_mask.any():
+            if not getattr(self, "det_enabled", True):
+                return 0.0, 0.0
             self.det_opt.zero_grad()
             det_logits, _ = self.net.forward_heads(x_det)
             det_loss = self.det_loss(det_logits, y_det.float())
@@ -414,19 +416,22 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             # print(len(self.mem_class_x[0]))
 
         avg_tr_acc = sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
-        self.det_opt.zero_grad()
-        det_logits, _ = self.net.forward_heads(x_det)
-        det_loss = self.det_loss(det_logits, y_det.float())
-        det_replay = self._sample_det_memory()
-        if det_replay is not None:
-            mem_x, mem_y = det_replay
-            mem_det_logits, _ = self.net.forward_heads(mem_x)
-            mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-            det_loss = 0.5 * (det_loss + mem_loss)
-        det_loss = self.det_lambda * det_loss
-        det_loss.backward()
-        self.det_opt.step()
-        total_loss = float(loss.item()) + float(det_loss.item())
+        det_loss_value = 0.0
+        if getattr(self, "det_enabled", True):
+            self.det_opt.zero_grad()
+            det_logits, _ = self.net.forward_heads(x_det)
+            det_loss = self.det_loss(det_logits, y_det.float())
+            det_replay = self._sample_det_memory()
+            if det_replay is not None:
+                mem_x, mem_y = det_replay
+                mem_det_logits, _ = self.net.forward_heads(mem_x)
+                mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+                det_loss = 0.5 * (det_loss + mem_loss)
+            det_loss = self.det_lambda * det_loss
+            det_loss.backward()
+            self.det_opt.step()
+            det_loss_value = float(det_loss.item())
+        total_loss = float(loss.item()) + det_loss_value
         # det_pred = (det_logits >= 0).long()
         # det_recall = macro_recall(det_pred, y_det.long())
         # neg_mask = y_det == 0
