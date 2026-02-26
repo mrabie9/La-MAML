@@ -77,7 +77,11 @@ class Net(DetectionReplayMixin, nn.Module):
         self.clipgrad = float(self.cfg.clipgrad) if self.cfg.clipgrad > 0 else None
         self.det_lambda = float(self.cfg.det_lambda)
         self.cls_lambda = float(self.cfg.cls_lambda)
-        self._init_det_replay(self.cfg.det_memories, self.cfg.det_replay_batch)
+        self._init_det_replay(
+            self.cfg.det_memories,
+            self.cfg.det_replay_batch,
+            enabled=bool(getattr(args, "use_detector_arch", False)),
+        )
 
         self.current_task: Optional[int] = None
         self._tasks_consolidated = 0
@@ -110,7 +114,17 @@ class Net(DetectionReplayMixin, nn.Module):
 
         self.net.train()
 
-        y_cls, y_det = self._unpack_labels(y)
+        class_counts = getattr(self, "classes_per_task", None)
+        noise_label = None
+        if class_counts is not None:
+            _, offset2 = misc_utils.compute_offsets(t, class_counts)
+            noise_label = offset2 - 1
+        y_cls, y_det = self._unpack_labels(
+            y,
+            noise_label=noise_label,
+            use_detector_arch=bool(getattr(self, "det_enabled", False)),
+        )
+        if y_det is None: print("Warning: y_det is None in Observe().")
         if y_det is not None and self.det_memories > 0:
             self._update_det_memory(x, y_det)
         det_logits, cls_logits = self._forward_heads(x)
@@ -138,6 +152,7 @@ class Net(DetectionReplayMixin, nn.Module):
         det_loss = self.det_loss(det_logits, y_det.float())
         det_replay = self._sample_det_memory()
         if det_replay is not None:
+            print("det_replay:", det_replay[0].shape, det_replay[1].shape)
             mem_x, mem_y = det_replay
             mem_det_logits, _ = self._forward_heads(mem_x)
             mem_loss = self.det_loss(mem_det_logits, mem_y.float())

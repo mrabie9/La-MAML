@@ -80,7 +80,11 @@ class Net(DetectionReplayMixin, nn.Module):
         self.clipgrad = self.cfg.clipgrad
         self.det_lambda = float(self.cfg.det_lambda)
         self.cls_lambda = float(self.cfg.cls_lambda)
-        self._init_det_replay(self.cfg.det_memories, self.cfg.det_replay_batch)
+        self._init_det_replay(
+            self.cfg.det_memories,
+            self.cfg.det_replay_batch,
+            enabled=bool(getattr(args, "use_detector_arch", False)),
+        )
 
         self.current_task: Optional[int] = None
         self.tasks_trained: int = 0
@@ -118,7 +122,16 @@ class Net(DetectionReplayMixin, nn.Module):
         self.net.train()
         self.opt.zero_grad()
 
-        y_cls, y_det = self._unpack_labels(y)
+        class_counts = getattr(self, "classes_per_task", None)
+        noise_label = None
+        if class_counts is not None:
+            _, offset2 = misc_utils.compute_offsets(t, class_counts)
+            noise_label = offset2 - 1
+        y_cls, y_det = self._unpack_labels(
+            y,
+            noise_label=noise_label,
+            use_detector_arch=bool(getattr(self, "det_enabled", False)),
+        )
         if y_det is not None and self.det_memories > 0:
             self._update_det_memory(x, y_det)
         det_logits, cls_logits = self.net.forward_heads(x)

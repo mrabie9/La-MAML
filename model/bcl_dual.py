@@ -68,7 +68,11 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.bce = torch.nn.CrossEntropyLoss()
         self.det_lambda = float(self.cfg.det_lambda)
         self.cls_lambda = float(self.cfg.cls_lambda)
-        self._init_det_replay(self.cfg.det_memories, self.cfg.det_replay_batch)
+        self._init_det_replay(
+            self.cfg.det_memories,
+            self.cfg.det_replay_batch,
+            enabled=bool(getattr(args, "use_detector_arch", False)),
+        )
 
         self.classes_per_task = misc_utils.build_task_class_list(
             n_tasks,
@@ -210,7 +214,16 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         sizes = (offsets[:, 1] - offsets[:, 0]).long()
         return xx,yy, feat , mask, t_idx.tolist(), sizes
     def observe(self, x, y, t):
-        y_cls, y_det = self._unpack_labels(y)
+        class_counts = getattr(self, "classes_per_task", None)
+        noise_label = None
+        if class_counts is not None:
+            _, offset2 = misc_utils.compute_offsets(t, class_counts)
+            noise_label = offset2 - 1
+        y_cls, y_det = self._unpack_labels(
+            y,
+            noise_label=noise_label,
+            use_detector_arch=bool(getattr(self, "det_enabled", False)),
+        )
         if self.current_task is None:
             self.current_task = t
         if self.current_task == t and self.mem_cnt == 0 and y_det is not None:
