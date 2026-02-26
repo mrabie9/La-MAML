@@ -187,9 +187,23 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
                         det_recalls.append(macro_recall(det_pred, yb_det_cpu))
                         det_false_alarms.append(_false_alarm_rate(det_pred, yb_det_cpu))
                 elif noise_label is not None:
+                    yb_unique = torch.unique(yb_cls_cpu)
+                    pred_unique = torch.unique(pb)
+                    noise_present = (yb_unique == noise_label).any().item()
                     det_targets = (yb_cls_cpu != noise_label).long()
                     det_pred = (pb != noise_label).long()
-                    det_recalls.append(macro_recall(det_pred, det_targets))
+                    # print(
+                    #     "DEBUG det: noise_label={}, present={}, yb_unique={}, pb_unique={}, "
+                    #     "pos_target_rate={:.3f}, pos_pred_rate={:.3f}".format(
+                    #         noise_label,
+                    #         noise_present,
+                    #         yb_unique.tolist(),
+                    #         pred_unique.tolist(),
+                    #         det_targets.float().mean().item(),
+                    #         det_pred.float().mean().item(),
+                    #     )
+                    # )
+                    # det_recalls.append(macro_recall(det_pred, det_targets))
                     det_false_alarms.append(_false_alarm_rate(det_pred, det_targets))
 
             results.append(sum(recalls) / len(recalls) if recalls else 0.0)
@@ -571,11 +585,23 @@ def life_experience(model, inc_loader, args):
 
     time_end = time.time()
     time_spent = time_end - time_start
+
+    def _pad_results(result_list: list[list[float]], pad_value: float = 0.0) -> torch.Tensor:
+        if not result_list:
+            return torch.empty((0, 0), dtype=torch.float)
+        max_len = max(len(row) for row in result_list)
+        padded = torch.full((len(result_list), max_len), float(pad_value), dtype=torch.float)
+        for row_idx, row in enumerate(result_list):
+            if not row:
+                continue
+            padded[row_idx, : len(row)] = torch.as_tensor(row, dtype=torch.float)
+        return padded
+
     return (
         torch.Tensor(result_val_t),
-        torch.Tensor(result_val_a),
+        _pad_results(result_val_a),
         torch.Tensor(result_test_t),
-        torch.Tensor(result_test_a),
+        _pad_results(result_test_a),
         torch.Tensor(result_val_det_a),
         torch.Tensor(result_val_det_fa),
         torch.Tensor(result_test_det_a),
