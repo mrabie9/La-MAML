@@ -151,7 +151,7 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
             det_recalls = []
             det_false_alarms = []
             noise_label = _noise_label_for_task(args, t)
-            print("Evaluating Task {} with dataloader, noise label: {}".format(t, noise_label))
+            # print("Evaluating Task {} with dataloader, noise label: {}".format(t, noise_label))
             for batch in task:
                 if isinstance(batch, (list, tuple)) and len(batch) == 3:
                     xb, yb, _ = batch
@@ -608,10 +608,10 @@ def life_experience(model, inc_loader, args):
         _pad_results(result_val_a),
         torch.Tensor(result_test_t),
         _pad_results(result_test_a),
-        torch.Tensor(result_val_det_a),
-        torch.Tensor(result_val_det_fa),
-        torch.Tensor(result_test_det_a),
-        torch.Tensor(result_test_det_fa),
+        _pad_results(result_val_det_a),
+        _pad_results(result_val_det_fa),
+        _pad_results(result_test_det_a),
+        _pad_results(result_test_det_fa),
         time_spent,
     )
 
