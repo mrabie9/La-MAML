@@ -133,7 +133,9 @@ class _ResNet1D(nn.Module):
         else:
             if x.dim() == 4:
                 if not isinstance(self.input_adapter, nn.Identity):
+                    # print("Using input adapter for 4D input.", x.shape)
                     x = self.input_adapter(x)
+                    # print("Adapter output shape:", x.shape)
                 else:
                     raise ValueError("Received 4D input but no adapter is configured.")
 
@@ -198,7 +200,9 @@ class ResNet1D(nn.Module):
         self.model.train(bn_training)
         try:
             if not classify_feats:
+                # print(f"Input shape: {tuple(x.shape)}")
                 x = self._prepare_input(x)
+                # print(f"Prepared input shape: {tuple(x.shape)}")
             if vars is None:
                 out = self.model(x, return_features=ret_feats, classify_feats=classify_feats)
             else:
@@ -245,19 +249,23 @@ class ResNet1D(nn.Module):
 
     # ------------------------------------------------------------------
     def _prepare_input(self, x: torch.Tensor) -> torch.Tensor:
+        """Normalize inputs into channel-first IQ tensors.
+
+        Accepted formats:
+        - (B, F): flat samples. If F is divisible by 2 or 3, reshape to
+          (B, 2, L) or (B, 3, 2, L) respectively. Ambiguous shapes (divisible
+          by both 2 and 3) raise an error.
+        - (B, C, L): channel-first. C can be 1 or 2 (passed through) or 3
+          (interpreted as 3 ADC channels with interleaved IQ and reshaped to
+          (B, 3, 2, L)).
+        - (C, B, L): channel-first but transposed; will be permuted to (B, C, L).
+        - (B, 3, 2, L): explicit ADC + IQ layout (passed through).
+        """
         if x.dim() == 2:
             batch, features = x.shape
             if features % 2 == 0 and features % 3 != 0:
                 seq_len = features // 2
                 x = x.view(batch, 2, seq_len)
-            elif features % 3 == 0 and features % 2 != 0:
-                seq_len = features // 3
-                x = x.view(batch, 3, seq_len)
-            elif features % 2 == 0 and features % 3 == 0:
-                raise ValueError(
-                    f"Ambiguous flat input shape {tuple(x.shape)}; divisible by both 2 and 3. "
-                    "Provide an explicit (B, C, L) tensor with C=2 or C=3."
-                )
             else:
                 x = x.unsqueeze(1)
         elif x.dim() == 3:

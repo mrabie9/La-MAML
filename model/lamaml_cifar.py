@@ -23,6 +23,7 @@ class Net(DetectionReplayMixin, BaseNet):
         self._init_det_replay(
             getattr(args, "det_memories", 2000),
             getattr(args, "det_replay_batch", 64),
+            enabled=bool(getattr(args, "use_detector_arch", False)),
         )
 
     def take_loss(self, t, logits, y):
@@ -116,7 +117,16 @@ class Net(DetectionReplayMixin, BaseNet):
             self.pass_itr = pass_itr
             perm = torch.randperm(x.size(0))
             x = x[perm]
-            y_cls, y_det = self._unpack_labels(y)
+            class_counts = getattr(self, "classes_per_task", None)
+            noise_label = None
+            if class_counts is not None:
+                _, offset2 = misc_utils.compute_offsets(t, class_counts)
+                noise_label = offset2 - 1
+            y_cls, y_det = self._unpack_labels(
+                y,
+                noise_label=noise_label,
+                use_detector_arch=bool(getattr(self, "det_enabled", False)),
+            )
             y_cls = y_cls[perm]
             y_det = y_det[perm]
             if y_det is not None and self.det_memories > 0:
