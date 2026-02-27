@@ -297,15 +297,15 @@ class ResNet1D(nn.Module):
 
     # ------------------------------------------------------------------
     def _build_norm_factory(self, args):
-        use_groupnorm = getattr(args, "model", "") == "packnet"
-        if use_groupnorm:
-            target_groups = getattr(args, "groupnorm_groups", 4)
+        # use_groupnorm = getattr(args, "model", "") == "packnet"
+        # if use_groupnorm:
+        #     target_groups = getattr(args, "groupnorm_groups", 16)
 
-            def gn_factory(channels: int):
-                groups = max(1, math.gcd(channels, target_groups))
-                return nn.GroupNorm(groups, channels)
+        #     def gn_factory(channels: int):
+        #         groups = max(1, math.gcd(channels, target_groups))
+        #         return nn.GroupNorm(groups, channels)
 
-            return lambda c: nn.Identity(c) # gn_factory
+        #     return gn_factory
         return lambda c: nn.BatchNorm1d(c)
 
 __all__ = ["ResNet1D"]
