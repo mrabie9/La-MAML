@@ -89,13 +89,17 @@ class Net(DetectionReplayMixin, BaseNet):
         for p in fast_weights:
             p.requires_grad_(True)
 
-        grads = torch.autograd.grad(
+        raw_gradients = torch.autograd.grad(
             loss,
             fast_weights,
             create_graph=graph_required,
             retain_graph=graph_required,
-            allow_unused=False,
+            allow_unused=True,
         )
+        grads = [
+            grad if grad is not None else torch.zeros_like(weight)
+            for grad, weight in zip(raw_gradients, fast_weights)
+        ]
 
         # Clip
         grads = [
