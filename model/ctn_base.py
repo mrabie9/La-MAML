@@ -89,15 +89,7 @@ class ContextNet(nn.Module):
 
     def base_param(self):
         base_iter = chain(
-            self.model.conv1_1.parameters(),
-            self.model.bn1_1.parameters(),
-            self.model.conv1_2.parameters(),
-            self.model.bn1_2.parameters(),
-            self.model.layer1.parameters(),
-            self.model.layer2.parameters(),
-            self.model.layer3.parameters(),
-            self.model.layer4.parameters(),
-            self.model.fc.parameters(),
+            self.model.parameters(),
             self.det_head.parameters(),
         )
         for param in base_iter:
