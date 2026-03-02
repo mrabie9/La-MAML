@@ -235,13 +235,12 @@ class Net(DetectionReplayMixin, nn.Module):
 
         output = self.netforward(x)
 
-        if self.is_cifar:
-            # class-masking within current task
-            offset1, offset2 = compute_offsets(t, self.classes_per_task, self.is_cifar)
-            if offset1 > 0:
-                output[:, :offset1].data.fill_(-10e10)
-            if offset2 < self.n_outputs:
-                output[:, offset2:self.n_outputs].data.fill_(-10e10)
+        # Task-incremental masking: always restrict logits to the task slice.
+        offset1, offset2 = compute_offsets(t, self.classes_per_task, self.is_cifar)
+        if offset1 > 0:
+            output[:, :offset1].data.fill_(-10e10)
+        if offset2 < self.n_outputs:
+            output[:, offset2:self.n_outputs].data.fill_(-10e10)
         return output
 
     def observe(self, x, y, t):

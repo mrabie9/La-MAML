@@ -189,6 +189,11 @@ class Net(DetectionReplayMixin, nn.Module):
             self.memory_data = self.memory_data.cuda()
             self.memory_labs = self.memory_labs.cuda()
 
+        # Track how many exemplars each task has actually written.
+        self.task_mem_filled = torch.zeros(n_tasks, dtype=torch.long)
+        if self.gpu:
+            self.task_mem_filled = self.task_mem_filled.cuda()
+
         # allocate temporary synaptic memory
         self.grad_dims = []
         for param in self._ll_params():
@@ -260,13 +265,12 @@ class Net(DetectionReplayMixin, nn.Module):
 
         output = self.net.forward(x)
 
-        if self.is_cifar:
-            # make sure we predict classes within the current task
-            offset1, offset2 = compute_offsets(t, self.classes_per_task, self.is_cifar)
-            if offset1 > 0:
-                output[:, :offset1].data.fill_(-10e10)
-            if offset2 < self.n_outputs:
-                output[:, offset2:self.n_outputs].data.fill_(-10e10)
+        # Task-incremental masking: always restrict logits to the task slice.
+        offset1, offset2 = compute_offsets(t, self.classes_per_task, self.is_cifar)
+        if offset1 > 0:
+            output[:, :offset1].data.fill_(-10e10)
+        if offset2 < self.n_outputs:
+            output[:, offset2:self.n_outputs].data.fill_(-10e10)
         return output
 
     def _ll_params(self):
@@ -322,9 +326,14 @@ class Net(DetectionReplayMixin, nn.Module):
 
         # update memory
         if t != self.current_task:
+            # finalize previous task's filled count
+            if self.current_task is not None:
+                self.task_mem_filled[self.current_task] = min(self.mem_cnt, self.n_memories)
             self.observed_tasks.append(t)
             self.current_task = t
             self.grad_align.append([])
+            # start writing this task from the beginning
+            self.mem_cnt = 0
             
         tr_acc = []
         for pass_itr in range(self.glances):
@@ -358,6 +367,7 @@ class Net(DetectionReplayMixin, nn.Module):
                     self.mem_cnt += effbsz
                     if self.mem_cnt == self.n_memories:
                         self.mem_cnt = 0
+                self.task_mem_filled[t] = min(self.n_memories, self.mem_cnt)
 
             # compute gradient on previous tasks
             if len(self.observed_tasks) > 1:
@@ -368,10 +378,13 @@ class Net(DetectionReplayMixin, nn.Module):
 
                     offset1, offset2 = compute_offsets(past_task, self.classes_per_task,
                                                        self.is_cifar)
-                    logits = self.forward(Variable(self.memory_data[past_task]), past_task)[:, offset1: offset2]
-                    ptloss = self.ce(
-                        logits,
-                        Variable(self.memory_labs[past_task] - offset1))
+                    filled = int(self.task_mem_filled[past_task].item())
+                    if filled == 0:
+                        continue
+                    mem_x = Variable(self.memory_data[past_task, :filled])
+                    mem_y = Variable(self.memory_labs[past_task, :filled])
+                    logits = self.forward(mem_x, past_task)[:, offset1: offset2]
+                    ptloss = self.ce(logits, mem_y - offset1)
                     ptloss.backward()
                     if self.cfg.grad_clip_norm:
                         torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.cfg.grad_clip_norm)
