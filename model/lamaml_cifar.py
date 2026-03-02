@@ -219,8 +219,10 @@ class Net(DetectionReplayMixin, BaseNet):
             if(self.cfg.sync_update):
                 self.opt_wt.step()
             else:            
-                for i,p in enumerate(self.net.parameters()):          
-                    # using relu on updated LRs to avoid negative values           
+                for i, p in enumerate(self.net.parameters()):
+                    # using relu on updated LRs to avoid negative values
+                    if p.grad is None:
+                        continue
                     p.data = p.data - p.grad * nn.functional.relu(self.net.alpha_lr[i])            
             self.net.zero_grad()
             self.net.alpha_lr.zero_grad()

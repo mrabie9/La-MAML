@@ -328,7 +328,17 @@ class Net(DetectionReplayMixin, nn.Module):
             fast_weights = list(self.net.parameters())
 
         graph_required = self.cfg.second_order
-        grads = list(torch.autograd.grad(loss, fast_weights, create_graph=graph_required, retain_graph=graph_required))
+        raw_gradients = torch.autograd.grad(
+            loss,
+            fast_weights,
+            create_graph=graph_required,
+            retain_graph=graph_required,
+            allow_unused=True,
+        )
+        grads = [
+            grad if grad is not None else torch.zeros_like(weight)
+            for grad, weight in zip(raw_gradients, fast_weights)
+        ]
 
         for i in range(len(grads)):
             if self.cfg.grad_clip_norm:
@@ -404,7 +414,9 @@ class Net(DetectionReplayMixin, nn.Module):
 
             # update weights with grad from simple ER loss 
             # and LRs obtained from meta-loss guided by old and new tasks
-            for i,p in enumerate(self.net.parameters()):                                 
+            for i, p in enumerate(self.net.parameters()):
+                if p.grad is None:
+                    continue
                 p.data = p.data - (p.grad * nn.functional.relu(self.net.alpha_lr[i]))       
             self.net.zero_grad()
             self.net.alpha_lr.zero_grad()
