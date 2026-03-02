@@ -529,8 +529,7 @@ def life_experience(model, inc_loader, args):
                     )
                 )
         log_state(args.state_logging, "Task {}: running final validation.".format(current_task))
-        evaluator(model, train_task_loaders, args, eval_epistemic=False)
-        val_acc = evaluator(model, train_task_loaders, args)
+        val_acc = evaluator(model, test_task_loaders, args)
         val_acc, val_det_acc, val_det_fa = _split_eval_output(val_acc)
         result_val_a.append(val_acc)
         if val_det_acc is not None:
