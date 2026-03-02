@@ -15,7 +15,7 @@ class_order: random
 increment: 5
 test_batch_size: 128
 samples_per_task: -1
-val_rate: 3
+val_rate: 10
 
 cuda: true
 seed: 0
@@ -31,7 +31,7 @@ inner_steps: 1
 temperature: 5
 n_epochs: 5
 optimizer: sgd
-batch_size: 128
+batch_size: 256
 # replay_batch_size: 64
 # memories: 1024
 # grad_clip_norm: 5.0

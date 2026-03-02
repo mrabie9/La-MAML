@@ -2,4 +2,4 @@
 model: agem
 lr: 0.01
 glances: 1
-memories: 200
+memories: 5120
