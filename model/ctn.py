@@ -220,6 +220,8 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         x_det = x
         signal_mask = (y_det == 1) & (y_cls >= 0)
         if not signal_mask.any():
+            if not getattr(self, "det_enabled", True):
+                return 0.0, 0.0
             det_logits = self.net.forward_det_agnostic(x_det)
             det_loss = self.det_loss(det_logits, y_det.float())
             det_replay = self._sample_det_memory()
@@ -291,28 +293,31 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         if self.mem_cnt >= self.n_memories:
             self.mem_cnt = 0
 
-        det_logits = self.net.forward_det_agnostic(x_det)
-        det_loss = self.det_loss(det_logits, y_det.float())
-        det_replay = self._sample_det_memory()
-        if det_replay is not None:
-            mem_x, mem_y = det_replay
-            mem_det_logits = self.net.forward_det_agnostic(mem_x)
-            mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-            det_loss = 0.5 * (det_loss + mem_loss)
-        det_loss_value = det_loss.detach()
-        det_loss = self.det_lambda * det_loss
-        det_grads = torch.autograd.grad(
-            det_loss,
-            self.net.base_param(),
-            create_graph=False,
-            allow_unused=True,
-        )
-        for param, grad in zip(self.net.base_param(), det_grads):
-            if grad is None:
-                continue
-            new_param = param.data.clone()
-            new_param = new_param - self.inner_lr * grad
-            param.data.copy_(new_param)
+        if getattr(self, "det_enabled", True):
+            det_logits = self.net.forward_det_agnostic(x_det)
+            det_loss = self.det_loss(det_logits, y_det.float())
+            det_replay = self._sample_det_memory()
+            if det_replay is not None:
+                mem_x, mem_y = det_replay
+                mem_det_logits = self.net.forward_det_agnostic(mem_x)
+                mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+                det_loss = 0.5 * (det_loss + mem_loss)
+            det_loss_value = det_loss.detach()
+            det_loss = self.det_lambda * det_loss
+            det_grads = torch.autograd.grad(
+                det_loss,
+                self.net.base_param(),
+                create_graph=False,
+                allow_unused=True,
+            )
+            for param, grad in zip(self.net.base_param(), det_grads):
+                if grad is None:
+                    continue
+                new_param = param.data.clone()
+                new_param = new_param - self.inner_lr * grad
+                param.data.copy_(new_param)
+        else:
+            det_loss_value = torch.zeros((), device=x_det.device, dtype=torch.float32)
 
         self.zero_grad()   
         meta_grad_init = [0 for _ in range(len(self.net.state_dict()))]
