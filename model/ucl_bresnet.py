@@ -582,7 +582,7 @@ class Net(nn.Module):
 
     def _compute_layer_regularisation_terms(
         self, old_layer: BayesianLayer, new_layer: BayesianLayer, eps: float
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, int]:
         """Compute UCL regularisation terms for a Bayesian layer pair.
 
         Args:
@@ -598,33 +598,39 @@ class Net(nn.Module):
         saver_weight_mu = old_layer.weight_mu
         trainer_weight_sigma = new_layer.weight_sigma
         saver_weight_sigma = old_layer.weight_sigma
+        safe_saver_weight_sigma = saver_weight_sigma.clamp_min(eps)
 
         fan_in, _ = _calculate_fan_in_and_fan_out(trainer_weight_mu)
         std_init = math.sqrt((2.0 / fan_in) * self.cfg.ratio)
 
-        saver_strength = std_init / (saver_weight_sigma + eps)
+        saver_strength = std_init / safe_saver_weight_sigma
         saver_strength_flat = saver_strength.view(saver_strength.size(0), -1)
         bias_strength = saver_strength_flat.mean(dim=1)
 
         mu_weight_reg = ((saver_strength * (trainer_weight_mu - saver_weight_mu)) ** 2).sum()
         l1_mu_weight_reg = (
-            (saver_weight_mu.pow(2) / saver_weight_sigma.pow(2))
+            (saver_weight_mu.pow(2) / safe_saver_weight_sigma.pow(2))
             * (trainer_weight_mu - saver_weight_mu).abs()
         ).sum()
 
         mu_bias_reg = torch.zeros_like(mu_weight_reg)
         l1_mu_bias_reg = torch.zeros_like(mu_weight_reg)
+        regularized_parameter_count = trainer_weight_mu.numel() + trainer_weight_sigma.numel()
         trainer_bias = getattr(new_layer, "bias", None)
         saver_bias = getattr(old_layer, "bias", None)
         if trainer_bias is not None and saver_bias is not None:
             mu_bias_reg = ((bias_strength * (trainer_bias - saver_bias)) ** 2).sum()
             saver_sigma_flat = saver_weight_sigma.view(saver_weight_sigma.size(0), -1)
             l1_mu_bias_reg = (
-                (saver_bias.pow(2) / (saver_sigma_flat.mean(dim=1).pow(2) + eps))
+                (
+                    saver_bias.pow(2)
+                    / saver_sigma_flat.mean(dim=1).clamp_min(eps).pow(2)
+                )
                 * (trainer_bias - saver_bias).abs()
             ).sum()
+            regularized_parameter_count += trainer_bias.numel()
 
-        weight_sigma_ratio = trainer_weight_sigma.pow(2) / (saver_weight_sigma.pow(2) + eps)
+        weight_sigma_ratio = trainer_weight_sigma.pow(2) / (safe_saver_weight_sigma.pow(2))
         sigma_weight_reg = (weight_sigma_ratio - torch.log(weight_sigma_ratio + eps)).sum()
         sigma_weight_normal_reg = (
             trainer_weight_sigma.pow(2) - torch.log(trainer_weight_sigma.pow(2) + eps)
@@ -636,6 +642,7 @@ class Net(nn.Module):
             mu_bias_reg,
             l1_mu_weight_reg,
             l1_mu_bias_reg,
+            regularized_parameter_count,
         )
 
     def _apply_regularisation(self, base_loss: torch.Tensor, batch_size: int) -> torch.Tensor:
@@ -657,6 +664,7 @@ class Net(nn.Module):
         mu_bias_reg = torch.zeros_like(base_loss)
         l1_mu_weight_reg = torch.zeros_like(base_loss)
         l1_mu_bias_reg = torch.zeros_like(base_loss)
+        regularized_parameter_count = 0
         eps = 1e-8
 
         for old_layer, new_layer in zip(
@@ -670,6 +678,7 @@ class Net(nn.Module):
                 mu_bias_term,
                 l1_weight_term,
                 l1_bias_term,
+                param_count,
             ) = self._compute_layer_regularisation_terms(old_layer, new_layer, eps)
             sigma_weight_reg = sigma_weight_reg + sigma_term
             sigma_weight_normal_reg = sigma_weight_normal_reg + sigma_normal_term
@@ -677,6 +686,7 @@ class Net(nn.Module):
             mu_bias_reg = mu_bias_reg + mu_bias_term
             l1_mu_weight_reg = l1_mu_weight_reg + l1_weight_term
             l1_mu_bias_reg = l1_mu_bias_reg + l1_bias_term
+            regularized_parameter_count += param_count
 
         current_task_index = int(self.current_task) if self.current_task is not None else 0
         for head_index in range(min(current_task_index, len(self.model.heads))):
@@ -689,6 +699,7 @@ class Net(nn.Module):
                 mu_bias_term,
                 l1_weight_term,
                 l1_bias_term,
+                param_count,
             ) = self._compute_layer_regularisation_terms(old_head, new_head, eps)
             sigma_weight_reg = sigma_weight_reg + sigma_term
             sigma_weight_normal_reg = sigma_weight_normal_reg + sigma_normal_term
@@ -696,6 +707,15 @@ class Net(nn.Module):
             mu_bias_reg = mu_bias_reg + mu_bias_term
             l1_mu_weight_reg = l1_mu_weight_reg + l1_weight_term
             l1_mu_bias_reg = l1_mu_bias_reg + l1_bias_term
+            regularized_parameter_count += param_count
+
+        normaliser = max(1, regularized_parameter_count)
+        sigma_weight_reg = sigma_weight_reg / normaliser
+        sigma_weight_normal_reg = sigma_weight_normal_reg / normaliser
+        mu_weight_reg = mu_weight_reg / normaliser
+        mu_bias_reg = mu_bias_reg / normaliser
+        l1_mu_weight_reg = l1_mu_weight_reg / normaliser
+        l1_mu_bias_reg = l1_mu_bias_reg / normaliser
 
         loss = base_loss
         loss = loss + self.cfg.alpha * (mu_weight_reg + mu_bias_reg) / (2 * batch_size)
