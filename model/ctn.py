@@ -14,7 +14,6 @@ from model.detection_replay import DetectionReplayMixin
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from copy import deepcopy
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 
@@ -231,11 +230,17 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 mem_loss = self.det_loss(mem_det_logits, mem_y.float())
                 det_loss = 0.5 * (det_loss + mem_loss)
             self.zero_grad()
-            grads = torch.autograd.grad(det_loss, self.net.base_param(), create_graph=False)
+            grads = torch.autograd.grad(
+                det_loss,
+                self.net.base_param(),
+                create_graph=False,
+                allow_unused=True,
+            )
             for param, grad in zip(self.net.base_param(), grads):
-                new_param = param.data.clone()
-                new_param = new_param - self.inner_lr * grad
-                param.data.copy_(new_param)
+                if grad is None:
+                    continue
+                with torch.no_grad():
+                    param.add_(grad, alpha=-self.inner_lr)
             return float(det_loss.item()), 0.0
         x = x[signal_mask]
         y = y_cls[signal_mask]
@@ -313,18 +318,15 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             for param, grad in zip(self.net.base_param(), det_grads):
                 if grad is None:
                     continue
-                new_param = param.data.clone()
-                new_param = new_param - self.inner_lr * grad
-                param.data.copy_(new_param)
+                with torch.no_grad():
+                    param.add_(grad, alpha=-self.inner_lr)
         else:
             det_loss_value = torch.zeros((), device=x_det.device, dtype=torch.float32)
 
-        self.zero_grad()   
-        meta_grad_init = [0 for _ in range(len(self.net.state_dict()))]
-        #for _ in range(self.inner_steps):
+        self.zero_grad()
         tr_acc = []
+        context_parameters = list(self.net.context_param())
         for _ in range(self.n_meta):
-            meta_grad = deepcopy(meta_grad_init)
             loss1 = torch.tensor(0.).cuda()
             loss2 = torch.tensor(0.).cuda()
             loss3 = torch.tensor(0.).cuda()
@@ -334,7 +336,17 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             logits = pred[:, offset1:offset2]
             targets = y - offset1
             preds = torch.argmax(logits, dim=1)
-            tr_acc.append(macro_recall(preds, targets))
+            local_noise_label = None
+            if (not getattr(self, "det_enabled", False)) and noise_label is not None:
+                local_noise_label = noise_label - offset1
+            if local_noise_label is None:
+                signal_mask_for_metric = torch.ones_like(targets, dtype=torch.bool)
+            else:
+                signal_mask_for_metric = targets != local_noise_label
+            if signal_mask_for_metric.any():
+                tr_acc.append(macro_recall(preds[signal_mask_for_metric], targets[signal_mask_for_metric]))
+            else:
+                tr_acc.append(0.0)
 
             loss1 = self.bce(logits, targets)
             #tt = t + 1
@@ -357,7 +369,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 grads = torch.autograd.grad(
                     loss,
                     self.net.base_param(),
-                    create_graph=True,
+                    create_graph=False,
                     allow_unused=True,
                 )
                 
@@ -365,9 +377,8 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 for param, grad in zip(self.net.base_param(), grads):
                     if grad is None:
                         continue
-                    new_param = param.data.clone()
-                    new_param = new_param - self.inner_lr * grad
-                    param.data.copy_(new_param)
+                    with torch.no_grad():
+                        param.add_(grad, alpha=-self.inner_lr)
 
             xval, yval, feat, mask, list_t, class_sizes_val = self.memory_sampling(t+1, valid = True)
             pred_ = self.net(xval, list_t)
@@ -376,15 +387,18 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 if size < pred.size(1):
                     pred[row, size:] = -1e9
             outer_loss = self.bce(pred, yval)
-            outer_grad = torch.autograd.grad(outer_loss, self.net.context_param())
-                
-            for g in range(len(outer_grad)):
-                meta_grad[g] += outer_grad[g].detach()
+            outer_grad = torch.autograd.grad(
+                outer_loss,
+                context_parameters,
+                create_graph=False,
+                allow_unused=True,
+            )
 
             self.opt.zero_grad()
-            for c, param in enumerate(self.net.context_param()):
-                param.grad = meta_grad[c] / float(self.n_meta)
-                param.grad.data.clamp_(-1,1)
+            for param, grad in zip(context_parameters, outer_grad):
+                if grad is None:
+                    continue
+                param.grad = grad.detach().clamp(-1, 1)
             self.opt.step()
             #SGD update the CONTROLLER 
             self.zero_grad() 
