@@ -119,9 +119,9 @@ def projectgrad(gradient, memories, margin=0.5, eps = 1e-3, oiter = 0):
     ref_mag = np.dot(memories_np2, memories_np2.transpose())
     dotp = np.dot(gradient_np.reshape(1, -1), memories_np2.transpose())
 
-    if(oiter%100==0):
-        print('similarity : ', similarity.item())
-        print('dotp:', dotp)
+    # if(oiter%100==0):
+    #     print('similarity : ', similarity.item())
+    #     print('dotp:', dotp)
 
     if(dotp[0,0]<0):
         proj = gradient_np.reshape(1, -1) - ((dotp/ ref_mag) * memories_np2)
