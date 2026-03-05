@@ -7,13 +7,14 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
+export PYTHONUNBUFFERED=1
 
 # Algorithms to run: space-separated list of config names (without .yaml), e.g. agem bcl_dual cmaml
 INCLUDED="ewc er_ring eralg4 agem gem bcl_dual cmaml ctn hat"
 # BETA= "lwf packnet rwalk si ucl la-er lamaml smaml"
 
 # Log file: stdout and stderr are appended here and also shown on the terminal
-LOG_DIR="${REPO_ROOT}/logs"
+LOG_DIR="${REPO_ROOT}/logs/full_experiments"
 mkdir -p "$LOG_DIR"
 LOG_FILE="${LOG_DIR}/full_experiments_$(date +%Y%m%d_%H%M%S).log"
 
