@@ -66,13 +66,14 @@ def _get_det_logits(model, xb, t):
 def _false_alarm_rate(preds: torch.Tensor, targets: torch.Tensor) -> float:
     neg_mask = targets == 0
     if not neg_mask.any():
+        print("Warning: No negative samples in _false_alarm_rate calculation, returning 0.0")
         return 0.0
-    neg_targets = targets[neg_mask]
-    neg_preds = preds[neg_mask]
-    fp = (neg_preds == 1).sum().item()
-    tn = (neg_targets == 0).sum().item() - fp
+    neg_targets = targets[neg_mask]             # true noise label
+    neg_preds = preds[neg_mask]                 # predicted noise label
+    fp = (neg_preds == 1).sum().item()          # predicted noise but actually signal
+    tn = (neg_targets == 0).sum().item() - fp   # predicted noise and actually noise
     denom = fp + tn
-    return float(fp / denom) if denom > 0 else 0.0
+    return float(fp / denom) if denom > 0 else -1
 
 def _noise_label_for_task(args, task_idx: int) -> int | None:
     class_counts = getattr(args, "classes_per_task", None)
