@@ -529,7 +529,7 @@ class IncrementalLoader:
                 else:
                     n = min(self._args.samples_per_task, N)
                 # randomly shuffle data
-                print(f"Task {t}: {N} training samples, using {n} samples for training and testing.")
+                # print(f"Task {t}: {N} training samples, using {n} samples for training and testing.")
                 p_tr = np.random.permutation(N)[:n]
                 N = self.test_dataset[t][1].shape[0]
                 p_te = np.random.permutation(N)[:n]

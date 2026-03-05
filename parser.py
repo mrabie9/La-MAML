@@ -141,7 +141,7 @@ def get_parser():
 
    # memory parameters for GEM | AGEM | ICARL 
     parser.add_argument('--n_memories', type=int, default=5120,
-                        help='number of memories per task')
+                        help='total replay-buffer capacity across all tasks')
     parser.add_argument('--memory_strength', default=0, type=float,
                         help='memory strength (meaning depends on memory)')
     parser.add_argument('--steps_per_sample', default=1, type=int,

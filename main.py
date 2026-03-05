@@ -20,7 +20,7 @@ from metrics.metrics import confusion_matrix
 from utils import misc_utils
 from main_multi_task import life_experience_iid
 from dataloaders.iq_data_loader import ensure_iq_two_channel
-from utils.training_metrics import macro_recall
+from utils.training_metrics import macro_f1_including_noise, macro_precision_signal_only, macro_recall
 
 def log_state(enabled, message):
     """Print a timestamped state message when state logging is enabled."""
@@ -66,13 +66,14 @@ def _get_det_logits(model, xb, t):
 def _false_alarm_rate(preds: torch.Tensor, targets: torch.Tensor) -> float:
     neg_mask = targets == 0
     if not neg_mask.any():
+        print("Warning: No negative samples in _false_alarm_rate calculation, returning 0.0")
         return 0.0
-    neg_targets = targets[neg_mask]
-    neg_preds = preds[neg_mask]
-    fp = (neg_preds == 1).sum().item()
-    tn = (neg_targets == 0).sum().item() - fp
+    neg_targets = targets[neg_mask]             # true noise label
+    neg_preds = preds[neg_mask]                 # predicted noise label
+    fp = (neg_preds == 1).sum().item()          # predicted noise but actually signal
+    tn = (neg_targets == 0).sum().item() - fp   # predicted noise and actually noise
     denom = fp + tn
-    return float(fp / denom) if denom > 0 else 0.0
+    return float(fp / denom) if denom > 0 else -1
 
 def _noise_label_for_task(args, task_idx: int, class_counts: List[int] | None = None) -> int | None:
     if class_counts is None:
@@ -414,33 +415,6 @@ def life_experience(model, inc_loader, args):
             prog_bar = tqdm(train_loader, disable=not interactive_terminal)
             for (i, (x, y)) in enumerate(prog_bar):
 
-                if ((ep % args.val_rate) == 0) and ((i % 3125 == 0)):
-                    eval_start = time.time()
-                    log_state(
-                        args.state_logging,
-                        "Task {} Epoch {}/{} Iter {}: running validation".format(
-                            current_task, ep + 1, args.n_epochs, i
-                        ),
-                    )
-                    # print("WARNING: Using training data for validation. This is for debugging purposes only!!")
-                    # val_acc = evaluator(model, train_task_loaders, args)
-                    val_acc = evaluator(model, test_task_loaders, args)
-                    val_acc, val_det_acc, val_det_fa = _split_eval_output(val_acc)
-                    epoch_eval_time += time.time() - eval_start
-                    result_acc_val.append(val_acc)
-                    result_val_a.append(val_acc)
-                    if val_det_acc is not None:
-                        result_val_det_a.append(val_det_acc)
-                    if val_det_fa is not None:
-                        result_val_det_fa.append(val_det_fa)
-                    result_val_t.append(task_info["task"])
-                    if val_det_acc is not None:
-                        print("---- Eval at Epoch {}: cls {} | det_recall {} | det_fa {} ----".format(
-                            ep, val_acc, val_det_acc, val_det_fa
-                        ))
-                    else:
-                        print("---- Eval at Epoch {}: {} ----".format(ep, val_acc))
-
                 v_x = x
                 y_cls, y_det = _split_labels(y)
                 if not torch.is_tensor(y_cls):
@@ -510,10 +484,24 @@ def life_experience(model, inc_loader, args):
                 epoch_losses.append(loss)
                 epoch_train_accs.append(tr_acc)
 
+                # Batch-level precision (signal only) and F1 (all classes incl. noise) for progress bar
+                noise_label = _noise_label_for_task(args, task_info["task"])
+                model.eval()
+                with torch.no_grad():
+                    logits = (
+                        model(v_x, task_info["task"])
+                        if args.model != "anml"
+                        else model(v_x, fast_weights=None)
+                    )
+                    pb = torch.argmax(logits, dim=1)
+                model.train()
+                y_cls_for_metric = y_cls if torch.is_tensor(y_cls) else torch.as_tensor(y_cls)
+                prec = macro_precision_signal_only(pb, y_cls_for_metric, noise_label)
+                f1 = macro_f1_including_noise(pb, y_cls_for_metric)
                 prog_bar.set_description(
-                    "Task: {} | Epoch: {}/{} | Loss: {} | Acc: Task_avg: {} Tr: {} Val: {} ".format(
-                        task_info["task"], ep+1, args.n_epochs, round(loss, 3),
-                        round(sum(result_val_a[-1])/len(result_val_a[-1]), 5), round(tr_acc, 5), round(result_val_a[-1][task_info["task"]], 5)
+                    "Task: {} | Epoch: {}/{} | Loss: {} | Tr: {} | Prec: {} | F1: {} ".format(
+                        task_info["task"], ep + 1, args.n_epochs, round(loss, 3),
+                        round(tr_acc, 5), round(prec, 5), round(f1, 5),
                     )
                 )
 
@@ -523,6 +511,32 @@ def life_experience(model, inc_loader, args):
                 #         round(sum(result_val_a[-1]).item()/len(result_val_a[-1]), 5), round(result_val_a[-1][task_info["task"]].item(), 5)
                 #     )
                 # )
+
+            # Run validation at end of epoch (after last batch) so val scores reflect current task
+            if (ep % args.val_rate) == 0:
+                eval_start = time.time()
+                log_state(
+                    args.state_logging,
+                    "Task {} Epoch {}/{}: running validation (end of epoch)".format(
+                        current_task, ep + 1, args.n_epochs
+                    ),
+                )
+                val_acc = evaluator(model, test_task_loaders, args)
+                val_acc, val_det_acc, val_det_fa = _split_eval_output(val_acc)
+                epoch_eval_time += time.time() - eval_start
+                result_acc_val.append(val_acc)
+                result_val_a.append(val_acc)
+                if val_det_acc is not None:
+                    result_val_det_a.append(val_det_acc)
+                if val_det_fa is not None:
+                    result_val_det_fa.append(val_det_fa)
+                result_val_t.append(task_info["task"])
+                if val_det_acc is not None:
+                    print("---- Eval at Epoch {}: cls {} | det_recall {} | det_fa {} ----".format(
+                        ep, val_acc, val_det_acc, val_det_fa
+                    ))
+                else:
+                    print("---- Eval at Epoch {}: {} ----".format(ep, val_acc))
 
             if not interactive_terminal:
                 epoch_duration = time.time() - epoch_start_time

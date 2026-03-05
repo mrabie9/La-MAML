@@ -2,7 +2,7 @@
 expt_name: eclresm_test
 arch: resnet1d
 loader: task_incremental_loader
-data_path: data/rff/radar/uclresm
+data_path: data/rff/radar/full
 data_scaling: normalize
 dataset: iq
 shuffle_tasks: false
@@ -13,6 +13,8 @@ workers: 0
 validation: 0.5
 class_order: random
 increment: 5
+# Keep small for GPU eval; 100000 causes OOM on large tasks (e.g. 100k samples × (3,1024))
+test_batch_size: 512
 cuda: true
 seed: 0
 log_every: 10
@@ -20,17 +22,22 @@ log_dir: logs/
 tf_dir: ""
 calc_test_accuracy: false
 state_logging: false
-samples_per_task: 10000
-nc_per_task: 6
+samples_per_task: -1
 
 # Optimizer defaults
 glances: 1
-n_epochs: 10
+n_epochs: 1
 batch_size: 128
-test_batch_size: 128
-replay_batch_size: 10
+n_memories: 5120
 memories: 5120
+glances: 1
+replay_batch_size: 64
+temperature: 5.0
+inner_steps: 1
+alpha_init: 0.001
 grad_clip_norm: 5.0
-lr: 0.03
 optimizer: sgd
 bgd_optimizer: sgd
+
+
+

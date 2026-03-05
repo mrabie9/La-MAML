@@ -158,7 +158,12 @@ class Net(DetectionReplayMixin, nn.Module):
         self.opt = optim.SGD(self._ll_params(), self.cfg.lr, momentum=0.9)
         self.det_opt = optim.SGD(self.net.det_head.parameters(), self.cfg.lr, momentum=0.9)
 
-        self.n_memories = self.cfg.n_memories
+        self.n_memories = int(self.cfg.n_memories)
+        self.task_memory_capacities = self._build_task_memory_capacities(
+            self.n_memories,
+            n_tasks,
+        )
+        self.max_task_memories = max(self.task_memory_capacities, default=0)
         self.gpu = self.cfg.cuda
 
         # --- Episodic memory allocation ---
@@ -166,20 +171,22 @@ class Net(DetectionReplayMixin, nn.Module):
             assert n_inputs % 2 == 0, f"n_inputs={n_inputs} must be 2*L for IQ."
             self.seq_len = n_inputs // 2
             # (task, mem, C=2, L)
-            self.memory_data = torch.FloatTensor(n_tasks, self.n_memories, 2, self.seq_len)
+            self.memory_data = torch.FloatTensor(n_tasks, self.max_task_memories, 2, self.seq_len)
         else:
             # (task, mem, F)
-            self.memory_data = torch.FloatTensor(n_tasks, self.n_memories, n_inputs)
+            self.memory_data = torch.FloatTensor(n_tasks, self.max_task_memories, n_inputs)
 
-        self.memory_labs = torch.LongTensor(n_tasks, self.n_memories)
+        self.memory_labs = torch.LongTensor(n_tasks, self.max_task_memories)
         if self.gpu:
             self.memory_data = self.memory_data.cuda()
             self.memory_labs = self.memory_labs.cuda()
 
         # track how many exemplars each task has actually written
         self.task_mem_filled = torch.zeros(n_tasks, dtype=torch.long)
+        self.task_mem_ptr = torch.zeros(n_tasks, dtype=torch.long)
         if self.gpu:
             self.task_mem_filled = self.task_mem_filled.cuda()
+            self.task_mem_ptr = self.task_mem_ptr.cuda()
 
         # --- GEM gradient buffers ---
         self.grad_dims = [p.data.numel() for p in self._ll_params()]
@@ -190,7 +197,6 @@ class Net(DetectionReplayMixin, nn.Module):
         # --- counters / bookkeeping ---
         self.observed_tasks = []
         self.old_task = -1
-        self.mem_cnt = 0
         self.classes_per_task = misc_utils.build_task_class_list(
             n_tasks,
             n_outputs,
@@ -201,6 +207,25 @@ class Net(DetectionReplayMixin, nn.Module):
 
         if self.gpu:
             self.cuda()
+
+    def _build_task_memory_capacities(self, total_memories: int, n_tasks: int) -> list[int]:
+        """Split a total memory budget across tasks.
+
+        Args:
+            total_memories: Total replay-buffer capacity requested by config.
+            n_tasks: Number of tasks in the stream.
+
+        Returns:
+            A list of per-task capacities whose sum equals `total_memories`.
+        """
+        if n_tasks <= 0:
+            return []
+        base_capacity = total_memories // n_tasks
+        remainder_capacity = total_memories % n_tasks
+        return [
+            base_capacity + (1 if task_index < remainder_capacity else 0)
+            for task_index in range(n_tasks)
+        ]
 
     def _ensure_iq_shape(self, x):
         """
@@ -218,6 +243,41 @@ class Net(DetectionReplayMixin, nn.Module):
             return x.view(B, 2, L)
         else:
             raise ValueError(f"Unexpected IQ input shape {tuple(x.shape)}; expected (B, 2, L) or (B, 2L).")
+
+    def _adapt_for_memory(self, x: torch.Tensor) -> torch.Tensor:
+        """Convert IQ inputs to the canonical replay-memory shape.
+
+        Args:
+            x: Input batch in one of the supported IQ layouts.
+
+        Returns:
+            Tensor with shape ``(B, 2, L_memory)`` where ``L_memory`` matches
+            the model replay buffer sequence length.
+        """
+        adapted_x = x
+        if adapted_x.dim() == 4 and adapted_x.size(1) == 3 and adapted_x.size(2) == 2:
+            adapted_x = self.net.model.input_adapter(adapted_x)
+        elif adapted_x.dim() == 3 and adapted_x.size(1) == 3:
+            if adapted_x.size(2) % 2 != 0:
+                raise ValueError(
+                    f"Expected even length for 3-ADC IQ input; got shape {tuple(adapted_x.shape)}."
+                )
+            sequence_length = adapted_x.size(2) // 2
+            adapted_x = adapted_x.view(adapted_x.size(0), 3, 2, sequence_length)
+            adapted_x = self.net.model.input_adapter(adapted_x)
+        else:
+            adapted_x = self._ensure_iq_shape(adapted_x)
+
+        if adapted_x.size(1) != 2:
+            raise ValueError(
+                f"Replay memory expects 2 IQ channels; got shape {tuple(adapted_x.shape)}."
+            )
+        if adapted_x.size(2) > self.seq_len:
+            adapted_x = adapted_x[:, :, : self.seq_len]
+        elif adapted_x.size(2) < self.seq_len:
+            pad_amount = self.seq_len - adapted_x.size(2)
+            adapted_x = torch.nn.functional.pad(adapted_x, (0, pad_amount))
+        return adapted_x
 
     def _ll_params(self):
         for name, param in self.net.named_parameters():
@@ -290,10 +350,8 @@ class Net(DetectionReplayMixin, nn.Module):
 
         # track tasks
         if t != self.old_task:
-            self.observed_tasks.append(t)
-            if self.old_task >= 0:
-                self.task_mem_filled[self.old_task] = min(self.mem_cnt, self.n_memories)
-            self.mem_cnt = 0  # start writing new task from the beginning
+            if t not in self.observed_tasks:
+                self.observed_tasks.append(t)
             self.old_task = t
 
         tr_acc = []
@@ -301,26 +359,25 @@ class Net(DetectionReplayMixin, nn.Module):
         for pass_itr in range(self.glances):
             # push current batch once per batch (not each glance)
             if pass_itr == 0:
-                bsz = y.data.size(0)
-                endcnt = min(self.mem_cnt + bsz, self.n_memories)
-                effbsz = endcnt - self.mem_cnt
-
-                # copy x into memory with matching shape
-                if effbsz > 0:
-                    if self.is_iq:
-                        # shapes: mem slice (effbsz, 2, L) <- x[:effbsz]
-                        self.memory_data[t, self.mem_cnt:endcnt].copy_(x.data[:effbsz])
-                    else:
-                        self.memory_data[t, self.mem_cnt:endcnt].copy_(x.data[:effbsz])
+                task_capacity = int(self.task_memory_capacities[t])
+                if task_capacity > 0:
+                    write_pointer = int(self.task_mem_ptr[t].item())
+                    bsz = y.data.size(0)
+                    endcnt = min(write_pointer + bsz, task_capacity)
+                    effbsz = endcnt - write_pointer
+                    # Store adapter output (e.g. 3-ADC -> 2-channel) so replay matches forward
+                    mem_x = self._input_for_replay(x.data[:effbsz])
+                    self.memory_data[t, write_pointer:endcnt].copy_(mem_x)
 
                     if bsz == 1:
-                        self.memory_labs[t, self.mem_cnt] = y.data[0]
+                        self.memory_labs[t, write_pointer] = y.data[0]
                     else:
-                        self.memory_labs[t, self.mem_cnt:endcnt].copy_(y.data[:effbsz])
+                        self.memory_labs[t, write_pointer:endcnt].copy_(y.data[:effbsz])
 
-                    self.mem_cnt += effbsz
-                    if self.mem_cnt == self.n_memories:
-                        self.mem_cnt = 0
+                    if effbsz > 0:
+                        filled_before_update = int(self.task_mem_filled[t].item())
+                        self.task_mem_filled[t] = min(task_capacity, filled_before_update + effbsz)
+                    self.task_mem_ptr[t] = 0 if endcnt == task_capacity else endcnt
 
             # gradients on past tasks (replay)
             if len(self.observed_tasks) > 1:

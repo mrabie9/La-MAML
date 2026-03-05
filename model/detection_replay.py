@@ -59,10 +59,7 @@ class DetectionReplayMixin:
         if not torch.is_tensor(y_cls):
             y_cls = torch.as_tensor(y_cls)
         if y_det is None:
-            if use_detector_arch is False:
-                # No detector head: include all samples (including noise) in cls loss.
-                y_det = torch.ones_like(y_cls, dtype=torch.float)
-            elif noise_label is not None:
+            if noise_label is not None and use_detector_arch is False:
                 y_det = (y_cls != noise_label).long()
             else:
                 y_det = torch.ones_like(y_cls, dtype=torch.float)
@@ -70,6 +67,40 @@ class DetectionReplayMixin:
             y_det = torch.as_tensor(y_det)
         # print(f"Unpacked labels: y_cls shape {y_cls.shape}, y_det shape {y_det.shape}")
         return y_cls, y_det
+
+    def _input_for_replay(self, x: torch.Tensor) -> torch.Tensor:
+        """Return the input in the form to store in replay buffers: (B, 2, 512) or (B, 1024).
+
+        Matches the backbone's canonical shape after _prepare_input and input adapter:
+        - 2D (B, 1024): view to (B, 2, 512).
+        - 3D (B, 3, 1024): view to (B, 3, 2, 512), then adapter -> (B, 2, 512).
+        - 4D (B, 3, 2, L): ensure L=512 (take :512 if needed), then adapter -> (B, 2, 512).
+        """
+        with torch.no_grad():
+            x = x.detach()
+            if x.dim() == 2:
+                batch, features = x.shape
+                if features % 2 == 0 and features % 3 != 0:
+                    x = x.view(batch, 2, features // 2)
+                return x
+            if x.dim() == 3 and x.size(1) == 3:
+                # (B, 3, 1024) -> (B, 3, 2, 512) then adapter
+                batch, _, L = x.shape
+                if L % 2 != 0:
+                    return x
+                x = x.view(batch, 3, 2, L // 2)
+                # fall through to 4D adapter path
+            if x.dim() == 4 and x.size(1) == 3 and x.size(2) == 2:
+                adapter = getattr(self, "net", None) and (
+                    getattr(self.net, "input_adapter", None)
+                    or getattr(getattr(self.net, "model", None), "input_adapter", None)
+                )
+                if adapter is not None and not isinstance(adapter, nn.Identity):
+                    L = x.size(3)
+                    if L > 512:
+                        x = x[:, :, :, :512].contiguous()
+                    return adapter(x)
+            return x
 
     def _init_det_memory(self, sample_x: torch.Tensor) -> None:
         if not getattr(self, "det_enabled", True):
@@ -90,6 +121,7 @@ class DetectionReplayMixin:
             return
         if self.det_memories <= 0:
             return
+        x = self._input_for_replay(x)
         if self._det_mem_x is None or self._det_mem_y is None:
             self._init_det_memory(x)
         x_cpu = x.detach().cpu()

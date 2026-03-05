@@ -1,5 +1,4 @@
 # Model-specific overrides for gem.
 model: gem
-memory_strength: 0.5
-lr: 0.001
-n_memories: 5120
+lr: 0.03
+memory_strength: 1.0

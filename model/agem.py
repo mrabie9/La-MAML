@@ -356,8 +356,8 @@ class Net(DetectionReplayMixin, nn.Module):
                 #     self.mem_cnt = 0
 
                 if effbsz > 0:
-                    # mem_x = self._adapt_for_memory(x.data[:effbsz])
-                    self.memory_data[t, self.mem_cnt:endcnt].copy_(x.data[:effbsz])
+                    mem_x = self._input_for_replay(x.data[:effbsz])
+                    self.memory_data[t, self.mem_cnt:endcnt].copy_(mem_x)
 
                     if bsz == 1:
                         self.memory_labs[t, self.mem_cnt] = y.data[0]

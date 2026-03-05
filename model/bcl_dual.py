@@ -84,21 +84,39 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         else:
             self.nc_per_task = n_outputs
-        # setup memories
+        # setup memories: n_memories = total buffer size, split across tasks
         self.current_task = 0
         self.fisher = {}
         self.optpar = {}
-        self.n_memories = self.cfg.n_memories
-        self.mem_cnt = 0       
-        
-        self.n_val = int(self.n_memories * 0.2)
-        self.n_memories -= self.n_val
-        
-        self.memx = torch.FloatTensor(n_tasks, self.n_memories, 2, n_inputs//2)
-        self.valx = torch.FloatTensor(n_tasks, self.n_val, 2, n_inputs//2)
-        self.memy = torch.LongTensor(n_tasks, self.n_memories)
-        self.mem_feat = torch.FloatTensor(n_tasks, self.n_memories, self.nc_per_task).fill_(0)
-        self.valy = torch.LongTensor(n_tasks, self.n_val)
+        total_memories = int(self.cfg.n_memories)
+        self.task_total_capacities = self._build_task_memory_capacities(
+            total_memories,
+            n_tasks,
+        )
+        val_fraction = 0.2
+        self.task_val_capacities = [
+            max(0, int(cap * val_fraction)) for cap in self.task_total_capacities
+        ]
+        self.task_replay_capacities = [
+            cap - val_cap
+            for cap, val_cap in zip(
+                self.task_total_capacities, self.task_val_capacities
+            )
+        ]
+        self.max_task_replay_capacity = max(self.task_replay_capacities, default=0)
+        self.max_task_val_capacity = max(self.task_val_capacities, default=0)
+
+        self.memx = torch.FloatTensor(
+            n_tasks, self.max_task_replay_capacity, 2, n_inputs // 2
+        )
+        self.valx = torch.FloatTensor(
+            n_tasks, self.max_task_val_capacity, 2, n_inputs // 2
+        )
+        self.memy = torch.LongTensor(n_tasks, self.max_task_replay_capacity)
+        self.mem_feat = torch.FloatTensor(
+            n_tasks, self.max_task_replay_capacity, self.nc_per_task
+        ).fill_(0)
+        self.valy = torch.LongTensor(n_tasks, self.max_task_val_capacity)
         self.mem = {}
         if self.cfg.cuda:
             self.memy = self.memy.cuda().fill_(0)
@@ -107,11 +125,22 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             self.valx = self.valx.cuda().fill_(0)
             self.valy = self.valy.cuda().fill_(0)
 
-        self.mem_cnt = 0
-        self.val_cnt = 0
+        self.task_mem_ptr = torch.zeros(
+            n_tasks, dtype=torch.long, device=self.memx.device
+        )
+        self.task_mem_filled = torch.zeros(
+            n_tasks, dtype=torch.long, device=self.memx.device
+        )
+        self.task_val_ptr = torch.zeros(
+            n_tasks, dtype=torch.long, device=self.valx.device
+        )
+        self.task_val_filled = torch.zeros(
+            n_tasks, dtype=torch.long, device=self.valx.device
+        )
         self.bsz = args.batch_size
         self.valid_id = []
         self.n_outputs = n_outputs
+        self.n_memories = total_memories  # total buffer size (for logging/config)
 
         self.mse = nn.MSELoss()
         # Use batchmean to match KL definition and remove PyTorch warning
@@ -120,27 +149,50 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.sz = int(self.cfg.replay_batch_size)
         self.glances = self.cfg.inner_steps
         self.n_meta = self.cfg.n_meta
-        self.count = 0
-        self.val_count = 0
-        self.adapt_ = False #args.adapt
+        self.adapt_ = False  # args.adapt
         self.adapt_lr = self.cfg.lr
         self.models={}
 
-    def on_epoch_end(self):  
+        # print(f"task_val_capacities: {self.task_val_capacities}")
+        # print(f"task_replay_capacities: {self.task_replay_capacities}")
+        # print(f"max_task_replay_capacity: {self.max_task_replay_capacity}")
+        # print(f"max_task_val_capacity: {self.max_task_val_capacity}")
+        # print(f"task_total_capacities: {self.task_total_capacities}")
+
+
+    def on_epoch_end(self):
         pass
-        
+
+    def _build_task_memory_capacities(
+        self, total_memories: int, n_tasks: int
+    ) -> list[int]:
+        """Split total replay budget across tasks so sum(capacities) == total_memories."""
+        if n_tasks <= 0:
+            return []
+        base = total_memories // n_tasks
+        remainder = total_memories % n_tasks
+        return [base + (1 if i < remainder else 0) for i in range(n_tasks)]
+
     def adapt(self):
-        print('Adapting')
+        print("Adapting")
         for t in range(self.n_tasks):
             model = deepcopy(self.net)
             if t > self.current_task:
                 self.models[t] = model
                 continue
-            xx = self.memx[t]
-            yy = self.memy[t]
-            opt = torch.optim.SGD(model.parameters(), self.adapt_lr, momentum=0.9)
+            filled = int(self.task_mem_filled[t].item())
+            if filled <= 0:
+                self.models[t] = model
+                continue
+            xx = self.memx[t, :filled]
+            yy = self.memy[t, :filled]
+            opt = torch.optim.SGD(
+                model.parameters(), self.adapt_lr, momentum=0.9
+            )
             train = torch.utils.data.TensorDataset(xx, yy)
-            loader = DataLoader(train, batch_size = self.bsz, shuffle = True, num_workers =0)
+            loader = DataLoader(
+                train, batch_size=self.bsz, shuffle=True, num_workers=0
+            )
             for _ in range(self.glances):
                 model.zero_grad()
                 pred = model.forward(xx)
@@ -172,47 +224,66 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 output[:, int(offset2):self.n_outputs].data.fill_(-10e10)
         return output
     
-    def memory_sampling(self,t, valid = False):
-        '''  
-        if t == self.current_task:
-            val_idx = self.val_count
-            mem_idx = self.count
-        else:
-            val_idx = self.n_val + 1
-            mem_idx = self.count + 1
-        t + = 1
-        '''
-        if valid:
-            mem_x = self.valx[:t,:]
-            mem_y = self.valy[:t,:]
-            mem_feat = self.mem_feat[:t,:]
-            sz = int(min(t*self.n_val, self.sz))
-            idx = np.random.choice(t* self.n_val,sz, False)
-            self.valid_id = idx.tolist()
-            t_idx = torch.from_numpy(idx // self.n_val)
-            s_idx = torch.from_numpy( idx % self.n_val)
-        else:
-            mem_x = self.memx[:t,:]
-            mem_y = self.memy[:t,:]
-            mem_feat = self.mem_feat[:t,:]
-            sz = int(min(self.n_memories, self.sz))
-            idx = np.random.choice(t* self.n_memories,sz, False)
-            idx = [x for x in idx if x not in self.valid_id]
-            idx = np.array(idx)
-            t_idx = torch.from_numpy(idx // self.n_memories)
-            s_idx = torch.from_numpy( idx % self.n_memories)
+    def memory_sampling(self, t: int, valid: bool = False):
+        """Sample from validation (valid=True) or replay (valid=False) buffers.
 
-        offsets = torch.tensor([self.compute_offsets(i) for i in t_idx]).cuda()
+        Uses per-task filled counts so only valid slots are sampled.
+        """
+        n_tasks = t
+        if valid:
+            filled = [
+                int(self.task_val_filled[i].item()) for i in range(n_tasks)
+            ]
+            mem_x = self.valx[:n_tasks]
+            mem_y = self.valy[:n_tasks]
+            mem_feat = self.mem_feat[:n_tasks]
+        else:
+            filled = [
+                int(self.task_mem_filled[i].item()) for i in range(n_tasks)
+            ]
+            mem_x = self.memx[:n_tasks]
+            mem_y = self.memy[:n_tasks]
+            mem_feat = self.mem_feat[:n_tasks]
+
+        total_filled = sum(filled)
+        if total_filled == 0:
+            return None
+
+        # Build flat index -> (task_idx, slot_idx)
+        flat_to_task_slot = []
+        for task_idx in range(n_tasks):
+            for slot in range(filled[task_idx]):
+                flat_to_task_slot.append((task_idx, slot))
+        flat_to_task_slot = np.array(flat_to_task_slot)
+
+        sz = min(total_filled, self.sz)
+        chosen = np.random.choice(total_filled, size=sz, replace=False)
+        t_idx_np = flat_to_task_slot[chosen, 0]
+        s_idx_np = flat_to_task_slot[chosen, 1]
+        if valid:
+            self.valid_id = chosen.tolist()
+
+        device = mem_x.device
+        t_idx = torch.from_numpy(t_idx_np).to(device)
+        s_idx = torch.from_numpy(s_idx_np).to(device)
+
+        offsets = torch.tensor(
+            [self.compute_offsets(int(i)) for i in t_idx.tolist()],
+            device=mem_x.device,
+            dtype=torch.long,
+        )
         xx = mem_x[t_idx, s_idx]
-        yy = mem_y[t_idx, s_idx] - offsets[:,0]
+        yy = mem_y[t_idx, s_idx] - offsets[:, 0]
         feat = mem_feat[t_idx, s_idx]
-        mask = torch.zeros(xx.size(0), self.nc_per_task)
+        mask = torch.zeros(xx.size(0), self.nc_per_task, device=xx.device)
         for j in range(mask.size(0)):
             cls_size = offsets[j][1] - offsets[j][0]
-            mask[j, :cls_size] = torch.arange(offsets[j][0], offsets[j][1])
-        mask = mask.long().cuda()
+            mask[j, :cls_size] = torch.arange(
+                offsets[j][0], offsets[j][1], device=xx.device
+            )
+        mask = mask.long()
         sizes = (offsets[:, 1] - offsets[:, 0]).long()
-        return xx,yy, feat , mask, t_idx.tolist(), sizes
+        return xx, yy, feat, mask, t_idx.tolist(), sizes
     def observe(self, x, y, t):
         class_counts = getattr(self, "classes_per_task", None)
         noise_label = None
@@ -226,7 +297,11 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         )
         if self.current_task is None:
             self.current_task = t
-        if self.current_task == t and self.mem_cnt == 0 and y_det is not None:
+        if (
+            self.current_task == t
+            and int(self.task_mem_filled[t].item()) == 0
+            and y_det is not None
+        ):
             det_mean = float(y_det.float().mean().item())
             if det_mean >= 0.99:
                 print("[WARN][BCL_Dual] y_det mean ~1.0; detection may be missing negatives.")
@@ -235,6 +310,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         x_det = x
         signal_mask = (y_det == 1) & (y_cls >= 0)
         if not signal_mask.any():
+            print("[WARN][BCL_Dual] No signal mask; skipping detection.")
             if not getattr(self, "det_enabled", True):
                 return 0.0, 0.0
             det_logits, _ = self.net.forward_heads(x_det)
@@ -251,66 +327,99 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             return float(det_loss.item()), 0.0
         x = x[signal_mask]
         y = y_cls[signal_mask]
+        x_for_storage = self._input_for_replay(x)
         if t != self.current_task:
             tt = self.current_task
-            offset1, offset2 = self.compute_offsets(tt)
-            out = self.forward(self.memx[tt],tt, True)
-            cls_size = int(offset2 - offset1)
-            feat = self.mem_feat[tt]
-            feat.zero_()
-            feat[:, :cls_size] = F.softmax(out[:, offset1:offset2] / self.temp, dim=1).data.clone()
+            previous_filled = int(self.task_mem_filled[tt].item())
+            if previous_filled > 0:
+                offset1, offset2 = self.compute_offsets(tt)
+                out = self.forward(
+                    self.memx[tt, :previous_filled], tt, True
+                )
+                cls_size = int(offset2 - offset1)
+                feat = self.mem_feat[tt, :previous_filled]
+                feat.zero_()
+                feat[:, :cls_size] = (
+                    F.softmax(out[:, offset1:offset2] / self.temp, dim=1)
+                    .data.clone()
+                )
             self.current_task = t
-            self.mem_cnt = 0
-            self.val_cnt = 0
-            self.val_count = 0
-            self.memy[t] = 0
-            self.count=0
-        
-        # evalidation set
-        valx, valy = x[0], y[0]
-        x, y = x[1:], y[1:]
-        if self.val_cnt == 0 and self.val_count == 0:
-            self.valx[t,:].copy_(valx)
-            self.valy[t,:].copy_(valy)
-        else:
-            x = torch.cat([x, self.valx[t,self.val_cnt].unsqueeze_(0)])
-            y = torch.cat([y, self.valy[t,self.val_cnt].unsqueeze_(0)])
-            self.valx[t, self.val_cnt].copy_(valx)
-            self.valy[t, self.val_cnt].copy_(valy)
-        self.val_cnt += 1
-        self.val_count += 1
-        if self.val_count == self.n_val:
-            self.val_count -= 1
-        if self.val_cnt == self.n_val:
-            self.val_cnt = 0
 
-        # memory set
+        # Validation set (ring buffer per task); store adapted input in val buffer
+        n_val_taken = 0
+        n_rotated_in = 0  # old val sample cat'd back into batch; not in x_for_storage
+        task_val_capacity = int(self.task_val_capacities[t])
+        if task_val_capacity > 0 and x.size(0) > 0:
+            n_val_taken = 1
+            valx, valy = x[0], y[0]
+            x, y = x[1:], y[1:]
+            # Use adapted (canonical) form so channel count matches val buffer (e.g. 2-ch)
+            x = x_for_storage[1 : 1 + x.size(0)]
+            val_write = int(self.task_val_ptr[t].item())
+            # Only rotate in when we're overwriting a slot that has valid data (buffer full)
+            val_filled = int(self.task_val_filled[t].item())
+            if val_filled >= task_val_capacity:
+                n_rotated_in = 1
+                x = torch.cat([x, self.valx[t, val_write].unsqueeze(0)])
+                y = torch.cat([y, self.valy[t, val_write].unsqueeze(0)])
+            self.valx[t, val_write].copy_(x_for_storage[0])
+            self.valy[t, val_write].copy_(valy)
+            self.task_val_filled[t] = min(
+                task_val_capacity,
+                int(self.task_val_filled[t].item()) + 1,
+            )
+            self.task_val_ptr[t] = (
+                0 if (val_write + 1) == task_val_capacity else (val_write + 1)
+            )
+            if x.size(0) == 0:
+                x = x_for_storage[0].unsqueeze(0)
+                y = valy.unsqueeze(0)
+
+        # Replay memory (ring buffer per task); store adapted input
+        # Only the "new" samples go to replay; rotated-in val sample is already in val buffer
         self.net.train()
-        bsz = y.data.size(0)
-        endcnt = min(self.mem_cnt + bsz, self.n_memories)
-        effbsz = endcnt - self.mem_cnt        
-        if self.count == 0:
-            self.memx[t,:].copy_(x.data[0])
-            self.memy[t,:].copy_(y.data[0])
-        self.memx[t, self.mem_cnt: endcnt].copy_(x.data[: effbsz])
-        self.memy[t, self.mem_cnt: endcnt].copy_(y.data[: effbsz])
-        self.mem_cnt += effbsz
-        self.count += effbsz
-        if self.count >= self.n_memories:
-            self.count -= effbsz
-        if self.mem_cnt >= self.n_memories:
-            self.mem_cnt = 0
+        task_replay_capacity = int(self.task_replay_capacities[t])
+        if task_replay_capacity > 0 and y.data.size(0) > 0:
+            replay_write = int(self.task_mem_ptr[t].item())
+            bsz = y.data.size(0)
+            n_new = bsz - n_rotated_in  # number of samples to write (exclude rotated-in)
+            endcnt = min(replay_write + n_new, task_replay_capacity)
+            effbsz = endcnt - replay_write
+            if effbsz > 0:
+                replay_start = n_val_taken
+                self.memx[t, replay_write:endcnt].copy_(
+                    x_for_storage[replay_start : replay_start + effbsz]
+                )
+                self.memy[t, replay_write:endcnt].copy_(y.data[:effbsz])
+                self.task_mem_filled[t] = min(
+                    task_replay_capacity,
+                    int(self.task_mem_filled[t].item()) + effbsz,
+                )
+                self.task_mem_ptr[t] = (
+                    0 if endcnt == task_replay_capacity else endcnt
+                )
 
         self.zero_grad()   
         tt = t + 1
         tr_acc = []
+        n_classes_current = None
         for _ in range(self.n_meta):
             weights_before = deepcopy(self.net.state_dict())
             offset1, offset2 = self.compute_offsets(t)
+            n_classes_current = offset2 - offset1
             for i in range(self.glances):
-                pred = self.forward(x,t)
+                pred = self.forward(x, t)
                 logits = pred[:, offset1:offset2]
                 targets = y - offset1
+                invalid = (targets < 0) | (targets >= n_classes_current)
+                if invalid.any():
+                    bad = y[invalid].detach().cpu().unique().tolist()
+                    raise RuntimeError(
+                        f"[BCL_Dual] Classification targets out of range for task {t}: "
+                        f"offset1={offset1}, offset2={offset2}, n_classes={n_classes_current}, "
+                        f"y in [{y.min().item()}, {y.max().item()}], bad global labels: {bad}. "
+                        f"Ensure loader uses global labels for this task."
+                    )
                 preds = torch.argmax(logits, dim=1)
                 tr_acc.append(macro_recall(preds, targets))
                 loss1 = self.bce(logits, targets)
@@ -323,29 +432,45 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                     mem_loss = self.det_loss(mem_det_logits, mem_y.float())
                     det_loss = 0.5 * (det_loss + mem_loss)
                 if t > 0:
-                    xx, yy, feat, mask, list_t, class_sizes = self.memory_sampling(t)
-                    pred_ = self.net(xx)
-                    pred = torch.gather(pred_, 1, mask)
-                    for row, size in enumerate(class_sizes):
-                        if size < pred.size(1):
-                            pred[row, size:] = -1e9
-                    loss2 = self.bce(pred, yy)
-                    loss3 = self.reg * self.kl(F.log_softmax(pred / self.temp, dim = 1), feat)
-                    loss = (self.cls_lambda * loss1
+                    sampled = self.memory_sampling(t)
+                    if sampled is not None:
+                        xx, yy, feat, mask, list_t, class_sizes = sampled
+                        pred_ = self.net(xx)
+                        pred = torch.gather(pred_, 1, mask)
+                        for row, size in enumerate(class_sizes):
+                            if size < pred.size(1):
+                                pred[row, size:] = -1e9
+                        loss2 = self.bce(pred, yy)
+                        loss3 = self.reg * self.kl(
+                            F.log_softmax(pred / self.temp, dim=1), feat
+                        )
+                        loss = (
+                            self.cls_lambda * loss1
                             + self.det_lambda * det_loss
-                            + loss2 + loss3)
+                            + loss2
+                            + loss3
+                        )
+                    else:
+                        loss = self.cls_lambda * loss1 + self.det_lambda * det_loss
                 else:
                     loss = self.cls_lambda * loss1 + self.det_lambda * det_loss
                 loss.backward()
                 self.inner_opt.step()
-            xval, yval, _, mask_val, list_t, class_sizes_val = self.memory_sampling(tt, valid = True)  
-            pred_ = self.net(xval)
-            pred = torch.gather(pred_, 1, mask_val)
-            for row, size in enumerate(class_sizes_val):
-                if size < pred.size(1):
-                    pred[row, size:] = -1e9
-            outer_loss = self.bce(pred, yval)
-            outer_loss.backward()                    
+            sampled_validation = self.memory_sampling(tt, valid=True)
+            if sampled_validation is not None:
+                xval, yval, _, mask_val, list_t, class_sizes_val = sampled_validation
+                pred_ = self.net(xval)
+                pred = torch.gather(pred_, 1, mask_val)
+                for row, size in enumerate(class_sizes_val):
+                    if size < pred.size(1):
+                        pred[row, size:] = -1e9
+                outer_loss = self.bce(pred, yval)
+            else:
+                pred = self.forward(x, t)
+                outer_loss = self.bce(
+                    pred[:, offset1:offset2], targets
+                )
+            outer_loss.backward()
             self.inner_opt.step()
             self.zero_grad()
             weights_after = self.net.state_dict()

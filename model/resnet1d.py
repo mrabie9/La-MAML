@@ -53,9 +53,9 @@ class BasicBlock1D(nn.Module):
 
 
 class AdcIqAdapter(nn.Module):
-    """Reduce 3 ADC channels into 2 IQ channels.
+    """Reduce 3 (or more) channels into 2 IQ channels.
 
-    Expects input of shape (B, 3, 2, L) and returns (B, 2, L).
+    Accepts either (B, 3, 2, L) [4D] or (B, 3, L) [3D] and returns (B, 2, L).
     """
 
     def __init__(self) -> None:
@@ -63,11 +63,14 @@ class AdcIqAdapter(nn.Module):
         self.weight = nn.Parameter(torch.empty(2, 3))
         self.bias = nn.Parameter(torch.zeros(2))
         nn.init.xavier_uniform_(self.weight)
+        self.proj_3ch = nn.Conv1d(3, 2, kernel_size=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.dim() == 3 and x.size(1) == 3:
+            return self.proj_3ch(x)
         if x.dim() != 4 or x.size(1) != 3 or x.size(2) != 2:
             raise ValueError(
-                f"ADC adapter expects (B, 3, 2, L); got shape {tuple(x.shape)}."
+                f"ADC adapter expects (B, 3, 2, L) or (B, 3, L); got shape {tuple(x.shape)}."
             )
         # (B, 3, 2, L) -> (B, 2, 3, L)
         x = x.permute(0, 2, 1, 3)
@@ -132,11 +135,13 @@ class _ResNet1D(nn.Module):
         else:
             if x.dim() == 4:
                 if not isinstance(self.input_adapter, nn.Identity):
-                    # print("Using input adapter for 4D input.", x.shape)
                     x = self.input_adapter(x)
-                    # print("Adapter output shape:", x.shape)
                 else:
                     raise ValueError("Received 4D input but no adapter is configured.")
+            elif x.dim() == 3 and x.size(1) != 2 and not isinstance(
+                self.input_adapter, nn.Identity
+            ):
+                x = self.input_adapter(x)
 
             x = self.bn1(self.conv1(x))
             x = self.relu(x)
