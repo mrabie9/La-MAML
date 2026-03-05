@@ -2,7 +2,7 @@
 expt_name: eclresm_test
 arch: resnet1d
 loader: task_incremental_loader
-data_path: data/rff/radar/uclresm
+data_path: data/rff/radar/full
 data_scaling: normalize
 dataset: iq
 shuffle_tasks: false
@@ -26,11 +26,18 @@ nc_per_task: 6
 
 # Optimizer defaults
 glances: 1
-n_epochs: 60
+n_epochs: 1
 batch_size: 128
-replay_batch_size: 10
+n_memories: 5120
 memories: 5120
+glances: 1
+replay_batch_size: 64
+temperature: 5.0
+inner_steps: 1
+alpha_init: 0.001
 grad_clip_norm: 5.0
-lr: 0.03
 optimizer: sgd
 bgd_optimizer: sgd
+
+
+

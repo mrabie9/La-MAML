@@ -1,10 +1,9 @@
 # Model-specific overrides for ctn.
 model: ctn
-memory_strength: 10
-temperature: 5.0
-task_emb: 64
 lr: 0.03
-ctx_lr: 0.05
-n_memories: 5120
+ctx_lr: 0.003
+task_emb: 64
+memory_strength: 10
+
 validation: 0.3
-replay_batch_size: 20
+noise_ce_weight: 0.2

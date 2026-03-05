@@ -1,9 +1,10 @@
 # Model-specific overrides for ucl.
 model: ucl_bresnet
-lr: 0.01
+lr: 0.0003
 lr_rho: 0.01
 beta: 0.0002
-alpha: 0.3
+alpha: 0.1
 ratio: 0.125
+
 eval_samples: 20
 split: true

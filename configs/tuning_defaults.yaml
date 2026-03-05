@@ -10,7 +10,6 @@ shuffle_tasks: false
 classes_per_it: 6
 iterations: 5000
 workers: 0
-validation: 0.3
 class_order: random
 increment: 5
 test_batch_size: 128
@@ -32,31 +31,23 @@ temperature: 5
 n_epochs: 5
 optimizer: sgd
 batch_size: 256
-# replay_batch_size: 64
-# memories: 1024
-# grad_clip_norm: 5.0
-# lr: 0.03
+replay_batch_size: 64
+clipgrad: 5.0
+grad_clip_norm: 5.0
 
 # La-MAML parameters
 opt_lr: 0.1                          # learning rate for LRs
 opt_wt: 0.1                          # learning rate for weights
-alpha_init: 0.1                    # initialization for the LRs
-learn_lr: false                      # model should update the LRs during learning
-sync_update: false                   # the LRs and weights should be updated synchronously
-cifar_batches: 3                     # Number of batches in inner trajectory
-use_old_task_memory: false           # Use only old task samples for replay buffer data
-second_order: true                  # use second order MAML updates
+alpha_init: 0.001                    # initialization for the LRs
 
 # Memory parameters
+memories: 5120
 n_memories: 5120                        # number of memories per task
-memory_strength: 1.0                 # memory strength (meaning depends on memory)
-steps_per_sample: 1                  # training steps per batch
 
 # Parameters specific to MER
 gamma: 1.0                           # gamma learning rate parameter
 beta: 0.1                            # beta learning rate parameter
 s: 1.0                               # current example learning rate multiplier (s)
-batches_per_example: 1.0             # the number of batch per incoming example
 
 # Parameters specific to Meta-BGD
 bgd_optimizer: bgd                   # Optimizer (choices: [adam, adagrad, bgd, sgd])
@@ -67,16 +58,7 @@ mean_eta: 50.                        # Eta for mean step (default 1)
 fisher_gamma: 0.95                   # Fisher gamma
 
 # Parameters specific to ANML
-rln: 7
-update_steps: 10
-meta_lr: 0.001 
-update_lr: 0.1 
-# steps: 20000
-
-# Parameters specific to CTN
-beta: 0.05                        # Beta parameter for CTN
-temperature: 5
-alpha_init: 0.1
-task_emb: 64
-
-# Parameters specific to BCL
+# rln: 7
+# update_steps: 10
+# meta_lr: 0.001 
+# update_lr: 0.1 
