@@ -1,12 +1,16 @@
 #!/bin/bash
-# Run main.py with base config and each model config in configs/models/,
-# excluding: anml, iid2, meralg1, meta-bgd, icarl.
+# Run main.py with base config and each model config listed in INCLUDED.
+# Edit INCLUDED below to choose which algorithms (config names in configs/models/) to run.
 # Stdout, stderr (including tracebacks), and run metadata are logged.
 
 # set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
+
+# Algorithms to run: space-separated list of config names (without .yaml), e.g. agem bcl_dual cmaml
+INCLUDED="ewc er_ring eralg4 agem gem bcl_dual cmaml ctn hat"
+# BETA= "lwf packnet rwalk si ucl la-er lamaml smaml"
 
 # Log file: stdout and stderr are appended here and also shown on the terminal
 LOG_DIR="${REPO_ROOT}/logs"
@@ -20,6 +24,7 @@ log_msg() {
 log_msg "=== full_experiments.sh started ==="
 log_msg "REPO_ROOT=$REPO_ROOT"
 log_msg "LOG_FILE=$LOG_FILE"
+log_msg "INCLUDED=$INCLUDED"
 
 # Activate environment (see AGENTS.md)
 if [ -d "la-maml_env" ]; then
@@ -27,7 +32,6 @@ if [ -d "la-maml_env" ]; then
     log_msg "Activated la-maml_env"
 fi
 
-EXCLUDED="anml iid2 meralg1 meta-bgd icarl"
 BASE_CONFIG="configs/base.yaml"
 MODELS_DIR="configs/models"
 
@@ -35,15 +39,15 @@ for model_yaml in "$MODELS_DIR"/*.yaml; do
     [ -f "$model_yaml" ] || continue
     basename="${model_yaml##*/}"
     name="${basename%.yaml}"
-    skip=
-    for ex in $EXCLUDED; do
-        if [ "$name" = "$ex" ]; then
-            skip=1
+    run=
+    for inc in $INCLUDED; do
+        if [ "$name" = "$inc" ]; then
+            run=1
             break
         fi
     done
-    if [ -n "$skip" ]; then
-        log_msg "Skipping $name (excluded)"
+    if [ -z "$run" ]; then
+        log_msg "Skipping $name (not in INCLUDED)"
         continue
     fi
     log_msg "--- Running: base + $name ---"
