@@ -366,8 +366,10 @@ class Net(DetectionReplayMixin, nn.Module):
 
                     self.mem_cnt += effbsz
                     if self.mem_cnt == self.n_memories:
+                        self.task_mem_filled[t] = self.n_memories  # full before wrap
                         self.mem_cnt = 0
-                self.task_mem_filled[t] = min(self.n_memories, self.mem_cnt)
+                    else:
+                        self.task_mem_filled[t] = self.mem_cnt
 
             # compute gradient on previous tasks
             if len(self.observed_tasks) > 1:
