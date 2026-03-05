@@ -227,7 +227,9 @@ class Net(DetectionReplayMixin, nn.Module):
 
         x = x[signal_mask]
         y = y_cls[signal_mask]
-        xi = x.data.cpu().numpy()
+        # Store and replay canonical (post-adapter) shape so buffer has uniform (2, 512) across tasks
+        x_for_storage = self._input_for_replay(x)
+        xi = x_for_storage.data.cpu().numpy()
         yi = y.data.cpu().numpy()
 
         if t != self.current_task:

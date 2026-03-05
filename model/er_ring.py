@@ -85,23 +85,29 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.current_task = 0
         self.fisher = {}
         self.optpar = {}
-        self.n_memories = self.cfg.n_memories
-        self.mem_cnt = 0       
-        
-        self.memx = torch.FloatTensor(n_tasks, self.n_memories, 2, n_inputs//2).fill_(0)
-        self.memy = torch.LongTensor(n_tasks, self.n_memories).fill_(-1)
-        self.mem_feat = torch.FloatTensor(n_tasks, self.n_memories, self.nc_per_task).fill_(0)
+        self.n_memories = int(self.cfg.n_memories)
+        self.task_memory_capacities = self._build_task_memory_capacities(
+            self.n_memories,
+            n_tasks,
+        )
+        self.max_task_memories = max(self.task_memory_capacities, default=0)
+
+        # Replay buffer stores canonical shape (2, 512) from _input_for_replay (2-channel or adapter output).
+        seq_len = n_inputs // 2
+        self.memx = torch.FloatTensor(n_tasks, self.max_task_memories, 2, seq_len).fill_(0)
+        self.memy = torch.LongTensor(n_tasks, self.max_task_memories).fill_(-1)
+        self.mem_feat = torch.FloatTensor(n_tasks, self.max_task_memories, self.nc_per_task).fill_(0)
         self.mem = {}
         if self.cfg.cuda:
             self.memx = self.memx.cuda()
             self.memy = self.memy.cuda()
             self.mem_feat = self.mem_feat.cuda()
-        self.mem_cnt = 0
-        self.n_memories = self.cfg.n_memories or self.n_memories
         self.bsz = self.cfg.batch_size
         self.task_mem_filled = torch.zeros(n_tasks, dtype=torch.long)
+        self.task_mem_ptr = torch.zeros(n_tasks, dtype=torch.long)
         if self.cfg.cuda:
             self.task_mem_filled = self.task_mem_filled.cuda()
+            self.task_mem_ptr = self.task_mem_ptr.cuda()
         
         self.n_outputs = n_outputs
 
@@ -113,6 +119,25 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.inner_steps = self.cfg.inner_steps
     def on_epoch_end(self):  
         pass
+
+    def _build_task_memory_capacities(self, total_memories: int, n_tasks: int) -> list[int]:
+        """Split a total replay budget across tasks.
+
+        Args:
+            total_memories: Total replay-buffer capacity.
+            n_tasks: Number of tasks in the stream.
+
+        Returns:
+            Per-task capacities whose sum equals `total_memories`.
+        """
+        if n_tasks <= 0:
+            return []
+        base_capacity = total_memories // n_tasks
+        remainder_capacity = total_memories % n_tasks
+        return [
+            base_capacity + (1 if task_index < remainder_capacity else 0)
+            for task_index in range(n_tasks)
+        ]
 
     def compute_offsets(self, task):
         if self.is_task_incremental:
@@ -207,15 +232,19 @@ class Net(DetectionReplayMixin, torch.nn.Module):
 
         x = x[signal_mask]
         y = y_cls[signal_mask]
-        bsz = y.data.size(0)
-        endcnt = min(self.mem_cnt + bsz, self.n_memories)
-        effbsz = endcnt - self.mem_cnt
-        self.memx[t, self.mem_cnt: endcnt].copy_(x.data[: effbsz])
-        self.memy[t, self.mem_cnt: endcnt].copy_(y.data[: effbsz])
-        self.mem_cnt += effbsz
-        self.task_mem_filled[t] = min(self.n_memories, self.mem_cnt)
-        if self.mem_cnt == self.n_memories:
-            self.mem_cnt = 0
+        task_capacity = int(self.task_memory_capacities[t])
+        if task_capacity > 0:
+            write_pointer = int(self.task_mem_ptr[t].item())
+            bsz = y.data.size(0)
+            endcnt = min(write_pointer + bsz, task_capacity)
+            effbsz = endcnt - write_pointer
+            if effbsz > 0:
+                x_for_storage = self._input_for_replay(x)
+                self.memx[t, write_pointer:endcnt].copy_(x_for_storage.data[:effbsz])
+                self.memy[t, write_pointer:endcnt].copy_(y.data[:effbsz])
+                filled_before_update = int(self.task_mem_filled[t].item())
+                self.task_mem_filled[t] = min(task_capacity, filled_before_update + effbsz)
+            self.task_mem_ptr[t] = 0 if endcnt == task_capacity else endcnt
 
         if t != self.current_task:
             tt = self.current_task
@@ -249,17 +278,17 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 sampled = self.memory_sampling(t)
                 if sampled is not None:
                     xx, yy, target, mask, class_sizes = sampled
-                pred_ = self.net(xx)
-                pred = torch.gather(pred_, 1, mask)
-                for row, size in enumerate(class_sizes):
-                    if size < pred.size(1):
-                        pred[row, size:] = -1e9
-                if yy.min() < 0 or yy.max() >= pred.size(1):
-                    raise ValueError(
-                        f"Replay target out of range: min={int(yy.min())}, max={int(yy.max())}, "
-                        f"class_count={pred.size(1)}, sizes={class_sizes.tolist()}"
-                    )
-                loss2 += self.bce(pred, yy)
+                    pred_ = self.net(xx)
+                    pred = torch.gather(pred_, 1, mask)
+                    for row, size in enumerate(class_sizes):
+                        if size < pred.size(1):
+                            pred[row, size:] = -1e9
+                    if yy.min() < 0 or yy.max() >= pred.size(1):
+                        raise ValueError(
+                            f"Replay target out of range: min={int(yy.min())}, max={int(yy.max())}, "
+                            f"class_count={pred.size(1)}, sizes={class_sizes.tolist()}"
+                        )
+                    loss2 += self.bce(pred, yy)
                 
             loss = loss1 + loss2
             loss.backward()

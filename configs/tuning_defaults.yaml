@@ -42,7 +42,7 @@ alpha_init: 0.001                    # initialization for the LRs
 
 # Memory parameters
 memories: 5120
-n_memories: 5120                        # number of memories per task
+n_memories: 5120                        # total replay-buffer capacity across all tasks
 
 # Parameters specific to MER
 gamma: 1.0                           # gamma learning rate parameter
