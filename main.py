@@ -74,21 +74,64 @@ def _false_alarm_rate(preds: torch.Tensor, targets: torch.Tensor) -> float:
     denom = fp + tn
     return float(fp / denom) if denom > 0 else 0.0
 
-def _noise_label_for_task(args, task_idx: int) -> int | None:
-    class_counts = getattr(args, "classes_per_task", None)
+def _noise_label_for_task(args, task_idx: int, class_counts: List[int] | None = None) -> int | None:
+    if class_counts is None:
+        class_counts = getattr(args, "classes_per_task", None)
     if class_counts is None:
         return None
     _, offset2 = misc_utils.compute_offsets(task_idx, class_counts)
     return offset2 - 1
 
+
+def _labels_to_numpy(labels: object) -> np.ndarray:
+    """Return labels as a NumPy array regardless of source container type."""
+    if torch.is_tensor(labels):
+        return labels.detach().cpu().numpy()
+    return np.asarray(labels)
+
+
+def _extract_task_labels(task: object) -> np.ndarray | None:
+    """Extract raw labels for a task from tuple tasks or loader-backed datasets."""
+    if isinstance(task, (list, tuple)) and len(task) == 3:
+        return _labels_to_numpy(task[2])
+
+    dataset = getattr(task, "dataset", None)
+    if dataset is None:
+        return None
+
+    for attribute_name in ("targets", "labels", "y", "ys"):
+        if hasattr(dataset, attribute_name):
+            return _labels_to_numpy(getattr(dataset, attribute_name))
+
+    dataset_tensors = getattr(dataset, "tensors", None)
+    if isinstance(dataset_tensors, (list, tuple)) and len(dataset_tensors) >= 2:
+        return _labels_to_numpy(dataset_tensors[1])
+
+    return None
+
+
+def _infer_class_counts_from_tasks(tasks: List[object]) -> List[int] | None:
+    """Infer per-task class counts directly from task labels."""
+    inferred_counts: List[int] = []
+    for task in tasks:
+        task_labels = _extract_task_labels(task)
+        if task_labels is None:
+            return None
+        y_cls, _ = _split_labels(task_labels)
+        y_cls_array = np.asarray(y_cls).reshape(-1)
+        inferred_counts.append(int(np.unique(y_cls_array).size))
+    return inferred_counts
+
+
 def eval_class_tasks(model, tasks, args):
 
     model.eval()
     result = []
+    class_counts = _infer_class_counts_from_tasks(tasks)
     for t, task_loader in enumerate(tasks):
         correct = 0.0
         total = 0.0
-        noise_label = _noise_label_for_task(args, t)
+        noise_label = _noise_label_for_task(args, t, class_counts)
 
         for (i, (x, y)) in enumerate(task_loader):
             y_cls, y_det = _split_labels(y)
@@ -121,7 +164,9 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
     device = torch.device('cuda' if getattr(args, 'cuda', False) and torch.cuda.is_available() else 'cpu')
     results = []
     is_iq = getattr(args, 'dataset', '').lower() == 'iq'
-    class_counts = getattr(args, "classes_per_task", None)
+    class_counts = _infer_class_counts_from_tasks(tasks)
+    if class_counts is None:
+        class_counts = getattr(args, "classes_per_task", None)
     batch_size = getattr(args, 'eval_batch_size', 256)
 
     if specific_task is not None:
@@ -150,7 +195,7 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
             recalls = []
             det_recalls = []
             det_false_alarms = []
-            noise_label = _noise_label_for_task(args, t)
+            noise_label = _noise_label_for_task(args, t, class_counts)
             # print("Evaluating Task {} with dataloader, noise label: {}".format(t, noise_label))
             for batch in task:
                 if isinstance(batch, (list, tuple)) and len(batch) == 3:
@@ -172,17 +217,32 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
                 pb = torch.argmax(logits, dim=1).cpu()
                 yb_cls_cpu = yb_cls.detach().cpu()
                 yb_det_cpu = yb_det.detach().cpu() if yb_det is not None else None
+                yb_cls_for_metrics = yb_cls_cpu
+                noise_label_for_metrics = noise_label
+                if 'ucl' in args.model:
+                    offset1, _ = misc_utils.compute_offsets(
+                        t, class_counts if class_counts is not None else args.nc_per_task
+                    )
+                    if yb_det_cpu is not None:
+                        yb_cls_for_metrics = yb_cls_cpu.clone()
+                        cls_target_mask = yb_det_cpu == 1
+                        if cls_target_mask.any():
+                            yb_cls_for_metrics[cls_target_mask] = yb_cls_for_metrics[cls_target_mask] - offset1
+                    else:
+                        yb_cls_for_metrics = yb_cls_cpu - offset1
+                        if noise_label_for_metrics is not None:
+                            noise_label_for_metrics = noise_label_for_metrics - offset1
                 if yb_det_cpu is not None:
                     cls_mask = yb_det_cpu == 1
                     if cls_mask.any():
-                        recalls.append(macro_recall(pb[cls_mask], yb_cls_cpu[cls_mask]))
-                elif noise_label is not None:
-                    cls_mask = yb_cls_cpu != noise_label
+                        recalls.append(macro_recall(pb[cls_mask], yb_cls_for_metrics[cls_mask]))
+                elif noise_label_for_metrics is not None:
+                    cls_mask = yb_cls_for_metrics != noise_label_for_metrics
                     # print("Task {}: noise_label {}, cls_mask sum {}, yb_cls unique {}, pb unique {}".format(t, noise_label, cls_mask.sum().item(), yb_cls_cpu.unique().tolist(), pb.unique().tolist()))
                     if cls_mask.any():
-                        recalls.append(macro_recall(pb[cls_mask], yb_cls_cpu[cls_mask]))
+                        recalls.append(macro_recall(pb[cls_mask], yb_cls_for_metrics[cls_mask]))
                 else:
-                    recalls.append(macro_recall(pb, yb_cls_cpu))
+                    recalls.append(macro_recall(pb, yb_cls_for_metrics))
 
                 if yb_det_cpu is not None:
                     det_logits = _get_det_logits(model, xb, t)
@@ -190,12 +250,9 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
                         det_pred = (det_logits >= 0).long().cpu()
                         det_recalls.append(macro_recall(det_pred, yb_det_cpu))
                         det_false_alarms.append(_false_alarm_rate(det_pred, yb_det_cpu))
-                elif noise_label is not None:
-                    yb_unique = torch.unique(yb_cls_cpu)
-                    pred_unique = torch.unique(pb)
-                    noise_present = (yb_unique == noise_label).any().item()
-                    det_targets = (yb_cls_cpu != noise_label).long()
-                    det_pred = (pb != noise_label).long()
+                elif noise_label_for_metrics is not None:
+                    det_targets = (yb_cls_for_metrics != noise_label_for_metrics).long()
+                    det_pred = (pb != noise_label_for_metrics).long()
                     # print(
                     #     "DEBUG det: noise_label={}, present={}, yb_unique={}, pb_unique={}, "
                     #     "pos_target_rate={:.3f}, pos_pred_rate={:.3f}".format(
@@ -228,20 +285,8 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
         if y_det_raw is not None:
             y_det = torch.as_tensor(y_det_raw, dtype=torch.long)
         # if y_det is None: print("Warning: y_det is None for Task {}, defaulting to all ones (all samples treated as CLS).".format(t))
-        noise_label = _noise_label_for_task(args, t)
-        if 'ucl' in args.model:
-            offset1, offset2 = misc_utils.compute_offsets(
-                t, class_counts if class_counts is not None else args.nc_per_task
-            )
-            if y_det is not None:
-                y = y.clone()
-                mask = y_det == 1
-                if mask.any():
-                    y[mask] = y[mask] - offset1
-            else:
-                y = y - offset1  # make labels start from 0 for each task
-                if noise_label is not None:
-                    noise_label = noise_label - offset1
+        noise_label = _noise_label_for_task(args, t, class_counts)
+       
 
         if isinstance(x_data, torch.Tensor):
             x_data_cpu = x_data.detach().cpu()
@@ -307,26 +352,6 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
                 det_pred = (pb != noise_label).long()
                 det_recalls.append(macro_recall(det_pred.cpu(), det_targets.cpu()))
                 det_false_alarms.append(_false_alarm_rate(det_pred, det_targets))
-            if eval_epistemic and 'ucl' in args.model:
-                p_mean, H_pred, EH, MI = model.mc_epistemic_classification(xb, t, S=30)
-                epistemic_uncertainties.append(MI.mean().cpu().item())
-                eh.append(EH.mean().cpu().item())
-                h_preds.append(H_pred.mean().cpu().item())
-        
-        if eval_epistemic and 'ucl' in args.model:
-            print("---- Epistemic Uncertainty Analysis for Task {} ----".format(i))
-            print("H_pred min: {}, max: {}, mean: {}".format(min(h_preds), max(h_preds), sum(h_preds)/len(h_preds)))
-            print("EH min: {}, max: {}, mean: {}".format(min(eh), max(eh), sum(eh)/len(eh)))
-            print("EU min: {}, max: {}, mean: {}".format(min(epistemic_uncertainties), max(epistemic_uncertainties), sum(epistemic_uncertainties)/len(epistemic_uncertainties)))
-            average_eh = 100* sum(eh)/len(eh)
-            current_nc = misc_utils.task_class_count(class_counts, t) if class_counts is not None else args.nc_per_task
-            norm_avg_eh = average_eh / np.log(current_nc)
-            average_h_pred = 100* sum(h_preds)/len(h_preds)
-            norm_avg_h_pred = average_h_pred / np.log(current_nc)
-            average_eu = 100* sum(epistemic_uncertainties)/len(epistemic_uncertainties)
-            norm_avg_eu = average_eu / np.log(current_nc)
-            print("Task: {} | Epistemic: {} | Aleatoric: {} | Total: {} | F_eu | {}".format(
-                i, round(norm_avg_eu, 2), round(norm_avg_eh, 2), round(norm_avg_h_pred, 2), round(norm_avg_eu/norm_avg_h_pred, 2)))
 
         results.append(sum(recalls) / len(recalls) if recalls else 0.0)
         if det_recalls:
@@ -355,7 +380,6 @@ def life_experience(model, inc_loader, args):
     time_start = time.time()
     train_task_loaders = []
     test_task_loaders = []
-    # print("WARNING: Using training data for validation. This is for debugging purposes only!!")
     evaluator = eval_tasks
     if args.loader == "class_incremental_loader":
         evaluator = eval_class_tasks
@@ -398,6 +422,8 @@ def life_experience(model, inc_loader, args):
                             current_task, ep + 1, args.n_epochs, i
                         ),
                     )
+                    # print("WARNING: Using training data for validation. This is for debugging purposes only!!")
+                    # val_acc = evaluator(model, train_task_loaders, args)
                     val_acc = evaluator(model, test_task_loaders, args)
                     val_acc, val_det_acc, val_det_fa = _split_eval_output(val_acc)
                     epoch_eval_time += time.time() - eval_start
@@ -435,7 +461,7 @@ def life_experience(model, inc_loader, args):
                 # model.eval()
                 # with torch.no_grad():
                 #     debug_logits = (
-                #         model(v_x, task_info["task"])
+                #         model.forward_training(v_x, task_info["task"])
                 #         if args.model != "anml"
                 #         else model(v_x, fast_weights=None)
                 #     )
