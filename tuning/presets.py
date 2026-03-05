@@ -545,11 +545,12 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                         "values":[0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
                 # "lr_rho": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-4, "fallback": 1e-2,
                 #         "values": [0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001]},
+                "alpha": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.05, "fallback": 0.3,
+                          "values":[0.01,0.03,0.1,0.3,1.0,3.0]},
                 "beta": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 1e-5, "fallback": 2e-4,
                         "values":[0.0001,0.0002,0.001,0.002,0.01,0.02]},#[0.1,0.5,5,10,50,100]},
 #                 "det_lambda": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.1, "fallback": 1.0,
 #                             "values": [0.1,0.5,1.0,2.0,5.0]},
-                # "alpha": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.05, "fallback": 0.3},
                 # "ratio": {"kind": "float", "factors": (0.5, 1.0, 2.0), "min": 0.05, "fallback": 0.125},
             }
         ),

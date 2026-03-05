@@ -7,7 +7,7 @@ python3 tuning/Alpha/tune_icarl.py --config configs/models/icarl.yaml --hierarch
 python3 tuning/Alpha/tune_ucl.py --config configs/models/ucl.yaml --hierarchical --dry-run
 # python3 tuning/Alpha/tune_lamaml.py --config configs/models/lamaml.yaml --hierarchical --dry-run
 
-python3 tuning/Alpha/tune_bcl.py --config configs/models/bcl.yaml --hierarchical --dry-run
+python3 tuning/Alpha/tune_bcl.py --config configs/models/bcl_dual.yaml --hierarchical --dry-run
 python3 tuning/Alpha/tune_ewc.py --config configs/models/ewc.yaml --hierarchical --dry-run
 python3 tuning/Alpha/tune_si.py --config configs/models/si.yaml --hierarchical --dry-run
 python3 tuning/Alpha/tune_lwf.py --config configs/models/lwf.yaml --hierarchical --dry-run
