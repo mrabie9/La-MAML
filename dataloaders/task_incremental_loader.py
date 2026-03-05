@@ -210,6 +210,7 @@ class IncrementalLoader:
             self.test_tasks.append(self._get_loader(self.test_dataset[i][1], self.test_dataset[i][2], mode="test"))
 
     def get_tasks(self, dataset_type='test'):
+        """Return a list of DataLoaders, one per task, for use by eval_tasks."""
         if dataset_type == 'test':
             dataset = self.test_dataset
             perm_index = 1
@@ -223,7 +224,12 @@ class IncrementalLoader:
             raise NotImplementedError("Unknown mode {}.".format(dataset_type))
 
         if self._args.samples_per_task <= 0:
-            return dataset
+            if dataset_type in ('test', 'val'):
+                return list(self.test_tasks)
+            loaders = []
+            for task in dataset:
+                loaders.append(self._get_loader(task[1], task[2], mode="train" if dataset_type == 'train' else "test"))
+            return loaders
 
         trimmed = []
         for task_id, task in enumerate(dataset):
@@ -233,10 +239,13 @@ class IncrementalLoader:
             else:
                 perm = perms if dataset_type == 'train' else None
             if perm is None:
-                trimmed.append(task)
+                trimmed.append((task[0], task[1], task[2]))
                 continue
             trimmed.append((task[0], task[1][perm], task[2][perm]))
-        return trimmed
+        return [
+            self._get_loader(t[1], t[2], mode="train" if dataset_type == 'train' else "test")
+            for t in trimmed
+        ]
 
     def get_dataset_info(self):
         def _max_label_value(labels):

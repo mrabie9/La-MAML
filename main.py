@@ -19,7 +19,6 @@ import parser as file_parser
 from metrics.metrics import confusion_matrix
 from utils import misc_utils
 from main_multi_task import life_experience_iid
-from dataloaders.iq_data_loader import ensure_iq_two_channel
 from utils.training_metrics import macro_f1_including_noise, macro_precision_signal_only, macro_recall
 
 def log_state(enabled, message):
@@ -164,194 +163,78 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
     model.eval()
     device = torch.device('cuda' if getattr(args, 'cuda', False) and torch.cuda.is_available() else 'cpu')
     results = []
-    is_iq = getattr(args, 'dataset', '').lower() == 'iq'
     class_counts = _infer_class_counts_from_tasks(tasks)
     if class_counts is None:
         class_counts = getattr(args, "classes_per_task", None)
-    batch_size = getattr(args, 'eval_batch_size', 256)
 
     if specific_task is not None:
         tasks = [tasks[specific_task]]
-        batch_size = 256
 
-    def _task_is_dataset(task: object) -> bool:
-        """Return True when the task is a dataset tuple with array-like samples.
-
-        Args:
-            task: Task payload produced by the incremental loader.
-
-        Returns:
-            True if the task is a 3-tuple of (meta, x, y).
-        """
-        if not isinstance(task, (list, tuple)) or len(task) != 3:
-            return False
-        return isinstance(task[1], np.ndarray) or torch.is_tensor(task[1])
-    
     det_results = []
     det_fa_results = []
     det_metrics_active = False
     for i, task in enumerate(tasks):
         t = i
-        if not _task_is_dataset(task):
-            recalls = []
-            det_recalls = []
-            det_false_alarms = []
-            noise_label = _noise_label_for_task(args, t, class_counts)
-            # print("Evaluating Task {} with dataloader, noise label: {}".format(t, noise_label))
-            for batch in task:
-                if isinstance(batch, (list, tuple)) and len(batch) == 3:
-                    xb, yb, _ = batch
-                else:
-                    xb, yb = batch
-                xb = xb.to(device)
-                if getattr(args, "arch", "").lower() == "linear":
-                    xb = xb.view(xb.size(0), -1)
-                yb_cls, yb_det = _split_labels(yb)
-                if not torch.is_tensor(yb_cls):
-                    yb_cls = torch.as_tensor(yb_cls)
-                if not getattr(args, "use_detector_arch", False):
-                    yb_det = None
-                elif yb_det is not None and not torch.is_tensor(yb_det):
-                    yb_det = torch.as_tensor(yb_det)
-
-                logits = model(xb, t) if args.model != "anml" else model(xb, fast_weights=None)
-                pb = torch.argmax(logits, dim=1).cpu()
-                yb_cls_cpu = yb_cls.detach().cpu()
-                yb_det_cpu = yb_det.detach().cpu() if yb_det is not None else None
-                yb_cls_for_metrics = yb_cls_cpu
-                noise_label_for_metrics = noise_label
-                if 'ucl' in args.model:
-                    offset1, _ = misc_utils.compute_offsets(
-                        t, class_counts if class_counts is not None else args.nc_per_task
-                    )
-                    if yb_det_cpu is not None:
-                        yb_cls_for_metrics = yb_cls_cpu.clone()
-                        cls_target_mask = yb_det_cpu == 1
-                        if cls_target_mask.any():
-                            yb_cls_for_metrics[cls_target_mask] = yb_cls_for_metrics[cls_target_mask] - offset1
-                    else:
-                        yb_cls_for_metrics = yb_cls_cpu - offset1
-                        if noise_label_for_metrics is not None:
-                            noise_label_for_metrics = noise_label_for_metrics - offset1
-                if yb_det_cpu is not None:
-                    cls_mask = yb_det_cpu == 1
-                    if cls_mask.any():
-                        recalls.append(macro_recall(pb[cls_mask], yb_cls_for_metrics[cls_mask]))
-                elif noise_label_for_metrics is not None:
-                    cls_mask = yb_cls_for_metrics != noise_label_for_metrics
-                    # print("Task {}: noise_label {}, cls_mask sum {}, yb_cls unique {}, pb unique {}".format(t, noise_label, cls_mask.sum().item(), yb_cls_cpu.unique().tolist(), pb.unique().tolist()))
-                    if cls_mask.any():
-                        recalls.append(macro_recall(pb[cls_mask], yb_cls_for_metrics[cls_mask]))
-                else:
-                    recalls.append(macro_recall(pb, yb_cls_for_metrics))
-
-                if yb_det_cpu is not None:
-                    det_logits = _get_det_logits(model, xb, t)
-                    if det_logits is not None:
-                        det_pred = (det_logits >= 0).long().cpu()
-                        det_recalls.append(macro_recall(det_pred, yb_det_cpu))
-                        det_false_alarms.append(_false_alarm_rate(det_pred, yb_det_cpu))
-                elif noise_label_for_metrics is not None:
-                    det_targets = (yb_cls_for_metrics != noise_label_for_metrics).long()
-                    det_pred = (pb != noise_label_for_metrics).long()
-                    # print(
-                    #     "DEBUG det: noise_label={}, present={}, yb_unique={}, pb_unique={}, "
-                    #     "pos_target_rate={:.3f}, pos_pred_rate={:.3f}".format(
-                    #         noise_label,
-                    #         noise_present,
-                    #         yb_unique.tolist(),
-                    #         pred_unique.tolist(),
-                    #         det_targets.float().mean().item(),
-                    #         det_pred.float().mean().item(),
-                    #     )
-                    # )
-                    det_recalls.append(macro_recall(det_pred, det_targets))
-                    det_false_alarms.append(_false_alarm_rate(det_pred, det_targets))
-
-            results.append(sum(recalls) / len(recalls) if recalls else 0.0)
-            if det_recalls:
-                det_results.append(sum(det_recalls) / len(det_recalls))
-                det_fa_results.append(sum(det_false_alarms) / len(det_false_alarms))
-                det_metrics_active = True
-            else:
-                det_results.append(0.0)
-                det_fa_results.append(0.0)
-            continue
-        x_data = task[1]
-        y_cls_raw, y_det_raw = _split_labels(task[2])
-        y = torch.as_tensor(y_cls_raw, dtype=torch.long)
-        y_det = None
-        if not getattr(args, "use_detector_arch", False):
-            y_det_raw = None
-        if y_det_raw is not None:
-            y_det = torch.as_tensor(y_det_raw, dtype=torch.long)
-        # if y_det is None: print("Warning: y_det is None for Task {}, defaulting to all ones (all samples treated as CLS).".format(t))
-        noise_label = _noise_label_for_task(args, t, class_counts)
-       
-
-        if isinstance(x_data, torch.Tensor):
-            x_data_cpu = x_data.detach().cpu()
-            if is_iq:
-                # print("Original test shape:", x_data_cpu.shape)
-                x_np = ensure_iq_two_channel(x_data_cpu.numpy())
-                x = torch.from_numpy(x_np)
-                # print("Converted IQ data to 2-channel format, new shape:", x.shape)
-            else:
-                x = x_data_cpu.float()
-        else:
-            if is_iq:
-                # print("Original test shape:", x_data.shape)
-                x_np = ensure_iq_two_channel(x_data)
-                x = torch.from_numpy(x_np)
-                # print("Converted IQ data to 2-channel format, new shape:", x.shape)
-            else:
-                x = torch.from_numpy(np.asarray(x_data, dtype=np.float32))
-
-        x = x.float()
-
         recalls = []
         det_recalls = []
         det_false_alarms = []
-        N = x.size(0)
-        # print(f"Evaluating Task {t}: {N} samples, batch size {batch_size}, noise label {noise_label}")
-        epistemic_uncertainties = []
-        eh = []
-        h_preds = []
-        for b_from in range(0, N, batch_size):
-            b_to = min(b_from + batch_size, N)
-            xb = x[b_from:b_to].to(device)
-            if getattr(args, 'arch', '').lower() == 'linear':
-                xb = xb.view(xb.size(0), -1)
-                
-            yb = y[b_from:b_to].to(device)
-            yb_det = None
-            if y_det is not None:
-                yb_det = y_det[b_from:b_to].to(device)
-
-            logits = model(xb, t) if args.model != 'anml' else model(xb, fast_weights=None)
-            pb = torch.argmax(logits, dim=1)
-            # correct += (pb == yb).sum().item()
-            if yb_det is not None:
-                cls_mask = yb_det == 1
-                if cls_mask.any():
-                    recalls.append(macro_recall(pb[cls_mask].cpu(), yb[cls_mask].cpu()))
-            elif noise_label is not None:
-                cls_mask = yb != noise_label
-                if cls_mask.any():
-                    recalls.append(macro_recall(pb[cls_mask].cpu(), yb[cls_mask].cpu()))
+        noise_label = _noise_label_for_task(args, t, class_counts)
+        for batch in task:
+            if isinstance(batch, (list, tuple)) and len(batch) == 3:
+                xb, yb, _ = batch
             else:
-                recalls.append(macro_recall(pb.cpu(), yb.cpu()))
+                xb, yb = batch
+            xb = xb.to(device)
+            if getattr(args, "arch", "").lower() == "linear":
+                xb = xb.view(xb.size(0), -1)
+            yb_cls, yb_det = _split_labels(yb)
+            if not torch.is_tensor(yb_cls):
+                yb_cls = torch.as_tensor(yb_cls)
+            if not getattr(args, "use_detector_arch", False):
+                yb_det = None
+            elif yb_det is not None and not torch.is_tensor(yb_det):
+                yb_det = torch.as_tensor(yb_det)
 
-            if yb_det is not None:
+            logits = model(xb, t) if args.model != "anml" else model(xb, fast_weights=None)
+            pb = torch.argmax(logits, dim=1).cpu()
+            yb_cls_cpu = yb_cls.detach().cpu()
+            yb_det_cpu = yb_det.detach().cpu() if yb_det is not None else None
+            yb_cls_for_metrics = yb_cls_cpu
+            noise_label_for_metrics = noise_label
+            if 'ucl' in args.model:
+                offset1, _ = misc_utils.compute_offsets(
+                    t, class_counts if class_counts is not None else args.nc_per_task
+                )
+                if yb_det_cpu is not None:
+                    yb_cls_for_metrics = yb_cls_cpu.clone()
+                    cls_target_mask = yb_det_cpu == 1
+                    if cls_target_mask.any():
+                        yb_cls_for_metrics[cls_target_mask] = yb_cls_for_metrics[cls_target_mask] - offset1
+                else:
+                    yb_cls_for_metrics = yb_cls_cpu - offset1
+                    if noise_label_for_metrics is not None:
+                        noise_label_for_metrics = noise_label_for_metrics - offset1
+            if yb_det_cpu is not None:
+                cls_mask = yb_det_cpu == 1
+                if cls_mask.any():
+                    recalls.append(macro_recall(pb[cls_mask], yb_cls_for_metrics[cls_mask]))
+            elif noise_label_for_metrics is not None:
+                cls_mask = yb_cls_for_metrics != noise_label_for_metrics
+                if cls_mask.any():
+                    recalls.append(macro_recall(pb[cls_mask], yb_cls_for_metrics[cls_mask]))
+            else:
+                recalls.append(macro_recall(pb, yb_cls_for_metrics))
+
+            if yb_det_cpu is not None:
                 det_logits = _get_det_logits(model, xb, t)
                 if det_logits is not None:
-                    det_pred = (det_logits >= 0).long()
-                    det_recalls.append(macro_recall(det_pred.cpu(), yb_det.cpu()))
-                    det_false_alarms.append(_false_alarm_rate(det_pred, yb_det))
-            elif noise_label is not None:
-                det_targets = (yb != noise_label).long()
-                det_pred = (pb != noise_label).long()
-                det_recalls.append(macro_recall(det_pred.cpu(), det_targets.cpu()))
+                    det_pred = (det_logits >= 0).long().cpu()
+                    det_recalls.append(macro_recall(det_pred, yb_det_cpu))
+                    det_false_alarms.append(_false_alarm_rate(det_pred, yb_det_cpu))
+            elif noise_label_for_metrics is not None:
+                det_targets = (yb_cls_for_metrics != noise_label_for_metrics).long()
+                det_pred = (pb != noise_label_for_metrics).long()
+                det_recalls.append(macro_recall(det_pred, det_targets))
                 det_false_alarms.append(_false_alarm_rate(det_pred, det_targets))
 
         results.append(sum(recalls) / len(recalls) if recalls else 0.0)
