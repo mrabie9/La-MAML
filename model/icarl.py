@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import torch
+import torch.nn.functional as F
 
 import numpy as np
 import random
@@ -30,7 +31,7 @@ if not sys.warnoptions:
 class IcarlConfig:
     lr: float = 1e-3
     memory_strength: float = 0.5
-    n_memories: int = 0
+    n_memories: int = 5120
     glances: int = 1
 
     grad_clip_norm: Optional[float] = 100.0
@@ -70,8 +71,12 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.reg = self.cfg.memory_strength
         self.n_memories = self.cfg.n_memories
         self.num_exemplars = 0
-        self.n_feat = n_outputs
+        # Classification operates in logit space (n_classes) but iCaRL's
+        # nearest-mean classifier should use penultimate-layer features.
         self.n_classes = n_outputs
+        # Initialise n_feat conservatively; will be overwritten once the
+        # backbone is constructed and exposes its feature dimension.
+        self.n_feat = n_outputs
         self.samples_per_task_resolver = getattr(args, "get_samples_per_task", None)
         self.samples_per_task = self.cfg.samples_per_task #* (1.0 - self.cfg.validation)
         if self.samples_per_task_resolver is None:
@@ -89,6 +94,8 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             raise ValueError(f"Unsupported arch {self.cfg.arch}; only resnet1d is available now.")
         self.net = ResNet1D(n_outputs, args)
         self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
+        # Use the backbone's penultimate feature size for iCaRL embeddings.
+        self.n_feat = getattr(self.net, "feature_dim", self.n_classes)
 
         # setup optimizer
         self.opt = torch.optim.SGD(self._ll_params(), lr=self.cfg.lr, momentum=0.9)
@@ -153,12 +160,31 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         elif self.cfg.dataset == 'cifar100':
             x = x.view(-1, 3, 32, 32)
         elif 'iq' in self.cfg.dataset.lower():
-            # print(x.shape)
-            x = ensure_iq_two_channel(x.detach().cpu().numpy())
-            x = torch.from_numpy(x).float().cuda()
-            # print(x.shape)
+            x_np = ensure_iq_two_channel(x.detach().cpu().numpy())
+            x = torch.from_numpy(x_np).float()
+            if self.gpu:
+                x = x.cuda()
 
         return self.net.forward(x)
+
+    def feature_forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass that returns penultimate-layer features.
+
+        Mirrors ``netforward`` input handling so that exemplar construction and
+        nearest-mean classification operate in feature space rather than over
+        logits.
+        """
+        if self.cfg.dataset == 'tinyimagenet':
+            x = x.view(-1, 3, 64, 64)
+        elif self.cfg.dataset == 'cifar100':
+            x = x.view(-1, 3, 32, 32)
+        elif 'iq' in self.cfg.dataset.lower():
+            x_np = ensure_iq_two_channel(x.detach().cpu().numpy())
+            x = torch.from_numpy(x_np).float()
+            if self.gpu:
+                x = x.cuda()
+
+        return self.net.forward_features(x)
 
     def compute_offsets(self, task):
         offset1, offset2 = misc_utils.compute_offsets(task, self.classes_per_task)
@@ -188,10 +214,13 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         if self.gpu:
             means = means.cuda()
         for cc in range(offset1, offset2):
-            means[cc -
-                  offset1] =self.netforward(self.mem_class_x[cc]).data.mean(0)
+            means[cc - offset1] = self.feature_forward(self.mem_class_x[cc]).data.mean(0)
         classpred = torch.LongTensor(ns)
-        preds = self.netforward(x).data.clone()
+        preds = self.feature_forward(x).data.clone()
+        # L2-normalise prototypes and predictions before distance computation,
+        # following the standard iCaRL nearest-mean classifier.
+        means = F.normalize(means, p=2, dim=1)
+        preds = F.normalize(preds, p=2, dim=1)
         for ss in range(ns):
             dist = (means - preds[ss].expand(task_classes, nd)).norm(2, 1)
             _, ii = dist.min(0)
@@ -228,18 +257,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
 
         x_det = self._prepare_input(x)
         batch_count = x.size(0)
-        x = x.view(x.size(0), -1)
         self.net.train()
-        if self.gpu: self.net.cuda()
-        det_provided = False
-        if isinstance(y, (tuple, list)) and len(y) == 2:
-            det_provided = True
-        elif isinstance(y, dict) and "y_det" in y:
-            det_provided = True
-        elif isinstance(y, np.ndarray) and y.ndim == 2 and y.shape[1] == 2:
-            det_provided = True
-        elif torch.is_tensor(y) and y.dim() == 2 and y.size(1) == 2:
-            det_provided = True
+        if self.gpu:
+            self.net.cuda()
         class_counts = getattr(self, "classes_per_task", None)
         noise_label = None
         if class_counts is not None:
@@ -279,13 +299,16 @@ class Net(DetectionReplayMixin, torch.nn.Module):
 
             # only make changes like pushing to buffer once per batch and not for every glance
             if(pass_itr==0):
-                self.examples_seen += x.size(0) if det_provided else batch_count
+                # Track task progress in terms of full training batches so the
+                # end-of-task trigger remains correct for n_epochs > 1.
+                prev_examples_seen = self.examples_seen
+                self.examples_seen += batch_count
                 samples_per_task = self._get_samples_per_task(t)
                 assert samples_per_task > 0, 'Samples per task is <= 0'
 
-                # if not last batch of task, store samples in memx/memy
-                # Problem if batch_size <= samples_per_task
-                if self.examples_seen < samples_per_task:
+                # Stage only the first pass through the task data. This keeps
+                # exemplar construction bounded while still supporting n_epochs > 1.
+                if prev_examples_seen < samples_per_task:
                     if self.memx is None:
                         self.memx = x.data.clone()
                         self.memy = y.data.clone()
@@ -298,7 +321,13 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             logits = self.netforward(x)[:, offset1: offset2]
             targets = y - offset1
             preds = torch.argmax(logits, dim=1)
-            tr_acc.append(macro_recall(preds, targets))
+            # Report classification recall on non-noise classes only, while
+            # keeping the optimization objective unchanged.
+            if noise_label is not None:
+                cls_metric_mask = y != noise_label
+                tr_acc.append(macro_recall(preds[cls_metric_mask], targets[cls_metric_mask]))
+            else:
+                tr_acc.append(macro_recall(preds, targets))
             loss = self.bce(logits, targets)
             # num_exemplars remains 0 unless final epoch is reached
             if self.num_exemplars > 0:
@@ -307,12 +336,12 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                     # first generate a minibatch with one example per class from
                     # previous tasks
                     task_classes = self.classes_per_task[tt]
-                    inp_dist = torch.zeros(task_classes, x.size(1))
-                    target_dist = torch.zeros(task_classes, self.n_feat)
+                    input_shape = x.shape[1:]
+                    inp_dist = x.new_zeros((task_classes,) + input_shape)
+                    # Distillation operates over classifier logits, which have
+                    # dimension ``n_classes`` rather than the feature size.
+                    target_dist = x.new_zeros((task_classes, self.n_classes))
                     offset1, offset2 = self.compute_offsets(tt)
-                    if self.gpu:
-                        inp_dist = inp_dist.cuda()
-                        target_dist = target_dist.cuda()
                     for cc in range(task_classes):
                         indx = random.randint(0, len(self.mem_class_x[cc + offset1]) - 1)
                         inp_dist[cc] = self.mem_class_x[cc + offset1][indx].clone()
@@ -330,8 +359,8 @@ class Net(DetectionReplayMixin, torch.nn.Module):
 
             self.opt.step()
 
-        # check whether this is the last minibatch of the current task
-        # We assume only 1 epoch!
+        # Check whether this is the last minibatch of the current task across
+        # all configured epochs.
         target = int(self.cfg.n_epochs * self._get_samples_per_task(t))
         # print(f"Samples per task: {self._get_samples_per_task(t)}, n_epochs: {self.cfg.n_epochs}")
         # print(f"Target samples for task {t}: {target}, examples seen: {self.examples_seen}")
@@ -343,6 +372,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         # if self.examples_seen == self.cfg.n_epochs * self.samples_per_task:
         #     self.examples_seen = 0
             # get labels from previous task; we assume labels are consecutive
+            if self.memx is None or self.memy is None or self.memy.numel() == 0:
+                return float(loss.item()), sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
+
             offset1, offset2 = self.compute_offsets(t)
             if self.gpu:
                 all_labs = torch.LongTensor(np.unique(self.memy.cpu().numpy()))
@@ -369,27 +401,24 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                                          (num_classes + len(self.mem_class_x.keys())))
                 for ll in range(num_classes):
                     label = task_labs[ll]  # current label
-                    indxs = (self.memy == label).nonzero().squeeze() # indices of current label
+                    indxs = (self.memy == label).nonzero(as_tuple=False).view(-1) # indices of current label
                     cdata = self.memx.index_select(0, indxs) # grab training data for current label
-                    # Construct exemplar set for last task
-                    mean_feature = self.netforward(cdata)[
-                        :, offset1: offset2].data.clone().mean(0) # mean of task-sliced logits for current label
-                    nd = num_classes # num classes in current task
-                    exemplars = torch.zeros(self.num_exemplars, x.size(1))
-                    if self.gpu:
-                        exemplars = exemplars.cuda()
+                    # Construct exemplar set for last task using penultimate
+                    # features as in the original iCaRL algorithm.
+                    feat_cdata = self.feature_forward(cdata).data.clone()
+                    mean_feature = feat_cdata.mean(0)
+                    nd = self.n_feat
+                    exemplars = cdata.new_zeros((self.num_exemplars,) + cdata.shape[1:])
                     ntr = cdata.size(0) # num data points for current label
                     # used to keep track of which examples we have already used
                     taken = torch.zeros(ntr)
-                    model_output = self.netforward(cdata)[
-                        :, offset1: offset2].data.clone() # clone model output for current label
+                    model_output = feat_cdata
                     for ee in range(self.num_exemplars): # herding loop
                         prev = torch.zeros(1, nd)
                         if self.gpu:
                             prev = prev.cuda()
                         if ee > 0:
-                            prev = self.netforward(exemplars[:ee])[
-                                :, offset1: offset2].data.clone().sum(0)
+                            prev = self.feature_forward(exemplars[:ee]).data.clone().sum(0)
                         cost = (mean_feature.expand(ntr, nd) - (model_output
                                                                 + prev.expand(ntr, nd)) / (ee + 1)).norm(2, 1).squeeze()
                         _, indx = cost.sort(0) # sort by ascending cost
@@ -400,7 +429,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                             taken[indx[winner]] = 1
                             exemplars[ee] = cdata[indx[winner]].clone()
                         else:
-                            exemplars = exemplars[:indx.size(0), :].clone()
+                            exemplars = exemplars[:indx.size(0)].clone()
                             self.num_exemplars = indx.size(0)
                             break
                     # update memory with exemplars
