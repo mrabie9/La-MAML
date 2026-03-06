@@ -43,12 +43,15 @@ def _split_labels(y):
     return y_cls, y_det
 
 def _split_eval_output(output):
+    """Return (cls_rec, cls_prec, cls_f1, det, fa). Missing values are None."""
     if isinstance(output, (tuple, list)):
+        if len(output) == 5:
+            return output[0], output[1], output[2], output[3], output[4]
         if len(output) == 3:
-            return output[0], output[1], output[2]
+            return output[0], None, None, output[1], output[2]
         if len(output) == 2:
-            return output[0], output[1], None
-    return output, None, None
+            return output[0], None, None, output[1], None
+    return output, None, None, None, None
 
 def _get_det_logits(model, xb, t):
     if hasattr(model, "forward_heads"):
@@ -163,6 +166,8 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
     model.eval()
     device = torch.device('cuda' if getattr(args, 'cuda', False) and torch.cuda.is_available() else 'cpu')
     results = []
+    prec_results = []
+    f1_results = []
     class_counts = _infer_class_counts_from_tasks(tasks)
     if class_counts is None:
         class_counts = getattr(args, "classes_per_task", None)
@@ -176,6 +181,8 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
     for i, task in enumerate(tasks):
         t = i
         recalls = []
+        precisions = []
+        f1s = []
         det_recalls = []
         det_false_alarms = []
         noise_label = _noise_label_for_task(args, t, class_counts)
@@ -218,12 +225,28 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
                 cls_mask = yb_det_cpu == 1
                 if cls_mask.any():
                     recalls.append(macro_recall(pb[cls_mask], yb_cls_for_metrics[cls_mask]))
+                    precisions.append(
+                        macro_precision_signal_only(
+                            pb[cls_mask], yb_cls_for_metrics[cls_mask], noise_label_for_metrics
+                        )
+                    )
+                    f1s.append(macro_f1_including_noise(pb[cls_mask], yb_cls_for_metrics[cls_mask]))
             elif noise_label_for_metrics is not None:
                 cls_mask = yb_cls_for_metrics != noise_label_for_metrics
                 if cls_mask.any():
                     recalls.append(macro_recall(pb[cls_mask], yb_cls_for_metrics[cls_mask]))
+                    precisions.append(
+                        macro_precision_signal_only(
+                            pb[cls_mask], yb_cls_for_metrics[cls_mask], noise_label_for_metrics
+                        )
+                    )
+                    f1s.append(macro_f1_including_noise(pb[cls_mask], yb_cls_for_metrics[cls_mask]))
             else:
                 recalls.append(macro_recall(pb, yb_cls_for_metrics))
+                precisions.append(
+                    macro_precision_signal_only(pb, yb_cls_for_metrics, noise_label_for_metrics)
+                )
+                f1s.append(macro_f1_including_noise(pb, yb_cls_for_metrics))
 
             if yb_det_cpu is not None:
                 det_logits = _get_det_logits(model, xb, t)
@@ -238,6 +261,8 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
                 det_false_alarms.append(_false_alarm_rate(det_pred, det_targets))
 
         results.append(sum(recalls) / len(recalls) if recalls else 0.0)
+        prec_results.append(sum(precisions) / len(precisions) if precisions else 0.0)
+        f1_results.append(sum(f1s) / len(f1s) if f1s else 0.0)
         if det_recalls:
             det_results.append(sum(det_recalls) / len(det_recalls))
             det_fa_results.append(sum(det_false_alarms) / len(det_false_alarms))
@@ -247,12 +272,14 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
             det_fa_results.append(0.0)
 
     if det_metrics_active:
-        return results, det_results, det_fa_results
-    return results, None
+        return results, prec_results, f1_results, det_results, det_fa_results
+    return results, prec_results, f1_results, None, None
 
 def life_experience(model, inc_loader, args):
     result_val_a = []
     result_test_a = []
+    result_val_prec = []
+    result_val_f1 = []
     result_val_det_a = []
     result_test_det_a = []
     result_val_det_fa = []
@@ -260,6 +287,9 @@ def life_experience(model, inc_loader, args):
 
     result_val_t = []
     result_test_t = []
+
+    last_tr_cls_rec = last_tr_cls_prec = last_tr_cls_f1 = None
+    last_tr_det = last_tr_fa = None
 
     time_start = time.time()
     train_task_loaders = []
@@ -409,14 +439,20 @@ def life_experience(model, inc_loader, args):
                     ),
                 )
                 val_acc = evaluator(model, test_task_loaders, args)
-                val_acc, val_det_acc, val_det_fa = _split_eval_output(val_acc)
+                val_acc, val_prec, val_f1, val_det_acc, val_det_fa = _split_eval_output(val_acc)
                 epoch_eval_time += time.time() - eval_start
                 result_acc_val.append(val_acc)
                 result_val_a.append(val_acc)
+                if val_prec is not None:
+                    result_val_prec.append(val_prec)
+                if val_f1 is not None:
+                    result_val_f1.append(val_f1)
                 if val_det_acc is not None:
                     result_val_det_a.append(val_det_acc)
+                    last_tr_det = sum(val_det_acc) / len(val_det_acc) if val_det_acc else None
                 if val_det_fa is not None:
                     result_val_det_fa.append(val_det_fa)
+                    last_tr_fa = sum(val_det_fa) / len(val_det_fa) if val_det_fa else None
                 result_val_t.append(task_info["task"])
                 if val_det_acc is not None:
                     print("---- Eval at Epoch {}: cls {} | det_recall {} | det_fa {} ----".format(
@@ -438,6 +474,9 @@ def life_experience(model, inc_loader, args):
                 avg_f1 = (
                     float(sum(epoch_f1s) / len(epoch_f1s)) if epoch_f1s else float("nan")
                 )
+                last_tr_cls_rec = avg_tr_acc
+                last_tr_cls_prec = avg_prec
+                last_tr_cls_f1 = avg_f1
                 print(
                     "Task {} Epoch {}/{} | Loss {:.4f} | Train Acc {:.4f} | Prec {:.4f} | F1 {:.4f} | Epoch Time {:.2f}s (Eval {:.2f}s, Train {:.2f}s)".format(
                         task_info["task"], ep + 1, args.n_epochs, avg_loss, avg_tr_acc, avg_prec, avg_f1,
@@ -461,8 +500,12 @@ def life_experience(model, inc_loader, args):
                 )
         log_state(args.state_logging, "Task {}: running final validation.".format(current_task))
         val_acc = evaluator(model, test_task_loaders, args)
-        val_acc, val_det_acc, val_det_fa = _split_eval_output(val_acc)
+        val_acc, val_prec, val_f1, val_det_acc, val_det_fa = _split_eval_output(val_acc)
         result_val_a.append(val_acc)
+        if val_prec is not None:
+            result_val_prec.append(val_prec)
+        if val_f1 is not None:
+            result_val_f1.append(val_f1)
         if val_det_acc is not None:
             result_val_det_a.append(val_det_acc)
         if val_det_fa is not None:
@@ -485,7 +528,7 @@ def life_experience(model, inc_loader, args):
 
         if args.calc_test_accuracy:
             test_acc = evaluator(model, test_task_loaders, args)
-            test_acc, test_det_acc, test_det_fa = _split_eval_output(test_acc)
+            test_acc, test_prec, test_f1, test_det_acc, test_det_fa = _split_eval_output(test_acc)
             result_test_a.append(test_acc)
             if test_det_acc is not None:
                 result_test_det_a.append(test_det_acc)
@@ -505,6 +548,50 @@ def life_experience(model, inc_loader, args):
         print("Final Detection False Alarm:- \n Total False Alarm: {} \n Individual False Alarm: {}".format(
             sum(result_val_det_fa[-1]) / len(result_val_det_fa[-1]), result_val_det_fa[-1]
         ))
+
+    def _mean(x):
+        if x is None or (isinstance(x, (list, tuple)) and len(x) == 0):
+            return None
+        if isinstance(x, (list, tuple)):
+            return sum(float(v) for v in x) / len(x)
+        return float(x)
+
+    if last_tr_cls_rec is not None or last_tr_cls_prec is not None or last_tr_cls_f1 is not None:
+        tr_rec = float(last_tr_cls_rec) if last_tr_cls_rec is not None else None
+        tr_prec = float(last_tr_cls_prec) if last_tr_cls_prec is not None else None
+        tr_f1 = float(last_tr_cls_f1) if last_tr_cls_f1 is not None else None
+        tr_det = last_tr_det
+        tr_fa = last_tr_fa
+        parts = []
+        if tr_rec is not None:
+            parts.append("cls_rec={:.4f}".format(tr_rec))
+        if tr_prec is not None:
+            parts.append("cls_prec={:.4f}".format(tr_prec))
+        if tr_f1 is not None:
+            parts.append("cls_f1={:.4f}".format(tr_f1))
+        if tr_det is not None:
+            parts.append("det={:.4f}".format(tr_det))
+        if tr_fa is not None:
+            parts.append("fa={:.4f}".format(tr_fa))
+        if parts:
+            print("SUMMARY_TR " + " ".join(parts))
+
+    if result_val_a:
+        te_rec = _mean(result_val_a[-1])
+        te_prec = _mean(result_val_prec[-1]) if result_val_prec else None
+        te_f1 = _mean(result_val_f1[-1]) if result_val_f1 else None
+        te_det = _mean(result_val_det_a[-1]) if result_val_det_a else None
+        te_fa = _mean(result_val_det_fa[-1]) if result_val_det_fa else None
+        parts = ["cls_rec={:.4f}".format(te_rec)]
+        if te_prec is not None:
+            parts.append("cls_prec={:.4f}".format(te_prec))
+        if te_f1 is not None:
+            parts.append("cls_f1={:.4f}".format(te_f1))
+        if te_det is not None:
+            parts.append("det={:.4f}".format(te_det))
+        if te_fa is not None:
+            parts.append("fa={:.4f}".format(te_fa))
+        print("SUMMARY_TE " + " ".join(parts))
 
     if args.calc_test_accuracy:
         print("####Final Test Accuracy####")
@@ -582,6 +669,10 @@ def life_experience(model, inc_loader, args):
 def save_results(args, result_val_t, result_val_a, result_test_t, result_test_a, model, spent_time):
     fname = os.path.join(args.log_dir, 'results')
     log_state(args.state_logging, "Saving results to {}".format(fname))
+
+    size_bytes = sum(p.numel() * p.element_size() for p in model.parameters())
+    size_gb = size_bytes / (1024 ** 3)
+    print("Model size: {:.4f} GB".format(size_gb))
 
     # save confusion matrix and print one line of stats
     val_stats = confusion_matrix(result_val_t, result_val_a, args.log_dir, 'results.txt')
