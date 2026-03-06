@@ -287,6 +287,8 @@ def life_experience(model, inc_loader, args):
             model.real_epoch = ep
             epoch_losses = []
             epoch_train_accs = []
+            epoch_precisions = []
+            epoch_f1s = []
             epoch_eval_mode_recalls = []
             epoch_start_time = time.time()
             epoch_eval_time = 0.0
@@ -381,6 +383,8 @@ def life_experience(model, inc_loader, args):
                 y_cls_for_metric = y_cls if torch.is_tensor(y_cls) else torch.as_tensor(y_cls)
                 prec = macro_precision_signal_only(pb, y_cls_for_metric, noise_label)
                 f1 = macro_f1_including_noise(pb, y_cls_for_metric)
+                epoch_precisions.append(prec)
+                epoch_f1s.append(f1)
                 prog_bar.set_description(
                     "Task: {} | Epoch: {}/{} | Loss: {} | Tr: {} | Prec: {} | F1: {} ".format(
                         task_info["task"], ep + 1, args.n_epochs, round(loss, 3),
@@ -426,21 +430,25 @@ def life_experience(model, inc_loader, args):
                 epoch_train_time = max(epoch_duration - epoch_eval_time, 0.0)
                 avg_loss = float(sum(epoch_losses) / len(epoch_losses)) if epoch_losses else float("nan")
                 avg_tr_acc = float(sum(epoch_train_accs) / len(epoch_train_accs)) if epoch_train_accs else float("nan")
-                latest_val = (
-                    result_acc_val[-1][task_info["task"]]
-                    if result_acc_val and task_info["task"] < len(result_acc_val[-1])
+                avg_prec = (
+                    float(sum(epoch_precisions) / len(epoch_precisions))
+                    if epoch_precisions
                     else float("nan")
                 )
+                avg_f1 = (
+                    float(sum(epoch_f1s) / len(epoch_f1s)) if epoch_f1s else float("nan")
+                )
                 print(
-                    "Task {} Epoch {}/{} | Loss {:.4f} | Train Acc {:.4f} | Val Acc {:.4f} | Epoch Time {:.2f}s (Eval {:.2f}s, Train {:.2f}s)".format(
-                        task_info["task"], ep + 1, args.n_epochs, avg_loss, avg_tr_acc, latest_val,
+                    "Task {} Epoch {}/{} | Loss {:.4f} | Train Acc {:.4f} | Prec {:.4f} | F1 {:.4f} | Epoch Time {:.2f}s (Eval {:.2f}s, Train {:.2f}s)".format(
+                        task_info["task"], ep + 1, args.n_epochs, avg_loss, avg_tr_acc, avg_prec, avg_f1,
                         epoch_duration, epoch_eval_time, epoch_train_time
                     )
                 )
                 log_state(
                     args.state_logging,
-                    "Task {} Epoch {}/{} complete: {:.2f}s total ({:.2f}s eval/{:.2f}s train)".format(
-                        current_task, ep + 1, args.n_epochs, epoch_duration, epoch_eval_time, epoch_train_time
+                    "Task {} Epoch {}/{} complete: Prec {:.4f} F1 {:.4f} | {:.2f}s total ({:.2f}s eval/{:.2f}s train)".format(
+                        current_task, ep + 1, args.n_epochs, avg_prec, avg_f1,
+                        epoch_duration, epoch_eval_time, epoch_train_time
                     ),
                 )
             if epoch_train_accs and epoch_eval_mode_recalls:
