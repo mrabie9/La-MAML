@@ -156,6 +156,8 @@ class Net(DetectionReplayMixin, BaseNet):
             x_det = x
             x = x[signal_mask]
             y = y_cls[signal_mask]
+            # Convert to canonical shape so replay batch (old + new) is homogeneous
+            x = self._input_for_replay(x)
 
             self.epoch += 1
             self.zero_grads()

@@ -236,7 +236,7 @@ class Net(DetectionReplayMixin, nn.Module):
            self.current_task = t
 
         if self.cfg.learn_lr:
-            loss, tr_acc = self.la_ER(x, y, t)
+            loss, tr_acc = self.la_ER(x_for_storage, y, t)
         else:
             loss, tr_acc = self.ER(xi, yi, t)
 
