@@ -19,6 +19,20 @@ import torch
 import torch.nn as nn
 from utils.training_metrics import macro_recall
 from utils import misc_utils
+from model.resnet1d import AdcIqAdapter
+
+
+class HatInputAdapter(nn.Module):
+    """Maps 3-channel input to 2 IQ channels via AdcIqAdapter; leaves 2-channel unchanged."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._adapter = AdcIqAdapter()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.dim() == 3 and x.size(1) == 3:
+            return self._adapter(x)
+        return x
 
 
 @dataclass
@@ -239,6 +253,9 @@ class HatBackbone(nn.Module):
         else:
             raise NotImplementedError
 
+        # Adapter maps 3-channel (e.g. (B, 3, 1024)) to 2-channel; 2-channel input unchanged
+        self.input_adapter = HatInputAdapter()
+
         registry = GateRegistry()
 
         def param_register(module_path: str, module: nn.Module, post_gate: str, pre_gate: Optional[str] = None) -> None:
@@ -272,7 +289,7 @@ class HatBackbone(nn.Module):
                 }
 
         self.param_gate_map: Dict[str, Dict[str, Optional[str]]] = {}
-        self.model = HatResNet1D(self.in_channels, n_outputs, registry, param_register)
+        self.model = HatResNet1D(2, n_outputs, registry, param_register)
 
         self.gate_specs = registry.specs
         self.gate_to_idx = {spec["name"]: idx for idx, spec in enumerate(self.gate_specs)}
@@ -322,6 +339,7 @@ class HatBackbone(nn.Module):
         return_masks: bool = False,
     ) -> Tuple[torch.Tensor, List[torch.Tensor]] | torch.Tensor:
         x = self._ensure_iq_shape(x)
+        x = self.input_adapter(x)
         masks = self.mask(task, s) # mask for each stage
         mask_dict = { # dict of masks per layer
             spec["name"]: masks[idx].view(-1) for idx, spec in enumerate(self.gate_specs)
