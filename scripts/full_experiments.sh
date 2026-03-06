@@ -10,7 +10,7 @@ cd "$REPO_ROOT"
 export PYTHONUNBUFFERED=1
 
 # Algorithms to run: space-separated list of config names (without .yaml), e.g. agem bcl_dual cmaml
-INCLUDED="ucl la-er lamaml smaml" #lwf packnet rwalk si 
+INCLUDED="cmaml hat" #ewc er_ring eralg4 agem gem bcl_dual ctn
 # BETA= "lwf packnet rwalk si ucl la-er lamaml smaml"
 # ALPHA= "ewc er_ring eralg4 agem gem bcl_dual cmaml ctn hat"
 
