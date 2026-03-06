@@ -597,9 +597,21 @@ def save_results(args, result_val_t, result_val_a, result_test_t, result_test_a,
     print(fname + ': ' + one_liner + ' # ' + str(spent_time))
 
     # save all results in binary file
-
+    state_dict = model.state_dict()
+    if getattr(args, "state_logging", False):
+        def _tensor_storage_size(t):
+            return t.element_size() * t.numel() if torch.is_tensor(t) else 0
+        state_dict_bytes = sum(_tensor_storage_size(v) for v in state_dict.values())
+        val_t_bytes = _tensor_storage_size(result_val_t)
+        val_a_bytes = _tensor_storage_size(result_val_a)
+        log_state(
+            args.state_logging,
+            "results.pt components (approx): state_dict {:.1f} MB, result_val_t {:.1f} KB, result_val_a {:.1f} KB".format(
+                state_dict_bytes / (1024 * 1024), val_t_bytes / 1024, val_a_bytes / 1024
+            ),
+        )
     torch.save(
-        (result_val_t, result_val_a, model.state_dict(), val_stats, one_liner, args),
+        (result_val_t, result_val_a, state_dict, val_stats, one_liner, args),
         fname + ".pt",
         pickle_protocol=4,
     )
