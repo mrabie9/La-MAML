@@ -390,7 +390,7 @@ def run_single_trial(
     trial_timestamp = f"{session_timestamp}-trial{trial_idx:03d}"
 
     misc_utils.init_seed(args.seed)
-    log_dir, tf_dir = misc_utils.log_dir(args, trial_timestamp)
+    log_dir, tf_dir = misc_utils.log_dir(args, trial_timestamp, model_name)
     args.log_dir = log_dir
     args.tf_dir = tf_dir
     if hasattr(args, "data_path"):

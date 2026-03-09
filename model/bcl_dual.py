@@ -286,47 +286,47 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         return xx, yy, feat, mask, t_idx.tolist(), sizes
     def observe(self, x, y, t):
         class_counts = getattr(self, "classes_per_task", None)
-        noise_label = None
-        if class_counts is not None:
-            _, offset2 = misc_utils.compute_offsets(t, class_counts)
-            noise_label = offset2 - 1
-        y_cls, y_det = self._unpack_labels(
-            y,
-            noise_label=noise_label,
-            use_detector_arch=bool(getattr(self, "det_enabled", False)),
-        )
+        # noise_label = None
+        # if class_counts is not None:
+        #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
+        #     noise_label = offset2 - 1
+        # y_cls, y_det = self._unpack_labels(
+        #     y,
+        #     noise_label=noise_label,
+        #     use_detector_arch=bool(getattr(self, "det_enabled", False)),
+        # )
         if self.current_task is None:
             self.current_task = t
-        if (
-            self.current_task == t
-            and int(self.task_mem_filled[t].item()) == 0
-            and y_det is not None
-        ):
-            det_mean = float(y_det.float().mean().item())
-            if det_mean >= 0.99:
-                print("[WARN][BCL_Dual] y_det mean ~1.0; detection may be missing negatives.")
-        if y_det is not None and self.det_memories > 0:
-            self._update_det_memory(x, y_det)
-        x_det = x
-        signal_mask = (y_det == 1) & (y_cls >= 0)
-        if not signal_mask.any():
-            print("[WARN][BCL_Dual] No signal mask; skipping detection.")
-            if not getattr(self, "det_enabled", True):
-                return 0.0, 0.0
-            det_logits, _ = self.net.forward_heads(x_det)
-            det_loss = self.det_loss(det_logits, y_det.float())
-            det_replay = self._sample_det_memory()
-            if det_replay is not None:
-                mem_x, mem_y = det_replay
-                mem_det_logits, _ = self.net.forward_heads(mem_x)
-                mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-                det_loss = 0.5 * (det_loss + mem_loss)
-            self.zero_grad()
-            det_loss.backward()
-            self.inner_opt.step()
-            return float(det_loss.item()), 0.0
-        x = x[signal_mask]
-        y = y_cls[signal_mask]
+        # if (
+        #     self.current_task == t
+        #     and int(self.task_mem_filled[t].item()) == 0
+        #     and y_det is not None
+        # ):
+        #     det_mean = float(y_det.float().mean().item())
+        #     if det_mean >= 0.99:
+        #         print("[WARN][BCL_Dual] y_det mean ~1.0; detection may be missing negatives.")
+        # if y_det is not None and self.det_memories > 0:
+        #     self._update_det_memory(x, y_det)
+        # x_det = x
+        # signal_mask = (y_det == 1) & (y_cls >= 0)
+        # if not signal_mask.any():
+        #     print("[WARN][BCL_Dual] No signal mask; skipping detection.")
+        #     if not getattr(self, "det_enabled", True):
+        #         return 0.0, 0.0
+        #     det_logits, _ = self.net.forward_heads(x_det)
+        #     det_loss = self.det_loss(det_logits, y_det.float())
+        #     det_replay = self._sample_det_memory()
+        #     if det_replay is not None:
+        #         mem_x, mem_y = det_replay
+        #         mem_det_logits, _ = self.net.forward_heads(mem_x)
+        #         mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+        #         det_loss = 0.5 * (det_loss + mem_loss)
+        #     self.zero_grad()
+        #     det_loss.backward()
+        #     self.inner_opt.step()
+        #     return float(det_loss.item()), 0.0
+        # x = x[signal_mask]
+        # y = y_cls[signal_mask]
         x_for_storage = self._input_for_replay(x)
         if t != self.current_task:
             tt = self.current_task
@@ -423,14 +423,14 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 preds = torch.argmax(logits, dim=1)
                 tr_acc.append(macro_recall(preds, targets))
                 loss1 = self.bce(logits, targets)
-                det_logits, _ = self.net.forward_heads(x_det)
-                det_loss = self.det_loss(det_logits, y_det.float())
-                det_replay = self._sample_det_memory()
-                if det_replay is not None:
-                    mem_x, mem_y = det_replay
-                    mem_det_logits, _ = self.net.forward_heads(mem_x)
-                    mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-                    det_loss = 0.5 * (det_loss + mem_loss)
+                # det_logits, _ = self.net.forward_heads(x_det)
+                # det_loss = self.det_loss(det_logits, y_det.float())
+                # det_replay = self._sample_det_memory()
+                # if det_replay is not None:
+                #     mem_x, mem_y = det_replay
+                #     mem_det_logits, _ = self.net.forward_heads(mem_x)
+                #     mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+                #     det_loss = 0.5 * (det_loss + mem_loss)
                 if t > 0:
                     sampled = self.memory_sampling(t)
                     if sampled is not None:
@@ -446,14 +446,14 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                         )
                         loss = (
                             self.cls_lambda * loss1
-                            + self.det_lambda * det_loss
+                            # + self.det_lambda * det_loss
                             + loss2
                             + loss3
                         )
                     else:
-                        loss = self.cls_lambda * loss1 + self.det_lambda * det_loss
+                        loss = self.cls_lambda * loss1 # + self.det_lambda * det_loss
                 else:
-                    loss = self.cls_lambda * loss1 + self.det_lambda * det_loss
+                    loss = self.cls_lambda * loss1 # + self.det_lambda * det_loss
                 loss.backward()
                 self.inner_opt.step()
             sampled_validation = self.memory_sampling(tt, valid=True)

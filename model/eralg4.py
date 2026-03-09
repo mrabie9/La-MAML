@@ -195,42 +195,42 @@ class Net(DetectionReplayMixin, nn.Module):
         ### step through elements of x
 
         class_counts = getattr(self, "classes_per_task", None)
-        noise_label = None
-        if class_counts is not None:
-            _, offset2 = misc_utils.compute_offsets(t, class_counts)
-            noise_label = offset2 - 1
-        y_cls, y_det = self._unpack_labels(
-            y,
-            noise_label=noise_label,
-            use_detector_arch=bool(getattr(self, "det_enabled", False)),
-        )
-        if y_det is not None and self.det_memories > 0:
-            self._update_det_memory(x, y_det)
-        x_det = x
-        signal_mask = (y_det == 1) & (y_cls >= 0)
-        if not signal_mask.any():
-            if not getattr(self, "det_enabled", True):
-                return 0.0, 0.0
-            self.det_opt.zero_grad()
-            det_logits, _ = self.net.forward_heads(x_det)
-            det_loss = self.det_loss(det_logits, y_det.float())
-            det_replay = self._sample_det_memory()
-            if det_replay is not None:
-                mem_x, mem_y = det_replay
-                mem_det_logits, _ = self.net.forward_heads(mem_x)
-                mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-                det_loss = 0.5 * (det_loss + mem_loss)
-            det_loss = self.det_lambda * det_loss
-            det_loss.backward()
-            self.det_opt.step()
-            return float(det_loss.item()), 0.0
+        # noise_label = None
+        # if class_counts is not None:
+        #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
+        #     noise_label = offset2 - 1
+        # y_cls, y_det = self._unpack_labels(
+        #     y,
+        #     noise_label=noise_label,
+        #     use_detector_arch=bool(getattr(self, "det_enabled", False)),
+        # )
+        # if y_det is not None and self.det_memories > 0:
+        #     self._update_det_memory(x, y_det)
+        # x_det = x
+        # signal_mask = (y_det == 1) & (y_cls >= 0)
+        # if not signal_mask.any():
+        #     if not getattr(self, "det_enabled", True):
+        #         return 0.0, 0.0
+        #     self.det_opt.zero_grad()
+        #     det_logits, _ = self.net.forward_heads(x_det)
+        #     det_loss = self.det_loss(det_logits, y_det.float())
+        #     det_replay = self._sample_det_memory()
+        #     if det_replay is not None:
+        #         mem_x, mem_y = det_replay
+        #         mem_det_logits, _ = self.net.forward_heads(mem_x)
+        #         mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+        #         det_loss = 0.5 * (det_loss + mem_loss)
+        #     det_loss = self.det_lambda * det_loss
+        #     det_loss.backward()
+        #     self.det_opt.step()
+        #     return float(det_loss.item()), 0.0
 
-        x = x[signal_mask]
-        y = y_cls[signal_mask]
+        # x = x[signal_mask]
+        # y = y_cls[signal_mask]
         # Store and replay canonical (post-adapter) shape so buffer has uniform (2, 512) across tasks
         x_for_storage = self._input_for_replay(x)
         xi = x_for_storage.data.cpu().numpy()
-        yi = y.data.cpu().numpy()
+        yi = y[0].data.cpu().numpy() if isinstance(y, (list, tuple)) else y.data.cpu().numpy()
 
         if t != self.current_task:
            self.current_task = t
@@ -251,19 +251,19 @@ class Net(DetectionReplayMixin, nn.Module):
                 if p < self.memories:
                     self.M[p] = [xi[i], yi[i], t]
 
-        if getattr(self, "det_enabled", True):
-            self.det_opt.zero_grad()
-            det_logits, _ = self.net.forward_heads(x_det)
-            det_loss = self.det_loss(det_logits, y_det.float())
-            det_replay = self._sample_det_memory()
-            if det_replay is not None:
-                mem_x, mem_y = det_replay
-                mem_det_logits, _ = self.net.forward_heads(mem_x)
-                mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-                det_loss = 0.5 * (det_loss + mem_loss)
-            det_loss = self.det_lambda * det_loss
-            det_loss.backward()
-            self.det_opt.step()
+        # if getattr(self, "det_enabled", True):
+        #     self.det_opt.zero_grad()
+        #     det_logits, _ = self.net.forward_heads(x_det)
+        #     det_loss = self.det_loss(det_logits, y_det.float())
+        #     det_replay = self._sample_det_memory()
+        #     if det_replay is not None:
+        #         mem_x, mem_y = det_replay
+        #         mem_det_logits, _ = self.net.forward_heads(mem_x)
+        #         mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+        #         det_loss = 0.5 * (det_loss + mem_loss)
+        #     det_loss = self.det_lambda * det_loss
+        #     det_loss.backward()
+        #     self.det_opt.step()
 
         return loss.item(), tr_acc
 
@@ -364,7 +364,10 @@ class Net(DetectionReplayMixin, nn.Module):
             
             perm = torch.randperm(x.size(0))
             x = x[perm]
-            y = y[perm]
+            if isinstance(y, (list, tuple)):
+                y = tuple(yi[perm] if yi is not None else None for yi in y)
+            else:
+                y = y[perm]
 
             batch_sz = x.shape[0]
             n_batches = self.cfg.meta_batches
@@ -372,13 +375,16 @@ class Net(DetectionReplayMixin, nn.Module):
             fast_weights = None
             meta_losses = [0 for _ in range(n_batches)] 
 
-            bx, by, bt = self.getBatch(x.cpu().numpy(), y.cpu().numpy(), t)
+            bx, by, bt = self.getBatch(x.cpu().numpy(), y[0].cpu().numpy() if isinstance(y, (list, tuple)) else y.cpu().numpy(), t)
             bx = bx.squeeze()
             
             for i in range(n_batches):
 
                 batch_x = x[i*rough_sz : (i+1)*rough_sz]
-                batch_y = y[i*rough_sz : (i+1)*rough_sz]
+                if isinstance(y, (list, tuple)):
+                    batch_y = tuple(yi[i*rough_sz : (i+1)*rough_sz] if yi is not None else None for yi in y)
+                else:
+                    batch_y = y[i*rough_sz : (i+1)*rough_sz]
 
                 # assuming labels for inner update are from the same 
                 fast_weights, inner_loss = self.inner_update(batch_x, fast_weights, batch_y, t)

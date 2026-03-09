@@ -319,6 +319,8 @@ def life_experience(model, inc_loader, args):
             epoch_train_accs = []
             epoch_precisions = []
             epoch_f1s = []
+            epoch_det_recalls = []
+            epoch_det_fas = []
             epoch_eval_mode_recalls = []
             epoch_start_time = time.time()
             epoch_eval_time = 0.0
@@ -408,17 +410,55 @@ def life_experience(model, inc_loader, args):
                         if args.model != "anml"
                         else model(v_x, fast_weights=None)
                     )
-                    pb = torch.argmax(logits, dim=1)
+                    pb = torch.argmax(logits, dim=1).cpu()
+                    det_logits = _get_det_logits(model, v_x, task_info["task"])
                 model.train()
-                y_cls_for_metric = y_cls if torch.is_tensor(y_cls) else torch.as_tensor(y_cls)
+                
+                y_cls_for_metric = y_cls.cpu() if torch.is_tensor(y_cls) else torch.as_tensor(y_cls)
+                y_det_for_metric = y_det.cpu() if y_det is not None and torch.is_tensor(y_det) else (torch.as_tensor(y_det) if y_det is not None else None)
+
                 prec = macro_precision_signal_only(pb, y_cls_for_metric, noise_label)
                 f1 = macro_f1_including_noise(pb, y_cls_for_metric)
+
+                if y_det_for_metric is not None:
+                    cls_mask = y_det_for_metric == 1
+                    if cls_mask.any():
+                        tr_acc = macro_recall(pb[cls_mask], y_cls_for_metric[cls_mask])
+                    else:
+                        tr_acc = 0.0
+                elif noise_label is not None:
+                    cls_mask = y_cls_for_metric != noise_label
+                    if cls_mask.any():
+                        tr_acc = macro_recall(pb[cls_mask], y_cls_for_metric[cls_mask])
+                    else:
+                        tr_acc = 0.0
+                else:
+                    tr_acc = macro_recall(pb, y_cls_for_metric)
+
+                det_rec = 0.0
+                det_fa = 0.0
+                if det_logits is not None and y_det_for_metric is not None:
+                    det_pred = (det_logits >= 0).long().cpu()
+                    det_rec = macro_recall(det_pred, y_det_for_metric)
+                    det_fa = _false_alarm_rate(det_pred, y_det_for_metric)
+                elif noise_label is not None:
+                    det_targets = (y_cls_for_metric != noise_label).long()
+                    det_pred = (pb != noise_label).long()
+                    det_rec = macro_recall(det_pred, det_targets)
+                    det_fa = _false_alarm_rate(det_pred, det_targets)
+
+                result_acc_tr[-1] = tr_acc
+                epoch_train_accs[-1] = tr_acc
+
                 epoch_precisions.append(prec)
                 epoch_f1s.append(f1)
+                epoch_det_recalls.append(det_rec)
+                epoch_det_fas.append(det_fa)
+
                 prog_bar.set_description(
-                    "Task: {} | Epoch: {}/{} | Loss: {} | Tr: {} | Prec: {} | F1: {} ".format(
+                    "T{}| Ep: {}/{}| Loss: {}| Rec: {}| Prec: {}| F1: {}| DetRec: {}| DetFA: {}".format(
                         task_info["task"], ep + 1, args.n_epochs, round(loss, 3),
-                        round(tr_acc, 5), round(prec, 5), round(f1, 5),
+                        round(tr_acc, 2), round(prec, 2), round(f1, 2), round(det_rec, 2), round(det_fa, 2)
                     )
                 )
 
@@ -474,19 +514,25 @@ def life_experience(model, inc_loader, args):
                 avg_f1 = (
                     float(sum(epoch_f1s) / len(epoch_f1s)) if epoch_f1s else float("nan")
                 )
+                avg_det_rec = (
+                    float(sum(epoch_det_recalls) / len(epoch_det_recalls)) if epoch_det_recalls else float("nan")
+                )
+                avg_det_fa = (
+                    float(sum(epoch_det_fas) / len(epoch_det_fas)) if epoch_det_fas else float("nan")
+                )
                 last_tr_cls_rec = avg_tr_acc
                 last_tr_cls_prec = avg_prec
                 last_tr_cls_f1 = avg_f1
                 print(
-                    "Task {} Epoch {}/{} | Loss {:.4f} | Train Acc {:.4f} | Prec {:.4f} | F1 {:.4f} | Epoch Time {:.2f}s (Eval {:.2f}s, Train {:.2f}s)".format(
-                        task_info["task"], ep + 1, args.n_epochs, avg_loss, avg_tr_acc, avg_prec, avg_f1,
+                    "Task {} Epoch {}/{} | L {:.4f} | Train Acc {:.2f} | Prec {:.2f} | F1 {:.2f} | Det Rec {:.2f} | Det FA {:.2f} | Epoch Time {:.2f}s (Eval {:.2f}s, Train {:.2f}s)".format(
+                        task_info["task"], ep + 1, args.n_epochs, avg_loss, avg_tr_acc, avg_prec, avg_f1, avg_det_rec, avg_det_fa,
                         epoch_duration, epoch_eval_time, epoch_train_time
                     )
                 )
                 log_state(
                     args.state_logging,
-                    "Task {} Epoch {}/{} complete: Prec {:.4f} F1 {:.4f} | {:.2f}s total ({:.2f}s eval/{:.2f}s train)".format(
-                        current_task, ep + 1, args.n_epochs, avg_prec, avg_f1,
+                    "Task {} Epoch {}/{} complete: Prec {:.4f} F1 {:.4f} DetRec {:.4f} DetFA {:.4f} | {:.2f}s total ({:.2f}s eval/{:.2f}s train)".format(
+                        current_task, ep + 1, args.n_epochs, avg_prec, avg_f1, avg_det_rec, avg_det_fa,
                         epoch_duration, epoch_eval_time, epoch_train_time
                     ),
                 )
@@ -788,7 +834,8 @@ def main():
 
     # setup logging
     timestamp = misc_utils.get_date_time()
-    args.log_dir, args.tf_dir = misc_utils.log_dir(args, timestamp)
+    config_name = Path(config_chain[-1]).stem if config_chain else None
+    args.log_dir, args.tf_dir = misc_utils.log_dir(args, timestamp, config_name)
     log_state(args.state_logging, "Logging to {}".format(args.log_dir))
 
     # load model

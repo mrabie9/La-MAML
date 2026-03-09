@@ -253,44 +253,44 @@ class Net(DetectionReplayMixin, torch.nn.Module):
     def observe(self, x, y, t):
         class_counts = getattr(self, "classes_per_task", None)
         noise_label = None
-        if class_counts is not None:
-            _, offset2 = misc_utils.compute_offsets(t, class_counts)
-            noise_label = offset2 - 1
-        y_cls, y_det = self._unpack_labels(
-            y,
-            noise_label=noise_label,
-            use_detector_arch=bool(getattr(self, "det_enabled", False)),
-        )
-        if y_det is not None and self.det_memories > 0:
-            self._update_det_memory(x, y_det)
-        x_det = x
-        signal_mask = (y_det == 1) & (y_cls >= 0)
-        if not signal_mask.any():
-            if not getattr(self, "det_enabled", True):
-                return 0.0, 0.0
-            det_logits = self.net.forward_det_agnostic(x_det)
-            det_loss = self.det_loss(det_logits, y_det.float())
-            det_replay = self._sample_det_memory()
-            if det_replay is not None:
-                mem_x, mem_y = det_replay
-                mem_det_logits = self.net.forward_det_agnostic(mem_x)
-                mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-                det_loss = 0.5 * (det_loss + mem_loss)
-            self.zero_grad()
-            grads = torch.autograd.grad(
-                det_loss,
-                self.net.base_param(),
-                create_graph=False,
-                allow_unused=True,
-            )
-            for param, grad in zip(self.net.base_param(), grads):
-                if grad is None:
-                    continue
-                with torch.no_grad():
-                    param.add_(grad, alpha=-self.inner_lr)
-            return float(det_loss.item()), 0.0
-        x = x[signal_mask]
-        y = y_cls[signal_mask]
+        # if class_counts is not None:
+        #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
+        #     noise_label = offset2 - 1
+        # y_cls, y_det = self._unpack_labels(
+        #     y,
+        #     noise_label=noise_label,
+        #     use_detector_arch=bool(getattr(self, "det_enabled", False)),
+        # )
+        # if y_det is not None and self.det_memories > 0:
+        #     self._update_det_memory(x, y_det)
+        # x_det = x
+        # signal_mask = (y_det == 1) & (y_cls >= 0)
+        # if not signal_mask.any():
+        #     if not getattr(self, "det_enabled", True):
+        #         return 0.0, 0.0
+        #     det_logits = self.net.forward_det_agnostic(x_det)
+        #     det_loss = self.det_loss(det_logits, y_det.float())
+        #     det_replay = self._sample_det_memory()
+        #     if det_replay is not None:
+        #         mem_x, mem_y = det_replay
+        #         mem_det_logits = self.net.forward_det_agnostic(mem_x)
+        #         mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+        #         det_loss = 0.5 * (det_loss + mem_loss)
+        #     self.zero_grad()
+        #     grads = torch.autograd.grad(
+        #         det_loss,
+        #         self.net.base_param(),
+        #         create_graph=False,
+        #         allow_unused=True,
+        #     )
+        #     for param, grad in zip(self.net.base_param(), grads):
+        #         if grad is None:
+        #             continue
+        #         with torch.no_grad():
+        #             param.add_(grad, alpha=-self.inner_lr)
+        #     return float(det_loss.item()), 0.0
+        # x = x[signal_mask]
+        # y = y_cls[signal_mask]
         x_for_storage = self._input_for_replay(x)
 
         # if task has changed, run model on val set of previous task to get soft targets 
@@ -353,30 +353,31 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 self.task_mem_filled[t] = min(task_replay_capacity, filled_mem_before_update + effbsz)
             self.task_mem_ptr[t] = 0 if endcnt == task_replay_capacity else endcnt
 
-        if getattr(self, "det_enabled", True):
-            det_logits = self.net.forward_det_agnostic(x_det)
-            det_loss = self.det_loss(det_logits, y_det.float())
-            det_replay = self._sample_det_memory()
-            if det_replay is not None:
-                mem_x, mem_y = det_replay
-                mem_det_logits = self.net.forward_det_agnostic(mem_x)
-                mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-                det_loss = 0.5 * (det_loss + mem_loss)
-            det_loss_value = det_loss.detach()
-            det_loss = self.det_lambda * det_loss
-            det_grads = torch.autograd.grad(
-                det_loss,
-                self.net.base_param(),
-                create_graph=False,
-                allow_unused=True,
-            )
-            for param, grad in zip(self.net.base_param(), det_grads):
-                if grad is None:
-                    continue
-                with torch.no_grad():
-                    param.add_(grad, alpha=-self.inner_lr)
-        else:
-            det_loss_value = torch.zeros((), device=x_det.device, dtype=torch.float32)
+        # if getattr(self, "det_enabled", True):
+        #     det_logits = self.net.forward_det_agnostic(x_det)
+        #     det_loss = self.det_loss(det_logits, y_det.float())
+        #     det_replay = self._sample_det_memory()
+        #     if det_replay is not None:
+        #         mem_x, mem_y = det_replay
+        #         mem_det_logits = self.net.forward_det_agnostic(mem_x)
+        #         mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+        #         det_loss = 0.5 * (det_loss + mem_loss)
+        #     det_loss_value = det_loss.detach()
+        #     det_loss = self.det_lambda * det_loss
+        #     det_grads = torch.autograd.grad(
+        #         det_loss,
+        #         self.net.base_param(),
+        #         create_graph=False,
+        #         allow_unused=True,
+        #     )
+        #     for param, grad in zip(self.net.base_param(), det_grads):
+        #         if grad is None:
+        #             continue
+        #         with torch.no_grad():
+        #             param.add_(grad, alpha=-self.inner_lr)
+        # else:
+        if True:
+            det_loss_value = torch.zeros((), device=x.device, dtype=torch.float32)
 
         self.zero_grad()
         tr_acc = []
