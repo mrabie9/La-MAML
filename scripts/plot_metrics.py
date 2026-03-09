@@ -52,7 +52,14 @@ def load_metrics(metrics_dir: Path) -> list[dict[str, Any]]:
     tasks = []
     for path in task_files:
         data = np.load(path, allow_pickle=True)
-        tasks.append({key: np.asarray(data[key]) for key in data.files})
+        task_data = {key: np.asarray(data[key]) for key in data.files}
+        task_idx = _task_index(path.name)
+        # val_acc might contain intermediate epoch validations flattened.
+        # The correct length for the final validation after this task is task_idx + 1
+        num_tasks_seen = task_idx + 1
+        if "val_acc" in task_data and len(task_data["val_acc"]) > num_tasks_seen:
+            task_data["val_acc"] = task_data["val_acc"][-num_tasks_seen:]
+        tasks.append(task_data)
     return tasks
 
 
