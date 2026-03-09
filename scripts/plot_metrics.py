@@ -307,6 +307,11 @@ def main() -> None:
     if not metrics_dir.is_dir():
         raise SystemExit(f"Not a directory: {metrics_dir}")
 
+    import matplotlib
+    if args.output_dir is None and matplotlib.get_backend().lower() == "agg":
+        print(f"Non-interactive backend detected. Defaulting to saving plots in {metrics_dir}")
+        args.output_dir = metrics_dir
+
     if args.output_dir is not None:
         args.output_dir.mkdir(parents=True, exist_ok=True)
 
