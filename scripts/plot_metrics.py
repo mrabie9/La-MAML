@@ -94,6 +94,28 @@ def _aggregate_per_epoch(values: np.ndarray, n_epochs: int) -> np.ndarray:
     return np.mean(values[:n_use].reshape(n_epochs, steps_per_epoch), axis=1)
 
 
+def get_task_color(task_idx: int):
+    """Assign a color based on task grouping."""
+    group1 = [3, 4, 6, 9]
+    group2 = [0, 1, 8]
+    group3 = [2, 5, 7]
+    
+    if task_idx in group1:
+        cmap = plt.get_cmap("Blues")
+        idx = group1.index(task_idx)
+        return cmap(0.4 + 0.6 * (idx / len(group1)))
+    elif task_idx in group2:
+        cmap = plt.get_cmap("Oranges")
+        idx = group2.index(task_idx)
+        return cmap(0.4 + 0.6 * (idx / len(group2)))
+    elif task_idx in group3:
+        cmap = plt.get_cmap("Greens")
+        idx = group3.index(task_idx)
+        return cmap(0.4 + 0.6 * (idx / len(group3)))
+    else:
+        return f"C{task_idx % 10}"
+
+
 def plot_per_task_curves(
     tasks: list[dict[str, Any]],
     output_dir: Path | None,
@@ -104,8 +126,9 @@ def plot_per_task_curves(
 
     for task_idx, task in enumerate(tasks):
         steps = np.arange(len(task["losses"]))
-        axes[0].plot(steps, task["losses"], label=f"Task {task_idx}", alpha=0.8)
-        axes[1].plot(steps, task["tr_acc"], label=f"Task {task_idx}", alpha=0.8)
+        c = get_task_color(task_idx)
+        axes[0].plot(steps, task["losses"], label=f"Task {task_idx}", color=c, alpha=0.8)
+        axes[1].plot(steps, task["tr_acc"], label=f"Task {task_idx}", color=c, alpha=0.8)
 
     axes[0].set_ylabel("Loss")
     axes[0].set_title("Loss per task (per step)")
@@ -139,8 +162,9 @@ def plot_per_epoch_curves(
         loss_ep = _aggregate_per_epoch(task["losses"], n_epochs)
         acc_ep = _aggregate_per_epoch(task["tr_acc"], n_epochs)
         epochs = np.arange(len(loss_ep))
-        axes[0].plot(epochs, loss_ep, "o-", label=f"Task {task_idx}", alpha=0.8)
-        axes[1].plot(epochs, acc_ep, "o-", label=f"Task {task_idx}", alpha=0.8)
+        c = get_task_color(task_idx)
+        axes[0].plot(epochs, loss_ep, "o-", label=f"Task {task_idx}", color=c, alpha=0.8)
+        axes[1].plot(epochs, acc_ep, "o-", label=f"Task {task_idx}", color=c, alpha=0.8)
 
     axes[0].set_ylabel("Loss (mean)")
     axes[0].set_title("Loss per epoch (mean over steps)")
@@ -168,9 +192,10 @@ def plot_final_validation(tasks: list[dict[str, Any]], output_dir: Path | None) 
     task_indices = np.arange(n_tasks)
 
     fig, ax = plt.subplots(figsize=(8, 4))
-    ax.bar(task_indices - 0.2, last["val_acc"], width=0.4, label="Val accuracy (cls)", color="C0")
+    colors = [get_task_color(i) for i in task_indices]
+    ax.bar(task_indices - 0.2, last["val_acc"], width=0.4, label="Val accuracy (cls)", color=colors)
     if "val_det_acc" in last:
-        ax.bar(task_indices + 0.2, last["val_det_acc"], width=0.4, label="Val det recall", color="C1")
+        ax.bar(task_indices + 0.2, last["val_det_acc"], width=0.4, label="Val det recall", color=colors, hatch='//')
     ax.set_xlabel("Task")
     ax.set_ylabel("Accuracy / recall")
     ax.set_title("Final validation metrics (after all tasks)")
@@ -186,7 +211,7 @@ def plot_final_validation(tasks: list[dict[str, Any]], output_dir: Path | None) 
 
     if "val_det_fa" in last:
         fig2, ax2 = plt.subplots(figsize=(8, 4))
-        ax2.bar(task_indices, last["val_det_fa"], color="C2")
+        ax2.bar(task_indices, last["val_det_fa"], color=colors)
         ax2.set_xlabel("Task")
         ax2.set_ylabel("False alarm rate")
         ax2.set_title("Final validation detection false alarm (per task)")
@@ -204,7 +229,7 @@ def plot_validation_over_time(tasks: list[dict[str, Any]], output_dir: Path | No
     """Plot validation accuracy per task as more tasks are trained (accuracy matrix)."""
     n_tasks = len(tasks)
     # After training task k, we have val_acc of length k+1 (tasks 0..k)
-    x = np.arange(1, n_tasks + 1)  # "after task 0", "after task 1", ...
+    x = np.arange(0, n_tasks)  # "after task 0", "after task 1", ...
 
     fig, ax = plt.subplots(figsize=(9, 5))
     for task_idx in range(n_tasks):
@@ -216,7 +241,7 @@ def plot_validation_over_time(tasks: list[dict[str, Any]], output_dir: Path | No
                 ys.append(val_acc[task_idx])
             else:
                 ys.append(np.nan)
-        ax.plot(x, ys, "o-", label=f"Task {task_idx}", alpha=0.8)
+        ax.plot(x, ys, "o-", label=f"Task {task_idx}", color=get_task_color(task_idx), alpha=0.8)
 
     ax.set_xlabel("After training up to task")
     ax.set_ylabel("Validation accuracy (classification)")
