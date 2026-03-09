@@ -195,38 +195,38 @@ class Net(DetectionReplayMixin, nn.Module):
         ### step through elements of x
 
         class_counts = getattr(self, "classes_per_task", None)
-        noise_label = None
-        if class_counts is not None:
-            _, offset2 = misc_utils.compute_offsets(t, class_counts)
-            noise_label = offset2 - 1
-        y_cls, y_det = self._unpack_labels(
-            y,
-            noise_label=noise_label,
-            use_detector_arch=bool(getattr(self, "det_enabled", False)),
-        )
-        if y_det is not None and self.det_memories > 0:
-            self._update_det_memory(x, y_det)
-        x_det = x
-        signal_mask = (y_det == 1) & (y_cls >= 0)
-        if not signal_mask.any():
-            if not getattr(self, "det_enabled", True):
-                return 0.0, 0.0
-            self.det_opt.zero_grad()
-            det_logits, _ = self.net.forward_heads(x_det)
-            det_loss = self.det_loss(det_logits, y_det.float())
-            det_replay = self._sample_det_memory()
-            if det_replay is not None:
-                mem_x, mem_y = det_replay
-                mem_det_logits, _ = self.net.forward_heads(mem_x)
-                mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-                det_loss = 0.5 * (det_loss + mem_loss)
-            det_loss = self.det_lambda * det_loss
-            det_loss.backward()
-            self.det_opt.step()
-            return float(det_loss.item()), 0.0
+        # noise_label = None
+        # if class_counts is not None:
+        #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
+        #     noise_label = offset2 - 1
+        # y_cls, y_det = self._unpack_labels(
+        #     y,
+        #     noise_label=noise_label,
+        #     use_detector_arch=bool(getattr(self, "det_enabled", False)),
+        # )
+        # if y_det is not None and self.det_memories > 0:
+        #     self._update_det_memory(x, y_det)
+        # x_det = x
+        # signal_mask = (y_det == 1) & (y_cls >= 0)
+        # if not signal_mask.any():
+        #     if not getattr(self, "det_enabled", True):
+        #         return 0.0, 0.0
+        #     self.det_opt.zero_grad()
+        #     det_logits, _ = self.net.forward_heads(x_det)
+        #     det_loss = self.det_loss(det_logits, y_det.float())
+        #     det_replay = self._sample_det_memory()
+        #     if det_replay is not None:
+        #         mem_x, mem_y = det_replay
+        #         mem_det_logits, _ = self.net.forward_heads(mem_x)
+        #         mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+        #         det_loss = 0.5 * (det_loss + mem_loss)
+        #     det_loss = self.det_lambda * det_loss
+        #     det_loss.backward()
+        #     self.det_opt.step()
+        #     return float(det_loss.item()), 0.0
 
-        x = x[signal_mask]
-        y = y_cls[signal_mask]
+        # x = x[signal_mask]
+        # y = y_cls[signal_mask]
         # Store and replay canonical (post-adapter) shape so buffer has uniform (2, 512) across tasks
         x_for_storage = self._input_for_replay(x)
         xi = x_for_storage.data.cpu().numpy()
@@ -251,19 +251,19 @@ class Net(DetectionReplayMixin, nn.Module):
                 if p < self.memories:
                     self.M[p] = [xi[i], yi[i], t]
 
-        if getattr(self, "det_enabled", True):
-            self.det_opt.zero_grad()
-            det_logits, _ = self.net.forward_heads(x_det)
-            det_loss = self.det_loss(det_logits, y_det.float())
-            det_replay = self._sample_det_memory()
-            if det_replay is not None:
-                mem_x, mem_y = det_replay
-                mem_det_logits, _ = self.net.forward_heads(mem_x)
-                mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-                det_loss = 0.5 * (det_loss + mem_loss)
-            det_loss = self.det_lambda * det_loss
-            det_loss.backward()
-            self.det_opt.step()
+        # if getattr(self, "det_enabled", True):
+        #     self.det_opt.zero_grad()
+        #     det_logits, _ = self.net.forward_heads(x_det)
+        #     det_loss = self.det_loss(det_logits, y_det.float())
+        #     det_replay = self._sample_det_memory()
+        #     if det_replay is not None:
+        #         mem_x, mem_y = det_replay
+        #         mem_det_logits, _ = self.net.forward_heads(mem_x)
+        #         mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+        #         det_loss = 0.5 * (det_loss + mem_loss)
+        #     det_loss = self.det_lambda * det_loss
+        #     det_loss.backward()
+        #     self.det_opt.step()
 
         return loss.item(), tr_acc
 

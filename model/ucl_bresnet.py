@@ -500,23 +500,23 @@ class Net(nn.Module):
 
         x_cls = x
         y_cls_filtered = y_cls
-        if y_det is not None:
-            signal_mask = (y_det == 1) & (y_cls >= 0)
-            if not signal_mask.any():
-                x = x.to(device)
-                y_det = y_det.to(device)
-                self.detector.train()
-                det_logits = self.detector.forward_detection(self.detector.forward_features(x))
-                det_loss = self.det_loss(det_logits, y_det.float())
-                self.det_optimizer.zero_grad(set_to_none=True)
-                det_loss = self.det_lambda * det_loss
-                det_loss.backward()
-                if self.cfg.clipgrad > 0:
-                    torch.nn.utils.clip_grad_norm_(self.detector.parameters(), self.cfg.clipgrad)
-                self.det_optimizer.step()
-                return float(det_loss.detach().cpu()), 0.0
-            x_cls = x[signal_mask]
-            y_cls_filtered = y_cls[signal_mask]
+        # if y_det is not None:
+        #     signal_mask = (y_det == 1) & (y_cls >= 0)
+        #     if not signal_mask.any():
+        #         x = x.to(device)
+        #         y_det = y_det.to(device)
+        #         self.detector.train()
+        #         det_logits = self.detector.forward_detection(self.detector.forward_features(x))
+        #         det_loss = self.det_loss(det_logits, y_det.float())
+        #         self.det_optimizer.zero_grad(set_to_none=True)
+        #         det_loss = self.det_lambda * det_loss
+        #         det_loss.backward()
+        #         if self.cfg.clipgrad > 0:
+        #             torch.nn.utils.clip_grad_norm_(self.detector.parameters(), self.cfg.clipgrad)
+        #         self.det_optimizer.step()
+        #         return float(det_loss.detach().cpu()), 0.0
+        #     x_cls = x[signal_mask]
+        #     y_cls_filtered = y_cls[signal_mask]
 
         if self.split:
             offset1, _ = self.compute_offsets(t)
@@ -554,16 +554,16 @@ class Net(nn.Module):
             torch.nn.utils.clip_grad_norm_(self.parameters(), self.cfg.clipgrad)
         self.optimizer.step()
 
-        if y_det is not None:
-            self.detector.train()
-            det_logits = self.detector.forward_detection(self.detector.forward_features(x))
-            det_loss = self.det_loss(det_logits, y_det.float())
-            self.det_optimizer.zero_grad(set_to_none=True)
-            det_loss = self.det_lambda * det_loss
-            det_loss.backward()
-            if self.cfg.clipgrad > 0:
-                torch.nn.utils.clip_grad_norm_(self.detector.parameters(), self.cfg.clipgrad)
-            self.det_optimizer.step()
+        # if y_det is not None:
+        #     self.detector.train()
+        #     det_logits = self.detector.forward_detection(self.detector.forward_features(x))
+        #     det_loss = self.det_loss(det_logits, y_det.float())
+        #     self.det_optimizer.zero_grad(set_to_none=True)
+        #     det_loss = self.det_lambda * det_loss
+        #     det_loss.backward()
+        #     if self.cfg.clipgrad > 0:
+        #         torch.nn.utils.clip_grad_norm_(self.detector.parameters(), self.cfg.clipgrad)
+        #     self.det_optimizer.step()
 
         return float(loss.detach().cpu()), tr_acc
 

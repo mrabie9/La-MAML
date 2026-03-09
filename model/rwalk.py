@@ -122,44 +122,49 @@ class Net(DetectionReplayMixin, nn.Module):
         self.net.train()
         self.opt.zero_grad()
 
-        class_counts = getattr(self, "classes_per_task", None)
-        noise_label = None
-        if class_counts is not None:
-            _, offset2 = misc_utils.compute_offsets(t, class_counts)
-            noise_label = offset2 - 1
-        y_cls, y_det = self._unpack_labels(
-            y,
-            noise_label=noise_label,
-            use_detector_arch=bool(getattr(self, "det_enabled", False)),
-        )
-        if y_det is not None and self.det_memories > 0:
-            self._update_det_memory(x, y_det)
-        det_logits, cls_logits = self.net.forward_heads(x)
+        # class_counts = getattr(self, "classes_per_task", None)
+        # noise_label = None
+        # if class_counts is not None:
+        #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
+        #     noise_label = offset2 - 1
+        # y_cls, y_det = self._unpack_labels(
+        #     y,
+        #     noise_label=noise_label,
+        #     use_detector_arch=bool(getattr(self, "det_enabled", False)),
+        # )
+        # if y_det is not None and self.det_memories > 0:
+        #     self._update_det_memory(x, y_det)
+        y_cls = y
+        # det_logits, cls_logits = self.net.forward_heads(x)
+        cls_logits = self.net.forward_heads(x)[1]
         offset1, offset2 = (0, self.n_outputs)
         targets = y_cls.long()
         if self.is_task_incremental:
             offset1, offset2 = self._compute_offsets(t)
-        valid_mask = (y_det == 1) & (y_cls >= 0)
-        if valid_mask.any():
-            logits = cls_logits[valid_mask][:, offset1:offset2]
-            targets = (targets[valid_mask] - offset1).long()
+        # valid_mask = (y_det == 1) & (y_cls >= 0)
+        # if valid_mask.any():
+        if True:
+            # logits = cls_logits[valid_mask][:, offset1:offset2]
+            # targets = (targets[valid_mask] - offset1).long()
+            logits = cls_logits[:, offset1:offset2]
+            targets = (targets - offset1).long()
             loss_ce = self.ce(logits, targets)
             preds = torch.argmax(logits, dim=1)
             tr_acc = macro_recall(preds, targets)
-        else:
-            loss_ce = cls_logits.new_zeros(1)
-            tr_acc = 0.0
+        # else:
+        #     loss_ce = cls_logits.new_zeros(1)
+        #     tr_acc = 0.0
 
-        det_loss = self.det_loss(det_logits, y_det.float())
-        det_replay = self._sample_det_memory()
-        if det_replay is not None:
-            mem_x, mem_y = det_replay
-            mem_det_logits, _ = self.net.forward_heads(mem_x)
-            mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-            det_loss = 0.5 * (det_loss + mem_loss)
+        # det_loss = self.det_loss(det_logits, y_det.float())
+        # det_replay = self._sample_det_memory()
+        # if det_replay is not None:
+        #     mem_x, mem_y = det_replay
+        #     mem_det_logits, _ = self.net.forward_heads(mem_x)
+        #     mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+        #     det_loss = 0.5 * (det_loss + mem_loss)
 
         loss = (self.cls_lambda * loss_ce
-                + self.det_lambda * det_loss
+                # + self.det_lambda * det_loss
                 + self.lamb * self._regulariser())
         loss.backward()
 
