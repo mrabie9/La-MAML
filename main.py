@@ -788,7 +788,8 @@ def main():
 
     # setup logging
     timestamp = misc_utils.get_date_time()
-    args.log_dir, args.tf_dir = misc_utils.log_dir(args, timestamp)
+    config_name = Path(config_chain[-1]).stem if config_chain else None
+    args.log_dir, args.tf_dir = misc_utils.log_dir(args, timestamp, config_name)
     log_state(args.state_logging, "Logging to {}".format(args.log_dir))
 
     # load model
