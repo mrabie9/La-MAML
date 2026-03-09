@@ -18,7 +18,7 @@ from typing import Iterable, List, Optional, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from model.resnet1d import ResNet1D
+from model.resnet1d import AdcIqAdapter, ResNet1D
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 
@@ -364,7 +364,8 @@ class BayesianClassifier(nn.Module):
                 classes_per_task=None,
             )
 
-        self.feature_net = BayesianResNet1D(in_channels=getattr(args, "in_channels", 2), ratio=cfg.ratio)
+        self.input_adapter = AdcIqAdapter()
+        self.feature_net = BayesianResNet1D(in_channels=2, ratio=cfg.ratio)
         self.feature_dim = self.feature_net.feature_dim
 
         self.heads = nn.ModuleList(
@@ -374,6 +375,10 @@ class BayesianClassifier(nn.Module):
         self.split = cfg.split
 
     def forward(self, x: torch.Tensor, sample: bool = False) -> List[torch.Tensor] | torch.Tensor:
+        if x.dim() == 3 and x.size(1) == 3:
+            x = self.input_adapter(x)
+        elif x.dim() == 4 and x.size(1) == 3 and x.size(2) == 2:
+            x = self.input_adapter(x)
         feats = self.feature_net(x, sample=sample, ret_feats=True)
         outputs = [head(feats, sample=sample) for head in self.heads]
         if self.split:
