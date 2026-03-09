@@ -229,7 +229,7 @@ def plot_validation_over_time(tasks: list[dict[str, Any]], output_dir: Path | No
     """Plot validation accuracy per task as more tasks are trained (accuracy matrix)."""
     n_tasks = len(tasks)
     # After training task k, we have val_acc of length k+1 (tasks 0..k)
-    x = np.arange(0, n_tasks)  # "after task 0", "after task 1", ...
+    x = np.arange(1, n_tasks + 1)  # "after task 0", "after task 1", ...
 
     fig, ax = plt.subplots(figsize=(9, 5))
     for task_idx in range(n_tasks):
