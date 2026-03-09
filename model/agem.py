@@ -428,8 +428,9 @@ class Net(DetectionReplayMixin, nn.Module):
 
             self.opt.step()
         
-        xi = x.data.cpu().numpy()
-        yi = y.data.cpu().numpy()
+        x_for_storage = self._input_for_replay(x)
+        xi = x_for_storage.data.cpu().numpy()
+        yi = y[0].data.cpu().numpy() if isinstance(y, (list, tuple)) else y.data.cpu().numpy()
         for i in range(0,x.size()[0]):
             self.age += 1
             # Reservoir sampling memory update:

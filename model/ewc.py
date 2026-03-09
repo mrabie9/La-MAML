@@ -155,7 +155,7 @@ class Net(DetectionReplayMixin, nn.Module):
             # self._accumulate_fisher(int(valid_mask.sum().item()))
             self._accumulate_fisher(int(y_cls.size(0)))
 
-        self.opt.zero_grad()
+        # self.opt.zero_grad()
         # det_loss = self.det_loss(det_logits, y_det.float())
         # det_replay = self._sample_det_memory()
         # if det_replay is not None:

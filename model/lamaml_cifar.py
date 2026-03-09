@@ -121,7 +121,10 @@ class Net(DetectionReplayMixin, BaseNet):
             self.pass_itr = pass_itr
             perm = torch.randperm(x.size(0))
             x = x[perm]
-            y=y[perm]
+            if isinstance(y, (list, tuple)):
+                y = tuple(yi[perm] if yi is not None else None for yi in y)
+            else:
+                y = y[perm]
             class_counts = getattr(self, "classes_per_task", None)
             # noise_label = None
             # if class_counts is not None:

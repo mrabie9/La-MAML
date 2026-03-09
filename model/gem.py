@@ -362,7 +362,8 @@ class Net(DetectionReplayMixin, nn.Module):
                 task_capacity = int(self.task_memory_capacities[t])
                 if task_capacity > 0:
                     write_pointer = int(self.task_mem_ptr[t].item())
-                    bsz = y.data.size(0)
+                    # extract the true batch size
+                    bsz = y[0].data.size(0) if isinstance(y, (tuple, list)) else y.data.size(0)
                     endcnt = min(write_pointer + bsz, task_capacity)
                     effbsz = endcnt - write_pointer
                     # Store adapter output (e.g. 3-ADC -> 2-channel) so replay matches forward
@@ -370,9 +371,11 @@ class Net(DetectionReplayMixin, nn.Module):
                     self.memory_data[t, write_pointer:endcnt].copy_(mem_x)
 
                     if bsz == 1:
-                        self.memory_labs[t, write_pointer] = y.data[0]
+                        y_val = y[0].data[0] if isinstance(y, (tuple, list)) else y.data[0]
+                        self.memory_labs[t, write_pointer] = y_val
                     else:
-                        self.memory_labs[t, write_pointer:endcnt].copy_(y.data[:effbsz])
+                        y_slice = y[0].data[:effbsz] if isinstance(y, (tuple, list)) else y.data[:effbsz]
+                        self.memory_labs[t, write_pointer:endcnt].copy_(y_slice)
 
                     if effbsz > 0:
                         filled_before_update = int(self.task_mem_filled[t].item())

@@ -230,7 +230,7 @@ class Net(DetectionReplayMixin, nn.Module):
         # Store and replay canonical (post-adapter) shape so buffer has uniform (2, 512) across tasks
         x_for_storage = self._input_for_replay(x)
         xi = x_for_storage.data.cpu().numpy()
-        yi = y.data.cpu().numpy()
+        yi = y[0].data.cpu().numpy() if isinstance(y, (list, tuple)) else y.data.cpu().numpy()
 
         if t != self.current_task:
            self.current_task = t
@@ -364,7 +364,10 @@ class Net(DetectionReplayMixin, nn.Module):
             
             perm = torch.randperm(x.size(0))
             x = x[perm]
-            y = y[perm]
+            if isinstance(y, (list, tuple)):
+                y = tuple(yi[perm] if yi is not None else None for yi in y)
+            else:
+                y = y[perm]
 
             batch_sz = x.shape[0]
             n_batches = self.cfg.meta_batches
@@ -372,13 +375,16 @@ class Net(DetectionReplayMixin, nn.Module):
             fast_weights = None
             meta_losses = [0 for _ in range(n_batches)] 
 
-            bx, by, bt = self.getBatch(x.cpu().numpy(), y.cpu().numpy(), t)
+            bx, by, bt = self.getBatch(x.cpu().numpy(), y[0].cpu().numpy() if isinstance(y, (list, tuple)) else y.cpu().numpy(), t)
             bx = bx.squeeze()
             
             for i in range(n_batches):
 
                 batch_x = x[i*rough_sz : (i+1)*rough_sz]
-                batch_y = y[i*rough_sz : (i+1)*rough_sz]
+                if isinstance(y, (list, tuple)):
+                    batch_y = tuple(yi[i*rough_sz : (i+1)*rough_sz] if yi is not None else None for yi in y)
+                else:
+                    batch_y = y[i*rough_sz : (i+1)*rough_sz]
 
                 # assuming labels for inner update are from the same 
                 fast_weights, inner_loss = self.inner_update(batch_x, fast_weights, batch_y, t)
