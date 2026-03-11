@@ -130,6 +130,13 @@ def load_metrics(metrics_dir: Path) -> List[TaskMetrics]:
     for path in task_files:
         data = np.load(path, allow_pickle=True)
         task_data: TaskMetrics = {key: np.asarray(data[key]) for key in data.files}
+        # Truncate validation metrics (e.g. val_acc, val_f1) in the same way as
+        # scripts/plot_metrics.py so that only the final per-task values remain.
+        task_idx = _task_index(path.name)
+        num_tasks_seen = task_idx + 1
+        for key in ("val_acc", "val_f1"):
+            if key in task_data and len(task_data[key]) > num_tasks_seen:
+                task_data[key] = task_data[key][-num_tasks_seen:]
         tasks.append(task_data)
     return tasks
 
@@ -137,10 +144,15 @@ def load_metrics(metrics_dir: Path) -> List[TaskMetrics]:
 def compute_average_forgetting(tasks: Sequence[TaskMetrics]) -> Tuple[np.ndarray, np.ndarray]:
     """Compute average forgetting over previous tasks at each checkpoint.
 
-    For each task ``t``, peak recall is taken as ``val_acc[t]`` after training
-    task ``t``. After training task ``K > t``, the recall on task ``t`` is
-    ``tasks[K]['val_acc'][t]``. Forgetting for task ``t`` at ``K`` is
-    ``max(0, peak[t] - current_acc)`` and the average forgetting at ``K`` is
+    This uses classification F1 when available (``val_f1`` saved in metrics);
+    otherwise it falls back to classification accuracy / recall from
+    ``val_acc``.
+
+    For each task ``t``, peak metric is taken as ``val_f1[t]`` (or
+    ``val_acc[t]``) after training task ``t``. After training task ``K > t``,
+    the metric on task ``t`` is ``tasks[K]['val_f1'][t]`` (or
+    ``tasks[K]['val_acc'][t]``). Forgetting for task ``t`` at ``K`` is
+    ``max(0, peak[t] - current_metric)`` and the average forgetting at ``K`` is
     the mean over all previous tasks.
 
     Args:
@@ -159,10 +171,15 @@ def compute_average_forgetting(tasks: Sequence[TaskMetrics]) -> Tuple[np.ndarray
     if n_tasks == 0:
         return np.array([]), np.array([])
 
-    peak_acc = np.array(
-        [float(tasks[t]["val_acc"][t]) for t in range(n_tasks)],
-        dtype=float,
-    )
+    # Peak metric (F1 if present, else accuracy) after learning each task t.
+    peak_vals: List[float] = []
+    for t in range(n_tasks):
+        metrics_t = tasks[t]
+        if "val_f1" in metrics_t and len(metrics_t["val_f1"]) > t:
+            peak_vals.append(float(metrics_t["val_f1"][t]))
+        else:
+            peak_vals.append(float(metrics_t["val_acc"][t]))
+    peak_vals_arr = np.asarray(peak_vals, dtype=float)
     avg_forgetting = np.zeros(n_tasks, dtype=float)
 
     for k in range(n_tasks):
@@ -171,8 +188,12 @@ def compute_average_forgetting(tasks: Sequence[TaskMetrics]) -> Tuple[np.ndarray
             continue
         forgets: List[float] = []
         for t in range(k):
-            current_acc = float(tasks[k]["val_acc"][t])
-            forgets.append(max(0.0, float(peak_acc[t] - current_acc)))
+            metrics_k = tasks[k]
+            if "val_f1" in metrics_k and len(metrics_k["val_f1"]) > t:
+                current_metric = float(metrics_k["val_f1"][t])
+            else:
+                current_metric = float(metrics_k["val_acc"][t])
+            forgets.append(max(0.0, float(peak_vals_arr[t] - current_metric)))
         avg_forgetting[k] = float(np.mean(forgets)) if forgets else 0.0
 
     return np.arange(n_tasks), avg_forgetting
@@ -347,7 +368,8 @@ def _plot_average_forgetting(ax: plt.Axes, tasks: Sequence[TaskMetrics]) -> None
         return
     ax.plot(x, avg_forgetting, "o-", color="C3")
     ax.set_xlabel("After training up to task")
-    ax.set_ylabel("Avg forgetting")
+    has_f1 = any("val_f1" in t for t in tasks)
+    ax.set_ylabel("Avg forgetting (Cls F1)" if has_f1 else "Avg forgetting (cls recall)")
     ax.grid(True, alpha=0.3)
 
 
