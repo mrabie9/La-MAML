@@ -224,9 +224,9 @@ def print_summary(summaries: Dict[str, AlgoSummary]) -> None:
     # tr: rec prec f1 det fa | te: rec prec f1 det fa | Size_GB Time
     header = (
         f"{'Algo':<{w_algo}} {'Status':<{w_status}} {'Exit':<{w_exit}} "
-        f"{'rec':>{w_num}} {'prec':>{w_num}} {'f1':>{w_num}} {'det':>{w_num}} {'fa':>{w_num}} "
+        f"{'rec':>{w_num}} {'prec':>{w_num}}  {'det':>{w_num}} {'fa':>{w_num}} {'f1':>{w_num}} "
         f"| "
-        f"{'rec':>{w_num}} {'prec':>{w_num}} {'f1':>{w_num}} {'det':>{w_num}} {'fa':>{w_num}} "
+        f"{'rec':>{w_num}} {'prec':>{w_num}}  {'det':>{w_num}} {'fa':>{w_num}} {'f1':>{w_num}} "
         f"{'Size_GB':>{w_num}} {'Time':>{w_time}}"
     )
     print(header)
@@ -238,11 +238,11 @@ def print_summary(summaries: Dict[str, AlgoSummary]) -> None:
         exit_str = str(s.exit_code) if s.exit_code is not None else ""
         print(
             f"{s.name:<{w_algo}} {s.status:<{w_status}} {exit_str:<{w_exit}} "
-            f"{_fmt(s.cls_rec_tr):>{w_num}} {_fmt(s.cls_prec_tr):>{w_num}} {_fmt(s.cls_f1_tr):>{w_num}} "
-            f"{_fmt(s.det_tr):>{w_num}} {_fmt(s.fa_tr):>{w_num}} "
+            f"{_fmt(s.cls_rec_tr):>{w_num}} {_fmt(s.cls_prec_tr):>{w_num}}  "
+            f"{_fmt(s.det_tr):>{w_num}} {_fmt(s.fa_tr):>{w_num}} {_fmt(s.cls_f1_tr):>{w_num}} "
             f"| "
-            f"{_fmt(s.cls_rec_te):>{w_num}} {_fmt(s.cls_prec_te):>{w_num}} {_fmt(s.cls_f1_te):>{w_num}} "
-            f"{_fmt(s.det_te):>{w_num}} {_fmt(s.fa_te):>{w_num}} "
+            f"{_fmt(s.cls_rec_te):>{w_num}} {_fmt(s.cls_prec_te):>{w_num}} "
+            f"{_fmt(s.det_te):>{w_num}} {_fmt(s.fa_te):>{w_num}} {_fmt(s.cls_f1_te):>{w_num}} "
             f"{size_str:>{w_num}} {time_str:>{w_time}}"
         )
 
