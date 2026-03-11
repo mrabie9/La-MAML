@@ -9,6 +9,12 @@ Parses a `full_experiments_*.log` file and prints, for each algorithm:
   the log only has "Train Acc | Val Acc" to avoid misleading values)
 - time taken (from results line when completed, else sum of Epoch Time)
 
+Time is computed per algorithm as follows:
+- If the run completed: the value is taken from the final results line
+  (regex RESULTS_TIME_RE matches "# val: ... # <seconds>" at end of line).
+- If the run did not finish or that line is missing: time is the sum of all
+  "Epoch Time <seconds>s" lines (EPOCH_TIME_RE) seen for that algorithm.
+
 Usage:
     python scripts/summarise_full_experiments.py \
         --log logs/full_experiments/full_experiments_20260305_175812.log
@@ -245,6 +251,11 @@ def print_summary(summaries: Dict[str, AlgoSummary]) -> None:
             f"{_fmt(s.det_te):>{w_num}} {_fmt(s.fa_te):>{w_num}} {_fmt(s.cls_f1_te):>{w_num}} "
             f"{size_str:>{w_num}} {time_str:>{w_time}}"
         )
+
+    total_sec = sum(s.time_sec for s in summaries.values() if s.time_sec is not None)
+    if total_sec > 0:
+        print("-" * len(header))
+        print(f"Total time (all models): {_format_time(total_sec)}")
 
 
 def main() -> None:
