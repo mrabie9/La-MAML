@@ -186,18 +186,75 @@ def plot_per_epoch_curves(
 
 
 def plot_final_validation(tasks: list[dict[str, Any]], output_dir: Path | None) -> None:
-    """Plot final validation accuracy (and detection metrics) from the last task."""
+    """Plot final validation metrics from the last task, including Pfa.
+
+    Bars per task are ordered as:
+    - detection false alarm rate (Pfa)
+    - detection recall
+    - classification accuracy
+    """
+    if not tasks:
+        return
+
     last = tasks[-1]
-    n_tasks = len(last["val_acc"])
+    val_acc = last.get("val_acc")
+    val_det_acc = last.get("val_det_acc")
+    val_det_fa = last.get("val_det_fa")
+
+    if val_acc is None and val_det_acc is None and val_det_fa is None:
+        return
+
+    lengths = [
+        len(v)
+        for v in (val_det_fa, val_det_acc, val_acc)
+        if v is not None
+    ]
+    if not lengths:
+        return
+    n_tasks = min(lengths)
     task_indices = np.arange(n_tasks)
 
     fig, ax = plt.subplots(figsize=(8, 4))
-    colors = [get_task_color(i) for i in task_indices]
-    ax.bar(task_indices - 0.2, last["val_acc"], width=0.4, label="Val accuracy (cls)", color=colors)
-    if "val_det_acc" in last:
-        ax.bar(task_indices + 0.2, last["val_det_acc"], width=0.4, label="Val det recall", color=colors, hatch='//')
+    width = 0.25
+    colors = [get_task_color(i) for i in range(n_tasks)]
+
+    # False alarm rate (Pfa) first.
+    if val_det_fa is not None:
+        fa_vals = np.asarray(val_det_fa, dtype=float)
+        ax.bar(
+            task_indices - width,
+            fa_vals[:n_tasks],
+            width=width,
+            label="Det Pfa",
+            color=colors,
+            hatch="//",
+        )
+
+    # Detection recall.
+    if val_det_acc is not None:
+        det_vals = np.asarray(val_det_acc, dtype=float)
+        ax.bar(
+            task_indices,
+            det_vals[:n_tasks],
+            width=width,
+            label="Det recall",
+            color=colors,
+            hatch="..",
+        )
+
+    # Classification accuracy.
+    if val_acc is not None:
+        cls_vals = np.asarray(val_acc, dtype=float)
+        ax.bar(
+            task_indices + width,
+            cls_vals[:n_tasks],
+            width=width,
+            label="Cls acc",
+            color=colors,
+        )
+
     ax.set_xlabel("Task")
-    ax.set_ylabel("Accuracy / recall")
+    ax.set_ylabel("Metric value")
     ax.set_title("Final validation metrics (after all tasks)")
     ax.set_xticks(task_indices)
     ax.legend()
@@ -208,21 +265,6 @@ def plot_final_validation(tasks: list[dict[str, Any]], output_dir: Path | None) 
     else:
         plt.show()
     plt.close()
-
-    if "val_det_fa" in last:
-        fig2, ax2 = plt.subplots(figsize=(8, 4))
-        ax2.bar(task_indices, last["val_det_fa"], color=colors)
-        ax2.set_xlabel("Task")
-        ax2.set_ylabel("False alarm rate")
-        ax2.set_title("Final validation detection false alarm (per task)")
-        ax2.set_xticks(task_indices)
-        ax2.grid(True, alpha=0.3, axis="y")
-        plt.tight_layout()
-        if output_dir:
-            fig2.savefig(output_dir / "final_val_det_fa.png", dpi=150, bbox_inches="tight")
-        else:
-            plt.show()
-        plt.close()
 
 
 def plot_validation_over_time(tasks: list[dict[str, Any]], output_dir: Path | None) -> None:
