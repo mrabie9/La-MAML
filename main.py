@@ -413,11 +413,20 @@ def life_experience(model, inc_loader, args):
                     pb = torch.argmax(logits, dim=1).cpu()
                     det_logits = _get_det_logits(model, v_x, task_info["task"])
                 model.train()
-                
+
                 y_cls_for_metric = y_cls.cpu() if torch.is_tensor(y_cls) else torch.as_tensor(y_cls)
                 y_det_for_metric = y_det.cpu() if y_det is not None and torch.is_tensor(y_det) else (torch.as_tensor(y_det) if y_det is not None else None)
+                noise_label_for_metric = noise_label
 
-                prec = macro_precision_signal_only(pb, y_cls_for_metric, noise_label)
+                # For split (task-incremental) models, forward returns task-local logits so pb is in [0, C_t-1].
+                # Convert labels to task-local so Train Acc / Prec / F1 match.
+                if getattr(model, "split", False):
+                    offset1, _ = model.compute_offsets(task_info["task"])
+                    y_cls_for_metric = y_cls_for_metric - offset1
+                    if noise_label_for_metric is not None:
+                        noise_label_for_metric = noise_label_for_metric - offset1
+
+                prec = macro_precision_signal_only(pb, y_cls_for_metric, noise_label_for_metric)
                 f1 = macro_f1_including_noise(pb, y_cls_for_metric)
 
                 if y_det_for_metric is not None:
@@ -426,8 +435,8 @@ def life_experience(model, inc_loader, args):
                         tr_acc = macro_recall(pb[cls_mask], y_cls_for_metric[cls_mask])
                     else:
                         tr_acc = 0.0
-                elif noise_label is not None:
-                    cls_mask = y_cls_for_metric != noise_label
+                elif noise_label_for_metric is not None:
+                    cls_mask = y_cls_for_metric != noise_label_for_metric
                     if cls_mask.any():
                         tr_acc = macro_recall(pb[cls_mask], y_cls_for_metric[cls_mask])
                     else:
@@ -441,9 +450,9 @@ def life_experience(model, inc_loader, args):
                     det_pred = (det_logits >= 0).long().cpu()
                     det_rec = macro_recall(det_pred, y_det_for_metric)
                     det_fa = _false_alarm_rate(det_pred, y_det_for_metric)
-                elif noise_label is not None:
-                    det_targets = (y_cls_for_metric != noise_label).long()
-                    det_pred = (pb != noise_label).long()
+                elif noise_label_for_metric is not None:
+                    det_targets = (y_cls_for_metric != noise_label_for_metric).long()
+                    det_pred = (pb != noise_label_for_metric).long()
                     det_rec = macro_recall(det_pred, det_targets)
                     det_fa = _false_alarm_rate(det_pred, det_targets)
 
@@ -799,6 +808,10 @@ def main():
     base_args = file_parser.parse_args_from_yaml(config_chain or None)
     parser = file_parser.get_parser()
     args = parser.parse_args(remaining, namespace=base_args)
+
+    # Scale learning rate based on batch size (reference batch size = 128).
+    # This applies uniformly across all models that rely on args.lr.
+    args.lr = misc_utils.scale_learning_rate_for_batch_size(args.lr, args.batch_size)
     print("Running model: ", args.model)
     log_state(
         args.state_logging,
