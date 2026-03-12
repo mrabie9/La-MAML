@@ -3,6 +3,8 @@ import glob
 import json
 import os
 import random
+from typing import Final
+
 import numpy as np
 import torch
 
@@ -224,3 +226,34 @@ def log_sum_exp(input, dim=None, keepdim=False):
     if not keepdim:
         output = output.squeeze(dim)
     return output
+
+
+_REFERENCE_BATCH_SIZE: Final[int] = 128
+
+
+def scale_learning_rate_for_batch_size(
+    base_lr: float,
+    batch_size: int,
+    reference_batch_size: int = _REFERENCE_BATCH_SIZE,
+) -> float:
+    """Scale a learning rate linearly with batch size.
+
+    This assumes that ``base_lr`` was tuned for ``reference_batch_size``.
+    For example, doubling the batch size from 128 to 256 will double the
+    learning rate; halving the batch size will halve the learning rate.
+
+    Args:
+        base_lr: Learning rate tuned for ``reference_batch_size``.
+        batch_size: Actual training batch size.
+        reference_batch_size: Batch size ``base_lr`` corresponds to.
+
+    Returns:
+        A scaled learning rate that is proportional to ``batch_size``.
+
+    Usage:
+        scaled_lr = scale_learning_rate_for_batch_size(args.lr, args.batch_size)
+    """
+    if batch_size <= 0 or reference_batch_size <= 0:
+        return float(base_lr)
+    scale = float(batch_size) / float(reference_batch_size)
+    return float(base_lr) * scale
