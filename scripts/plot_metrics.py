@@ -3,8 +3,8 @@
 Metrics are saved by main.py under args.log_dir/metrics/ as task0.npz, task1.npz, ...
 Each task*.npz contains:
   - losses: per-step/epoch loss for that task
-  - tr_acc: per-step/epoch training accuracy
-  - val_acc: validation accuracy per task (length = task_index + 1)
+  - tr_acc: per-step/epoch training recall
+  - val_acc: validation recall per task (length = task_index + 1)
   - val_det_acc, val_det_fa: optional detection metrics (same shape as val_acc)
 
 Usage:
@@ -122,7 +122,7 @@ def plot_per_task_curves(
     tasks: list[dict[str, Any]],
     output_dir: Path | None,
 ) -> None:
-    """Plot loss and training accuracy per task (steps within task)."""
+    """Plot loss and training recall per task (steps within task)."""
     n_tasks = len(tasks)
     fig, axes = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
 
@@ -137,9 +137,9 @@ def plot_per_task_curves(
     axes[0].legend(ncol=min(n_tasks, 5), fontsize=8)
     axes[0].grid(True, alpha=0.3)
 
-    axes[1].set_ylabel("Train accuracy")
+    axes[1].set_ylabel("Train recall")
     axes[1].set_xlabel("Step / epoch index")
-    axes[1].set_title("Training accuracy per task")
+    axes[1].set_title("Training cls recall per task")
     axes[1].legend(ncol=min(n_tasks, 5), fontsize=8)
     axes[1].grid(True, alpha=0.3)
 
@@ -156,7 +156,7 @@ def plot_per_epoch_curves(
     n_epochs: int,
     output_dir: Path | None,
 ) -> None:
-    """Plot mean loss and mean training accuracy per epoch (one point per epoch per task)."""
+    """Plot mean loss and mean training recall per epoch (one point per epoch per task)."""
     n_tasks = len(tasks)
     fig, axes = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
 
@@ -173,9 +173,9 @@ def plot_per_epoch_curves(
     axes[0].legend(ncol=min(n_tasks, 5), fontsize=8)
     axes[0].grid(True, alpha=0.3)
 
-    axes[1].set_ylabel("Train accuracy (mean)")
+    axes[1].set_ylabel("Train recall (mean)")
     axes[1].set_xlabel("Epoch")
-    axes[1].set_title("Training accuracy per epoch (mean over steps)")
+    axes[1].set_title("Training cls recall per epoch (mean over steps)")
     axes[1].legend(ncol=min(n_tasks, 5), fontsize=8)
     axes[1].grid(True, alpha=0.3)
 
@@ -193,7 +193,7 @@ def plot_final_validation(tasks: list[dict[str, Any]], output_dir: Path | None) 
     Bars per task are ordered as:
     - detection false alarm rate (Pfa)
     - detection recall
-    - classification accuracy
+    - classification recall
     """
     if not tasks:
         return
@@ -244,14 +244,14 @@ def plot_final_validation(tasks: list[dict[str, Any]], output_dir: Path | None) 
             hatch="..",
         )
 
-    # Classification accuracy.
+    # Classification recall.
     if val_acc is not None:
         cls_vals = np.asarray(val_acc, dtype=float)
         ax.bar(
             task_indices + width,
             cls_vals[:n_tasks],
             width=width,
-            label="Cls acc",
+            label="Cls Recall",
             color=colors,
         )
 
@@ -270,7 +270,7 @@ def plot_final_validation(tasks: list[dict[str, Any]], output_dir: Path | None) 
 
 
 def plot_validation_over_time(tasks: list[dict[str, Any]], output_dir: Path | None) -> None:
-    """Plot validation accuracy per task as more tasks are trained (accuracy matrix)."""
+    """Plot validation recall per task as more tasks are trained (recall matrix)."""
     n_tasks = len(tasks)
     # After training task k, we have val_acc of length k+1 (tasks 0..k)
     x = np.arange(1, n_tasks + 1)  # "after task 0", "after task 1", ...
@@ -288,8 +288,8 @@ def plot_validation_over_time(tasks: list[dict[str, Any]], output_dir: Path | No
         ax.plot(x, ys, "o-", label=f"Task {task_idx}", color=get_task_color(task_idx), alpha=0.8)
 
     ax.set_xlabel("After training up to task")
-    ax.set_ylabel("Validation accuracy (classification)")
-    ax.set_title("Validation accuracy per task over continual learning")
+    ax.set_ylabel("Validation recall (classification)")
+    ax.set_title("Validation recall per task over continual learning")
     ax.legend(ncol=min(n_tasks, 5), fontsize=8)
     ax.grid(True, alpha=0.3)
     ax.set_xticks(x)
@@ -305,7 +305,7 @@ def compute_average_forgetting(tasks: list[dict[str, Any]]) -> tuple[np.ndarray,
     """Compute average forgetting over all previous tasks at each checkpoint.
 
     This uses classification F1 when available (``val_f1`` saved in metrics);
-    otherwise it falls back to classification accuracy from ``val_acc``.
+    otherwise it falls back to classification recall from ``val_acc``.
 
     For each task t, peak metric = metric[t] after training task t
     (i.e. tasks[t]['val_f1'][t] or tasks[t]['val_acc'][t]). After training
@@ -319,7 +319,7 @@ def compute_average_forgetting(tasks: list[dict[str, Any]]) -> tuple[np.ndarray,
         avg_forgetting: average forgetting at each checkpoint (length n_tasks)
     """
     n_tasks = len(tasks)
-    # Peak metric (F1 if present, else accuracy) after learning each task t.
+    # Peak metric (F1 if present, else recall) after learning each task t.
     peak_vals = []
     for t in range(n_tasks):
         metrics_t = tasks[t]
