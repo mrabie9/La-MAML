@@ -309,6 +309,21 @@ def life_experience(model, inc_loader, args):
         train_task_loaders.append(train_loader)
         test_task_loaders.append(test_loader)
         current_task = task_info["task"]
+
+        # Per-epoch training metrics for this task (classification + detection).
+        per_epoch_train_cls_rec = []
+        per_epoch_train_cls_prec = []
+        per_epoch_train_det_rec = []
+        per_epoch_train_det_pfa = []
+        per_epoch_train_f1 = []
+
+        # Per-evaluation validation metrics for this task (classification + detection).
+        per_epoch_val_cls_rec = []
+        per_epoch_val_cls_prec = []
+        per_epoch_val_det_rec = []
+        per_epoch_val_det_pfa = []
+        per_epoch_val_f1 = []
+
         log_state(
             args.state_logging,
             "Starting task {} ({}/{})".format(current_task, task_i + 1, inc_loader.n_tasks),
@@ -510,28 +525,86 @@ def life_experience(model, inc_loader, args):
                 else:
                     print("---- Eval at Epoch {}: {} ----".format(ep, val_acc))
 
+                # Store per-evaluation validation metrics for this task (current epoch).
+                # Index into the evaluator outputs with the current task id where possible.
+                current_task_idx = task_info["task"]
+                if isinstance(val_acc, (list, tuple)) and current_task_idx < len(val_acc):
+                    per_epoch_val_cls_rec.append(float(val_acc[current_task_idx]))
+                elif not isinstance(val_acc, (list, tuple)):
+                    per_epoch_val_cls_rec.append(float(val_acc))
+                else:
+                    per_epoch_val_cls_rec.append(float("nan"))
+
+                if val_prec is not None:
+                    if isinstance(val_prec, (list, tuple)) and current_task_idx < len(val_prec):
+                        per_epoch_val_cls_prec.append(float(val_prec[current_task_idx]))
+                    elif not isinstance(val_prec, (list, tuple)):
+                        per_epoch_val_cls_prec.append(float(val_prec))
+                    else:
+                        per_epoch_val_cls_prec.append(float("nan"))
+                else:
+                    per_epoch_val_cls_prec.append(float("nan"))
+
+                if val_f1 is not None:
+                    if isinstance(val_f1, (list, tuple)) and current_task_idx < len(val_f1):
+                        per_epoch_val_f1.append(float(val_f1[current_task_idx]))
+                    elif not isinstance(val_f1, (list, tuple)):
+                        per_epoch_val_f1.append(float(val_f1))
+                    else:
+                        per_epoch_val_f1.append(float("nan"))
+                else:
+                    per_epoch_val_f1.append(float("nan"))
+
+                if val_det_acc is not None:
+                    if isinstance(val_det_acc, (list, tuple)) and current_task_idx < len(val_det_acc):
+                        per_epoch_val_det_rec.append(float(val_det_acc[current_task_idx]))
+                    elif not isinstance(val_det_acc, (list, tuple)):
+                        per_epoch_val_det_rec.append(float(val_det_acc))
+                    else:
+                        per_epoch_val_det_rec.append(float("nan"))
+                else:
+                    per_epoch_val_det_rec.append(float("nan"))
+
+                if val_det_fa is not None:
+                    if isinstance(val_det_fa, (list, tuple)) and current_task_idx < len(val_det_fa):
+                        per_epoch_val_det_pfa.append(float(val_det_fa[current_task_idx]))
+                    elif not isinstance(val_det_fa, (list, tuple)):
+                        per_epoch_val_det_pfa.append(float(val_det_fa))
+                    else:
+                        per_epoch_val_det_pfa.append(float("nan"))
+                else:
+                    per_epoch_val_det_pfa.append(float("nan"))
+
+            epoch_duration = time.time() - epoch_start_time
+            epoch_train_time = max(epoch_duration - epoch_eval_time, 0.0)
+            avg_loss = float(sum(epoch_losses) / len(epoch_losses)) if epoch_losses else float("nan")
+            avg_tr_acc = float(sum(epoch_train_accs) / len(epoch_train_accs)) if epoch_train_accs else float("nan")
+            avg_prec = (
+                float(sum(epoch_precisions) / len(epoch_precisions))
+                if epoch_precisions
+                else float("nan")
+            )
+            avg_f1 = float(sum(epoch_f1s) / len(epoch_f1s)) if epoch_f1s else float("nan")
+            avg_det_rec = (
+                float(sum(epoch_det_recalls) / len(epoch_det_recalls)) if epoch_det_recalls else float("nan")
+            )
+            avg_det_fa = (
+                float(sum(epoch_det_fas) / len(epoch_det_fas)) if epoch_det_fas else float("nan")
+            )
+
+            # Track the last training metrics we saw (for summary logging).
+            last_tr_cls_rec = avg_tr_acc
+            last_tr_cls_prec = avg_prec
+            last_tr_cls_f1 = avg_f1
+
+            # Persist per-epoch training metrics for this task.
+            per_epoch_train_cls_rec.append(avg_tr_acc)
+            per_epoch_train_cls_prec.append(avg_prec)
+            per_epoch_train_det_rec.append(avg_det_rec)
+            per_epoch_train_det_pfa.append(avg_det_fa)
+            per_epoch_train_f1.append(avg_f1)
+
             if not interactive_terminal:
-                epoch_duration = time.time() - epoch_start_time
-                epoch_train_time = max(epoch_duration - epoch_eval_time, 0.0)
-                avg_loss = float(sum(epoch_losses) / len(epoch_losses)) if epoch_losses else float("nan")
-                avg_tr_acc = float(sum(epoch_train_accs) / len(epoch_train_accs)) if epoch_train_accs else float("nan")
-                avg_prec = (
-                    float(sum(epoch_precisions) / len(epoch_precisions))
-                    if epoch_precisions
-                    else float("nan")
-                )
-                avg_f1 = (
-                    float(sum(epoch_f1s) / len(epoch_f1s)) if epoch_f1s else float("nan")
-                )
-                avg_det_rec = (
-                    float(sum(epoch_det_recalls) / len(epoch_det_recalls)) if epoch_det_recalls else float("nan")
-                )
-                avg_det_fa = (
-                    float(sum(epoch_det_fas) / len(epoch_det_fas)) if epoch_det_fas else float("nan")
-                )
-                last_tr_cls_rec = avg_tr_acc
-                last_tr_cls_prec = avg_prec
-                last_tr_cls_f1 = avg_f1
                 print(
                     "Task {} Epoch {}/{} | L {:.4f} | Train Acc {:.2f} | Prec {:.2f} | F1 {:.2f} | Det Rec {:.2f} | Det FA {:.2f} | Epoch Time {:.2f}s (Eval {:.2f}s, Train {:.2f}s)".format(
                         task_info["task"], ep + 1, args.n_epochs, avg_loss, avg_tr_acc, avg_prec, avg_f1, avg_det_rec, avg_det_fa,
@@ -568,18 +641,52 @@ def life_experience(model, inc_loader, args):
         result_val_t.append(task_info["task"])
 
         losses = np.array(result_epoch_loss)
-        # print(epoch_accuracies)
         result_acc_tr = np.array([x.cpu().item() if torch.is_tensor(x) else x for x in result_acc_tr])
-        # print(epoch_accuracies)
-        result_acc_val = np.array([x.detach().cpu().item() if torch.is_tensor(x) else x for sublist in result_acc_val for x in sublist])
+        result_acc_val = np.array(
+            [x.detach().cpu().item() if torch.is_tensor(x) else x for sublist in result_acc_val for x in sublist]
+        )
+        # Flatten validation F1 scores in the same order as result_acc_val, if available.
+        if result_val_f1:
+            result_val_f1_flat = np.array(
+                [x.detach().cpu().item() if torch.is_tensor(x) else x for sublist in result_val_f1 for x in sublist]
+            )
+        else:
+            result_val_f1_flat = None
+
         logs_dir = os.path.join(args.log_dir, "metrics")
         os.makedirs(logs_dir, exist_ok=True)
         save_payload = {"losses": losses, "tr_acc": result_acc_tr, "val_acc": result_acc_val}
+        if result_val_f1_flat is not None:
+            save_payload["val_f1"] = result_val_f1_flat
+        # Optional: per-epoch training metrics for this task.
+        if per_epoch_train_cls_rec:
+            save_payload["train_cls_rec"] = np.asarray(per_epoch_train_cls_rec, dtype=float)
+        if per_epoch_train_cls_prec:
+            save_payload["train_cls_prec"] = np.asarray(per_epoch_train_cls_prec, dtype=float)
+        if per_epoch_train_det_rec:
+            save_payload["train_det_rec"] = np.asarray(per_epoch_train_det_rec, dtype=float)
+        if per_epoch_train_det_pfa:
+            save_payload["train_det_pfa"] = np.asarray(per_epoch_train_det_pfa, dtype=float)
+        if per_epoch_train_f1:
+            save_payload["train_f1"] = np.asarray(per_epoch_train_f1, dtype=float)
+
+        # Optional: per-evaluation validation metrics for this task (one entry per eval/epoch).
+        if per_epoch_val_cls_rec:
+            save_payload["val_cls_rec"] = np.asarray(per_epoch_val_cls_rec, dtype=float)
+        if per_epoch_val_cls_prec:
+            save_payload["val_cls_prec"] = np.asarray(per_epoch_val_cls_prec, dtype=float)
+        if per_epoch_val_det_rec:
+            save_payload["val_det_rec"] = np.asarray(per_epoch_val_det_rec, dtype=float)
+        if per_epoch_val_det_pfa:
+            save_payload["val_det_pfa"] = np.asarray(per_epoch_val_det_pfa, dtype=float)
+        if per_epoch_val_f1:
+            save_payload["val_f1_per_epoch"] = np.asarray(per_epoch_val_f1, dtype=float)
+
         if result_val_det_a:
             save_payload["val_det_acc"] = np.array(result_val_det_a[-1])
         if result_val_det_fa:
             save_payload["val_det_fa"] = np.array(result_val_det_fa[-1])
-        np.savez(os.path.join(logs_dir, "task" + str(task_i)+".npz"), **save_payload) 
+        np.savez(os.path.join(logs_dir, "task" + str(task_i) + ".npz"), **save_payload)
 
         if args.calc_test_accuracy:
             test_acc = evaluator(model, test_task_loaders, args)

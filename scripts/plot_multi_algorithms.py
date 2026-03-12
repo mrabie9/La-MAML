@@ -445,7 +445,11 @@ def _plot_final_validation_metrics(ax: plt.Axes, tasks: Sequence[TaskMetrics]) -
     ax.grid(True, alpha=0.3, axis="y")
 
 
-def plot_multi_algorithms(runs: Sequence[AlgoRun], output_dir: Path | None) -> None:
+def plot_multi_algorithms(
+    runs: Sequence[AlgoRun],
+    output_dir: Path | None,
+    same_y_limits: bool = False,
+) -> None:
     """Create the multi-row, multi-column figure for all algorithms.
 
     Args:
@@ -506,6 +510,23 @@ def plot_multi_algorithms(runs: Sequence[AlgoRun], output_dir: Path | None) -> N
     handles_val, _ = axes[0][2].get_legend_handles_labels()
     if handles_val:
         axes[0][2].legend(ncol=min(len(handles_val), 4), fontsize=8)
+
+    # Optionally enforce the same y-axis limits across rows for each column so
+    # that comparisons between algorithms are visually consistent.
+    if same_y_limits:
+        for col_idx in range(n_cols):
+            y_mins: List[float] = []
+            y_maxs: List[float] = []
+            for row_idx in range(n_algos):
+                y_min, y_max = axes[row_idx][col_idx].get_ylim()
+                y_mins.append(y_min)
+                y_maxs.append(y_max)
+            if not y_mins:
+                continue
+            col_min = min(y_mins)
+            col_max = max(y_maxs)
+            for row_idx in range(n_algos):
+                axes[row_idx][col_idx].set_ylim(col_min, col_max)
 
     plt.tight_layout()
 
@@ -578,6 +599,14 @@ def _parse_args() -> argparse.Namespace:
         default=Path("logs"),
         help="Root directory containing logs/{algo}/ subdirectories (default: logs).",
     )
+    parser.add_argument(
+        "--same-y-limits",
+        action="store_true",
+        help=(
+            "Use the same y-axis limits across all rows for each column to "
+            "make cross-algorithm comparisons easier."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -600,7 +629,11 @@ def main() -> None:
     for run in runs:
         print(f"  {run.name}: {run.metrics_dir}")
 
-    plot_multi_algorithms(runs, args.output_dir)
+    plot_multi_algorithms(
+        runs=runs,
+        output_dir=args.output_dir,
+        same_y_limits=args.same_y_limits,
+    )
 
 
 if __name__ == "__main__":
