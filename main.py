@@ -721,13 +721,54 @@ def life_experience(model, inc_loader, args):
         time_spent,
     )
 
+
+def estimate_memory_buffer_size_bytes(model: torch.nn.Module) -> int:
+    """Estimate total bytes used by replay/memory buffers in a model.
+
+    This scans all modules for tensor attributes whose names suggest they are
+    part of a replay or memory buffer (for example, attributes containing
+    ``\"mem\"``) while excluding tensors already counted as parameters and
+    avoiding double-counting shared storages.
+
+    Args:
+        model: Torch module whose memory/replay buffers will be inspected.
+
+    Returns:
+        Total number of bytes occupied by the matching tensors.
+
+    Usage:
+        buffer_bytes = estimate_memory_buffer_size_bytes(model)
+    """
+    parameter_data_ids = {id(parameter.data) for parameter in model.parameters()}
+    seen_tensor_ids: set[int] = set()
+    total_bytes = 0
+
+    for module in model.modules():
+        for attribute_name, value in vars(module).items():
+            if not torch.is_tensor(value):
+                continue
+            if "mem" not in attribute_name.lower():
+                continue
+            tensor_data = value
+            tensor_id = id(tensor_data)
+            if tensor_id in seen_tensor_ids or tensor_id in parameter_data_ids:
+                continue
+            seen_tensor_ids.add(tensor_id)
+            total_bytes += tensor_data.numel() * tensor_data.element_size()
+
+    return total_bytes
+
+
 def save_results(args, result_val_t, result_val_a, result_test_t, result_test_a, model, spent_time):
     fname = os.path.join(args.log_dir, 'results')
     log_state(args.state_logging, "Saving results to {}".format(fname))
 
     size_bytes = sum(p.numel() * p.element_size() for p in model.parameters())
     size_gb = size_bytes / (1024 ** 3)
+    buffer_bytes = estimate_memory_buffer_size_bytes(model)
+    buffer_gb = buffer_bytes / (1024 ** 3)
     print("Model size: {:.4f} GB".format(size_gb))
+    print("Memory buffer size: {:.4f} GB".format(buffer_gb))
 
     # save confusion matrix and print one line of stats
     val_stats = confusion_matrix(result_val_t, result_val_a, args.log_dir, 'results.txt')
@@ -739,6 +780,7 @@ def save_results(args, result_val_t, result_val_a, result_test_t, result_test_a,
     if args.calc_test_accuracy:
         test_stats = confusion_matrix(result_test_t, result_test_a, args.log_dir, 'results.txt')
         one_liner += ' # test: ' +  ' '.join(["%.3f" % stat for stat in test_stats])
+    one_liner += " # sizes: model_gb={:.4f} mem_gb={:.4f}".format(size_gb, buffer_gb)
 
     print(fname + ': ' + one_liner + ' # ' + str(spent_time))
 
