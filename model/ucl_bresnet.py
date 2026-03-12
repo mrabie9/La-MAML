@@ -336,7 +336,7 @@ class UCLConfig:
     det_lambda: float = 1.0
     
     split: bool = True
-    eval_samples: int = 20
+    eval_samples: int = 1
     clipgrad: float = 10.0
 
     @staticmethod

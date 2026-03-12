@@ -6,5 +6,5 @@ beta: 0.0002
 alpha: 0.1
 ratio: 0.125
 
-eval_samples: 20
+eval_samples: 1 # Only used for epistemic uncertainty estimation
 split: true
