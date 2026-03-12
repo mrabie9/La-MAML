@@ -7,7 +7,7 @@ data_scaling: normalize
 dataset: iq
 shuffle_tasks: false
 classes_per_it: 6
-val_rate: 4
+val_rate: 1000
 iterations: 5000
 workers: 0
 validation: 0.5
@@ -26,12 +26,12 @@ samples_per_task: -1
 
 # Optimizer defaults
 glances: 1
-n_epochs: 1
-batch_size: 128
+n_epochs: 5
+batch_size: 256
 n_memories: 5120
 memories: 5120
 glances: 1
-replay_batch_size: 64
+replay_batch_size: 128
 temperature: 5.0
 inner_steps: 1
 alpha_init: 0.001
