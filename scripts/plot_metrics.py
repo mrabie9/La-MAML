@@ -18,7 +18,7 @@ import argparse
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable, Sequence
 
 # Use non-interactive backend only when saving to file (-o); otherwise plt.show() can open windows
 _pre_parser = argparse.ArgumentParser()
@@ -96,31 +96,101 @@ def _aggregate_per_epoch(values: np.ndarray, n_epochs: int) -> np.ndarray:
     return np.mean(values[:n_use].reshape(n_epochs, steps_per_epoch), axis=1)
 
 
-def get_task_color(task_idx: int):
-    """Assign a color based on task grouping."""
-    group1 = [3, 4, 6, 9]
-    group2 = [0, 1, 8]
-    group3 = [2, 5, 7]
-    
-    if task_idx in group1:
-        cmap = plt.get_cmap("Blues")
-        idx = group1.index(task_idx)
-        return cmap(0.4 + 0.6 * (idx / len(group1)))
-    elif task_idx in group2:
-        cmap = plt.get_cmap("Oranges")
-        idx = group2.index(task_idx)
-        return cmap(0.4 + 0.6 * (idx / len(group2)))
-    elif task_idx in group3:
-        cmap = plt.get_cmap("Greens")
-        idx = group3.index(task_idx)
-        return cmap(0.4 + 0.6 * (idx / len(group3)))
-    else:
+def load_task_names(metrics_dir: Path) -> list[str] | None:
+    """Load task names from a ``task_order.txt`` file if present.
+
+    The file is expected to live inside ``metrics_dir`` and contain one task
+    name per line in task index order.
+
+    Args:
+        metrics_dir: Path to the metrics directory.
+
+    Returns:
+        A list of task names, or ``None`` if the file does not exist or is
+        empty.
+    """
+    order_file = metrics_dir / "task_order.txt"
+    if not order_file.is_file():
+        return None
+
+    names: list[str] = []
+    with order_file.open(encoding="utf-8") as f:
+        for line in f:
+            stripped = line.strip()
+            if stripped:
+                names.append(stripped)
+    return names or None
+
+
+def _group_for_task_name(task_name: str) -> str:
+    """Return a semantic group label for a task name."""
+    name = task_name.lower()
+    if "rcn" in name:
+        return "rcn"
+    if "deeprad" in name:
+        return "deeprad"
+    if "uclresm" in name:
+        return "uclresm"
+    return "other"
+
+
+def get_task_color(task_idx: int, task_names: Sequence[str] | None = None):
+    """Assign a color for a task, grouping by task name when available.
+
+    Tasks whose names contain ``rcn`` / ``deeprad`` / ``uclresm`` are coloured
+    consistently within their group across plots. When no task names are
+    provided, a static index-based grouping is used as a fallback.
+    """
+    if task_names is None or task_idx >= len(task_names):
+        group1 = [3, 4, 6, 9]
+        group2 = [0, 1, 8]
+        group3 = [2, 5, 7]
+
+        if task_idx in group1:
+            cmap = plt.get_cmap("Blues")
+            idx = group1.index(task_idx)
+            return cmap(0.4 + 0.6 * (idx / len(group1)))
+        if task_idx in group2:
+            cmap = plt.get_cmap("Oranges")
+            idx = group2.index(task_idx)
+            return cmap(0.4 + 0.6 * (idx / len(group2)))
+        if task_idx in group3:
+            cmap = plt.get_cmap("Greens")
+            idx = group3.index(task_idx)
+            return cmap(0.4 + 0.6 * (idx / len(group3)))
         return f"C{task_idx % 10}"
+
+    # Name-based grouping.
+    groups: dict[str, list[int]] = {}
+    for idx, name in enumerate(task_names):
+        group = _group_for_task_name(name)
+        groups.setdefault(group, []).append(idx)
+
+    task_name = task_names[task_idx]
+    group = _group_for_task_name(task_name)
+    group_indices = groups.get(group, [task_idx])
+    position_in_group = group_indices.index(task_idx)
+    group_size = len(group_indices)
+
+    def _shade(index: int, size: int) -> float:
+        if size <= 1:
+            return 0.7
+        return 0.4 + 0.6 * (index / float(size - 1))
+
+    cmap_name = {
+        "rcn": "Blues",
+        "deeprad": "Oranges",
+        "uclresm": "Greens",
+        "other": "Greys",
+    }[group]
+    cmap = plt.get_cmap(cmap_name)
+    return cmap(_shade(position_in_group, group_size))
 
 
 def plot_per_task_curves(
     tasks: list[dict[str, Any]],
     output_dir: Path | None,
+    task_names: Sequence[str] | None = None,
 ) -> None:
     """Plot loss and training recall per task (steps within task)."""
     n_tasks = len(tasks)
@@ -128,7 +198,7 @@ def plot_per_task_curves(
 
     for task_idx, task in enumerate(tasks):
         steps = np.arange(len(task["losses"]))
-        c = get_task_color(task_idx)
+        c = get_task_color(task_idx, task_names)
         axes[0].plot(steps, task["losses"], label=f"Task {task_idx}", color=c, alpha=0.8)
         axes[1].plot(steps, task["tr_acc"], label=f"Task {task_idx}", color=c, alpha=0.8)
 
@@ -155,6 +225,7 @@ def plot_per_epoch_curves(
     tasks: list[dict[str, Any]],
     n_epochs: int,
     output_dir: Path | None,
+    task_names: Sequence[str] | None = None,
 ) -> None:
     """Plot mean loss and mean training recall per epoch (one point per epoch per task)."""
     n_tasks = len(tasks)
@@ -164,7 +235,7 @@ def plot_per_epoch_curves(
         loss_ep = _aggregate_per_epoch(task["losses"], n_epochs)
         acc_ep = _aggregate_per_epoch(task["tr_acc"], n_epochs)
         epochs = np.arange(len(loss_ep))
-        c = get_task_color(task_idx)
+        c = get_task_color(task_idx, task_names)
         axes[0].plot(epochs, loss_ep, "o-", label=f"Task {task_idx}", color=c, alpha=0.8)
         axes[1].plot(epochs, acc_ep, "o-", label=f"Task {task_idx}", color=c, alpha=0.8)
 
@@ -187,7 +258,11 @@ def plot_per_epoch_curves(
     plt.close()
 
 
-def plot_final_validation(tasks: list[dict[str, Any]], output_dir: Path | None) -> None:
+def plot_final_validation(
+    tasks: list[dict[str, Any]],
+    output_dir: Path | None,
+    task_names: Sequence[str] | None = None,
+) -> None:
     """Plot final validation metrics from the last task, including Pfa.
 
     Bars per task are ordered as:
@@ -218,7 +293,7 @@ def plot_final_validation(tasks: list[dict[str, Any]], output_dir: Path | None) 
 
     fig, ax = plt.subplots(figsize=(8, 4))
     width = 0.25
-    colors = [get_task_color(i) for i in range(n_tasks)]
+    colors = [get_task_color(i, task_names) for i in range(n_tasks)]
 
     # False alarm rate (Pfa) first.
     if val_det_fa is not None:
@@ -269,7 +344,11 @@ def plot_final_validation(tasks: list[dict[str, Any]], output_dir: Path | None) 
     plt.close()
 
 
-def plot_validation_over_time(tasks: list[dict[str, Any]], output_dir: Path | None) -> None:
+def plot_validation_over_time(
+    tasks: list[dict[str, Any]],
+    output_dir: Path | None,
+    task_names: Sequence[str] | None = None,
+) -> None:
     """Plot validation recall per task as more tasks are trained (recall matrix)."""
     n_tasks = len(tasks)
     # After training task k, we have val_acc of length k+1 (tasks 0..k)
@@ -285,7 +364,14 @@ def plot_validation_over_time(tasks: list[dict[str, Any]], output_dir: Path | No
                 ys.append(val_acc[task_idx])
             else:
                 ys.append(np.nan)
-        ax.plot(x, ys, "o-", label=f"Task {task_idx}", color=get_task_color(task_idx), alpha=0.8)
+        ax.plot(
+            x,
+            ys,
+            "o-",
+            label=f"Task {task_idx}",
+            color=get_task_color(task_idx, task_names),
+            alpha=0.8,
+        )
 
     ax.set_xlabel("After training up to task")
     ax.set_ylabel("Validation recall (classification)")
@@ -405,16 +491,18 @@ def main() -> None:
     tasks = load_metrics(metrics_dir)
     print(f"Loaded {len(tasks)} task(s) from {metrics_dir}")
 
-    plot_per_task_curves(tasks, args.output_dir)
+    task_names = load_task_names(metrics_dir)
+
+    plot_per_task_curves(tasks, args.output_dir, task_names=task_names)
 
     n_epochs = load_n_epochs(metrics_dir)
     if n_epochs is not None:
-        plot_per_epoch_curves(tasks, n_epochs, args.output_dir)
+        plot_per_epoch_curves(tasks, n_epochs, args.output_dir, task_names=task_names)
     else:
         print("Skipping per-epoch plot (no n_epochs in training_parameters.json)")
 
-    plot_final_validation(tasks, args.output_dir)
-    plot_validation_over_time(tasks, args.output_dir)
+    plot_final_validation(tasks, args.output_dir, task_names=task_names)
+    plot_validation_over_time(tasks, args.output_dir, task_names=task_names)
     plot_average_forgetting(tasks, args.output_dir)
 
     if args.output_dir:

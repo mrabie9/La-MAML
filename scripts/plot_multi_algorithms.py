@@ -54,32 +54,91 @@ class AlgoRun:
         name: Short algorithm name to show in the plots.
         metrics_dir: Directory containing ``task*.npz`` metric files.
         tasks: Loaded per-task metrics dictionaries.
+        task_names: Optional human-readable names for each task.
     """
 
     name: str
     metrics_dir: Path
     tasks: List[TaskMetrics]
+    task_names: List[str] | None = None
 
 
-def get_task_color(task_idx: int):
-    """Assign a color based on task grouping."""
-    group1 = [3, 4, 6, 9]
-    group2 = [0, 1, 8]
-    group3 = [2, 5, 7]
+def load_task_names(metrics_dir: Path) -> List[str] | None:
+    """Load task names from a ``task_order.txt`` file if present.
 
-    if task_idx in group1:
-        cmap = plt.get_cmap("Blues")
-        idx = group1.index(task_idx)
-        return cmap(0.4 + 0.6 * (idx / len(group1)))
-    if task_idx in group2:
-        cmap = plt.get_cmap("Oranges")
-        idx = group2.index(task_idx)
-        return cmap(0.4 + 0.6 * (idx / len(group2)))
-    if task_idx in group3:
-        cmap = plt.get_cmap("Greens")
-        idx = group3.index(task_idx)
-        return cmap(0.4 + 0.6 * (idx / len(group3)))
-    return f"C{task_idx % 10}"
+    The file is expected to live inside ``metrics_dir`` and contain one task
+    name per line in task index order.
+    """
+    order_file = metrics_dir / "task_order.txt"
+    if not order_file.is_file():
+        return None
+
+    names: List[str] = []
+    with order_file.open(encoding="utf-8") as f:
+        for line in f:
+            stripped = line.strip()
+            if stripped:
+                names.append(stripped)
+    return names or None
+
+
+def _group_for_task_name(task_name: str) -> str:
+    """Return a semantic group label for a task name."""
+    name = task_name.lower()
+    if "rcn" in name:
+        return "rcn"
+    if "deeprad" in name:
+        return "deeprad"
+    if "uclresm" in name:
+        return "uclresm"
+    return "other"
+
+
+def get_task_color(task_idx: int, task_names: Sequence[str] | None = None):
+    """Assign a colour for a task, grouping by task name when available."""
+    if task_names is None or task_idx >= len(task_names):
+        group1 = [3, 4, 6, 9]
+        group2 = [0, 1, 8]
+        group3 = [2, 5, 7]
+
+        if task_idx in group1:
+            cmap = plt.get_cmap("Blues")
+            idx = group1.index(task_idx)
+            return cmap(0.4 + 0.6 * (idx / len(group1)))
+        if task_idx in group2:
+            cmap = plt.get_cmap("Oranges")
+            idx = group2.index(task_idx)
+            return cmap(0.4 + 0.6 * (idx / len(group2)))
+        if task_idx in group3:
+            cmap = plt.get_cmap("Greens")
+            idx = group3.index(task_idx)
+            return cmap(0.4 + 0.6 * (idx / len(group3)))
+        return f"C{task_idx % 10}"
+
+    groups: Dict[str, List[int]] = {}
+    for idx, name in enumerate(task_names):
+        group = _group_for_task_name(name)
+        groups.setdefault(group, []).append(idx)
+
+    task_name = task_names[task_idx]
+    group = _group_for_task_name(task_name)
+    group_indices = groups.get(group, [task_idx])
+    position_in_group = group_indices.index(task_idx)
+    group_size = len(group_indices)
+
+    def _shade(index: int, size: int) -> float:
+        if size <= 1:
+            return 0.7
+        return 0.4 + 0.6 * (index / float(size))
+
+    cmap_name = {
+        "rcn": "Oranges",
+        "deeprad": "Blues",
+        "uclresm": "Greens",
+        "other": "Greys",
+    }[group]
+    cmap = plt.get_cmap(cmap_name)
+    return cmap(_shade(position_in_group, group_size))
 
 
 def _task_index(filename: str) -> int:
@@ -302,8 +361,16 @@ def _prepare_algo_runs(
             raise SystemExit(f"Not a directory: {metrics_dir}")
 
         tasks = load_metrics(metrics_dir)
+        task_names = load_task_names(metrics_dir)
         name = _resolve_algo_name(metrics_dir, explicit_name=algo)
-        runs.append(AlgoRun(name=name, metrics_dir=metrics_dir, tasks=tasks))
+        runs.append(
+            AlgoRun(
+                name=name,
+                metrics_dir=metrics_dir,
+                tasks=tasks,
+                task_names=task_names,
+            )
+        )
 
     return runs
 
@@ -314,7 +381,11 @@ def _plot_loss_vs_steps(ax: plt.Axes, tasks: Sequence[TaskMetrics]) -> None:
         return
 
 
-def _plot_train_acc_vs_steps(ax: plt.Axes, tasks: Sequence[TaskMetrics]) -> None:
+def _plot_train_acc_vs_steps(
+    ax: plt.Axes,
+    tasks: Sequence[TaskMetrics],
+    task_names: Sequence[str] | None,
+) -> None:
     """Plot training recall vs step for each task separately for an algorithm."""
     if not tasks:
         return
@@ -324,7 +395,7 @@ def _plot_train_acc_vs_steps(ax: plt.Axes, tasks: Sequence[TaskMetrics]) -> None
         ax.plot(
             steps,
             acc,
-            color=get_task_color(task_idx),
+            color=get_task_color(task_idx, task_names),
             alpha=0.8,
             label=f"Task {task_idx}",
         )
@@ -332,7 +403,11 @@ def _plot_train_acc_vs_steps(ax: plt.Axes, tasks: Sequence[TaskMetrics]) -> None
     ax.grid(True, alpha=0.3)
 
 
-def _plot_val_acc_over_tasks(ax: plt.Axes, tasks: Sequence[TaskMetrics]) -> None:
+def _plot_val_acc_over_tasks(
+    ax: plt.Axes,
+    tasks: Sequence[TaskMetrics],
+    task_names: Sequence[str] | None,
+) -> None:
     """Plot validation recall per task as more tasks are trained."""
     n_tasks = len(tasks)
     if n_tasks == 0:
@@ -352,7 +427,7 @@ def _plot_val_acc_over_tasks(ax: plt.Axes, tasks: Sequence[TaskMetrics]) -> None
             ys,
             "o-",
             label=f"Task {task_idx}",
-            color=get_task_color(task_idx),
+            color=get_task_color(task_idx, task_names),
             alpha=0.8,
         )
 
@@ -373,7 +448,11 @@ def _plot_average_forgetting(ax: plt.Axes, tasks: Sequence[TaskMetrics]) -> None
     ax.grid(True, alpha=0.3)
 
 
-def _plot_final_validation_metrics(ax: plt.Axes, tasks: Sequence[TaskMetrics]) -> None:
+def _plot_final_validation_metrics(
+    ax: plt.Axes,
+    tasks: Sequence[TaskMetrics],
+    task_names: Sequence[str] | None,
+) -> None:
     """Plot final validation metrics (pfa, detection recall, cls rec) from last task.
 
     Bars are ordered with false alarm (pfa) first, followed by detection
@@ -401,7 +480,7 @@ def _plot_final_validation_metrics(ax: plt.Axes, tasks: Sequence[TaskMetrics]) -
         return
     n_tasks = min(lengths)
     task_indices = np.arange(n_tasks)
-    colors = [get_task_color(i) for i in range(n_tasks)]
+    colors = [get_task_color(i, task_names) for i in range(n_tasks)]
     width = 0.25
 
     # False alarm rate (pfa) first
@@ -484,9 +563,9 @@ def plot_multi_algorithms(
 
     for row_idx, run in enumerate(runs):
         row_axes = axes[row_idx]
-        _plot_train_acc_vs_steps(row_axes[0], run.tasks)
-        _plot_final_validation_metrics(row_axes[1], run.tasks)
-        _plot_val_acc_over_tasks(row_axes[2], run.tasks)
+        _plot_train_acc_vs_steps(row_axes[0], run.tasks, run.task_names)
+        _plot_final_validation_metrics(row_axes[1], run.tasks, run.task_names)
+        _plot_val_acc_over_tasks(row_axes[2], run.tasks, run.task_names)
         _plot_average_forgetting(row_axes[3], run.tasks)
 
         row_axes[0].set_ylabel(f"{run.name}\nTrain recall")
