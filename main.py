@@ -1016,8 +1016,8 @@ def main():
     # print(model)
     if args.cuda:
         try:
-            model.cuda()            
-        except:
+            model.cuda()
+        except RuntimeError:
             pass
     print(args.cuda)
     print("Model device:", next(model.parameters()).device)

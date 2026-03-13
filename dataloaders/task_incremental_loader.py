@@ -1,10 +1,12 @@
+import os
+from typing import List, Sequence
+
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
 from dataloaders.idataset import DummyArrayDataset
 from dataloaders.iq_data_loader import IQDataGenerator
-import os
 
 
 def _normalize_label_array(labels, expected_len, source):
@@ -121,6 +123,81 @@ def _apply_data_scaling(
     scaled_training = (training_samples - offset) / scale
     scaled_test = (test_samples - offset) / scale
     return scaled_training.astype(np.float32, copy=False), scaled_test.astype(np.float32, copy=False)
+
+
+def _resolve_task_file_order(all_files: Sequence[str], order_arg: str) -> List[str]:
+    """Resolve IQ .npz task file ordering from a CLI argument.
+
+    Args:
+        all_files: Iterable of discovered ``.npz`` filenames in ``data_path``.
+        order_arg: Raw string from ``--task-order-files`` (comma-separated).
+
+    Returns:
+        A list of filenames in the desired task order.
+
+    Raises:
+        SystemExit: If the argument references unknown files or does not cover
+        exactly the discovered files.
+    """
+    if not all_files:
+        return []
+
+    discovered = list(all_files)
+    if not order_arg:
+        # Default behaviour: natural alphabetical order (current behaviour).
+        return sorted(discovered)
+
+    tokens = [token.strip() for token in order_arg.split(",") if token.strip()]
+    if not tokens:
+        raise SystemExit(
+            "--task-order-files was provided but no valid filenames or stems were found after parsing."
+        )
+
+    stem_to_file: dict[str, str] = {}
+    name_to_file: dict[str, str] = {}
+    for filename in discovered:
+        name_to_file[filename] = filename
+        stem, _ = os.path.splitext(filename)
+        stem_to_file[stem] = filename
+
+    ordered_files: List[str] = []
+    for token in tokens:
+        if token in name_to_file:
+            resolved = name_to_file[token]
+        else:
+            stem = os.path.splitext(token)[0]
+            if stem in stem_to_file:
+                resolved = stem_to_file[stem]
+            else:
+                available_stems = ", ".join(sorted(stem_to_file.keys()))
+                raise SystemExit(
+                    f"--task-order-files references unknown file or stem '{token}'. "
+                    f"Available stems: {available_stems}"
+                )
+        if resolved in ordered_files:
+            raise SystemExit(
+                f"--task-order-files contains a duplicate reference to '{resolved}'. "
+                "Each IQ .npz file must appear exactly once."
+            )
+        ordered_files.append(resolved)
+
+    discovered_set = set(discovered)
+    ordered_set = set(ordered_files)
+    if discovered_set != ordered_set or len(ordered_files) != len(discovered):
+        missing = discovered_set - ordered_set
+        extra = ordered_set - discovered_set
+        details = []
+        if missing:
+            details.append("missing: " + ", ".join(sorted(missing)))
+        if extra:
+            details.append("unexpected: " + ", ".join(sorted(extra)))
+        joined_details = "; ".join(details) if details else "mismatched coverage"
+        raise SystemExit(
+            "--task-order-files must list every IQ .npz file exactly once. "
+            f"Discovered files: {sorted(discovered)}; {joined_details}."
+        )
+
+    return ordered_files
 
 
 def _maybe_move_sample_axis(x, y, source):
@@ -347,7 +424,7 @@ class IncrementalLoader:
 
         data_files = [f for f in os.listdir(self._args.data_path) if f.endswith('.npz')]
         if data_files and self._args.dataset.lower() == 'iq':
-            data_files.sort()
+            data_files = _resolve_task_file_order(data_files, self._args.task_order_files)
             raw_datasets = []
             all_labels = []
             labels_offset = 0

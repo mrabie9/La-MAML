@@ -76,6 +76,16 @@ def get_parser():
     # data parameters
     parser.add_argument('--data_path', default='data/tiny-imagenet-200/',
                         help='path where data is located')
+    parser.add_argument(
+        '--task-order-files',
+        dest='task_order_files',
+        type=str,
+        default='',
+        help=(
+            'Comma-separated list of IQ .npz file names or stems defining the task order. '
+            'When provided, overrides the default alphabetical file order for IQ datasets.'
+        ),
+    )
     parser.add_argument('--loader', type=str, default='task_incremental_loader',
                         help='data loader to use')
     parser.add_argument('--samples_per_task', type=int, default=-1,
