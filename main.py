@@ -686,7 +686,17 @@ def life_experience(model, inc_loader, args):
             save_payload["val_det_acc"] = np.array(result_val_det_a[-1])
         if result_val_det_fa:
             save_payload["val_det_fa"] = np.array(result_val_det_fa[-1])
+
+        # Persist per-task metrics and a human-readable task order file.
         np.savez(os.path.join(logs_dir, "task" + str(task_i) + ".npz"), **save_payload)
+
+        task_order_path = os.path.join(logs_dir, "task_order.txt")
+        try:
+            task_name = task_info.get("task_name", f"task{task_i}")
+        except AttributeError:
+            task_name = f"task{task_i}"
+        with open(task_order_path, "a", encoding="utf-8") as f_task_order:
+            f_task_order.write(str(task_name) + "\n")
 
         if args.calc_test_accuracy:
             test_acc = evaluator(model, test_task_loaders, args)

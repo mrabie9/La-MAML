@@ -157,6 +157,7 @@ class IncrementalLoader:
         increment=args.increment
 
         self.classes_per_task = []
+        self.task_names: list[str] = []
         self._setup_data(
             class_order_type=args.class_order,
             seed=seed,
@@ -189,11 +190,16 @@ class IncrementalLoader:
         train_loader = self._get_loader(x_train, y_train, mode="train")
         test_loader = self._get_loader(x_test, y_test, mode="test")
 
+        task_name = None
+        if 0 <= self._current_task < len(self.task_names):
+            task_name = self.task_names[self._current_task]
+
         task_info = {
             "min_class": 0,
             "max_class": self.n_outputs,
             "increment": -1,
             "task": self._current_task,
+            "task_name": task_name,
             "max_task": len(self.test_dataset),
             "n_train_data": len(x_train),
             "n_test_data": len(x_test)
@@ -346,6 +352,9 @@ class IncrementalLoader:
             all_labels = []
             labels_offset = 0
 
+            # Track human-readable task names based on file names.
+            self.task_names = [os.path.splitext(f)[0] for f in data_files]
+
             # Load npz files and concatenate datasets
             for fname in data_files:
                 data = np.load(os.path.join(self._args.data_path, fname))
@@ -367,7 +376,7 @@ class IncrementalLoader:
                     after = x_train.shape
                     if before != after:
                         print(f"{fname} train: moved sample axis {before} -> {after}")
-                        # x_train = x_train[:,[0,2],:]
+                        # x_train = x_train[:,0,:]
                         # print("Dropped ADC channel from train data, new shape:", x_train.shape)
                 if x_test is not None and y_test is not None:
                     before = x_test.shape
@@ -375,7 +384,7 @@ class IncrementalLoader:
                     after = x_test.shape
                     if before != after:
                         print(f"{fname} test: moved sample axis {before} -> {after}")
-                        # x_test = x_test[:,[0,2],:]
+                        # x_test = x_test[:,0,:]
                         # print("Dropped ADC channel from test data, new shape:", x_test.shape)
                 if x_train is not None and y_train is not None:
                     y_train = _normalize_label_array(y_train, x_train.shape[0], f"{fname} train")
@@ -556,7 +565,12 @@ class IncrementalLoader:
             # Persist on args for convenience.
             self._args.classes_per_task = self.classes_per_task
         else:
-            self.train_dataset, self.test_dataset = torch.load(os.path.join(self._args.data_path, self._args.dataset + ".pt"))
+            self.train_dataset, self.test_dataset = torch.load(
+                os.path.join(self._args.data_path, self._args.dataset + ".pt")
+            )
+
+            # Fallback generic task names when loading from a pre-built .pt file.
+            self.task_names = [f"task{idx}" for idx in range(len(self.train_dataset))]
 
             self.sample_permutations = []
 
