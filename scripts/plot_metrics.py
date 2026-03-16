@@ -198,9 +198,20 @@ def plot_per_task_curves(
 
     for task_idx, task in enumerate(tasks):
         steps = np.arange(len(task["losses"]))
+        acc_values = task.get("cls_tr_rec")
+        if acc_values is None:
+            acc_values = task.get("tr_acc")
+        if acc_values is None:
+            raise KeyError("Neither 'cls_tr_rec' nor 'tr_acc' found in task metrics.")
         c = get_task_color(task_idx, task_names)
         axes[0].plot(steps, task["losses"], label=f"Task {task_idx}", color=c, alpha=0.8)
-        axes[1].plot(steps, task["cls_tr_rec"], label=f"Task {task_idx}", color=c, alpha=0.8)
+        axes[1].plot(
+            steps,
+            np.asarray(acc_values, dtype=float),
+            label=f"Task {task_idx}",
+            color=c,
+            alpha=0.8,
+        )
 
     axes[0].set_ylabel("Loss")
     axes[0].set_title("Loss per task (per step)")
@@ -233,7 +244,12 @@ def plot_per_epoch_curves(
 
     for task_idx, task in enumerate(tasks):
         loss_ep = _aggregate_per_epoch(task["losses"], n_epochs)
-        acc_ep = _aggregate_per_epoch(task["cls_tr_rec"], n_epochs)
+        acc_values = task.get("cls_tr_rec")
+        if acc_values is None:
+            acc_values = task.get("tr_acc")
+        if acc_values is None:
+            raise KeyError("Neither 'cls_tr_rec' nor 'tr_acc' found in task metrics.")
+        acc_ep = _aggregate_per_epoch(np.asarray(acc_values, dtype=float), n_epochs)
         epochs = np.arange(len(loss_ep))
         c = get_task_color(task_idx, task_names)
         axes[0].plot(epochs, loss_ep, "o-", label=f"Task {task_idx}", color=c, alpha=0.8)

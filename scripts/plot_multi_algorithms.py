@@ -413,7 +413,14 @@ def _plot_train_acc_vs_steps(
     if not tasks:
         return
     for task_idx, task in enumerate(tasks):
-        acc = np.asarray(task["cls_tr_rec"], dtype=float)
+        # Try both possible keys: prefer "cls_tr_rec" (new name), else fall back
+        # to "tr_acc" for backwards compatibility with older runs.
+        acc_values = task.get("cls_tr_rec")
+        if acc_values is None:
+            acc_values = task.get("tr_acc")
+        if acc_values is None:
+            raise KeyError("Neither 'cls_tr_rec' nor 'tr_acc' found in task metrics.")
+        acc = np.asarray(acc_values, dtype=float)
         steps = np.arange(len(acc))
         ax.plot(
             steps,
