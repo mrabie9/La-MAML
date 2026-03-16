@@ -133,11 +133,14 @@ def _resolve_task_file_order(all_files: Sequence[str], order_arg: str) -> List[s
         order_arg: Raw string from ``--task-order-files`` (comma-separated).
 
     Returns:
-        A list of filenames in the desired task order.
+        A list of filenames in the desired task order. If a non-empty
+        ``order_arg`` is provided, only the referenced files are included
+        and any discovered but unreferenced files are ignored (with a
+        warning).
 
     Raises:
-        SystemExit: If the argument references unknown files or does not cover
-        exactly the discovered files.
+        SystemExit: If the argument references unknown files, contains
+        duplicates, or resolves to more files than were discovered.
     """
     if not all_files:
         return []
@@ -181,21 +184,23 @@ def _resolve_task_file_order(all_files: Sequence[str], order_arg: str) -> List[s
             )
         ordered_files.append(resolved)
 
-    discovered_set = set(discovered)
-    ordered_set = set(ordered_files)
-    if discovered_set != ordered_set or len(ordered_files) != len(discovered):
-        missing = discovered_set - ordered_set
-        extra = ordered_set - discovered_set
-        details = []
-        if missing:
-            details.append("missing: " + ", ".join(sorted(missing)))
-        if extra:
-            details.append("unexpected: " + ", ".join(sorted(extra)))
-        joined_details = "; ".join(details) if details else "mismatched coverage"
+    num_discovered = len(discovered)
+    num_requested = len(ordered_files)
+    if num_requested > num_discovered:
         raise SystemExit(
-            "--task-order-files must list every IQ .npz file exactly once. "
-            f"Discovered files: {sorted(discovered)}; {joined_details}."
+            "--task-order-files lists more files than were found in data_path "
+            f"(requested {num_requested}, available {num_discovered})."
         )
+
+    if num_requested < num_discovered:
+        discovered_set = set(discovered)
+        ordered_set = set(ordered_files)
+        ignored = sorted(discovered_set - ordered_set)
+        if ignored:
+            print(
+                "[WARNING] Ignoring task files not listed in --task-order-files: "
+                + ", ".join(ignored)
+            )
 
     return ordered_files
 
