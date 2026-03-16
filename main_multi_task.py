@@ -54,13 +54,13 @@ def life_experience_iid(model, inc_loader, args):
 
             model.train()
 
-            loss, tr_acc = model.observe(Variable(v_x), Variable(v_y), Variable(super_v_y))
+            loss, cls_tr_rec = model.observe(Variable(v_x), Variable(v_y), Variable(super_v_y))
 
             val_acc = sum(result_val_a[-1]).item()/len(result_val_a[-1]) if result_val_a else 0.0
             prog_bar.set_description(
                 "Epoch: {}/{} | Iter: {} | Loss: {} | Acc: Tr: {} Val: {}".format(
                     ep+1, args.n_epochs, i%(1000*args.n_epochs), round(loss, 3),
-                    round(tr_acc, 5), round(val_acc, 5)
+                    round(cls_tr_rec, 5), round(val_acc, 5)
                 )
             )
 
