@@ -488,7 +488,7 @@ def main() -> None:
         description="Read and plot metrics from a run's metrics directory.",
     )
     parser.add_argument(
-        "metrics_dir",
+        "--metrics-dir",
         type=Path,
         default=Path("logs/ctn/eclresm_test-2026-03-05_14-58-57-4091/0/metrics"),
         nargs="?",
