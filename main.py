@@ -1050,6 +1050,16 @@ def main():
         save_results(args, result_val_t, result_val_a, result_test_t, result_test_a, model, spent_time)
         log_state(args.state_logging, "Results saved; total runtime {:.2f}s".format(spent_time))
 
+    # Print and append total runtime for this experiment.
+    print("Total runtime: {:.2f} seconds".format(spent_time))
+    results_txt_path = os.path.join(args.log_dir, "results.txt")
+    try:
+        with open(results_txt_path, "a", encoding="utf-8") as results_file:
+            results_file.write("total_runtime_seconds: {:.3f}\n".format(spent_time))
+    except OSError:
+        # If results.txt cannot be written, fail silently to avoid breaking experiments.
+        pass
+
 
 if __name__ == "__main__":
     print("New Experiment Starting...")
