@@ -919,6 +919,12 @@ def save_results(args, result_val_t, result_val_a, result_test_t, result_test_a,
                 state_dict_bytes / (1024 * 1024), val_t_bytes / 1024, val_a_bytes / 1024
             ),
         )
+    if hasattr(args, "get_samples_per_task"):
+        try:
+            delattr(args, "get_samples_per_task")
+        except AttributeError:
+            args.get_samples_per_task = None
+
     torch.save(
         (result_val_t, result_val_a, state_dict, val_stats, one_liner, args),
         fname + ".pt",
