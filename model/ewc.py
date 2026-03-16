@@ -139,12 +139,12 @@ class Net(DetectionReplayMixin, nn.Module):
             logits_task = cls_logits[:, offset1:offset2]
             targets = (y_cls - offset1).long()
             preds = torch.argmax(logits_task, dim=1)
-            tr_acc = macro_recall(preds, targets)
+            cls_tr_rec = macro_recall(preds, targets)
             loss_ce = self.ce(logits_task, targets)
         # else:
         #     logits_task = cls_logits.new_empty((0, offset2 - offset1))
         #     targets = y_cls.new_empty((0,), dtype=torch.long)
-        #     tr_acc = 0.0
+        #     cls_tr_rec = 0.0
         #     loss_ce = cls_logits.new_zeros(1)
 
         self.opt.zero_grad()
@@ -174,7 +174,7 @@ class Net(DetectionReplayMixin, nn.Module):
 
         self.opt.step()
 
-        return float(loss.item()), tr_acc
+        return float(loss.item()), cls_tr_rec
 
     # ------------------------------------------------------------------
     def _build_optimizer(self) -> torch.optim.Optimizer:

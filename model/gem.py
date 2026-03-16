@@ -354,7 +354,7 @@ class Net(DetectionReplayMixin, nn.Module):
                 self.observed_tasks.append(t)
             self.old_task = t
 
-        tr_acc = []
+        cls_tr_rec = []
 
         for pass_itr in range(self.glances):
             # push current batch once per batch (not each glance)
@@ -422,7 +422,7 @@ class Net(DetectionReplayMixin, nn.Module):
                     f"offset=({offset1},{offset2})"
                 )
             preds = torch.argmax(logits, dim=1)
-            tr_acc.append(macro_recall(preds, targets))
+            cls_tr_rec.append(macro_recall(preds, targets))
             loss = self.ce(logits, targets)
             loss.backward()
             if self.cfg.grad_clip_norm:
@@ -453,5 +453,5 @@ class Net(DetectionReplayMixin, nn.Module):
         #     det_loss = self.det_lambda * det_loss
         #     det_loss.backward()
         #     self.det_opt.step()
-        avg_tr_acc = sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
-        return loss.item(), avg_tr_acc
+        avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
+        return loss.item(), avg_cls_tr_rec

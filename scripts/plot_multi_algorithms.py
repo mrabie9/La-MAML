@@ -14,6 +14,10 @@ Usage:
     python scripts/plot_multi_algorithms.py \\
         --algo cmaml --algo hat --algo ewc
 
+    # Use a specific run by index (0 = latest, 1 = second latest, ...)
+    python scripts/plot_multi_algorithms.py \\
+        --algo cmaml --algo hat --run-index 1
+
     # Explicit metrics directories for each algorithm
     python scripts/plot_multi_algorithms.py \\
         --algo cmaml --metrics-dir logs/cmaml/runA/0/metrics \\
@@ -168,7 +172,7 @@ def load_metrics(metrics_dir: Path) -> List[TaskMetrics]:
 
     Returns:
         List of dictionaries, one per task, with at least the keys
-        ``losses``, ``tr_acc`` and ``val_acc`` when present.
+        ``losses``, ``cls_tr_rec`` and ``val_acc`` when present.
 
     Raises:
         FileNotFoundError: If no ``task*.npz`` files are found.
@@ -258,28 +262,37 @@ def compute_average_forgetting(tasks: Sequence[TaskMetrics]) -> Tuple[np.ndarray
     return np.arange(n_tasks), avg_forgetting
 
 
-def find_latest_metrics_dir_for_algo(algo: str, logs_root: Path) -> Path:
-    """Find the latest metrics directory for an algorithm under a logs root.
+def find_metrics_dir_for_algo(
+    algo: str,
+    logs_root: Path,
+    run_index: int = 0,
+) -> Path:
+    """Find a metrics directory for an algorithm by run index (0 = latest).
 
     The function looks for directories named ``metrics`` under
-    ``logs_root / algo`` that contain at least one ``task*.npz`` file, then
-    returns the one whose parent directory was modified most recently.
+    ``logs_root / algo`` that contain at least one ``task*.npz`` file, sorts
+    them by parent run directory modification time (newest first), then
+    returns the one at ``run_index`` (0 = latest, 1 = second latest, etc.).
 
     Args:
         algo: Algorithm name (subdirectory under ``logs_root``).
         logs_root: Root directory containing algorithm subdirectories.
+        run_index: Which run to use: 0 for latest, 1 for second latest, etc.
+            Default is 0 (latest run).
 
     Returns:
-        Path to the latest metrics directory for the given algorithm.
+        Path to the metrics directory for the given algorithm and run index.
 
     Raises:
-        FileNotFoundError: If no valid metrics directory is found.
+        FileNotFoundError: If no valid metrics directory is found, or
+            ``run_index`` is out of range.
 
     Usage:
         >>> logs_root = Path("logs")
-        >>> latest = find_latest_metrics_dir_for_algo("cmaml", logs_root)
+        >>> latest = find_metrics_dir_for_algo("cmaml", logs_root, run_index=0)
         >>> latest.name
         'metrics'
+        >>> second = find_metrics_dir_for_algo("cmaml", logs_root, run_index=1)
     """
     algo_root = logs_root / algo
     if not algo_root.exists():
@@ -300,7 +313,12 @@ def find_latest_metrics_dir_for_algo(algo: str, logs_root: Path) -> Path:
         raise FileNotFoundError(f"No metrics directories with task*.npz for '{algo}' under {algo_root}")
 
     candidate_dirs.sort(key=lambda x: x[0], reverse=True)
-    return candidate_dirs[0][1]
+    if run_index < 0 or run_index >= len(candidate_dirs):
+        raise FileNotFoundError(
+            f"Run index {run_index} out of range for '{algo}' "
+            f"(found {len(candidate_dirs)} run(s); use 0 to {len(candidate_dirs) - 1})."
+        )
+    return candidate_dirs[run_index][1]
 
 
 def _resolve_algo_name(metrics_dir: Path, explicit_name: str | None) -> str:
@@ -330,6 +348,7 @@ def _prepare_algo_runs(
     algos: Sequence[str],
     metrics_dirs: Sequence[Path] | None,
     logs_root: Path,
+    run_index: int = 0,
 ) -> List[AlgoRun]:
     """Resolve algorithms and metrics directories into a list of runs.
 
@@ -337,8 +356,10 @@ def _prepare_algo_runs(
         algos: Algorithm names from CLI.
         metrics_dirs: Optional list of metrics directories, same length as
             ``algos``. If empty or ``None``, metrics directories are discovered
-            under ``logs_root/{algo}/``.
+            under ``logs_root/{algo}/`` using ``run_index``.
         logs_root: Root logs directory.
+        run_index: When auto-discovering, which run to use: 0 = latest,
+            1 = second latest, etc. Ignored when ``metrics_dirs`` is provided.
 
     Returns:
         List of ``AlgoRun`` instances ready for plotting.
@@ -354,7 +375,7 @@ def _prepare_algo_runs(
         if metrics_dirs and len(metrics_dirs) == len(algos):
             metrics_dir = metrics_dirs[idx]
         else:
-            metrics_dir = find_latest_metrics_dir_for_algo(algo, logs_root)
+            metrics_dir = find_metrics_dir_for_algo(algo, logs_root, run_index=run_index)
 
         metrics_dir = metrics_dir.resolve()
         if not metrics_dir.is_dir():
@@ -390,7 +411,7 @@ def _plot_train_acc_vs_steps(
     if not tasks:
         return
     for task_idx, task in enumerate(tasks):
-        acc = np.asarray(task["tr_acc"], dtype=float)
+        acc = np.asarray(task["cls_tr_rec"], dtype=float)
         steps = np.arange(len(acc))
         ax.plot(
             steps,
@@ -444,7 +465,7 @@ def _plot_average_forgetting(ax: plt.Axes, tasks: Sequence[TaskMetrics]) -> None
     ax.plot(x, avg_forgetting, "o-", color="C3")
     ax.set_xlabel("After training up to task")
     has_f1 = any("val_f1" in t for t in tasks)
-    ax.set_ylabel("Avg forgetting (Cls F1)" if has_f1 else "Avg forgetting (cls recall)")
+    ax.set_ylabel("Avg forgetting (F1)" if has_f1 else "Avg forgetting (cls recall)")
     ax.grid(True, alpha=0.3)
 
 
@@ -679,6 +700,16 @@ def _parse_args() -> argparse.Namespace:
         help="Root directory containing logs/{algo}/ subdirectories (default: logs).",
     )
     parser.add_argument(
+        "--run-index",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "When auto-discovering runs (no --metrics-dir), use the Nth run by recency: "
+            "0 = latest (default), 1 = second latest, etc."
+        ),
+    )
+    parser.add_argument(
         "--same-y-limits",
         action="store_true",
         help=(
@@ -703,6 +734,7 @@ def main() -> None:
         algos=list(args.algos),
         metrics_dirs=metrics_dirs,
         logs_root=args.logs_root,
+        run_index=args.run_index,
     )
     print("Algorithms and metrics directories:")
     for run in runs:

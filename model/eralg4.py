@@ -236,9 +236,9 @@ class Net(DetectionReplayMixin, nn.Module):
            self.current_task = t
 
         if self.cfg.learn_lr:
-            loss, tr_acc = self.la_ER(x_for_storage, y, t)
+            loss, cls_tr_rec = self.la_ER(x_for_storage, y, t)
         else:
-            loss, tr_acc = self.ER(xi, yi, t)
+            loss, cls_tr_rec = self.ER(xi, yi, t)
 
         for i in range(0, x.size()[0]):
             self.age += 1
@@ -265,7 +265,7 @@ class Net(DetectionReplayMixin, nn.Module):
         #     det_loss.backward()
         #     self.det_opt.step()
 
-        return loss.item(), tr_acc
+        return loss.item(), cls_tr_rec
 
     def _batch_accuracy(self, bt, logits, labels):
         if len(bt) == 0:
@@ -286,7 +286,7 @@ class Net(DetectionReplayMixin, nn.Module):
         return macro_recall(stacked_preds, stacked_targets)
 
     def ER(self, x, y, t):
-        tr_acc = []
+        cls_tr_rec = []
         for pass_itr in range(self.glances):
 
             self.net.zero_grad()
@@ -297,7 +297,7 @@ class Net(DetectionReplayMixin, nn.Module):
             bx = bx.squeeze()
             prediction = self.net.forward(bx)
             loss = self.take_multitask_loss(bt, prediction, by)
-            tr_acc.append(self._batch_accuracy(bt, prediction, by))
+            cls_tr_rec.append(self._batch_accuracy(bt, prediction, by))
 
             loss.backward()
             if self.cfg.grad_clip_norm:
@@ -305,8 +305,8 @@ class Net(DetectionReplayMixin, nn.Module):
 
             self.opt_wt.step()
         
-        avg_tr_acc = sum(tr_acc)/len(tr_acc) if tr_acc else 0.0
-        return loss, avg_tr_acc
+        avg_cls_tr_rec = sum(cls_tr_rec)/len(cls_tr_rec) if cls_tr_rec else 0.0
+        return loss, avg_cls_tr_rec
 
     def inner_update(self, x, fast_weights, y, t):
         """
@@ -359,7 +359,7 @@ class Net(DetectionReplayMixin, nn.Module):
         and use it with ER (therefore no meta-learning for the weights)
 
         """
-        tr_acc = []
+        cls_tr_rec = []
         for pass_itr in range(self.glances):
             
             perm = torch.randperm(x.size(0))
@@ -413,7 +413,7 @@ class Net(DetectionReplayMixin, nn.Module):
             # compute ER loss for network weights
             prediction = self.net.forward(bx)
             loss = self.take_multitask_loss(bt, prediction, by)
-            tr_acc.append(self._batch_accuracy(bt, prediction, by))
+            cls_tr_rec.append(self._batch_accuracy(bt, prediction, by))
 
             loss.backward()
 
@@ -429,5 +429,5 @@ class Net(DetectionReplayMixin, nn.Module):
             self.net.zero_grad()
             self.net.alpha_lr.zero_grad()
 
-        avg_tr_acc = sum(tr_acc)/len(tr_acc) if tr_acc else 0.0
-        return loss, avg_tr_acc
+        avg_cls_tr_rec = sum(cls_tr_rec)/len(cls_tr_rec) if cls_tr_rec else 0.0
+        return loss, avg_cls_tr_rec

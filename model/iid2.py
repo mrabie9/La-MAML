@@ -119,10 +119,10 @@ class Net(torch.nn.Module):
             if batch_preds:
                 stacked_preds = torch.stack(batch_preds).view(-1)
                 stacked_targets = torch.stack(batch_targets).view(-1)
-                tr_acc = macro_recall(stacked_preds, stacked_targets)
+                cls_tr_rec = macro_recall(stacked_preds, stacked_targets)
             else:
-                tr_acc = 0.0
+                cls_tr_rec = 0.0
         loss.backward()
         self.opt.step()
 
-        return loss.item(), tr_acc
+        return loss.item(), cls_tr_rec

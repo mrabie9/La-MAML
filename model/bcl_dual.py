@@ -401,7 +401,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
 
         self.zero_grad()   
         tt = t + 1
-        tr_acc = []
+        cls_tr_rec = []
         n_classes_current = None
         for _ in range(self.n_meta):
             weights_before = deepcopy(self.net.state_dict())
@@ -421,7 +421,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                         f"Ensure loader uses global labels for this task."
                     )
                 preds = torch.argmax(logits, dim=1)
-                tr_acc.append(macro_recall(preds, targets))
+                cls_tr_rec.append(macro_recall(preds, targets))
                 loss1 = self.bce(logits, targets)
                 # det_logits, _ = self.net.forward_heads(x_det)
                 # det_loss = self.det_loss(det_logits, y_det.float())
@@ -476,5 +476,5 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             weights_after = self.net.state_dict()
             new_params = {name : weights_before[name] + ((weights_after[name] - weights_before[name]) * self.beta) for name in weights_before.keys()}
             self.net.load_state_dict(new_params)
-        avg_tr_acc = sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
-        return outer_loss.item(), avg_tr_acc
+        avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
+        return outer_loss.item(), avg_cls_tr_rec

@@ -116,7 +116,7 @@ class Net(DetectionReplayMixin, BaseNet):
 
     def observe(self, x, y, t):
         self.net.train() 
-        tr_acc = []
+        cls_tr_rec = []
         for pass_itr in range(self.glances):
             self.pass_itr = pass_itr
             perm = torch.randperm(x.size(0))
@@ -204,7 +204,7 @@ class Net(DetectionReplayMixin, BaseNet):
                     if preds_list:
                         stacked_preds = torch.stack(preds_list).view(-1)
                         stacked_targets = torch.stack(target_list).view(-1)
-                        tr_acc.append(macro_recall(stacked_preds, stacked_targets))
+                        cls_tr_rec.append(macro_recall(stacked_preds, stacked_targets))
 
                 meta_losses[i] += meta_loss
 
@@ -247,5 +247,5 @@ class Net(DetectionReplayMixin, BaseNet):
             #     det_loss.backward()
             #     self.opt_wt.step()
 
-        avg_tr_acc = sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
-        return meta_loss.item(), avg_tr_acc
+        avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
+        return meta_loss.item(), avg_cls_tr_rec

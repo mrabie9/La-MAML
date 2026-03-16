@@ -132,7 +132,7 @@ class Net(nn.Module):
 
         loss = self.ce(logits, targets)
         preds = torch.argmax(logits, dim=1)
-        tr_acc = macro_recall(preds, targets)
+        cls_tr_rec = macro_recall(preds, targets)
 
         self.opt.zero_grad()
         loss.backward()
@@ -142,7 +142,7 @@ class Net(nn.Module):
         self.opt.step()
         self._restore_frozen_weights()
 
-        return float(loss.item()), tr_acc
+        return float(loss.item()), cls_tr_rec
 
     # ------------------------------------------------------------------
     def on_task_end(self) -> None:

@@ -199,7 +199,7 @@ class Net(nn.Module):
         self.freeze_layers(self.cfg.rln)
         self.backbone.train(); self.nm.train()
 
-        tr_acc = []
+        cls_tr_rec = []
 
         for pass_itr in range(self.update_steps):
             self.pass_itr = pass_itr
@@ -245,7 +245,7 @@ class Net(nn.Module):
                 meta_loss, logits = self.meta_loss(bx, fast_weights, by) # loss on the meta batch
                 with torch.no_grad():
                     preds = torch.argmax(logits, dim=1)
-                    tr_acc.append(macro_recall(preds, by))
+                    cls_tr_rec.append(macro_recall(preds, by))
                 # meta_losses[i] += meta_loss
                 assert meta_loss.requires_grad, "meta_loss has no grad path to alpha"
                 (meta_loss / batch_sz).backward()
@@ -266,8 +266,8 @@ class Net(nn.Module):
             self.zero_grad(set_to_none=True)
             # self.backbone.alpha_lr.zero_grad(set_to_none=True)
 
-        avg_tr_acc = sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
-        return meta_loss.item(), avg_tr_acc
+        avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
+        return meta_loss.item(), avg_cls_tr_rec
     
     def push_to_mem(self, batch_x, batch_y, t):
         """

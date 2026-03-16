@@ -598,7 +598,7 @@ class Net(nn.Module):
         targets = (y - offset1).long()
         loss, _ = self._criterion(logits_task, targets, masks)
         preds = torch.argmax(logits_task, dim=1)
-        tr_acc = macro_recall(preds, targets)
+        cls_tr_rec = macro_recall(preds, targets)
         loss.backward()
 
         if self.mask_back:
@@ -617,7 +617,7 @@ class Net(nn.Module):
         self.bridge.clamp_embeddings()
 
         self._epoch_counts[t] += 1
-        return float(loss.detach().cpu()), tr_acc
+        return float(loss.detach().cpu()), cls_tr_rec
 
     def on_epoch_end(self) -> None:
         pass

@@ -337,7 +337,7 @@ class Net(DetectionReplayMixin, nn.Module):
             # start writing this task from the beginning
             self.mem_cnt = 0
             
-        tr_acc = []
+        cls_tr_rec = []
         for pass_itr in range(self.glances):
 # copy x into memory with matching shape
                 
@@ -402,7 +402,7 @@ class Net(DetectionReplayMixin, nn.Module):
             logits = self.forward(x, t)[:, offset1: offset2]
             pb = torch.argmax(logits, dim=1)
             targets = y - offset1
-            tr_acc.append(macro_recall(pb, targets))
+            cls_tr_rec.append(macro_recall(pb, targets))
             loss = self.ce(logits, targets)
             loss.backward()
             if self.cfg.grad_clip_norm:
@@ -456,5 +456,5 @@ class Net(DetectionReplayMixin, nn.Module):
         #     det_loss.backward()
         #     self.det_opt.step()
 
-        avg_tr_acc = sum(tr_acc)/len(tr_acc) if tr_acc else 0.0
-        return loss.item(), avg_tr_acc
+        avg_cls_tr_rec = sum(cls_tr_rec)/len(cls_tr_rec) if cls_tr_rec else 0.0
+        return loss.item(), avg_cls_tr_rec

@@ -3,7 +3,7 @@
 Metrics are saved by main.py under args.log_dir/metrics/ as task0.npz, task1.npz, ...
 Each task*.npz contains:
   - losses: per-step/epoch loss for that task
-  - tr_acc: per-step/epoch training recall
+  - cls_tr_rec: per-step/epoch training recall
   - val_acc: validation recall per task (length = task_index + 1)
   - val_det_acc, val_det_fa: optional detection metrics (same shape as val_acc)
 
@@ -39,7 +39,7 @@ def load_metrics(metrics_dir: Path) -> list[dict[str, Any]]:
         metrics_dir: Path to the metrics directory (contains task0.npz, task1.npz, ...).
 
     Returns:
-        List of dicts, one per task, each with keys losses, tr_acc, val_acc,
+        List of dicts, one per task, each with keys losses, cls_tr_rec, val_acc,
         and optionally val_det_acc, val_det_fa.
     """
     task_files = sorted(
@@ -200,7 +200,7 @@ def plot_per_task_curves(
         steps = np.arange(len(task["losses"]))
         c = get_task_color(task_idx, task_names)
         axes[0].plot(steps, task["losses"], label=f"Task {task_idx}", color=c, alpha=0.8)
-        axes[1].plot(steps, task["tr_acc"], label=f"Task {task_idx}", color=c, alpha=0.8)
+        axes[1].plot(steps, task["cls_tr_rec"], label=f"Task {task_idx}", color=c, alpha=0.8)
 
     axes[0].set_ylabel("Loss")
     axes[0].set_title("Loss per task (per step)")
@@ -233,7 +233,7 @@ def plot_per_epoch_curves(
 
     for task_idx, task in enumerate(tasks):
         loss_ep = _aggregate_per_epoch(task["losses"], n_epochs)
-        acc_ep = _aggregate_per_epoch(task["tr_acc"], n_epochs)
+        acc_ep = _aggregate_per_epoch(task["cls_tr_rec"], n_epochs)
         epochs = np.arange(len(loss_ep))
         c = get_task_color(task_idx, task_names)
         axes[0].plot(epochs, loss_ep, "o-", label=f"Task {task_idx}", color=c, alpha=0.8)

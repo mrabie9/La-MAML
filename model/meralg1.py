@@ -235,7 +235,7 @@ class Net(nn.Module):
         if batch_preds:
             stacked_preds = torch.stack(batch_preds).view(-1)
             stacked_targets = torch.stack(batch_targets).view(-1)
-            avg_tr_acc = macro_recall(stacked_preds, stacked_targets)
+            avg_cls_tr_rec = macro_recall(stacked_preds, stacked_targets)
         else:
-            avg_tr_acc = 0.0
-        return total_loss/self.steps, avg_tr_acc
+            avg_cls_tr_rec = 0.0
+        return total_loss/self.steps, avg_cls_tr_rec

@@ -80,7 +80,7 @@ class Net(BaseNet):
 
             batch_sz = x.shape[0]
             meta_losses = [0 for _ in range(batch_sz)]
-            tr_acc = []
+            cls_tr_rec = []
 
             bx, by, bt = self.getBatch(x.cpu().numpy(), y.cpu().numpy(), t)
             fast_weights = None
@@ -100,7 +100,7 @@ class Net(BaseNet):
 
                 meta_loss, logits = self.meta_loss(bx, fast_weights, by, t) # loss on the meta batch
                 pb = torch.argmax(logits, dim=1)
-                tr_acc.append(macro_recall(pb, by))
+                cls_tr_rec.append(macro_recall(pb, by))
                 meta_losses[i] += meta_loss/batch_sz
                 assert meta_loss.requires_grad, "meta_loss has no grad path to alpha"
                 meta_losses[i].backward()
@@ -135,5 +135,5 @@ class Net(BaseNet):
             self.net.zero_grad(set_to_none=True)
             self.net.alpha_lr.zero_grad(set_to_none=True)
 
-        avg_tr_acc = sum(tr_acc)/len(tr_acc) if tr_acc else 0.0
-        return meta_loss.mean().item(), avg_tr_acc
+        avg_cls_tr_rec = sum(cls_tr_rec)/len(cls_tr_rec) if cls_tr_rec else 0.0
+        return meta_loss.mean().item(), avg_cls_tr_rec

@@ -253,7 +253,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             #self.mem_feat[tt] = F.softmax(out[:, offset1:offset2] / self.temp, dim=1 ).data.clone()
             self.current_task = t
             
-        tr_acc = []
+        cls_tr_rec = []
 
         for _ in range(self.inner_steps):
             self.net.zero_grad()
@@ -272,7 +272,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                     f"class_count={logits.size(1)}, offset=({offset1},{offset2})"
                 )
             preds = torch.argmax(logits, dim=1)
-            tr_acc.append(macro_recall(preds, targets))
+            cls_tr_rec.append(macro_recall(preds, targets))
             loss1 = self.bce(logits, targets)
             if t > 0:
                 sampled = self.memory_sampling(t)
@@ -294,7 +294,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             loss.backward()
             self.opt.step()
 
-        avg_tr_acc = sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
+        avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
         # if getattr(self, "det_enabled", True):
         #     self.det_opt.zero_grad()
         #     det_logits, _ = self.net.forward_heads(x_det)
@@ -308,4 +308,4 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         #     det_loss = self.det_lambda * det_loss
         #     det_loss.backward()
         #     self.det_opt.step()
-        return loss.item(), avg_tr_acc
+        return loss.item(), avg_cls_tr_rec

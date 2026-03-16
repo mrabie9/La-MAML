@@ -394,6 +394,6 @@ class Net(torch.nn.Module):
                 self.optimizer.step()
 
         meta_loss_return = sum(mc_meta_losses)/len(mc_meta_losses)
-        avg_tr_acc = sum(train_acc_values)/len(train_acc_values) if train_acc_values else 0.0
+        avg_cls_tr_rec = sum(train_acc_values)/len(train_acc_values) if train_acc_values else 0.0
 
-        return meta_loss_return.item(), avg_tr_acc
+        return meta_loss_return.item(), avg_cls_tr_rec

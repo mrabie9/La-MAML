@@ -148,11 +148,11 @@ class Net(DetectionReplayMixin, nn.Module):
             current_logits = self._select_task_logits(cls_logits, class_ids)
             targets = self._map_labels_to_local(cls_labels, t)
             preds = torch.argmax(current_logits, dim=1)
-            tr_acc = macro_recall(preds, targets)
+            cls_tr_rec = macro_recall(preds, targets)
             loss_ce = self.ce(current_logits, targets)
         # else:
         #     loss_ce = cls_logits.new_zeros(1)
-        #     tr_acc = 0.0
+        #     cls_tr_rec = 0.0
 
         prev_class_ids = self._collect_previous_class_ids(t)
         distill_loss = self._distillation_loss(cls_logits, x, prev_class_ids)
@@ -175,7 +175,7 @@ class Net(DetectionReplayMixin, nn.Module):
             torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.clipgrad)
         self.opt.step()
 
-        return float(loss.item()), tr_acc
+        return float(loss.item()), cls_tr_rec
 
     # ------------------------------------------------------------------
     def _build_backbone(self, n_inputs: int, n_outputs: int, args: object) -> nn.Module:

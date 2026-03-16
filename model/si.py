@@ -135,10 +135,10 @@ class Net(DetectionReplayMixin, nn.Module):
                 targets = (targets - offset1).long()
             loss_ce = self.ce(logits, targets)
             preds = torch.argmax(logits, dim=1)
-            tr_acc = macro_recall(preds, targets)
+            cls_tr_rec = macro_recall(preds, targets)
         # else:
         #     loss_ce = cls_logits.new_zeros(1)
-        #     tr_acc = 0.0
+        #     cls_tr_rec = 0.0
         # det_loss = self.det_loss(det_logits, y_det.float())
         # det_replay = self._sample_det_memory()
         # if det_replay is not None:
@@ -157,7 +157,7 @@ class Net(DetectionReplayMixin, nn.Module):
         self.opt.step()
         self._update_path_integral()
 
-        return float(loss.item()), tr_acc
+        return float(loss.item()), cls_tr_rec
 
     # ------------------------------------------------------------------
     def on_task_end(self) -> None:

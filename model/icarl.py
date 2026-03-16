@@ -293,7 +293,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         # x = x[signal_mask]
         # y = y_cls[signal_mask]
 
-        tr_acc = []
+        cls_tr_rec = []
 
         for pass_itr in range(self.glances):
 
@@ -325,9 +325,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             # keeping the optimization objective unchanged.
             if noise_label is not None:
                 cls_metric_mask = y != noise_label
-                tr_acc.append(macro_recall(preds[cls_metric_mask], targets[cls_metric_mask]))
+                cls_tr_rec.append(macro_recall(preds[cls_metric_mask], targets[cls_metric_mask]))
             else:
-                tr_acc.append(macro_recall(preds, targets))
+                cls_tr_rec.append(macro_recall(preds, targets))
             loss = self.bce(logits, targets)
             # num_exemplars remains 0 unless final epoch is reached
             if self.num_exemplars > 0:
@@ -373,7 +373,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         #     self.examples_seen = 0
             # get labels from previous task; we assume labels are consecutive
             if self.memx is None or self.memy is None or self.memy.numel() == 0:
-                return float(loss.item()), sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
+                return float(loss.item()), sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
 
             offset1, offset2 = self.compute_offsets(t)
             if self.gpu:
@@ -444,7 +444,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             self.memy = None
             # print(len(self.mem_class_x[0]))
 
-        avg_tr_acc = sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
+        avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
         det_loss_value = 0.0
         # if getattr(self, "det_enabled", True):
         #     self.det_opt.zero_grad()
@@ -472,10 +472,10 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         #     det_pfa = float(fp / denom) if denom > 0 else 0.0
         # else:
         #     det_pfa = 0.0
-        # score = avg_tr_acc * det_recall * (1.0 - det_pfa)
+        # score = avg_cls_tr_rec * det_recall * (1.0 - det_pfa)
         # print(
         #     f"Task {t} | Score: {score:.4f} | Loss: {total_loss:.4f} | Cls Loss: {loss.item():.4f} "
         #     f"| Det Loss: {det_loss.item():.4f} | Det Recall: {det_recall:.4f} | Det PFA: {det_pfa:.4f} "
         #     f"| Det_lambda: {self.det_lambda} | Memory Strength: {self.reg}"
         # )
-        return total_loss, avg_tr_acc
+        return total_loss, avg_cls_tr_rec

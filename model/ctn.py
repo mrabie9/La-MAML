@@ -380,7 +380,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             det_loss_value = torch.zeros((), device=x.device, dtype=torch.float32)
 
         self.zero_grad()
-        tr_acc = []
+        cls_tr_rec = []
         context_parameters = list(self.net.context_param())
         for _ in range(self.n_meta):
             loss1 = torch.tensor(0.0, device=x.device)
@@ -398,9 +398,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             else:
                 signal_mask_for_metric = targets != local_noise_label
             if signal_mask_for_metric.any():
-                tr_acc.append(macro_recall(preds[signal_mask_for_metric], targets[signal_mask_for_metric]))
+                cls_tr_rec.append(macro_recall(preds[signal_mask_for_metric], targets[signal_mask_for_metric]))
             else:
-                tr_acc.append(0.0)
+                cls_tr_rec.append(0.0)
 
             loss1 = self.bce(logits, targets)
             #tt = t + 1
@@ -465,5 +465,5 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             #SGD update the CONTROLLER 
             self.zero_grad() 
                
-        avg_tr_acc = sum(tr_acc) / len(tr_acc) if tr_acc else 0.0
-        return loss.item(), avg_tr_acc
+        avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
+        return loss.item(), avg_cls_tr_rec

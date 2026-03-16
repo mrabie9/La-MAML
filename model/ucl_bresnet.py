@@ -549,7 +549,7 @@ class Net(nn.Module):
         logits = outputs[t] if self.split else outputs
 
         preds = torch.argmax(logits, dim=1)
-        tr_acc = macro_recall(preds, y_cls_filtered)
+        cls_tr_rec = macro_recall(preds, y_cls_filtered)
         loss = self.ce(logits, y_cls_filtered)
         loss = self._apply_regularisation(loss, y_cls_filtered.size(0))
 
@@ -570,7 +570,7 @@ class Net(nn.Module):
         #         torch.nn.utils.clip_grad_norm_(self.detector.parameters(), self.cfg.clipgrad)
         #     self.det_optimizer.step()
 
-        return float(loss.detach().cpu()), tr_acc
+        return float(loss.detach().cpu()), cls_tr_rec
 
     def on_epoch_end(self) -> None:  # pragma: no cover
         pass
