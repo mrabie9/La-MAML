@@ -64,7 +64,9 @@ def confusion_matrix(result_t, result_a, log_dir, fname=None):
     colors = cm.nipy_spectral(np.linspace(0, 1, len(result)))
     figure = plt.figure(figsize=(8, 8))
     ax = plt.gca()
-    data = np.array(result_a)
+    # Convert to a plain NumPy array without relying on the deprecated
+    # ``copy=`` semantics in NumPy 2.x.
+    data = np.asarray(result_a)
     for i in range(len(data[0])):
         plt.plot(range(data.shape[0]), data[:,i], label=str(i), color=colors[i], linewidth=2)
         
