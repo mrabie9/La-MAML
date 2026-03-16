@@ -18,7 +18,7 @@ import argparse
 import json
 import re
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Sequence
 
 # Use non-interactive backend only when saving to file (-o); otherwise plt.show() can open windows
 _pre_parser = argparse.ArgumentParser()
@@ -348,8 +348,10 @@ def plot_validation_over_time(
     tasks: list[dict[str, Any]],
     output_dir: Path | None,
     task_names: Sequence[str] | None = None,
+    val_metric_key: str = "val_acc",
+    val_metric_label: str = "Cls Recall",
 ) -> None:
-    """Plot validation recall per task as more tasks are trained (recall matrix)."""
+    """Plot a validation metric per task as more tasks are trained (metric matrix)."""
     n_tasks = len(tasks)
     # After training task k, we have val_acc of length k+1 (tasks 0..k)
     x = np.arange(1, n_tasks + 1)  # "after task 0", "after task 1", ...
@@ -359,11 +361,12 @@ def plot_validation_over_time(
         # For each task t, get its val acc from task files task_idx, task_idx+1, ..., n_tasks-1
         ys = []
         for k in range(n_tasks):
-            val_acc = tasks[k]["val_acc"]
-            if task_idx < len(val_acc):
-                ys.append(val_acc[task_idx])
-            else:
+            metrics_k = tasks[k]
+            metric_vals = metrics_k.get(val_metric_key)
+            if metric_vals is None or task_idx >= len(metric_vals):
                 ys.append(np.nan)
+                continue
+            ys.append(float(metric_vals[task_idx]))
         ax.plot(
             x,
             ys,
@@ -374,8 +377,8 @@ def plot_validation_over_time(
         )
 
     ax.set_xlabel("After training up to task")
-    ax.set_ylabel("Validation recall (classification)")
-    ax.set_title("Validation recall per task over continual learning")
+    ax.set_ylabel(f"Validation ({val_metric_label})")
+    ax.set_title(f"Validation {val_metric_label} per task over continual learning")
     ax.legend(ncol=min(n_tasks, 5), fontsize=8)
     ax.grid(True, alpha=0.3)
     ax.set_xticks(x)
@@ -387,16 +390,18 @@ def plot_validation_over_time(
     plt.close()
 
 
-def compute_average_forgetting(tasks: list[dict[str, Any]]) -> tuple[np.ndarray, np.ndarray]:
+def compute_average_forgetting(
+    tasks: list[dict[str, Any]],
+    val_metric_key: str,
+) -> tuple[np.ndarray, np.ndarray]:
     """Compute average forgetting over all previous tasks at each checkpoint.
 
-    This uses classification F1 when available (``val_f1`` saved in metrics);
-    otherwise it falls back to classification recall from ``val_acc``.
+    This uses a single validation metric key (e.g. ``val_f1`` or ``val_acc``)
+    consistently for peak and current values.
 
     For each task t, peak metric = metric[t] after training task t
-    (i.e. tasks[t]['val_f1'][t] or tasks[t]['val_acc'][t]). After training
-    task K > t, the metric on task t is tasks[K]['val_f1'][t] (or
-    tasks[K]['val_acc'][t]). Forgetting for task t at K is
+    (i.e. tasks[t][val_metric_key][t]). After training
+    task K > t, the metric on task t is tasks[K][val_metric_key][t]. Forgetting for task t at K is
     max(0, peak[t] - current_metric).
     Average forgetting at K = mean over t in 0..K-1 (no previous tasks when K=0).
 
@@ -405,14 +410,14 @@ def compute_average_forgetting(tasks: list[dict[str, Any]]) -> tuple[np.ndarray,
         avg_forgetting: average forgetting at each checkpoint (length n_tasks)
     """
     n_tasks = len(tasks)
-    # Peak metric (F1 if present, else recall) after learning each task t.
-    peak_vals = []
+    # Peak metric after learning each task t.
+    peak_vals: list[float] = []
     for t in range(n_tasks):
         metrics_t = tasks[t]
-        if "val_f1" in metrics_t and len(metrics_t["val_f1"]) > t:
-            peak_vals.append(float(metrics_t["val_f1"][t]))
-        else:
-            peak_vals.append(float(metrics_t["val_acc"][t]))
+        metric_vals = metrics_t.get(val_metric_key)
+        if metric_vals is None or len(metric_vals) <= t:
+            continue
+        peak_vals.append(float(metric_vals[t]))
     peak_vals_arr = np.asarray(peak_vals, dtype=float)
     avg_forgetting = np.zeros(n_tasks)
     for k in range(n_tasks):
@@ -422,29 +427,35 @@ def compute_average_forgetting(tasks: list[dict[str, Any]]) -> tuple[np.ndarray,
         forgets: list[float] = []
         for t in range(k):
             metrics_k = tasks[k]
-            if "val_f1" in metrics_k and len(metrics_k["val_f1"]) > t:
-                current_metric = float(metrics_k["val_f1"][t])
-            else:
-                current_metric = float(metrics_k["val_acc"][t])
+            metric_vals_k = metrics_k.get(val_metric_key)
+            if metric_vals_k is None or len(metric_vals_k) <= t:
+                # If we do not have a value, treat as no additional forgetting signal.
+                continue
+            current_metric = float(metric_vals_k[t])
             forgets.append(max(0.0, float(peak_vals_arr[t] - current_metric)))
         avg_forgetting[k] = float(np.mean(forgets)) if forgets else 0.0
     return np.arange(n_tasks), avg_forgetting
 
 
-def plot_average_forgetting(tasks: list[dict[str, Any]], output_dir: Path | None) -> None:
-    """Plot average forgetting over previous tasks vs checkpoint (after training task K)."""
-    x, avg_forgetting = compute_average_forgetting(tasks)
-    n_tasks = len(tasks)
+def plot_average_forgetting(
+    tasks: list[dict[str, Any]],
+    output_dir: Path | None,
+    val_metric_key: str,
+    val_metric_label: str,
+) -> None:
+    """Plot average forgetting over previous tasks vs checkpoint (after training task K).
 
-    # Decide label based on whether F1 is available in metrics.
-    has_f1 = any("val_f1" in t for t in tasks)
-    y_label = "Average forgetting (Cls F1)" if has_f1 else "Average forgetting (Cls acc)"
+    This uses a single validation metric (e.g. Total F1 or classification
+    recall) resolved in ``main`` and passed via ``val_metric_key``.
+    """
+    x, avg_forgetting = compute_average_forgetting(tasks, val_metric_key)
+    y_label = f"Average forgetting ({val_metric_label})"
 
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.plot(x, avg_forgetting, "o-", color="C0", linewidth=2, markersize=6)
     ax.set_xlabel("After training up to task")
     ax.set_ylabel(y_label)
-    ax.set_title(f"Average forgetting on all previous tasks ({'Cls F1' if has_f1 else 'Cls acc'})")
+    ax.set_title(f"Average forgetting on all previous tasks ({val_metric_label})")
     ax.set_xticks(x)
     ax.grid(True, alpha=0.3)
     ax.set_ylim(bottom=0)
@@ -474,6 +485,17 @@ def main() -> None:
         default=None,
         help="Directory to save plot images. If not set, only display.",
     )
+    parser.add_argument(
+        "--val-metric",
+        type=str,
+        choices=("total_f1", "cls_recall"),
+        default="total_f1",
+        help=(
+            "Validation metric to use for 'val over tasks' and average forgetting "
+            "plots. Defaults to total_f1; falls back to cls_recall if F1 is not "
+            "available in the metrics."
+        ),
+    )
     args = parser.parse_args()
 
     metrics_dir = args.metrics_dir.resolve()
@@ -491,6 +513,25 @@ def main() -> None:
     tasks = load_metrics(metrics_dir)
     print(f"Loaded {len(tasks)} task(s) from {metrics_dir}")
 
+    # Resolve which validation metric to use for plots that depend on a single
+    # validation signal (validation over tasks and average forgetting).
+    if args.val_metric == "cls_recall":
+        val_metric_key = "val_acc"
+        val_metric_label = "Cls Recall"
+    else:
+        # Prefer Total F1 when available; otherwise fall back to classification recall.
+        has_f1 = any("val_f1" in t for t in tasks)
+        if has_f1:
+            val_metric_key = "val_f1"
+            val_metric_label = "Total F1"
+        else:
+            val_metric_key = "val_acc"
+            val_metric_label = "Cls Recall"
+            print(
+                "[WARN] Requested val-metric=total_f1 but no 'val_f1' found in metrics; "
+                "falling back to classification recall ('val_acc')."
+            )
+
     task_names = load_task_names(metrics_dir)
 
     plot_per_task_curves(tasks, args.output_dir, task_names=task_names)
@@ -502,8 +543,19 @@ def main() -> None:
         print("Skipping per-epoch plot (no n_epochs in training_parameters.json)")
 
     plot_final_validation(tasks, args.output_dir, task_names=task_names)
-    plot_validation_over_time(tasks, args.output_dir, task_names=task_names)
-    plot_average_forgetting(tasks, args.output_dir)
+    plot_validation_over_time(
+        tasks,
+        args.output_dir,
+        task_names=task_names,
+        val_metric_key=val_metric_key,
+        val_metric_label=val_metric_label,
+    )
+    plot_average_forgetting(
+        tasks,
+        args.output_dir,
+        val_metric_key=val_metric_key,
+        val_metric_label=val_metric_label,
+    )
 
     if args.output_dir:
         print(f"Plots saved under {args.output_dir}")

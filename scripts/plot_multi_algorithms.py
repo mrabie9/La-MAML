@@ -204,29 +204,31 @@ def load_metrics(metrics_dir: Path) -> List[TaskMetrics]:
     return tasks
 
 
-def compute_average_forgetting(tasks: Sequence[TaskMetrics]) -> Tuple[np.ndarray, np.ndarray]:
+def compute_average_forgetting(
+    tasks: Sequence[TaskMetrics],
+    val_metric_key: str,
+) -> Tuple[np.ndarray, np.ndarray]:
     """Compute average forgetting over previous tasks at each checkpoint.
 
-    This uses classification F1 when available (``val_f1`` saved in metrics);
-    otherwise it falls back to classification accuracy / recall from
-    ``val_acc``.
+    This uses a single validation metric key (e.g. ``val_f1`` or ``val_acc``)
+    consistently for peak and current values.
 
-    For each task ``t``, peak metric is taken as ``val_f1[t]`` (or
-    ``val_acc[t]``) after training task ``t``. After training task ``K > t``,
-    the metric on task ``t`` is ``tasks[K]['val_f1'][t]`` (or
-    ``tasks[K]['val_acc'][t]``). Forgetting for task ``t`` at ``K`` is
-    ``max(0, peak[t] - current_metric)`` and the average forgetting at ``K`` is
-    the mean over all previous tasks.
+    For each task ``t``, peak metric is taken as ``tasks[t][val_metric_key][t]``
+    after training task ``t``. After training task ``K > t``, the metric on
+    task ``t`` is ``tasks[K][val_metric_key][t]``. Forgetting for task ``t`` at
+    ``K`` is ``max(0, peak[t] - current_metric)`` and the average forgetting at
+    ``K`` is the mean over all previous tasks.
 
     Args:
         tasks: Sequence of per-task metric dictionaries.
+        val_metric_key: Key of the validation metric to use (e.g. ``val_f1`` or ``val_acc``).
 
     Returns:
         A tuple ``(x, avg_forgetting)`` where ``x`` is an array of checkpoint
         indices and ``avg_forgetting`` is the corresponding forgetting values.
 
     Usage:
-        >>> x, f = compute_average_forgetting(tasks)
+        >>> x, f = compute_average_forgetting(tasks, \"val_acc\")
         >>> x.shape == f.shape
         True
     """
@@ -234,14 +236,14 @@ def compute_average_forgetting(tasks: Sequence[TaskMetrics]) -> Tuple[np.ndarray
     if n_tasks == 0:
         return np.array([]), np.array([])
 
-    # Peak metric (F1 if present, else accuracy) after learning each task t.
+    # Peak metric after learning each task t.
     peak_vals: List[float] = []
     for t in range(n_tasks):
         metrics_t = tasks[t]
-        if "val_f1" in metrics_t and len(metrics_t["val_f1"]) > t:
-            peak_vals.append(float(metrics_t["val_f1"][t]))
-        else:
-            peak_vals.append(float(metrics_t["val_acc"][t]))
+        metric_vals = metrics_t.get(val_metric_key)
+        if metric_vals is None or len(metric_vals) <= t:
+            continue
+        peak_vals.append(float(metric_vals[t]))
     peak_vals_arr = np.asarray(peak_vals, dtype=float)
     avg_forgetting = np.zeros(n_tasks, dtype=float)
 
@@ -252,10 +254,10 @@ def compute_average_forgetting(tasks: Sequence[TaskMetrics]) -> Tuple[np.ndarray
         forgets: List[float] = []
         for t in range(k):
             metrics_k = tasks[k]
-            if "val_f1" in metrics_k and len(metrics_k["val_f1"]) > t:
-                current_metric = float(metrics_k["val_f1"][t])
-            else:
-                current_metric = float(metrics_k["val_acc"][t])
+            metric_vals_k = metrics_k.get(val_metric_key)
+            if metric_vals_k is None or len(metric_vals_k) <= t:
+                continue
+            current_metric = float(metric_vals_k[t])
             forgets.append(max(0.0, float(peak_vals_arr[t] - current_metric)))
         avg_forgetting[k] = float(np.mean(forgets)) if forgets else 0.0
 
@@ -428,8 +430,10 @@ def _plot_val_acc_over_tasks(
     ax: plt.Axes,
     tasks: Sequence[TaskMetrics],
     task_names: Sequence[str] | None,
+    val_metric_key: str,
+    val_metric_label: str,
 ) -> None:
-    """Plot validation recall per task as more tasks are trained."""
+    """Plot a validation metric per task as more tasks are trained."""
     n_tasks = len(tasks)
     if n_tasks == 0:
         return
@@ -438,11 +442,11 @@ def _plot_val_acc_over_tasks(
     for task_idx in range(n_tasks):
         ys = []
         for k in range(n_tasks):
-            val_acc = tasks[k].get("val_acc")
-            if val_acc is None or task_idx >= len(val_acc):
+            metric_vals = tasks[k].get(val_metric_key)
+            if metric_vals is None or task_idx >= len(metric_vals):
                 ys.append(np.nan)
             else:
-                ys.append(float(val_acc[task_idx]))
+                ys.append(float(metric_vals[task_idx]))
         ax.plot(
             x,
             ys,
@@ -453,19 +457,23 @@ def _plot_val_acc_over_tasks(
         )
 
     ax.set_xlabel("After training up to task")
-    ax.set_ylabel("Val recall")
+    ax.set_ylabel(f"Val {val_metric_label}")
     ax.grid(True, alpha=0.3)
 
 
-def _plot_average_forgetting(ax: plt.Axes, tasks: Sequence[TaskMetrics]) -> None:
+def _plot_average_forgetting(
+    ax: plt.Axes,
+    tasks: Sequence[TaskMetrics],
+    val_metric_key: str,
+    val_metric_label: str,
+) -> None:
     """Plot average forgetting vs checkpoint index for an algorithm."""
-    x, avg_forgetting = compute_average_forgetting(tasks)
+    x, avg_forgetting = compute_average_forgetting(tasks, val_metric_key)
     if x.size == 0:
         return
     ax.plot(x, avg_forgetting, "o-", color="C3")
     ax.set_xlabel("After training up to task")
-    has_f1 = any("val_f1" in t for t in tasks)
-    ax.set_ylabel("Avg forgetting (F1)" if has_f1 else "Avg forgetting (cls recall)")
+    ax.set_ylabel(f"Avg forgetting ({val_metric_label})")
     ax.grid(True, alpha=0.3)
 
 
@@ -549,6 +557,7 @@ def plot_multi_algorithms(
     runs: Sequence[AlgoRun],
     output_dir: Path | None,
     same_y_limits: bool = False,
+    val_metric_choice: str = "total_f1",
 ) -> None:
     """Create the multi-row, multi-column figure for all algorithms.
 
@@ -582,20 +591,49 @@ def plot_multi_algorithms(
         dpi=dpi,
     )
 
+    def _resolve_val_metric_for_run(choice: str, run: AlgoRun) -> tuple[str, str]:
+        """Resolve validation metric key and label for a single run."""
+        if choice == "cls_recall":
+            return "val_acc", "Cls recall"
+        # choice == "total_f1": prefer F1 when available, fall back to recall.
+        has_f1 = any("val_f1" in t for t in run.tasks)
+        if has_f1:
+            return "val_f1", "Total F1"
+        print(
+            f"[WARN] Requested val-metric=total_f1 but run '{run.name}' at "
+            f"{run.metrics_dir} has no 'val_f1'; falling back to cls recall ('val_acc')."
+        )
+        return "val_acc", "Cls recall"
+
+    # Resolve label for column titles from the first run.
+    first_key, first_label = _resolve_val_metric_for_run(val_metric_choice, runs[0])
+
     for row_idx, run in enumerate(runs):
+        val_metric_key, val_metric_label = _resolve_val_metric_for_run(val_metric_choice, run)
         row_axes = axes[row_idx]
         _plot_train_acc_vs_steps(row_axes[0], run.tasks, run.task_names)
         _plot_final_validation_metrics(row_axes[1], run.tasks, run.task_names)
-        _plot_val_acc_over_tasks(row_axes[2], run.tasks, run.task_names)
-        _plot_average_forgetting(row_axes[3], run.tasks)
+        _plot_val_acc_over_tasks(
+            row_axes[2],
+            run.tasks,
+            run.task_names,
+            val_metric_key=val_metric_key,
+            val_metric_label=val_metric_label,
+        )
+        _plot_average_forgetting(
+            row_axes[3],
+            run.tasks,
+            val_metric_key=val_metric_key,
+            val_metric_label=val_metric_label,
+        )
 
         row_axes[0].set_ylabel(f"{run.name}\nTrain recall")
 
     # Column titles on the top row
     axes[0][0].set_title("Train recall vs step")
     axes[0][1].set_title("Final validation metrics")
-    axes[0][2].set_title("Val recall over tasks")
-    axes[0][3].set_title("Average forgetting")
+    axes[0][2].set_title(f"Val {first_label} over tasks")
+    axes[0][3].set_title(f"Average forgetting ({first_label})")
 
     # Legends on first row only: train recall vs step, final validation metrics.
     handles_train, _ = axes[0][0].get_legend_handles_labels()
@@ -717,6 +755,17 @@ def _parse_args() -> argparse.Namespace:
             "make cross-algorithm comparisons easier."
         ),
     )
+    parser.add_argument(
+        "--val-metric",
+        type=str,
+        choices=("total_f1", "cls_recall"),
+        default="total_f1",
+        help=(
+            "Validation metric to use for 'val over tasks' and average forgetting "
+            "plots. Defaults to total_f1; falls back to cls_recall when F1 is "
+            "not available for a run."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -744,6 +793,7 @@ def main() -> None:
         runs=runs,
         output_dir=args.output_dir,
         same_y_limits=args.same_y_limits,
+        val_metric_choice=args.val_metric,
     )
 
 
