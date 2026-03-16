@@ -64,6 +64,91 @@ class AdcIqAdapter(nn.Module):
         self.bias = nn.Parameter(torch.zeros(2))
         nn.init.xavier_uniform_(self.weight)
         self.proj_3ch = nn.Conv1d(3, 2, kernel_size=1)
+        weight_4d = torch.tensor([[1,  1,  1 ],
+                                    [1,  1, 1 ]])
+        bias_4d = torch.tensor([0.0,  0.0])
+        # self.set_initial_parameters(weight_4d=weight_4d, bias_4d=bias_4d)
+
+    def set_initial_parameters(
+        self,
+        *,
+        weight_4d: torch.Tensor | None = None,
+        bias_4d: torch.Tensor | None = None,
+        weight_3d: torch.Tensor | None = None,
+        bias_3d: torch.Tensor | None = None,
+        freeze: bool = False,
+    ) -> None:
+        """Optionally override the adapter's initial parameters.
+
+        This helper lets you seed the adapter with known linear mappings
+        (e.g. from a previous run or domain knowledge) instead of relying
+        on the default random initialization.
+
+        Args:
+            weight_4d: Optional weight for the 4D path with shape (2, 3).
+            bias_4d: Optional bias for the 4D path with shape (2,).
+            weight_3d: Optional weight for the 3D Conv1d path. Accepts either
+                a tensor of shape (2, 3) or (2, 3, 1); the latter will be
+                used directly as ``proj_3ch.weight``.
+            bias_3d: Optional bias for the 3D Conv1d path with shape (2,).
+            freeze: If True, disables gradient updates for the adapter
+                parameters after initialization.
+
+        Usage:
+            >>> adapter = AdcIqAdapter()
+            >>> adapter.set_initial_parameters(
+            ...     weight_4d=my_w4d, bias_4d=my_b4d,
+            ...     weight_3d=my_w3d, bias_3d=my_b3d,
+            ...     freeze=False,
+            ... )
+        """
+        print("[WARNING] Setting initial parameters for AdcIqAdapter")
+        if weight_4d is not None:
+            if weight_4d.shape != self.weight.shape:
+                raise ValueError(
+                    f"weight_4d must have shape {tuple(self.weight.shape)}, got {tuple(weight_4d.shape)}"
+                )
+            with torch.no_grad():
+                self.weight.copy_(weight_4d)
+        if bias_4d is not None:
+            if bias_4d.shape != self.bias.shape:
+                raise ValueError(
+                    f"bias_4d must have shape {tuple(self.bias.shape)}, got {tuple(bias_4d.shape)}"
+                )
+            with torch.no_grad():
+                self.bias.copy_(bias_4d)
+
+        if weight_3d is not None:
+            if weight_3d.dim() == 2:
+                if weight_3d.shape != (2, 3):
+                    raise ValueError(
+                        f"weight_3d must have shape (2, 3) or (2, 3, 1); got {tuple(weight_3d.shape)}"
+                    )
+                w3 = weight_3d.view(2, 3, 1)
+            elif weight_3d.dim() == 3:
+                if weight_3d.shape != (2, 3, 1):
+                    raise ValueError(
+                        f"weight_3d must have shape (2, 3, 1); got {tuple(weight_3d.shape)}"
+                    )
+                w3 = weight_3d
+            else:
+                raise ValueError(
+                    f"weight_3d must be rank 2 or 3 tensor; got dim={weight_3d.dim()}"
+                )
+            with torch.no_grad():
+                self.proj_3ch.weight.copy_(w3)
+
+        if bias_3d is not None:
+            if bias_3d.shape != self.proj_3ch.bias.shape:
+                raise ValueError(
+                    f"bias_3d must have shape {tuple(self.proj_3ch.bias.shape)}, got {tuple(bias_3d.shape)}"
+                )
+            with torch.no_grad():
+                self.proj_3ch.bias.copy_(bias_3d)
+
+        if freeze:
+            for param in (self.weight, self.bias, *self.proj_3ch.parameters()):
+                param.requires_grad = False
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if x.dim() == 3 and x.size(1) == 3:
