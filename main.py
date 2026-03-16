@@ -221,6 +221,13 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
                     yb_cls_for_metrics = yb_cls_cpu - offset1
                     if noise_label_for_metrics is not None:
                         noise_label_for_metrics = noise_label_for_metrics - offset1
+            # Record total F1 score for all classes including noise
+            if yb_det is None:
+                f1s.append(macro_f1_including_noise(pb, yb_cls_for_metrics))
+            else:
+                print("[WARNING] F1 not supported for detection architecture.")
+                f1s.append(0.0)
+
             if yb_det_cpu is not None:
                 cls_mask = yb_det_cpu == 1
                 if cls_mask.any():
@@ -230,7 +237,6 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
                             pb[cls_mask], yb_cls_for_metrics[cls_mask], noise_label_for_metrics
                         )
                     )
-                    f1s.append(macro_f1_including_noise(pb[cls_mask], yb_cls_for_metrics[cls_mask]))
             elif noise_label_for_metrics is not None:
                 cls_mask = yb_cls_for_metrics != noise_label_for_metrics
                 if cls_mask.any():
@@ -240,13 +246,11 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
                             pb[cls_mask], yb_cls_for_metrics[cls_mask], noise_label_for_metrics
                         )
                     )
-                    f1s.append(macro_f1_including_noise(pb[cls_mask], yb_cls_for_metrics[cls_mask]))
             else:
                 recalls.append(macro_recall(pb, yb_cls_for_metrics))
                 precisions.append(
                     macro_precision_signal_only(pb, yb_cls_for_metrics, noise_label_for_metrics)
                 )
-                f1s.append(macro_f1_including_noise(pb, yb_cls_for_metrics))
 
             if yb_det_cpu is not None:
                 det_logits = _get_det_logits(model, xb, t)
