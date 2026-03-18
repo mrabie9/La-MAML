@@ -440,12 +440,18 @@ def _plot_val_acc_over_tasks(
     val_metric_key: str,
     val_metric_label: str,
 ) -> None:
-    """Plot a validation metric per task as more tasks are trained."""
+    """Plot a validation metric per task as more tasks are trained.
+
+    This shows one curve per task (as in ``scripts/plot_metrics.py``), plus an
+    additional aggregate curve where each point ``k`` is the mean metric value
+    over tasks ``0..k`` at checkpoint ``k``.
+    """
     n_tasks = len(tasks)
     if n_tasks == 0:
         return
 
     x = np.arange(1, n_tasks + 1)
+    # Per-task curves.
     for task_idx in range(n_tasks):
         ys = []
         for k in range(n_tasks):
@@ -462,6 +468,37 @@ def _plot_val_acc_over_tasks(
             color=get_task_color(task_idx, task_names),
             alpha=0.8,
         )
+
+    # Aggregate curve: at checkpoint k, mean over tasks 0..k using the same
+    # validation metric key. Missing values and NaNs are skipped.
+    agg_vals: List[float] = []
+    for k in range(n_tasks):
+        metrics_k = tasks[k]
+        metric_vals_k = metrics_k.get(val_metric_key)
+        if metric_vals_k is None:
+            agg_vals.append(float("nan"))
+            continue
+        window: List[float] = []
+        for t in range(k + 1):
+            if t >= len(metric_vals_k):
+                continue
+            v = float(metric_vals_k[t])
+            if np.isnan(v):
+                continue
+            window.append(v)
+        if window:
+            agg_vals.append(float(np.mean(window)))
+        else:
+            agg_vals.append(float("nan"))
+
+    ax.plot(
+        x,
+        np.asarray(agg_vals, dtype=float),
+        "k^-",
+        linewidth=2.0,
+        markersize=4.0,
+        label=f"Mean {val_metric_label}",
+    )
 
     ax.set_xlabel("After training up to task")
     ax.set_ylabel(f"Val {val_metric_label}")
