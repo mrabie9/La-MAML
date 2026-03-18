@@ -3,6 +3,7 @@
 import importlib
 import datetime
 import argparse
+import atexit
 import time
 import os
 import sys
@@ -19,7 +20,12 @@ import parser as file_parser
 from metrics.metrics import confusion_matrix
 from utils import misc_utils
 from main_multi_task import life_experience_iid
-from utils.training_metrics import macro_f1_including_noise, macro_precision_signal_only, macro_recall
+from utils.training_metrics import (
+    macro_f1_including_noise,
+    macro_precision_signal_only,
+    macro_recall,
+)
+
 
 def log_state(enabled, message):
     """Print a timestamped state message when state logging is enabled."""
@@ -27,6 +33,89 @@ def log_state(enabled, message):
         return
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print("[STATE {}] {}".format(timestamp, message))
+
+
+_OUTPUT_TEE_INITIALIZED = False
+_OUTPUT_TEE_LOG_FILE = None
+_OUTPUT_TEE_ORIGINAL_STDOUT = None
+_OUTPUT_TEE_ORIGINAL_STDERR = None
+
+
+class _OutputTee:
+    """Mirror writes to terminal and a log file."""
+
+    def __init__(self, terminal: object, log_file: object):
+        self._terminal = terminal
+        self._log_file = log_file
+
+    def write(self, data: str) -> int:
+        self._terminal.write(data)
+        self._log_file.write(data)
+        return len(data)
+
+    @property
+    def encoding(self):
+        return getattr(self._terminal, "encoding", None)
+
+    def flush(self) -> None:
+        # Keep terminal responsive and ensure log is up to date.
+        self._terminal.flush()
+        self._log_file.flush()
+
+    def isatty(self) -> bool:
+        if hasattr(self._terminal, "isatty"):
+            return bool(self._terminal.isatty())
+        return False
+
+    def fileno(self):
+        if hasattr(self._terminal, "fileno"):
+            return self._terminal.fileno()
+        return None
+
+
+def enable_output_tee(log_file_path: str) -> None:
+    """Enable stdout/stderr mirroring to a log file (without hiding terminal output).
+
+    Args:
+        log_file_path: Full path to the log file to append/overwrite.
+    """
+    global _OUTPUT_TEE_INITIALIZED, _OUTPUT_TEE_LOG_FILE
+    global _OUTPUT_TEE_ORIGINAL_STDOUT, _OUTPUT_TEE_ORIGINAL_STDERR
+
+    if _OUTPUT_TEE_INITIALIZED:
+        return
+
+    _OUTPUT_TEE_ORIGINAL_STDOUT = sys.stdout
+    _OUTPUT_TEE_ORIGINAL_STDERR = sys.stderr
+
+    # Use line buffering so the log closely matches what users see in the terminal.
+    _OUTPUT_TEE_LOG_FILE = open(log_file_path, "w", encoding="utf-8", buffering=1)
+
+    sys.stdout = _OutputTee(_OUTPUT_TEE_ORIGINAL_STDOUT, _OUTPUT_TEE_LOG_FILE)  # type: ignore[assignment]
+    sys.stderr = _OutputTee(_OUTPUT_TEE_ORIGINAL_STDERR, _OUTPUT_TEE_LOG_FILE)  # type: ignore[assignment]
+
+    def _shutdown_output_tee() -> None:
+        """Restore stdout/stderr and close the log file on interpreter shutdown."""
+        global _OUTPUT_TEE_LOG_FILE, _OUTPUT_TEE_INITIALIZED
+
+        # Restore first so any final writes go to the real streams.
+        if _OUTPUT_TEE_ORIGINAL_STDOUT is not None:
+            sys.stdout = _OUTPUT_TEE_ORIGINAL_STDOUT
+        if _OUTPUT_TEE_ORIGINAL_STDERR is not None:
+            sys.stderr = _OUTPUT_TEE_ORIGINAL_STDERR
+
+        if _OUTPUT_TEE_LOG_FILE is not None:
+            try:
+                _OUTPUT_TEE_LOG_FILE.flush()
+            finally:
+                _OUTPUT_TEE_LOG_FILE.close()
+                _OUTPUT_TEE_LOG_FILE = None
+
+        _OUTPUT_TEE_INITIALIZED = False
+
+    atexit.register(_shutdown_output_tee)
+    _OUTPUT_TEE_INITIALIZED = True
+
 
 def _split_labels(y):
     y_det = None
@@ -42,6 +131,7 @@ def _split_labels(y):
         y_cls = y
     return y_cls, y_det
 
+
 def _split_eval_output(output):
     """Return (cls_rec, cls_prec, cls_f1, det, fa). Missing values are None."""
     if isinstance(output, (tuple, list)):
@@ -53,6 +143,7 @@ def _split_eval_output(output):
             return output[0], None, None, output[1], None
     return output, None, None, None, None
 
+
 def _get_det_logits(model, xb, t):
     if hasattr(model, "forward_heads"):
         det_logits, _ = model.forward_heads(xb)
@@ -60,30 +151,40 @@ def _get_det_logits(model, xb, t):
     if hasattr(model, "net") and hasattr(model.net, "forward_heads"):
         det_logits, _ = model.net.forward_heads(xb)
         return det_logits
-    if hasattr(model, "net") and hasattr(model.net, "forward_features") and hasattr(model.net, "forward_detection"):
+    if (
+        hasattr(model, "net")
+        and hasattr(model.net, "forward_features")
+        and hasattr(model.net, "forward_detection")
+    ):
         feats = model.net.forward_features(xb)
         return model.net.forward_detection(feats)
     return None
 
+
 def _false_alarm_rate(preds: torch.Tensor, targets: torch.Tensor) -> float:
     neg_mask = targets == 0
     if not neg_mask.any():
-        print("Warning: No negative samples in _false_alarm_rate calculation, returning 0.0")
+        print(
+            "Warning: No negative samples in _false_alarm_rate calculation, returning 0.0"
+        )
         return 0.0
-    neg_targets = targets[neg_mask]             # true noise label
-    neg_preds = preds[neg_mask]                 # predicted noise label
-    fp = (neg_preds == 1).sum().item()          # predicted noise but actually signal
-    tn = (neg_targets == 0).sum().item() - fp   # predicted noise and actually noise
+    neg_targets = targets[neg_mask]  # true noise label
+    neg_preds = preds[neg_mask]  # predicted noise label
+    fp = (neg_preds == 1).sum().item()  # predicted noise but actually signal
+    tn = (neg_targets == 0).sum().item() - fp  # predicted noise and actually noise
     denom = fp + tn
     return float(fp / denom) if denom > 0 else -1
 
-def _noise_label_for_task(args, task_idx: int, class_counts: List[int] | None = None) -> int | None:
+
+def _noise_label_for_task(
+    args, task_idx: int, class_counts: List[int] | None = None
+) -> int | None:
     if class_counts is None:
         class_counts = getattr(args, "classes_per_task", None)
     if class_counts is None:
         return None
     _, offset2 = misc_utils.compute_offsets(task_idx, class_counts)
-    return offset2 - 1 # Assume noise label is highest in task
+    return offset2 - 1  # Assume noise label is highest in task
 
 
 def _labels_to_numpy(labels: object) -> np.ndarray:
@@ -136,7 +237,7 @@ def eval_class_tasks(model, tasks, args):
         total = 0.0
         noise_label = _noise_label_for_task(args, t, class_counts)
 
-        for (i, (x, y)) in enumerate(task_loader):
+        for i, (x, y) in enumerate(task_loader):
             y_cls, y_det = _split_labels(y)
             if not torch.is_tensor(y_cls):
                 y_cls = torch.as_tensor(y_cls)
@@ -146,7 +247,7 @@ def eval_class_tasks(model, tasks, args):
                 x = x.cuda()
             _, p = torch.max(model(x, t).data.cpu(), 1, keepdim=False)
             if y_det is not None:
-                mask = (y_det == 1)
+                mask = y_det == 1
                 if mask.any():
                     correct += (p[mask] == y_cls[mask]).float().sum().item()
                     total += float(mask.sum().item())
@@ -162,9 +263,12 @@ def eval_class_tasks(model, tasks, args):
         result.append(correct / total if total > 0 else 0.0)
     return result
 
-def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
+
+def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
     model.eval()
-    device = torch.device('cuda' if getattr(args, 'cuda', False) and torch.cuda.is_available() else 'cpu')
+    device = torch.device(
+        "cuda" if getattr(args, "cuda", False) and torch.cuda.is_available() else "cpu"
+    )
     results = []
     prec_results = []
     f1_results = []
@@ -202,13 +306,15 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
             elif yb_det is not None and not torch.is_tensor(yb_det):
                 yb_det = torch.as_tensor(yb_det)
 
-            logits = model(xb, t) if args.model != "anml" else model(xb, fast_weights=None)
+            logits = (
+                model(xb, t) if args.model != "anml" else model(xb, fast_weights=None)
+            )
             pb = torch.argmax(logits, dim=1).cpu()
             yb_cls_cpu = yb_cls.detach().cpu()
             yb_det_cpu = yb_det.detach().cpu() if yb_det is not None else None
             yb_cls_for_metrics = yb_cls_cpu
             noise_label_for_metrics = noise_label
-            if 'ucl' in args.model:
+            if "ucl" in args.model:
                 offset1, _ = misc_utils.compute_offsets(
                     t, class_counts if class_counts is not None else args.nc_per_task
                 )
@@ -216,7 +322,9 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
                     yb_cls_for_metrics = yb_cls_cpu.clone()
                     cls_target_mask = yb_det_cpu == 1
                     if cls_target_mask.any():
-                        yb_cls_for_metrics[cls_target_mask] = yb_cls_for_metrics[cls_target_mask] - offset1
+                        yb_cls_for_metrics[cls_target_mask] = (
+                            yb_cls_for_metrics[cls_target_mask] - offset1
+                        )
                 else:
                     yb_cls_for_metrics = yb_cls_cpu - offset1
                     if noise_label_for_metrics is not None:
@@ -231,25 +339,35 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
             if yb_det_cpu is not None:
                 cls_mask = yb_det_cpu == 1
                 if cls_mask.any():
-                    recalls.append(macro_recall(pb[cls_mask], yb_cls_for_metrics[cls_mask]))
+                    recalls.append(
+                        macro_recall(pb[cls_mask], yb_cls_for_metrics[cls_mask])
+                    )
                     precisions.append(
                         macro_precision_signal_only(
-                            pb[cls_mask], yb_cls_for_metrics[cls_mask], noise_label_for_metrics
+                            pb[cls_mask],
+                            yb_cls_for_metrics[cls_mask],
+                            noise_label_for_metrics,
                         )
                     )
             elif noise_label_for_metrics is not None:
                 cls_mask = yb_cls_for_metrics != noise_label_for_metrics
                 if cls_mask.any():
-                    recalls.append(macro_recall(pb[cls_mask], yb_cls_for_metrics[cls_mask]))
+                    recalls.append(
+                        macro_recall(pb[cls_mask], yb_cls_for_metrics[cls_mask])
+                    )
                     precisions.append(
                         macro_precision_signal_only(
-                            pb[cls_mask], yb_cls_for_metrics[cls_mask], noise_label_for_metrics
+                            pb[cls_mask],
+                            yb_cls_for_metrics[cls_mask],
+                            noise_label_for_metrics,
                         )
                     )
             else:
                 recalls.append(macro_recall(pb, yb_cls_for_metrics))
                 precisions.append(
-                    macro_precision_signal_only(pb, yb_cls_for_metrics, noise_label_for_metrics)
+                    macro_precision_signal_only(
+                        pb, yb_cls_for_metrics, noise_label_for_metrics
+                    )
                 )
 
             if yb_det_cpu is not None:
@@ -279,6 +397,7 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic = False):
         return results, prec_results, f1_results, det_results, det_fa_results
     return results, prec_results, f1_results, None, None
 
+
 def life_experience(model, inc_loader, args):
     result_val_a = []
     result_test_a = []
@@ -303,7 +422,10 @@ def life_experience(model, inc_loader, args):
         evaluator = eval_class_tasks
 
     interactive_terminal = sys.stdout.isatty()
-    log_state(args.state_logging, "Life experience start: {} tasks queued".format(inc_loader.n_tasks))
+    log_state(
+        args.state_logging,
+        "Life experience start: {} tasks queued".format(inc_loader.n_tasks),
+    )
 
     for task_i in range(inc_loader.n_tasks):
         result_epoch_loss = []
@@ -330,7 +452,9 @@ def life_experience(model, inc_loader, args):
 
         log_state(
             args.state_logging,
-            "Starting task {} ({}/{})".format(current_task, task_i + 1, inc_loader.n_tasks),
+            "Starting task {} ({}/{})".format(
+                current_task, task_i + 1, inc_loader.n_tasks
+            ),
         )
         for ep in range(args.n_epochs):
             model.real_epoch = ep
@@ -345,11 +469,13 @@ def life_experience(model, inc_loader, args):
             epoch_eval_time = 0.0
             log_state(
                 args.state_logging,
-                "Task {} Epoch {}/{}: entering train loop".format(current_task, ep + 1, args.n_epochs),
+                "Task {} Epoch {}/{}: entering train loop".format(
+                    current_task, ep + 1, args.n_epochs
+                ),
             )
 
             prog_bar = tqdm(train_loader, disable=not interactive_terminal)
-            for (i, (x, y)) in enumerate(prog_bar):
+            for i, (x, y) in enumerate(prog_bar):
 
                 v_x = x
                 y_cls, y_det = _split_labels(y)
@@ -430,11 +556,17 @@ def life_experience(model, inc_loader, args):
                         else model(v_x, fast_weights=None)
                     )
                     pb = torch.argmax(logits, dim=1).cpu()
-                    det_logits = None # _get_det_logits(model, v_x, task_info["task"])
+                    det_logits = None  # _get_det_logits(model, v_x, task_info["task"])
                 model.train()
 
-                y_cls_for_metric = y_cls.cpu() if torch.is_tensor(y_cls) else torch.as_tensor(y_cls)
-                y_det_for_metric = y_det.cpu() if y_det is not None and torch.is_tensor(y_det) else (torch.as_tensor(y_det) if y_det is not None else None)
+                y_cls_for_metric = (
+                    y_cls.cpu() if torch.is_tensor(y_cls) else torch.as_tensor(y_cls)
+                )
+                y_det_for_metric = (
+                    y_det.cpu()
+                    if y_det is not None and torch.is_tensor(y_det)
+                    else (torch.as_tensor(y_det) if y_det is not None else None)
+                )
                 noise_label_for_metric = noise_label
 
                 # For split (task-incremental) models, forward returns task-local logits so pb is in [0, C_t-1].
@@ -445,19 +577,25 @@ def life_experience(model, inc_loader, args):
                     if noise_label_for_metric is not None:
                         noise_label_for_metric = noise_label_for_metric - offset1
 
-                prec = macro_precision_signal_only(pb, y_cls_for_metric, noise_label_for_metric)
+                prec = macro_precision_signal_only(
+                    pb, y_cls_for_metric, noise_label_for_metric
+                )
                 f1 = macro_f1_including_noise(pb, y_cls_for_metric)
 
                 if y_det_for_metric is not None:
                     cls_mask = y_det_for_metric == 1
                     if cls_mask.any():
-                        cls_tr_rec = macro_recall(pb[cls_mask], y_cls_for_metric[cls_mask])
+                        cls_tr_rec = macro_recall(
+                            pb[cls_mask], y_cls_for_metric[cls_mask]
+                        )
                     else:
                         cls_tr_rec = 0.0
                 elif noise_label_for_metric is not None:
                     cls_mask = y_cls_for_metric != noise_label_for_metric
                     if cls_mask.any():
-                        cls_tr_rec = macro_recall(pb[cls_mask], y_cls_for_metric[cls_mask])
+                        cls_tr_rec = macro_recall(
+                            pb[cls_mask], y_cls_for_metric[cls_mask]
+                        )
                     else:
                         cls_tr_rec = 0.0
                 else:
@@ -485,8 +623,15 @@ def life_experience(model, inc_loader, args):
 
                 prog_bar.set_description(
                     "T{}| Ep: {}/{}| Loss: {}| Rec: {}| Prec: {}| F1: {}| DetRec: {}| DetFA: {}".format(
-                        task_info["task"], ep + 1, args.n_epochs, round(loss, 3),
-                        round(cls_tr_rec, 2), round(prec, 2), round(f1, 2), round(det_rec, 2), round(det_fa, 2)
+                        task_info["task"],
+                        ep + 1,
+                        args.n_epochs,
+                        round(loss, 3),
+                        round(cls_tr_rec, 2),
+                        round(prec, 2),
+                        round(f1, 2),
+                        round(det_rec, 2),
+                        round(det_fa, 2),
                     )
                 )
 
@@ -507,7 +652,9 @@ def life_experience(model, inc_loader, args):
                     ),
                 )
                 val_acc = evaluator(model, test_task_loaders, args)
-                val_acc, val_prec, val_f1, val_det_acc, val_det_fa = _split_eval_output(val_acc)
+                val_acc, val_prec, val_f1, val_det_acc, val_det_fa = _split_eval_output(
+                    val_acc
+                )
                 epoch_eval_time += time.time() - eval_start
                 result_acc_val.append(val_acc)
                 result_val_a.append(val_acc)
@@ -517,22 +664,30 @@ def life_experience(model, inc_loader, args):
                     result_val_f1.append(val_f1)
                 if val_det_acc is not None:
                     result_val_det_a.append(val_det_acc)
-                    last_tr_det = sum(val_det_acc) / len(val_det_acc) if val_det_acc else None
+                    last_tr_det = (
+                        sum(val_det_acc) / len(val_det_acc) if val_det_acc else None
+                    )
                 if val_det_fa is not None:
                     result_val_det_fa.append(val_det_fa)
-                    last_tr_fa = sum(val_det_fa) / len(val_det_fa) if val_det_fa else None
+                    last_tr_fa = (
+                        sum(val_det_fa) / len(val_det_fa) if val_det_fa else None
+                    )
                 result_val_t.append(task_info["task"])
                 if val_det_acc is not None:
-                    print("---- Eval at Epoch {}: cls {} | det_recall {} | det_fa {} ----".format(
-                        ep, val_acc, val_det_acc, val_det_fa
-                    ))
+                    print(
+                        "---- Eval at Epoch {}: cls {} | det_recall {} | det_fa {} ----".format(
+                            ep, val_acc, val_det_acc, val_det_fa
+                        )
+                    )
                 else:
                     print("---- Eval at Epoch {}: {} ----".format(ep, val_acc))
 
                 # Store per-evaluation validation metrics for this task (current epoch).
                 # Index into the evaluator outputs with the current task id where possible.
                 current_task_idx = task_info["task"]
-                if isinstance(val_acc, (list, tuple)) and current_task_idx < len(val_acc):
+                if isinstance(val_acc, (list, tuple)) and current_task_idx < len(
+                    val_acc
+                ):
                     per_epoch_val_cls_rec.append(float(val_acc[current_task_idx]))
                 elif not isinstance(val_acc, (list, tuple)):
                     per_epoch_val_cls_rec.append(float(val_acc))
@@ -540,7 +695,9 @@ def life_experience(model, inc_loader, args):
                     per_epoch_val_cls_rec.append(float("nan"))
 
                 if val_prec is not None:
-                    if isinstance(val_prec, (list, tuple)) and current_task_idx < len(val_prec):
+                    if isinstance(val_prec, (list, tuple)) and current_task_idx < len(
+                        val_prec
+                    ):
                         per_epoch_val_cls_prec.append(float(val_prec[current_task_idx]))
                     elif not isinstance(val_prec, (list, tuple)):
                         per_epoch_val_cls_prec.append(float(val_prec))
@@ -550,7 +707,9 @@ def life_experience(model, inc_loader, args):
                     per_epoch_val_cls_prec.append(float("nan"))
 
                 if val_f1 is not None:
-                    if isinstance(val_f1, (list, tuple)) and current_task_idx < len(val_f1):
+                    if isinstance(val_f1, (list, tuple)) and current_task_idx < len(
+                        val_f1
+                    ):
                         per_epoch_val_f1.append(float(val_f1[current_task_idx]))
                     elif not isinstance(val_f1, (list, tuple)):
                         per_epoch_val_f1.append(float(val_f1))
@@ -560,8 +719,12 @@ def life_experience(model, inc_loader, args):
                     per_epoch_val_f1.append(float("nan"))
 
                 if val_det_acc is not None:
-                    if isinstance(val_det_acc, (list, tuple)) and current_task_idx < len(val_det_acc):
-                        per_epoch_val_det_rec.append(float(val_det_acc[current_task_idx]))
+                    if isinstance(
+                        val_det_acc, (list, tuple)
+                    ) and current_task_idx < len(val_det_acc):
+                        per_epoch_val_det_rec.append(
+                            float(val_det_acc[current_task_idx])
+                        )
                     elif not isinstance(val_det_acc, (list, tuple)):
                         per_epoch_val_det_rec.append(float(val_det_acc))
                     else:
@@ -570,8 +733,12 @@ def life_experience(model, inc_loader, args):
                     per_epoch_val_det_rec.append(float("nan"))
 
                 if val_det_fa is not None:
-                    if isinstance(val_det_fa, (list, tuple)) and current_task_idx < len(val_det_fa):
-                        per_epoch_val_det_pfa.append(float(val_det_fa[current_task_idx]))
+                    if isinstance(val_det_fa, (list, tuple)) and current_task_idx < len(
+                        val_det_fa
+                    ):
+                        per_epoch_val_det_pfa.append(
+                            float(val_det_fa[current_task_idx])
+                        )
                     elif not isinstance(val_det_fa, (list, tuple)):
                         per_epoch_val_det_pfa.append(float(val_det_fa))
                     else:
@@ -581,19 +748,33 @@ def life_experience(model, inc_loader, args):
 
             epoch_duration = time.time() - epoch_start_time
             epoch_train_time = max(epoch_duration - epoch_eval_time, 0.0)
-            avg_loss = float(sum(epoch_losses) / len(epoch_losses)) if epoch_losses else float("nan")
-            avg_cls_tr_rec = float(sum(epoch_train_accs) / len(epoch_train_accs)) if epoch_train_accs else float("nan")
+            avg_loss = (
+                float(sum(epoch_losses) / len(epoch_losses))
+                if epoch_losses
+                else float("nan")
+            )
+            avg_cls_tr_rec = (
+                float(sum(epoch_train_accs) / len(epoch_train_accs))
+                if epoch_train_accs
+                else float("nan")
+            )
             avg_prec = (
                 float(sum(epoch_precisions) / len(epoch_precisions))
                 if epoch_precisions
                 else float("nan")
             )
-            avg_f1 = float(sum(epoch_f1s) / len(epoch_f1s)) if epoch_f1s else float("nan")
+            avg_f1 = (
+                float(sum(epoch_f1s) / len(epoch_f1s)) if epoch_f1s else float("nan")
+            )
             avg_det_rec = (
-                float(sum(epoch_det_recalls) / len(epoch_det_recalls)) if epoch_det_recalls else float("nan")
+                float(sum(epoch_det_recalls) / len(epoch_det_recalls))
+                if epoch_det_recalls
+                else float("nan")
             )
             avg_det_fa = (
-                float(sum(epoch_det_fas) / len(epoch_det_fas)) if epoch_det_fas else float("nan")
+                float(sum(epoch_det_fas) / len(epoch_det_fas))
+                if epoch_det_fas
+                else float("nan")
             )
 
             # Track the last training metrics we saw (for summary logging).
@@ -610,27 +791,54 @@ def life_experience(model, inc_loader, args):
 
             if not interactive_terminal:
                 print(
-                    "Task {} Epoch {}/{} | L {:.4f} | Train Acc {:.2f} | Prec {:.2f} | F1 {:.2f} | Det Rec {:.2f} | Det FA {:.2f} | Epoch Time {:.2f}s (Eval {:.2f}s, Train {:.2f}s)".format(
-                        task_info["task"], ep + 1, args.n_epochs, avg_loss, avg_cls_tr_rec, avg_prec, avg_f1, avg_det_rec, avg_det_fa,
-                        epoch_duration, epoch_eval_time, epoch_train_time
+                    "T{} Ep {}/{} | L {:.4f} | Train Acc {:.2f} | Prec {:.2f} | F1 {:.2f} | Det Rec {:.2f} | Det FA {:.2f} | Epoch Time {:.2f}s (Eval {:.2f}s, Train {:.2f}s)".format(
+                        task_info["task"],
+                        ep + 1,
+                        args.n_epochs,
+                        avg_loss,
+                        avg_cls_tr_rec,
+                        avg_prec,
+                        avg_f1,
+                        avg_det_rec,
+                        avg_det_fa,
+                        epoch_duration,
+                        epoch_eval_time,
+                        epoch_train_time,
                     )
                 )
                 log_state(
                     args.state_logging,
-                    "Task {} Epoch {}/{} complete: Prec {:.4f} F1 {:.4f} DetRec {:.4f} DetFA {:.4f} | {:.2f}s total ({:.2f}s eval/{:.2f}s train)".format(
-                        current_task, ep + 1, args.n_epochs, avg_prec, avg_f1, avg_det_rec, avg_det_fa,
-                        epoch_duration, epoch_eval_time, epoch_train_time
+                    "T{} Ep {}/{} complete: Prec {:.4f} F1 {:.4f} DetRec {:.4f} DetFA {:.4f} | {:.2f}s total ({:.2f}s eval/{:.2f}s train)".format(
+                        current_task,
+                        ep + 1,
+                        args.n_epochs,
+                        avg_prec,
+                        avg_f1,
+                        avg_det_rec,
+                        avg_det_fa,
+                        epoch_duration,
+                        epoch_eval_time,
+                        epoch_train_time,
                     ),
                 )
             if epoch_train_accs and epoch_eval_mode_recalls:
                 avg_tr_recall = float(sum(epoch_train_accs) / len(epoch_train_accs))
-                avg_eval_recall = float(sum(epoch_eval_mode_recalls) / len(epoch_eval_mode_recalls))
+                avg_eval_recall = float(
+                    sum(epoch_eval_mode_recalls) / len(epoch_eval_mode_recalls)
+                )
                 print(
                     "Task {} Epoch {}/{} | Avg Train Recall {:.5f} | Avg Eval-Mode Recall {:.5f}".format(
-                        task_info["task"], ep + 1, args.n_epochs, avg_tr_recall, avg_eval_recall
+                        task_info["task"],
+                        ep + 1,
+                        args.n_epochs,
+                        avg_tr_recall,
+                        avg_eval_recall,
                     )
                 )
-        log_state(args.state_logging, "Task {}: running final validation.".format(current_task))
+        log_state(
+            args.state_logging,
+            "Task {}: running final validation.".format(current_task),
+        )
         val_acc = evaluator(model, test_task_loaders, args)
         val_acc, val_prec, val_f1, val_det_acc, val_det_fa = _split_eval_output(val_acc)
         result_val_a.append(val_acc)
@@ -645,32 +853,54 @@ def life_experience(model, inc_loader, args):
         result_val_t.append(task_info["task"])
 
         losses = np.array(result_epoch_loss)
-        result_acc_tr = np.array([x.cpu().item() if torch.is_tensor(x) else x for x in result_acc_tr])
+        result_acc_tr = np.array(
+            [x.cpu().item() if torch.is_tensor(x) else x for x in result_acc_tr]
+        )
         result_acc_val = np.array(
-            [x.detach().cpu().item() if torch.is_tensor(x) else x for sublist in result_acc_val for x in sublist]
+            [
+                x.detach().cpu().item() if torch.is_tensor(x) else x
+                for sublist in result_acc_val
+                for x in sublist
+            ]
         )
         # Flatten validation F1 scores in the same order as result_acc_val, if available.
         if result_val_f1:
             result_val_f1_flat = np.array(
-                [x.detach().cpu().item() if torch.is_tensor(x) else x for sublist in result_val_f1 for x in sublist]
+                [
+                    x.detach().cpu().item() if torch.is_tensor(x) else x
+                    for sublist in result_val_f1
+                    for x in sublist
+                ]
             )
         else:
             result_val_f1_flat = None
 
         logs_dir = os.path.join(args.log_dir, "metrics")
         os.makedirs(logs_dir, exist_ok=True)
-        save_payload = {"losses": losses, "cls_tr_rec": result_acc_tr, "val_acc": result_acc_val}
+        save_payload = {
+            "losses": losses,
+            "cls_tr_rec": result_acc_tr,
+            "val_acc": result_acc_val,
+        }
         if result_val_f1_flat is not None:
             save_payload["val_f1"] = result_val_f1_flat
         # Optional: per-epoch training metrics for this task.
         if per_epoch_train_cls_rec:
-            save_payload["train_cls_rec"] = np.asarray(per_epoch_train_cls_rec, dtype=float)
+            save_payload["train_cls_rec"] = np.asarray(
+                per_epoch_train_cls_rec, dtype=float
+            )
         if per_epoch_train_cls_prec:
-            save_payload["train_cls_prec"] = np.asarray(per_epoch_train_cls_prec, dtype=float)
+            save_payload["train_cls_prec"] = np.asarray(
+                per_epoch_train_cls_prec, dtype=float
+            )
         if per_epoch_train_det_rec:
-            save_payload["train_det_rec"] = np.asarray(per_epoch_train_det_rec, dtype=float)
+            save_payload["train_det_rec"] = np.asarray(
+                per_epoch_train_det_rec, dtype=float
+            )
         if per_epoch_train_det_pfa:
-            save_payload["train_det_pfa"] = np.asarray(per_epoch_train_det_pfa, dtype=float)
+            save_payload["train_det_pfa"] = np.asarray(
+                per_epoch_train_det_pfa, dtype=float
+            )
         if per_epoch_train_f1:
             save_payload["train_f1"] = np.asarray(per_epoch_train_f1, dtype=float)
 
@@ -678,7 +908,9 @@ def life_experience(model, inc_loader, args):
         if per_epoch_val_cls_rec:
             save_payload["val_cls_rec"] = np.asarray(per_epoch_val_cls_rec, dtype=float)
         if per_epoch_val_cls_prec:
-            save_payload["val_cls_prec"] = np.asarray(per_epoch_val_cls_prec, dtype=float)
+            save_payload["val_cls_prec"] = np.asarray(
+                per_epoch_val_cls_prec, dtype=float
+            )
         if per_epoch_val_det_rec:
             save_payload["val_det_rec"] = np.asarray(per_epoch_val_det_rec, dtype=float)
         if per_epoch_val_det_pfa:
@@ -704,7 +936,9 @@ def life_experience(model, inc_loader, args):
 
         if args.calc_test_accuracy:
             test_acc = evaluator(model, test_task_loaders, args)
-            test_acc, test_prec, test_f1, test_det_acc, test_det_fa = _split_eval_output(test_acc)
+            test_acc, test_prec, test_f1, test_det_acc, test_det_fa = (
+                _split_eval_output(test_acc)
+            )
             result_test_a.append(test_acc)
             if test_det_acc is not None:
                 result_test_det_a.append(test_det_acc)
@@ -712,18 +946,33 @@ def life_experience(model, inc_loader, args):
                 result_test_det_fa.append(test_det_fa)
             result_test_t.append(task_info["task"])
 
-        log_state(args.state_logging, "Completed task {} ({}/{})".format(current_task, task_i + 1, inc_loader.n_tasks))
+        log_state(
+            args.state_logging,
+            "Completed task {} ({}/{})".format(
+                current_task, task_i + 1, inc_loader.n_tasks
+            ),
+        )
 
     print("####Final Validation Accuracy####")
-    print("Final Results:- \n Total Accuracy: {} \n Individual Accuracy: {}".format(sum(result_val_a[-1])/len(result_val_a[-1]), result_val_a[-1]))
+    print(
+        "Final Results:- \n Total Accuracy: {} \n Individual Accuracy: {}".format(
+            sum(result_val_a[-1]) / len(result_val_a[-1]), result_val_a[-1]
+        )
+    )
     if result_val_det_a:
-        print("Final Detection Results:- \n Total Detection: {} \n Individual Detection: {}".format(
-            sum(result_val_det_a[-1]) / len(result_val_det_a[-1]), result_val_det_a[-1]
-        ))
+        print(
+            "Final Detection Results:- \n Total Detection: {} \n Individual Detection: {}".format(
+                sum(result_val_det_a[-1]) / len(result_val_det_a[-1]),
+                result_val_det_a[-1],
+            )
+        )
     if result_val_det_fa:
-        print("Final Detection False Alarm:- \n Total False Alarm: {} \n Individual False Alarm: {}".format(
-            sum(result_val_det_fa[-1]) / len(result_val_det_fa[-1]), result_val_det_fa[-1]
-        ))
+        print(
+            "Final Detection False Alarm:- \n Total False Alarm: {} \n Individual False Alarm: {}".format(
+                sum(result_val_det_fa[-1]) / len(result_val_det_fa[-1]),
+                result_val_det_fa[-1],
+            )
+        )
 
     def _mean(x):
         if x is None or (isinstance(x, (list, tuple)) and len(x) == 0):
@@ -732,7 +981,11 @@ def life_experience(model, inc_loader, args):
             return sum(float(v) for v in x) / len(x)
         return float(x)
 
-    if last_tr_cls_rec is not None or last_tr_cls_prec is not None or last_tr_cls_f1 is not None:
+    if (
+        last_tr_cls_rec is not None
+        or last_tr_cls_prec is not None
+        or last_tr_cls_f1 is not None
+    ):
         tr_rec = float(last_tr_cls_rec) if last_tr_cls_rec is not None else None
         tr_prec = float(last_tr_cls_prec) if last_tr_cls_prec is not None else None
         tr_f1 = float(last_tr_cls_f1) if last_tr_cls_f1 is not None else None
@@ -771,16 +1024,25 @@ def life_experience(model, inc_loader, args):
 
     if args.calc_test_accuracy:
         print("####Final Test Accuracy####")
-        print("Final Results:- \n Total Accuracy: {} \n Individual Accuracy: {}".format(sum(result_test_a[-1])/len(result_test_a[-1]), result_test_a[-1]))
+        print(
+            "Final Results:- \n Total Accuracy: {} \n Individual Accuracy: {}".format(
+                sum(result_test_a[-1]) / len(result_test_a[-1]), result_test_a[-1]
+            )
+        )
         if result_test_det_a:
-            print("Final Detection Results:- \n Total Detection: {} \n Individual Detection: {}".format(
-                sum(result_test_det_a[-1]) / len(result_test_det_a[-1]), result_test_det_a[-1]
-            ))
+            print(
+                "Final Detection Results:- \n Total Detection: {} \n Individual Detection: {}".format(
+                    sum(result_test_det_a[-1]) / len(result_test_det_a[-1]),
+                    result_test_det_a[-1],
+                )
+            )
         if result_test_det_fa:
-            print("Final Detection False Alarm:- \n Total False Alarm: {} \n Individual False Alarm: {}".format(
-                sum(result_test_det_fa[-1]) / len(result_test_det_fa[-1]), result_test_det_fa[-1]
-            ))
-
+            print(
+                "Final Detection False Alarm:- \n Total False Alarm: {} \n Individual False Alarm: {}".format(
+                    sum(result_test_det_fa[-1]) / len(result_test_det_fa[-1]),
+                    result_test_det_fa[-1],
+                )
+            )
 
     time_end = time.time()
     time_spent = time_end - time_start
@@ -823,7 +1085,9 @@ def life_experience(model, inc_loader, args):
             normalized_rows.append(row_tensor)
 
         max_len = max(row.numel() for row in normalized_rows)
-        padded = torch.full((len(normalized_rows), max_len), float(pad_value), dtype=torch.float)
+        padded = torch.full(
+            (len(normalized_rows), max_len), float(pad_value), dtype=torch.float
+        )
         for row_idx, row_tensor in enumerate(normalized_rows):
             if row_tensor.numel() == 0:
                 continue
@@ -880,36 +1144,44 @@ def estimate_memory_buffer_size_bytes(model: torch.nn.Module) -> int:
     return total_bytes
 
 
-def save_results(args, result_val_t, result_val_a, result_test_t, result_test_a, model, spent_time):
-    fname = os.path.join(args.log_dir, 'results')
+def save_results(
+    args, result_val_t, result_val_a, result_test_t, result_test_a, model, spent_time
+):
+    fname = os.path.join(args.log_dir, "results")
     log_state(args.state_logging, "Saving results to {}".format(fname))
 
     size_bytes = sum(p.numel() * p.element_size() for p in model.parameters())
-    size_gb = size_bytes / (1024 ** 3)
+    size_gb = size_bytes / (1024**3)
     buffer_bytes = estimate_memory_buffer_size_bytes(model)
-    buffer_gb = buffer_bytes / (1024 ** 3)
+    buffer_gb = buffer_bytes / (1024**3)
     print("Model size: {:.4f} GB".format(size_gb))
     print("Memory buffer size: {:.4f} GB".format(buffer_gb))
 
     # save confusion matrix and print one line of stats
-    val_stats = confusion_matrix(result_val_t, result_val_a, args.log_dir, 'results.txt')
-    
-    one_liner = str(vars(args)) + ' # val: '
-    one_liner += ' '.join(["%.3f" % stat for stat in val_stats])
+    val_stats = confusion_matrix(
+        result_val_t, result_val_a, args.log_dir, "results.txt"
+    )
+
+    one_liner = str(vars(args)) + " # val: "
+    one_liner += " ".join(["%.3f" % stat for stat in val_stats])
 
     test_stats = 0
     if args.calc_test_accuracy:
-        test_stats = confusion_matrix(result_test_t, result_test_a, args.log_dir, 'results.txt')
-        one_liner += ' # test: ' +  ' '.join(["%.3f" % stat for stat in test_stats])
+        test_stats = confusion_matrix(
+            result_test_t, result_test_a, args.log_dir, "results.txt"
+        )
+        one_liner += " # test: " + " ".join(["%.3f" % stat for stat in test_stats])
     one_liner += " # sizes: model_gb={:.4f} mem_gb={:.4f}".format(size_gb, buffer_gb)
 
-    print(fname + ': ' + one_liner + ' # ' + str(spent_time))
+    print(fname + ": " + one_liner + " # " + str(spent_time))
 
     # save all results in binary file
     state_dict = model.state_dict()
     if getattr(args, "state_logging", False):
+
         def _tensor_storage_size(t):
             return t.element_size() * t.numel() if torch.is_tensor(t) else 0
+
         state_dict_bytes = sum(_tensor_storage_size(v) for v in state_dict.values())
         val_t_bytes = _tensor_storage_size(result_val_t)
         val_a_bytes = _tensor_storage_size(result_val_a)
@@ -931,6 +1203,7 @@ def save_results(args, result_val_t, result_val_a, result_test_t, result_test_a,
         pickle_protocol=4,
     )
     return val_stats, test_stats
+
 
 def _default_main_config_chain() -> List[str]:
     chain: List[str] = []
@@ -981,10 +1254,27 @@ def main():
     # Scale learning rate based on batch size (reference batch size = 128).
     # This applies uniformly across all models that rely on args.lr.
     args.lr = misc_utils.scale_learning_rate_for_batch_size(args.lr, args.batch_size)
+
+    # Setup logging early so we can mirror all prints to a log file.
+    timestamp = misc_utils.get_date_time()
+    config_name = Path(config_chain[-1]).stem if config_chain else None
+    args.log_dir, args.tf_dir = misc_utils.log_dir(args, timestamp, config_name)
+    if getattr(args, "state_logging", False):
+        enable_output_tee(os.path.join(args.log_dir, "terminal.log"))
+        log_state(
+            args.state_logging,
+            "Enabling terminal logging to {}".format(
+                os.path.join(args.log_dir, "terminal.log")
+            ),
+        )
+
+    print("New Experiment Starting...")
     print("Running model: ", args.model)
     log_state(
         args.state_logging,
-        "Experiment '{}' starting with model '{}' (seed {})".format(args.expt_name, args.model, args.seed),
+        "Experiment '{}' starting with model '{}' (seed {})".format(
+            args.expt_name, args.model, args.seed
+        ),
     )
 
     # initialize seeds
@@ -993,7 +1283,7 @@ def main():
     # set up loader
     # 2 options: class_incremental and task_incremental
     # experiments in the paper only use task_incremental
-    Loader = importlib.import_module('dataloaders.' + args.loader)
+    Loader = importlib.import_module("dataloaders." + args.loader)
     loader = Loader.IncrementalLoader(args, seed=args.seed)
     n_inputs, n_outputs, n_tasks = loader.get_dataset_info()
     args.get_samples_per_task = getattr(loader, "get_samples_per_task", None)
@@ -1003,25 +1293,27 @@ def main():
         args.classes_per_task = misc_utils.build_task_class_list(
             n_tasks,
             n_outputs,
-            nc_per_task=args.nc_per_task_list if getattr(args, "nc_per_task_list", "") else args.nc_per_task,
+            nc_per_task=(
+                args.nc_per_task_list
+                if getattr(args, "nc_per_task_list", "")
+                else args.nc_per_task
+            ),
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         print("Built classes_per_task:", args.classes_per_task)
     log_state(
         args.state_logging,
-        "Loader '{}' ready: {} inputs, {} outputs, {} tasks".format(args.loader, n_inputs, n_outputs, n_tasks),
+        "Loader '{}' ready: {} inputs, {} outputs, {} tasks".format(
+            args.loader, n_inputs, n_outputs, n_tasks
+        ),
     )
 
     print("n_outputs:", n_outputs, "\tn_tasks:", n_tasks)
 
-    # setup logging
-    timestamp = misc_utils.get_date_time()
-    config_name = Path(config_chain[-1]).stem if config_chain else None
-    args.log_dir, args.tf_dir = misc_utils.log_dir(args, timestamp, config_name)
     log_state(args.state_logging, "Logging to {}".format(args.log_dir))
 
     # load model
-    Model = importlib.import_module('model.' + args.model)
+    Model = importlib.import_module("model." + args.model)
     model = Model.Net(n_inputs, n_outputs, n_tasks, args)
     # print(model)
     if args.cuda:
@@ -1031,24 +1323,54 @@ def main():
             pass
     print(args.cuda)
     print("Model device:", next(model.parameters()).device)
-    log_state(args.state_logging, "Model initialized on device {}".format(next(model.parameters()).device))
+    log_state(
+        args.state_logging,
+        "Model initialized on device {}".format(next(model.parameters()).device),
+    )
     # run model on loader
     if args.model == "iid2":
         # oracle baseline with all task data shown at same time
         log_state(args.state_logging, "Invoking iid life experience flow")
-        result_val_t, result_val_a, result_test_t, result_test_a, _, _, _, _, spent_time = (
-            life_experience_iid(model, loader, args)
-        )
+        (
+            result_val_t,
+            result_val_a,
+            result_test_t,
+            result_test_a,
+            _,
+            _,
+            _,
+            _,
+            spent_time,
+        ) = life_experience_iid(model, loader, args)
     else:
         # for all the CL baselines
         log_state(args.state_logging, "Invoking continual life experience flow")
-        result_val_t, result_val_a, result_test_t, result_test_a, _, _, _, _, spent_time = (
-            life_experience(model, loader, args)
-        )
+        (
+            result_val_t,
+            result_val_a,
+            result_test_t,
+            result_test_a,
+            _,
+            _,
+            _,
+            _,
+            spent_time,
+        ) = life_experience(model, loader, args)
 
         # save results in files or print on terminal
-        save_results(args, result_val_t, result_val_a, result_test_t, result_test_a, model, spent_time)
-        log_state(args.state_logging, "Results saved; total runtime {:.2f}s".format(spent_time))
+        save_results(
+            args,
+            result_val_t,
+            result_val_a,
+            result_test_t,
+            result_test_a,
+            model,
+            spent_time,
+        )
+        log_state(
+            args.state_logging,
+            "Results saved; total runtime {:.2f}s".format(spent_time),
+        )
 
     # Print and append total runtime for this experiment.
     print("Total runtime: {:.2f} seconds".format(spent_time))
@@ -1062,5 +1384,4 @@ def main():
 
 
 if __name__ == "__main__":
-    print("New Experiment Starting...")
     main()
