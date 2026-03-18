@@ -135,11 +135,11 @@ def _group_for_task_name(task_name: str) -> str:
 
 
 def get_task_color(task_idx: int, task_names: Sequence[str] | None = None):
-    """Assign a color for a task, grouping by task name when available.
+    """Assign a colour for a task, grouping by task name when available.
 
-    Tasks whose names contain ``rcn`` / ``deeprad`` / ``uclresm`` are coloured
-    consistently within their group across plots. When no task names are
-    provided, a static index-based grouping is used as a fallback.
+    This matches the grouping logic used in ``scripts/plot_multi_algorithms.py``
+    so that colours are consistent between single-run and multi-algorithm
+    plots.
     """
     if task_names is None or task_idx >= len(task_names):
         group1 = [3, 4, 6, 9]
@@ -160,7 +160,6 @@ def get_task_color(task_idx: int, task_names: Sequence[str] | None = None):
             return cmap(0.4 + 0.6 * (idx / len(group3)))
         return f"C{task_idx % 10}"
 
-    # Name-based grouping.
     groups: dict[str, list[int]] = {}
     for idx, name in enumerate(task_names):
         group = _group_for_task_name(name)
@@ -175,11 +174,11 @@ def get_task_color(task_idx: int, task_names: Sequence[str] | None = None):
     def _shade(index: int, size: int) -> float:
         if size <= 1:
             return 0.7
-        return 0.4 + 0.6 * (index / float(size - 1))
+        return 0.4 + 0.6 * (index / float(size))
 
     cmap_name = {
-        "rcn": "Blues",
-        "deeprad": "Oranges",
+        "rcn": "Oranges",
+        "deeprad": "Blues",
         "uclresm": "Greens",
         "other": "Greys",
     }[group]
@@ -227,9 +226,8 @@ def plot_per_task_curves(
     plt.tight_layout()
     if output_dir:
         fig.savefig(output_dir / "per_task_loss_and_acc.png", dpi=150, bbox_inches="tight")
-    else:
-        plt.show()
-    plt.close()
+        plt.close(fig)
+    # else: leave figure open for plt.show() at end of main
 
 
 def plot_per_epoch_curves(
@@ -269,9 +267,8 @@ def plot_per_epoch_curves(
     plt.tight_layout()
     if output_dir:
         fig.savefig(output_dir / "per_epoch_loss_and_acc.png", dpi=150, bbox_inches="tight")
-    else:
-        plt.show()
-    plt.close()
+        plt.close(fig)
+    # else: leave figure open for plt.show() at end of main
 
 
 def plot_final_validation(
@@ -355,9 +352,8 @@ def plot_final_validation(
     plt.tight_layout()
     if output_dir:
         fig.savefig(output_dir / "final_validation.png", dpi=150, bbox_inches="tight")
-    else:
-        plt.show()
-    plt.close()
+        plt.close(fig)
+    # else: leave figure open for plt.show() at end of main
 
 
 def plot_validation_over_time(
@@ -367,7 +363,11 @@ def plot_validation_over_time(
     val_metric_key: str = "val_acc",
     val_metric_label: str = "Cls Recall",
 ) -> None:
-    """Plot a validation metric per task as more tasks are trained (metric matrix)."""
+    """Plot a validation metric per task as more tasks are trained (metric matrix).
+
+    Includes an aggregate curve where each point k is the mean metric over
+    tasks 0..k at checkpoint k.
+    """
     n_tasks = len(tasks)
     # After training task k, we have val_acc of length k+1 (tasks 0..k)
     x = np.arange(1, n_tasks + 1)  # "after task 0", "after task 1", ...
@@ -392,6 +392,36 @@ def plot_validation_over_time(
             alpha=0.8,
         )
 
+    # Aggregate curve: at checkpoint k, mean over tasks 0..k. Skip missing/NaN.
+    agg_vals: list[float] = []
+    for k in range(n_tasks):
+        metrics_k = tasks[k]
+        metric_vals_k = metrics_k.get(val_metric_key)
+        if metric_vals_k is None:
+            agg_vals.append(float("nan"))
+            continue
+        window: list[float] = []
+        for t in range(k + 1):
+            if t >= len(metric_vals_k):
+                continue
+            v = float(metric_vals_k[t])
+            if np.isnan(v):
+                continue
+            window.append(v)
+        if window:
+            agg_vals.append(float(np.mean(window)))
+        else:
+            agg_vals.append(float("nan"))
+
+    ax.plot(
+        x,
+        np.asarray(agg_vals, dtype=float),
+        "k^-",
+        linewidth=2.0,
+        markersize=4.0,
+        label=f"Mean {val_metric_label}",
+    )
+
     ax.set_xlabel("After training up to task")
     ax.set_ylabel(f"Validation ({val_metric_label})")
     ax.set_title(f"Validation {val_metric_label} per task over continual learning")
@@ -401,9 +431,8 @@ def plot_validation_over_time(
     plt.tight_layout()
     if output_dir:
         fig.savefig(output_dir / "val_acc_over_tasks.png", dpi=150, bbox_inches="tight")
-    else:
-        plt.show()
-    plt.close()
+        plt.close(fig)
+    # else: leave figure open for plt.show() at end of main
 
 
 def compute_average_forgetting(
@@ -478,9 +507,8 @@ def plot_average_forgetting(
     plt.tight_layout()
     if output_dir:
         fig.savefig(output_dir / "average_forgetting.png", dpi=150, bbox_inches="tight")
-    else:
-        plt.show()
-    plt.close()
+        plt.close(fig)
+    # else: leave figure open for plt.show() at end of main
 
 
 def main() -> None:
@@ -575,6 +603,8 @@ def main() -> None:
 
     if args.output_dir:
         print(f"Plots saved under {args.output_dir}")
+    else:
+        plt.show()
 
 
 if __name__ == "__main__":
