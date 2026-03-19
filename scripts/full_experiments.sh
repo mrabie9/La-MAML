@@ -9,6 +9,26 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 export PYTHONUNBUFFERED=1
 
+EXPERIMENT_DESC=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -d|--desc|--description)
+            EXPERIMENT_DESC="${2:-}"
+            shift 2
+            ;;
+        -h|--help)
+            echo "Usage: $0 [--desc/-d DESCRIPTION]"
+            echo "  DESCRIPTION is used to label the logs folder (sanitized)."
+            exit 0
+            ;;
+        *)
+            echo "Unknown argument: $1"
+            echo "Usage: $0 [--desc/-d DESCRIPTION]"
+            exit 1
+            ;;
+    esac
+done
+
 # Host-based algorithm selection.
 # Edit these lists to control which algorithms each machine runs.
 INCLUDED_LNX_ELKK_2="ewc er_ring eralg4 agem gem bcl_dual cmaml ctn hat"
@@ -33,8 +53,18 @@ mkdir -p "$LOG_DIR"
 # One timestamp per script run so summary + job logs stay grouped.
 RUN_TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 
+# Optional description suffix for the run folder.
+DESC_SUFFIX=""
+if [ -n "$EXPERIMENT_DESC" ]; then
+    # Keep it filesystem-friendly: replace spaces, drop other weird characters.
+    DESC_SANITIZED="$(echo "$EXPERIMENT_DESC" | tr ' ' '_' | tr -cd 'A-Za-z0-9._-')"
+    if [ -n "$DESC_SANITIZED" ]; then
+        DESC_SUFFIX="_${DESC_SANITIZED}"
+    fi
+fi
+
 # Create a run-specific folder so all logs for this script execution are together.
-RUN_LOG_DIR="${LOG_DIR}/run_${RUN_TIMESTAMP}"
+RUN_LOG_DIR="${LOG_DIR}/run_${RUN_TIMESTAMP}${DESC_SUFFIX}"
 mkdir -p "$RUN_LOG_DIR"
 
 # Job logs live in a subfolder under the run directory.
@@ -52,6 +82,9 @@ log_msg "=== full_experiments.sh started ==="
 log_msg "REPO_ROOT=$REPO_ROOT"
 log_msg "LOG_FILE=$LOG_FILE"
 log_msg "INCLUDED=$INCLUDED"
+if [ -n "$EXPERIMENT_DESC" ]; then
+    log_msg "EXPERIMENT_DESC=$EXPERIMENT_DESC"
+fi
 
 # Activate environment (see AGENTS.md)
 if [ -d "la-maml_env" ]; then
