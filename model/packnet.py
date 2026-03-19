@@ -45,7 +45,9 @@ class PackNetConfig:
 class Net(nn.Module):
     """PackNet learner with ResNet/MLP backbones and task-aware pruning."""
 
-    def __init__(self, n_inputs: int, n_outputs: int, n_tasks: int, args: object) -> None:
+    def __init__(
+        self, n_inputs: int, n_outputs: int, n_tasks: int, args: object
+    ) -> None:
         super().__init__()
 
         if n_tasks <= 0:
@@ -58,7 +60,8 @@ class Net(nn.Module):
         self.classes_per_task = misc_utils.build_task_class_list(
             n_tasks,
             n_outputs,
-            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            nc_per_task=getattr(args, "nc_per_task_list", "")
+            or getattr(args, "nc_per_task", None),
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
@@ -70,8 +73,10 @@ class Net(nn.Module):
         self.ce = nn.CrossEntropyLoss()
         self.opt = self._build_optimizer()
         self.clipgrad = self.cfg.clipgrad
-        self.prune_perc = float(1/self.cfg.n_tasks)
-        print(f"PackNet will prune {self.prune_perc*100:.1f}% of currently used weights after each task.")
+        self.prune_perc = float(1 / self.cfg.n_tasks)
+        print(
+            f"PackNet will prune {self.prune_perc*100:.1f}% of currently used weights after each task."
+        )
 
         self.current_task: Optional[int] = None
         self._param_to_buffers: Dict[str, Tuple[str, str]] = {}
@@ -84,7 +89,9 @@ class Net(nn.Module):
         ]
         # print(f"Found {len(self._bn_modules)} BN modules in the model.")
         # Mapping: task_id -> list of (running_mean, running_var, num_batches_tracked)
-        self._bn_task_stats: Dict[int, List[Tuple[torch.Tensor, torch.Tensor, int]]] = {}
+        self._bn_task_stats: Dict[int, List[Tuple[torch.Tensor, torch.Tensor, int]]] = (
+            {}
+        )
         # Mapping: task_id -> list of (weight, bias) snapshots (None when affine=False).
         self._bn_task_affine: Dict[
             int, List[Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]]
@@ -156,7 +163,9 @@ class Net(nn.Module):
         arch = getattr(args, "arch", "resnet1d")
         arch = arch.lower() if isinstance(arch, str) else "resnet1d"
         if arch != "resnet1d":
-            raise ValueError(f"Unsupported arch {arch}; only resnet1d is available now.")
+            raise ValueError(
+                f"Unsupported arch {arch}; only resnet1d is available now."
+            )
         return ResNet1D(n_outputs, args)
 
     # ------------------------------------------------------------------
@@ -230,12 +239,19 @@ class Net(nn.Module):
                 continue
             if name in self._non_prunable_params:
                 continue
-            key = name.replace(".", "__") 
-            owner_name = f"{key}_owner" # Name of buffer tracking which task owns each weight
-            frozen_name = f"{key}_frozen" # Name of buffer ...
-            self.register_buffer(owner_name, torch.full_like(param, fill_value=-1, dtype=torch.long))
+            key = name.replace(".", "__")
+            owner_name = (
+                f"{key}_owner"  # Name of buffer tracking which task owns each weight
+            )
+            frozen_name = f"{key}_frozen"  # Name of buffer ...
+            self.register_buffer(
+                owner_name, torch.full_like(param, fill_value=-1, dtype=torch.long)
+            )
             self.register_buffer(frozen_name, param.detach().clone())
-            self._param_to_buffers[name] = (owner_name, frozen_name) # Map param name to its buffers
+            self._param_to_buffers[name] = (
+                owner_name,
+                frozen_name,
+            )  # Map param name to its buffers
 
     # ------------------------------------------------------------------
     def _get_owner_and_frozen(self, name: str) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -262,9 +278,11 @@ class Net(nn.Module):
     def _restore_frozen_weights(self) -> None:
         for name, param in self._prunable_named_parameters():
             owner, frozen = self._get_owner_and_frozen(name)
-            frozen_positions = owner >= 0 # Frozen if param has an owner
+            frozen_positions = owner >= 0  # Frozen if param has an owner
             if frozen_positions.any():
-                param.data[frozen_positions] = frozen.data[frozen_positions] # Restore frozen weights
+                param.data[frozen_positions] = frozen.data[
+                    frozen_positions
+                ]  # Restore frozen weights
 
     # ------------------------------------------------------------------
     def _pack_current_task(self) -> None:
@@ -283,7 +301,7 @@ class Net(nn.Module):
 
         for name, param in self._prunable_named_parameters():
             owner, frozen = self._get_owner_and_frozen(name)
-            free_mask = owner < 0 # Weights not yet owned by any task
+            free_mask = owner < 0  # Weights not yet owned by any task
             free_count = int(free_mask.sum().item())
             if free_count == 0:
                 continue
@@ -294,8 +312,12 @@ class Net(nn.Module):
             if keep_count >= flat_abs.numel():
                 keep_mask = free_mask.clone()
             else:
-                threshold = torch.topk(flat_abs, keep_count, largest=True).values.min() # Params to keep
-                keep_mask = free_mask & (param.detach().abs() >= threshold) # Mask of params to keep
+                threshold = torch.topk(
+                    flat_abs, keep_count, largest=True
+                ).values.min()  # Params to keep
+                keep_mask = free_mask & (
+                    param.detach().abs() >= threshold
+                )  # Mask of params to keep
 
             # Lock kept weights and remember their values.
             owner[keep_mask] = self.current_task
@@ -306,6 +328,7 @@ class Net(nn.Module):
             if free_to_reset.any():
                 param.data[free_to_reset] = 0.0
                 owner[free_to_reset] = -1
+
     # ------------------------------------------------------------------
     @contextlib.contextmanager
     def _apply_task_mask(self, task: int, allow_free: bool):
@@ -315,7 +338,9 @@ class Net(nn.Module):
             allowed = torch.zeros_like(owner, dtype=torch.bool)
             if allow_free:
                 allowed |= owner < 0
-            allowed |= (owner >= 0) & (owner <= task) # Allow owned by current or previous tasks
+            allowed |= (owner >= 0) & (
+                owner <= task
+            )  # Allow owned by current or previous tasks
             disallowed = ~allowed
             if not disallowed.any():
                 continue
@@ -361,7 +386,6 @@ class Net(nn.Module):
         self._bn_task_affine[task] = affine
         # print(f"Snapshot BN stats and affine params for task {task}, stats: {stats}, affine: {affine}")
 
-
     def _restore_bn_stats(self, task: int) -> None:
         """Load BN running stats and affine params for ``task`` or reset if unseen."""
         if not self._bn_modules:
@@ -378,7 +402,9 @@ class Net(nn.Module):
                 bn.num_batches_tracked.zero_()
             return
 
-        for bn, (running_mean, running_var, num_batches) in zip(self._bn_modules, stats):
+        for bn, (running_mean, running_var, num_batches) in zip(
+            self._bn_modules, stats
+        ):
             bn.running_mean.data.copy_(running_mean)
             bn.running_var.data.copy_(running_var)
             bn.num_batches_tracked.data.fill_(num_batches)

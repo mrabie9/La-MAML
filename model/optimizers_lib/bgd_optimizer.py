@@ -1,6 +1,7 @@
 import torch
 from torch.optim.optimizer import Optimizer
 
+
 class BGD(Optimizer):
     """Implements BGD.
     A simple usage of BGD would be:
@@ -14,6 +15,7 @@ class BGD(Optimizer):
             optimizer.aggregate_grads()
         optimizer.step()
     """
+
     def __init__(self, params, std_init, mean_eta=1, mc_iters=10):
         """
         Initialization of BGD optimizer
@@ -26,18 +28,26 @@ class BGD(Optimizer):
                          Use None to disable the check.
         """
         super(BGD, self).__init__(params, defaults={})
-        assert mc_iters is None or (type(mc_iters) == int and mc_iters > 0), "mc_iters should be positive int or None."
+        assert mc_iters is None or (
+            type(mc_iters) == int and mc_iters > 0
+        ), "mc_iters should be positive int or None."
         self.std_init = std_init
         self.mean_eta = mean_eta
         self.mc_iters = mc_iters
         # Initialize mu (mean_param) and sigma (std_param)
         for group in self.param_groups:
-            assert len(group["params"]) == 1, "BGD optimizer does not support multiple params in a group"
+            assert (
+                len(group["params"]) == 1
+            ), "BGD optimizer does not support multiple params in a group"
             # group['params'][0] is the weights
-            assert isinstance(group["params"][0], torch.Tensor), "BGD expect param to be a tensor"
+            assert isinstance(
+                group["params"][0], torch.Tensor
+            ), "BGD expect param to be a tensor"
             # We use the initialization of weights to initialize the mean.
             group["mean_param"] = group["params"][0].data.clone()
-            group["std_param"] = torch.zeros_like(group["params"][0].data).add_(self.std_init)
+            group["std_param"] = torch.zeros_like(group["params"][0].data).add_(
+                self.std_init
+            )
         self._init_accumulators()
 
     def get_mc_iters(self):
@@ -78,29 +88,36 @@ class BGD(Optimizer):
         for group in self.param_groups:
             if group["params"][0].grad is None:
                 continue
-            assert group["eps"] is not None, "Must randomize weights before using aggregate_grads"
+            assert (
+                group["eps"] is not None
+            ), "Must randomize weights before using aggregate_grads"
             groups_cnt += 1
             grad = group["params"][0].grad.data.mul(batch_size)
             group["grad_sum"].add_(grad)
             group["grad_mul_eps_sum"].add_(grad.mul(group["eps"]))
             group["eps"] = None
-        assert groups_cnt > 0, "Called aggregate_grads, but all gradients were None. Make sure you called .backward()"
+        assert (
+            groups_cnt > 0
+        ), "Called aggregate_grads, but all gradients were None. Make sure you called .backward()"
 
-    def step(self, closure=None, print_std = False):
+    def step(self, closure=None, print_std=False):
         """
         Updates the learned mean and STD.
         :return:
         """
         # Makes sure that self.mc_iters had been taken.
-        assert self.mc_iters is None or self.mc_iters == self.mc_iters_taken, "MC iters is set to " \
-                                                                              + str(self.mc_iters) \
-                                                                              + ", but took " + \
-                                                                              str(self.mc_iters_taken) + " MC iters"
+        assert self.mc_iters is None or self.mc_iters == self.mc_iters_taken, (
+            "MC iters is set to "
+            + str(self.mc_iters)
+            + ", but took "
+            + str(self.mc_iters_taken)
+            + " MC iters"
+        )
 
         for group in self.param_groups:
             mean = group["mean_param"]
             std = group["std_param"]
-            
+
             # Divide gradients by MC iters to get expectation
             e_grad = group["grad_sum"].div(self.mc_iters_taken)
             e_grad_eps = group["grad_mul_eps_sum"].div(self.mc_iters_taken)

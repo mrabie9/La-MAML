@@ -9,7 +9,6 @@ from dataloaders.idataset import _get_datasets, DummyDataset
 from dataloaders.task_sampler import MultiTaskSampler
 
 
-
 class IncrementalLoader:
 
     def __init__(
@@ -19,9 +18,9 @@ class IncrementalLoader:
         seed=1,
     ):
         self._opt = opt
-        dataset_name=opt.dataset
-        validation_split=opt.validation
-        self.increment=opt.increment
+        dataset_name = opt.dataset
+        validation_split = opt.validation
+        self.increment = opt.increment
 
         datasets = _get_datasets(dataset_name)
         self._setup_data(
@@ -29,7 +28,7 @@ class IncrementalLoader:
             class_order_type=opt.class_order,
             seed=seed,
             increment=self.increment,
-            validation_split=validation_split
+            validation_split=validation_split,
         )
 
         self.validation_split = validation_split
@@ -40,7 +39,7 @@ class IncrementalLoader:
         self._current_task = 0
 
         self._batch_size = opt.batch_size
-        self._test_batch_size = opt.test_batch_size        
+        self._test_batch_size = opt.test_batch_size
         self._workers = opt.workers
         self._shuffle = shuffle
 
@@ -49,20 +48,37 @@ class IncrementalLoader:
     @property
     def n_tasks(self):
         return len(self.increments)
-    
+
     def new_task(self):
         min_class = 0
         max_class = max(self.targets_train) + 1
         x_train, y_train, super_y_train = self._select(
-            self.data_train, self.targets_train, self.super_targets_train, low_range=min_class, high_range=max_class
+            self.data_train,
+            self.targets_train,
+            self.super_targets_train,
+            low_range=min_class,
+            high_range=max_class,
         )
         x_val, y_val, super_y_val = self._select(
-            self.data_val, self.targets_val, self.super_targets_val, low_range=min_class, high_range=max_class
+            self.data_val,
+            self.targets_val,
+            self.super_targets_val,
+            low_range=min_class,
+            high_range=max_class,
         )
-        x_test, y_test, super_y_test = self._select(self.data_test, self.targets_test, self.super_targets_test, high_range=max_class)
+        x_test, y_test, super_y_test = self._select(
+            self.data_test,
+            self.targets_test,
+            self.super_targets_test,
+            high_range=max_class,
+        )
 
         train_loader = self._get_loader(x_train, y_train, super_y_train, mode="train")
-        val_loader = self._get_loader(x_val, y_val, super_y_val, mode="train") if len(x_val) > 0 else None
+        val_loader = (
+            self._get_loader(x_val, y_val, super_y_val, mode="train")
+            if len(x_val) > 0
+            else None
+        )
         test_loader = self._get_loader(x_test, y_test, super_y_test, mode="test")
 
         task_info = {
@@ -72,7 +88,7 @@ class IncrementalLoader:
             "task": self._current_task,
             "max_task": len(self.increments),
             "n_train_data": x_train.shape[0],
-            "n_test_data": x_test.shape[0]
+            "n_test_data": x_test.shape[0],
         }
 
         self._current_task += 1
@@ -84,31 +100,50 @@ class IncrementalLoader:
         self.val_tasks = []
         for i in range(len(self.increments)):
             min_class = i
-            max_class = i+1
-            x_test, y_test, super_y_test = self._select_super(self.data_test, self.targets_test, self.super_targets_test, low_range=min_class, high_range=max_class)
-            self.test_tasks.append(self._get_loader(x_test, y_test, super_y_test, mode="test"))
+            max_class = i + 1
+            x_test, y_test, super_y_test = self._select_super(
+                self.data_test,
+                self.targets_test,
+                self.super_targets_test,
+                low_range=min_class,
+                high_range=max_class,
+            )
+            self.test_tasks.append(
+                self._get_loader(x_test, y_test, super_y_test, mode="test")
+            )
 
             if validation_split > 0.0:
-                x_val, y_val, super_y_val = self._select_super(self.data_val, self.targets_val, self.super_targets_val, low_range=min_class, high_range=max_class)
-                self.val_tasks.append(self._get_loader(x_val, y_val, super_y_val, mode="test"))
+                x_val, y_val, super_y_val = self._select_super(
+                    self.data_val,
+                    self.targets_val,
+                    self.super_targets_val,
+                    low_range=min_class,
+                    high_range=max_class,
+                )
+                self.val_tasks.append(
+                    self._get_loader(x_val, y_val, super_y_val, mode="test")
+                )
 
-
-    def get_tasks(self, dataset_type='test'):
-        if dataset_type == 'val':
+    def get_tasks(self, dataset_type="test"):
+        if dataset_type == "val":
             if self.validation_split > 0.0:
                 return self.val_tasks
             else:
                 return self.test_tasks
-        elif dataset_type == 'test':
+        elif dataset_type == "test":
             return self.test_tasks
         else:
             raise NotImplementedError("Unknown mode {}.".format(dataset_type))
 
     def get_dataset_info(self):
-        if(self._opt.dataset == 'tinyimagenet'):
-            n_inputs = 3*64*64        
+        if self._opt.dataset == "tinyimagenet":
+            n_inputs = 3 * 64 * 64
         else:
-            n_inputs = self.data_train.shape[3]*self.data_train.shape[1]*self.data_train.shape[2]
+            n_inputs = (
+                self.data_train.shape[3]
+                * self.data_train.shape[1]
+                * self.data_train.shape[2]
+            )
         n_outputs = self._opt.increment * len(self.increments)
         n_task = len(self.increments)
         return n_inputs, n_outputs, n_task
@@ -130,10 +165,12 @@ class IncrementalLoader:
             sampler = self._get_sampler(super_y, mode)
 
             return DataLoader(
-                DummyDataset(x, y, trsf, pretrsf, self._opt.dataset=='tinyimagenet', super_y),
+                DummyDataset(
+                    x, y, trsf, pretrsf, self._opt.dataset == "tinyimagenet", super_y
+                ),
                 batch_sampler=sampler,
                 shuffle=False,
-                num_workers=self._workers
+                num_workers=self._workers,
             )
         elif mode == "test" or mode == "flip":
             if mode == "test":
@@ -142,38 +179,49 @@ class IncrementalLoader:
                 batch_size = self._test_batch_size
             elif mode == "flip":
                 trsf = transforms.Compose(
-                    [transforms.RandomHorizontalFlip(p=1.), *self.common_transforms]
+                    [transforms.RandomHorizontalFlip(p=1.0), *self.common_transforms]
                 )
                 batch_size = self._test_batch_size
 
             return DataLoader(
-                DummyDataset(x, y, trsf, pretrsf, self._opt.dataset=='tinyimagenet', super_y),
+                DummyDataset(
+                    x, y, trsf, pretrsf, self._opt.dataset == "tinyimagenet", super_y
+                ),
                 batch_size=batch_size,
                 shuffle=shuffle,
-                num_workers=self._workers
+                num_workers=self._workers,
             )
         else:
             raise NotImplementedError("Unknown mode {}.".format(mode))
 
-
     def _get_sampler(self, labels, mode):
-        assert self._batch_size%self._opt.classes_per_it == 0, \
-            "Batch size should be a multiple of number of desired classes in a iter"
-        if 'train' in mode:
+        assert (
+            self._batch_size % self._opt.classes_per_it == 0
+        ), "Batch size should be a multiple of number of desired classes in a iter"
+        if "train" in mode:
             classes_per_it = self._opt.classes_per_it
-            num_samples = int(self._batch_size/self._opt.classes_per_it)
-        elif 'val' in mode:
+            num_samples = int(self._batch_size / self._opt.classes_per_it)
+        elif "val" in mode:
             classes_per_it = self._opt.classes_per_it
-            num_samples = int(self._batch_size/self._opt.classes_per_it)
+            num_samples = int(self._batch_size / self._opt.classes_per_it)
         else:
             raise NotImplementedError("Unknown mode {}.".format(mode))
 
-        return MultiTaskSampler(labels=labels,
-                                classes_per_it=classes_per_it,
-                                num_samples=num_samples,
-                                iterations=self._opt.iterations)
+        return MultiTaskSampler(
+            labels=labels,
+            classes_per_it=classes_per_it,
+            num_samples=num_samples,
+            iterations=self._opt.iterations,
+        )
 
-    def _setup_data(self, datasets, class_order_type=False, seed=1, increment=10, validation_split=0.):
+    def _setup_data(
+        self,
+        datasets,
+        class_order_type=False,
+        seed=1,
+        increment=10,
+        validation_split=0.0,
+    ):
         # FIXME: handles online loading of images
         self.data_train, self.targets_train, self.super_targets_train = [], [], []
         self.data_test, self.targets_test, self.super_targets_test = [], [], []
@@ -184,10 +232,10 @@ class IncrementalLoader:
         current_class_idx = 0  # When using multiple datasets
         for dataset in datasets:
 
-            if(self._opt.dataset == 'tinyimagenet'):
+            if self._opt.dataset == "tinyimagenet":
                 root_path = self._opt.data_path
-                train_dataset = dataset.base_dataset(root_path + 'train/')
-                test_dataset = dataset.base_dataset(root_path + 'val/')
+                train_dataset = dataset.base_dataset(root_path + "train/")
+                test_dataset = dataset.base_dataset(root_path + "val/")
 
                 train_dataset.data = train_dataset.samples
                 test_dataset.data = test_dataset.samples
@@ -199,11 +247,13 @@ class IncrementalLoader:
                 x_test, y_test = test_dataset.data, np.array(test_dataset.targets)
 
                 order = [i for i in range(len(np.unique(y_train)))]
-                if class_order_type == 'random':
-                    random.seed(seed)  # Ensure that following order is determined by seed:
+                if class_order_type == "random":
+                    random.seed(
+                        seed
+                    )  # Ensure that following order is determined by seed:
                     random.shuffle(order)
                     print("Class order:", order)
-                elif class_order_type == 'old' and dataset.class_order is not None:
+                elif class_order_type == "old" and dataset.class_order is not None:
                     order = dataset.class_order
                 else:
                     print("Classes are presented in a chronological order")
@@ -226,11 +276,17 @@ class IncrementalLoader:
                 if len(datasets) > 1:
                     self.increments.append(len(order))
                 else:
-                    self.increments = [increment for _ in range(len(order) // increment)]
-            elif ((self._opt.dataset == 'cifar100') and (self._opt.model=="iid2")):
+                    self.increments = [
+                        increment for _ in range(len(order) // increment)
+                    ]
+            elif (self._opt.dataset == "cifar100") and (self._opt.model == "iid2"):
                 root_path = self._opt.data_path
-                train_dataset = dataset.base_dataset(root_path, train=True, download=True)
-                test_dataset = dataset.base_dataset(root_path, train=False, download=True)
+                train_dataset = dataset.base_dataset(
+                    root_path, train=True, download=True
+                )
+                test_dataset = dataset.base_dataset(
+                    root_path, train=False, download=True
+                )
 
                 x_train, y_train = train_dataset.data, np.array(train_dataset.targets)
                 x_val, y_val, x_train, y_train = self._list_split_per_class(
@@ -239,13 +295,18 @@ class IncrementalLoader:
                 x_test, y_test = test_dataset.data, np.array(test_dataset.targets)
 
                 order = [i for i in range(len(np.unique(y_train)))]
-                if class_order_type == 'random':
-                    random.seed(seed)  # Ensure that following order is determined by seed:
+                if class_order_type == "random":
+                    random.seed(
+                        seed
+                    )  # Ensure that following order is determined by seed:
                     random.shuffle(order)
                     print("Class order:", order)
-                elif class_order_type == 'old' and dataset.class_order is not None:
+                elif class_order_type == "old" and dataset.class_order is not None:
                     order = dataset.class_order
-                elif class_order_type == 'super' and dataset.class_order_super is not None:
+                elif (
+                    class_order_type == "super"
+                    and dataset.class_order_super is not None
+                ):
                     order = dataset.class_order_super
                 else:
                     print("Classes are presented in a chronological order")
@@ -268,19 +329,35 @@ class IncrementalLoader:
                 if len(datasets) > 1:
                     self.increments.append(len(order))
                 else:
-                    self.increments = [increment for _ in range(len(order) // increment)]
-        
+                    self.increments = [
+                        increment for _ in range(len(order) // increment)
+                    ]
+
             else:
                 root_path = self._opt.data_path
-                train_dataset = dataset.base_dataset_hierarchy(root_path, train=True, download=True)
-                test_dataset = dataset.base_dataset_hierarchy(root_path, train=False, download=True)
-
-                x_train, y_train, super_y_train = train_dataset.data, np.array(train_dataset.targets), np.array(train_dataset.super_targets)
-                x_val, y_val, super_y_val, x_train, y_train, super_y_train = self._split_per_class(
-                    x_train, y_train, super_y_train, validation_split
+                train_dataset = dataset.base_dataset_hierarchy(
+                    root_path, train=True, download=True
                 )
-                x_test, y_test, super_y_test = test_dataset.data, np.array(test_dataset.targets), np.array(test_dataset.super_targets)
-                
+                test_dataset = dataset.base_dataset_hierarchy(
+                    root_path, train=False, download=True
+                )
+
+                x_train, y_train, super_y_train = (
+                    train_dataset.data,
+                    np.array(train_dataset.targets),
+                    np.array(train_dataset.super_targets),
+                )
+                x_val, y_val, super_y_val, x_train, y_train, super_y_train = (
+                    self._split_per_class(
+                        x_train, y_train, super_y_train, validation_split
+                    )
+                )
+                x_test, y_test, super_y_test = (
+                    test_dataset.data,
+                    np.array(test_dataset.targets),
+                    np.array(test_dataset.super_targets),
+                )
+
                 idxs = np.argsort(super_y_test)
                 x_test = x_test[idxs]
                 y_test = y_test[idxs]
@@ -306,7 +383,6 @@ class IncrementalLoader:
                 y_val = self._map_new_class_index(y_val, unique_y_order)
                 y_test = self._map_new_class_index(y_test, unique_y_order)
 
-                
                 y_train += current_class_idx
                 y_val += current_class_idx
                 y_test += current_class_idx
@@ -342,18 +418,17 @@ class IncrementalLoader:
 
     def _make_super_classes(self, y, increment):
         unique_y = np.unique(y)
-        super_y = [int(i/increment) for i in range(len(unique_y))]
+        super_y = [int(i / increment) for i in range(len(unique_y))]
         super_order = [super_y[y[i]] for i in range(len(y))]
         return super_order
-    
+
     @staticmethod
     def _map_new_class_index(y, order):
         """Transforms targets for new class order."""
         return np.array(list(map(lambda x: order.index(x), y)))
 
-
     @staticmethod
-    def _split_per_class(x, y, super_y, validation_split=0.):
+    def _split_per_class(x, y, super_y, validation_split=0.0):
         """Splits train data for a subset of validation data.
         Split is done so that each class has same amount of data.
         """
@@ -381,14 +456,21 @@ class IncrementalLoader:
             y_train.append(y[train_indexes])
             super_y_train.append(super_y[train_indexes])
 
-
-        x_val, y_val, super_y_val = np.concatenate(x_val), np.concatenate(y_val), np.concatenate(super_y_val) 
-        x_train, y_train, super_y_train = np.concatenate(x_train), np.concatenate(y_train), np.concatenate(super_y_train) 
+        x_val, y_val, super_y_val = (
+            np.concatenate(x_val),
+            np.concatenate(y_val),
+            np.concatenate(super_y_val),
+        )
+        x_train, y_train, super_y_train = (
+            np.concatenate(x_train),
+            np.concatenate(y_train),
+            np.concatenate(super_y_train),
+        )
 
         return x_val, y_val, super_y_val, x_train, y_train, super_y_train
 
     @staticmethod
-    def _list_split_per_class(x, y, validation_split=0.):
+    def _list_split_per_class(x, y, validation_split=0.0):
         """Splits train data for a subset of validation data.
         Split is done so that each class has a much data.
         """
@@ -408,22 +490,22 @@ class IncrementalLoader:
 
             x_val_i = [x[i] for i in val_indexes]
             y_val_i = [y[i] for i in val_indexes]
-            
+
             x_train_i = [x[i] for i in train_indexes]
             y_train_i = [y[i] for i in train_indexes]
-            
+
             x_val.append(x_val_i)
             y_val.append(y_val_i)
-            
+
             x_train.append(x_train_i)
             y_train.append(y_train_i)
-            
+
         x_val, y_val = np.concatenate(x_val), np.concatenate(y_val)
         x_train, y_train = np.concatenate(x_train), np.concatenate(y_train)
 
         return x_val, y_val, x_train, y_train
 
-###### Unused functions
+    ###### Unused functions
     def get_idx_data(self, idx, batch_size, mode="test", data_source="train"):
         """Returns a custom loader with specific idxs only.
         :param idx: A list of data indexes that we want.
@@ -432,7 +514,11 @@ class IncrementalLoader:
         :return: The raw data and a loader.
         """
         if data_source == "train":
-            x, y, super_y = self.data_train, self.targets_train, self.super_targets_train
+            x, y, super_y = (
+                self.data_train,
+                self.targets_train,
+                self.super_targets_train,
+            )
         elif data_source == "val":
             x, y, super_y = self.data_val, self.targets_val, self.super_targets_val
         elif data_source == "test":
@@ -449,7 +535,8 @@ class IncrementalLoader:
             sampler=sampler,
             batch_size=batch_size,
             shuffle=False,
-            num_workers=self._workers)
+            num_workers=self._workers,
+        )
 
     def get_custom_loader(self, class_indexes, mode="test", data_source="train"):
         """Returns a custom loader.
@@ -458,11 +545,17 @@ class IncrementalLoader:
         :param data_source: Whether to fetch from the train, val, or test set.
         :return: The raw data and a loader.
         """
-        if not isinstance(class_indexes, list):  # TODO: deprecated, should always give a list
+        if not isinstance(
+            class_indexes, list
+        ):  # TODO: deprecated, should always give a list
             class_indexes = [class_indexes]
 
         if data_source == "train":
-            x, y, super_y = self.data_train, self.targets_train, self.super_targets_train
+            x, y, super_y = (
+                self.data_train,
+                self.targets_train,
+                self.super_targets_train,
+            )
         elif data_source == "val":
             x, y, super_y = self.data_val, self.targets_val, self.super_targets_val
         elif data_source == "test":
@@ -472,16 +565,17 @@ class IncrementalLoader:
 
         data, targets, super_targets = [], [], []
         for class_index in class_indexes:
-            class_data, class_targets, super_class_targets  = self._select(
+            class_data, class_targets, super_class_targets = self._select(
                 x, y, super_y, low_range=class_index, high_range=class_index + 1
             )
             data.append(class_data)
             targets.append(class_targets)
-            super_targets.append(super_class_targets)            
+            super_targets.append(super_class_targets)
 
         data = np.concatenate(data)
         targets = np.concatenate(targets)
         super_targets = np.concatenate(super_targets)
 
-        return data, self._get_loader(data, targets, super_targets, shuffle=False, mode=mode)
-    
+        return data, self._get_loader(
+            data, targets, super_targets, shuffle=False, mode=mode
+        )

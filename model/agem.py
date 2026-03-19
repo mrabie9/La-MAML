@@ -1,4 +1,4 @@
-### This is a pytorch implementation of AGEM based on https://github.com/facebookresearch/agem. 
+### This is a pytorch implementation of AGEM based on https://github.com/facebookresearch/agem.
 
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
@@ -47,23 +47,26 @@ class AgemConfig:
             if hasattr(args, field):
                 setattr(cfg, field, getattr(args, field))
         return cfg
+
+
 # Auxiliary functions useful for AGEM's inner optimization.
+
 
 def compute_offsets(task, nc_per_task, is_cifar):
     """
-        Compute offsets for cifar to determine which
-        outputs to select for a given task.
+    Compute offsets for cifar to determine which
+    outputs to select for a given task.
     """
     return misc_utils.compute_offsets(task, nc_per_task)
 
 
 def store_grad(pp, grads, grad_dims, tid):
     """
-        This stores parameter gradients of past tasks.
-        pp: parameters
-        grads: gradients
-        grad_dims: list with number of parameters per layers
-        tid: task id
+    This stores parameter gradients of past tasks.
+    pp: parameters
+    grads: gradients
+    grad_dims: list with number of parameters per layers
+    tid: task id
     """
     # store the gradients
     grads[:, tid].fill_(0.0)
@@ -71,42 +74,42 @@ def store_grad(pp, grads, grad_dims, tid):
     for param in pp():
         if param.grad is not None:
             beg = 0 if cnt == 0 else sum(grad_dims[:cnt])
-            en = sum(grad_dims[:cnt + 1])
-            grads[beg: en, tid].copy_(param.grad.data.view(-1))
+            en = sum(grad_dims[: cnt + 1])
+            grads[beg:en, tid].copy_(param.grad.data.view(-1))
         cnt += 1
 
 
 def overwrite_grad(pp, newgrad, grad_dims):
     """
-        This is used to overwrite the gradients with a new gradient
-        vector, whenever violations occur.
-        pp: parameters
-        newgrad: corrected gradient
-        grad_dims: list storing number of parameters at each layer
+    This is used to overwrite the gradients with a new gradient
+    vector, whenever violations occur.
+    pp: parameters
+    newgrad: corrected gradient
+    grad_dims: list storing number of parameters at each layer
     """
     cnt = 0
     for param in pp():
         if param.grad is not None:
             beg = 0 if cnt == 0 else sum(grad_dims[:cnt])
-            en = sum(grad_dims[:cnt + 1])
-            this_grad = newgrad[beg: en].contiguous().view(
-                param.grad.data.size())
+            en = sum(grad_dims[: cnt + 1])
+            this_grad = newgrad[beg:en].contiguous().view(param.grad.data.size())
             param.grad.data.copy_(this_grad)
         cnt += 1
 
 
-
-def projectgrad(gradient, memories, margin=0.5, eps = 1e-3, oiter = 0):
+def projectgrad(gradient, memories, margin=0.5, eps=1e-3, oiter=0):
     """
-        Solves the GEM dual QP described in the paper given a proposed
-        gradient "gradient", and a memory of task gradients "memories".
-        Overwrites "gradient" with the final projected update.
-        input:  gradient, p-vector
-        input:  memories, (t * p)-vector
-        output: x, p-vector
+    Solves the GEM dual QP described in the paper given a proposed
+    gradient "gradient", and a memory of task gradients "memories".
+    Overwrites "gradient" with the final projected update.
+    input:  gradient, p-vector
+    input:  memories, (t * p)-vector
+    output: x, p-vector
     """
 
-    similarity = torch.nn.functional.cosine_similarity(gradient.t(), memories.t().mean(dim=0).unsqueeze(0))
+    similarity = torch.nn.functional.cosine_similarity(
+        gradient.t(), memories.t().mean(dim=0).unsqueeze(0)
+    )
 
     memories_np = memories.cpu().t().double().numpy()
     gradient_np = gradient.cpu().contiguous().view(-1).double().numpy()
@@ -123,30 +126,28 @@ def projectgrad(gradient, memories, margin=0.5, eps = 1e-3, oiter = 0):
     #     print('similarity : ', similarity.item())
     #     print('dotp:', dotp)
 
-    if(dotp[0,0]<0):
-        proj = gradient_np.reshape(1, -1) - ((dotp/ ref_mag) * memories_np2)
+    if dotp[0, 0] < 0:
+        proj = gradient_np.reshape(1, -1) - ((dotp / ref_mag) * memories_np2)
         gradient.copy_(torch.Tensor(proj).view(-1, 1))
 
 
 class Net(DetectionReplayMixin, nn.Module):
-    def __init__(self,
-                 n_inputs,
-                 n_outputs,
-                 n_tasks,
-                 args):
+    def __init__(self, n_inputs, n_outputs, n_tasks, args):
         super(Net, self).__init__()
         self.cfg = AgemConfig.from_args(args)
 
-        self.is_cifar = (
-            (self.cfg.dataset == 'cifar100') or (self.cfg.dataset == 'tinyimagenet')
+        self.is_cifar = (self.cfg.dataset == "cifar100") or (
+            self.cfg.dataset == "tinyimagenet"
         )
-        
+
         # --- IQ mode toggle ---
         self.input_channels = self.cfg.input_channels
         self.is_iq = (self.cfg.dataset == "iq") or (self.input_channels == 2)
 
-        if self.cfg.arch != 'resnet1d':
-            raise ValueError(f"Unsupported arch {self.cfg.arch}; only resnet1d is available now.")
+        if self.cfg.arch != "resnet1d":
+            raise ValueError(
+                f"Unsupported arch {self.cfg.arch}; only resnet1d is available now."
+            )
         self.net = ResNet1D(n_outputs, args)
 
         self.ce = nn.CrossEntropyLoss()
@@ -162,9 +163,11 @@ class Net(DetectionReplayMixin, nn.Module):
         )
 
         self.opt = optim.SGD(self._ll_params(), self.cfg.lr, momentum=0.9)
-        self.det_opt = optim.SGD(self.net.det_head.parameters(), self.cfg.lr, momentum=0.9)
+        self.det_opt = optim.SGD(
+            self.net.det_head.parameters(), self.cfg.lr, momentum=0.9
+        )
 
-        self.n_memories = int(self.cfg.memories/n_tasks)
+        self.n_memories = int(self.cfg.memories / n_tasks)
         self.gpu = self.cfg.cuda
 
         self.age = 0
@@ -179,7 +182,9 @@ class Net(DetectionReplayMixin, nn.Module):
             assert n_inputs % 2 == 0, f"n_inputs={n_inputs} must be 2*L for IQ."
             self.seq_len = n_inputs // 2
             # (task, mem, C=2, L)
-            self.memory_data = torch.FloatTensor(n_tasks, self.n_memories, 2, self.seq_len)
+            self.memory_data = torch.FloatTensor(
+                n_tasks, self.n_memories, 2, self.seq_len
+            )
         else:
             # (task, mem, F)
             self.memory_data = torch.FloatTensor(n_tasks, self.n_memories, n_inputs)
@@ -208,11 +213,12 @@ class Net(DetectionReplayMixin, nn.Module):
         self.classes_per_task = misc_utils.build_task_class_list(
             n_tasks,
             n_outputs,
-            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            nc_per_task=getattr(args, "nc_per_task_list", "")
+            or getattr(args, "nc_per_task", None),
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
-        
+
         if self.gpu:
             self.cuda()
 
@@ -233,7 +239,9 @@ class Net(DetectionReplayMixin, nn.Module):
             L = F // 2
             return x.view(B, 2, L)
         else:
-            raise ValueError(f"Unexpected IQ input shape {tuple(x.shape)}; expected (B, 2, L) or (B, 2L).")
+            raise ValueError(
+                f"Unexpected IQ input shape {tuple(x.shape)}; expected (B, 2, L) or (B, 2L)."
+            )
 
     def _adapt_for_memory(self, x: torch.Tensor) -> torch.Tensor:
         """Ensure inputs stored in memory are (B, 2, L)."""
@@ -254,14 +262,14 @@ class Net(DetectionReplayMixin, nn.Module):
                 x4 = x.view(x.size(0), 3, 2, seq_len)
                 return self.net.model.input_adapter(x4)
         return self._ensure_iq_shape(x)
-    
+
     def forward(self, x, t):
-        if self.cfg.dataset == 'tinyimagenet':
+        if self.cfg.dataset == "tinyimagenet":
             x = x.view(-1, 3, 64, 64)
-        elif self.cfg.dataset == 'cifar100':
+        elif self.cfg.dataset == "cifar100":
             x = x.view(-1, 3, 32, 32)
         elif self.is_iq:
-            x = self._ensure_iq_shape(x) # (B, 2, L)
+            x = self._ensure_iq_shape(x)  # (B, 2, L)
 
         output = self.net.forward(x)
 
@@ -270,7 +278,7 @@ class Net(DetectionReplayMixin, nn.Module):
         if offset1 > 0:
             output[:, :offset1].data.fill_(-10e10)
         if offset2 < self.n_outputs:
-            output[:, offset2:self.n_outputs].data.fill_(-10e10)
+            output[:, offset2 : self.n_outputs].data.fill_(-10e10)
         return output
 
     def _ll_params(self):
@@ -281,8 +289,8 @@ class Net(DetectionReplayMixin, nn.Module):
 
     def observe(self, x, y, t):
 
-        self.iter +=1
-        
+        self.iter += 1
+
         # --- shape handling ---
         if self.is_iq:
             # keep (B, 2, L)
@@ -330,18 +338,20 @@ class Net(DetectionReplayMixin, nn.Module):
         if t != self.current_task:
             # finalize previous task's filled count
             if self.current_task is not None:
-                self.task_mem_filled[self.current_task] = min(self.mem_cnt, self.n_memories)
+                self.task_mem_filled[self.current_task] = min(
+                    self.mem_cnt, self.n_memories
+                )
             self.observed_tasks.append(t)
             self.current_task = t
             self.grad_align.append([])
             # start writing this task from the beginning
             self.mem_cnt = 0
-            
+
         cls_tr_rec = []
         for pass_itr in range(self.glances):
-# copy x into memory with matching shape
-                
-            if(pass_itr==0):
+            # copy x into memory with matching shape
+
+            if pass_itr == 0:
                 # Update ring buffer storing examples from current task
                 bsz = y.data.size(0)
                 endcnt = min(self.mem_cnt + bsz, self.n_memories)
@@ -359,12 +369,14 @@ class Net(DetectionReplayMixin, nn.Module):
 
                 if effbsz > 0:
                     mem_x = self._input_for_replay(x.data[:effbsz])
-                    self.memory_data[t, self.mem_cnt:endcnt].copy_(mem_x)
+                    self.memory_data[t, self.mem_cnt : endcnt].copy_(mem_x)
 
                     if bsz == 1:
                         self.memory_labs[t, self.mem_cnt] = y.data[0]
                     else:
-                        self.memory_labs[t, self.mem_cnt:endcnt].copy_(y.data[:effbsz])
+                        self.memory_labs[t, self.mem_cnt : endcnt].copy_(
+                            y.data[:effbsz]
+                        )
 
                     self.mem_cnt += effbsz
                     if self.mem_cnt == self.n_memories:
@@ -380,67 +392,79 @@ class Net(DetectionReplayMixin, nn.Module):
                     # fwd/bwd on the examples in the memory
                     past_task = self.observed_tasks[tt]
 
-                    offset1, offset2 = compute_offsets(past_task, self.classes_per_task,
-                                                       self.is_cifar)
+                    offset1, offset2 = compute_offsets(
+                        past_task, self.classes_per_task, self.is_cifar
+                    )
                     filled = int(self.task_mem_filled[past_task].item())
                     if filled == 0:
                         continue
                     mem_x = Variable(self.memory_data[past_task, :filled])
                     mem_y = Variable(self.memory_labs[past_task, :filled])
-                    logits = self.forward(mem_x, past_task)[:, offset1: offset2]
+                    logits = self.forward(mem_x, past_task)[:, offset1:offset2]
                     ptloss = self.ce(logits, mem_y - offset1)
                     ptloss.backward()
                     if self.cfg.grad_clip_norm:
-                        torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.cfg.grad_clip_norm)
+                        torch.nn.utils.clip_grad_norm_(
+                            self.net.parameters(), self.cfg.grad_clip_norm
+                        )
 
-                    store_grad(self._ll_params, self.grads, self.grad_dims,
-                               past_task)
+                    store_grad(self._ll_params, self.grads, self.grad_dims, past_task)
 
             # now compute the grad on the current minibatch
             self.zero_grad()
             offset1, offset2 = compute_offsets(t, self.classes_per_task, self.is_cifar)
-            logits = self.forward(x, t)[:, offset1: offset2]
+            logits = self.forward(x, t)[:, offset1:offset2]
             pb = torch.argmax(logits, dim=1)
             targets = y - offset1
             cls_tr_rec.append(macro_recall(pb, targets))
             loss = self.ce(logits, targets)
             loss.backward()
             if self.cfg.grad_clip_norm:
-                torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.cfg.grad_clip_norm)
+                torch.nn.utils.clip_grad_norm_(
+                    self.net.parameters(), self.cfg.grad_clip_norm
+                )
 
-            # check if gradient violates constraints                                                           
+            # check if gradient violates constraints
             if len(self.observed_tasks) > 1:
                 # copy gradient
                 store_grad(self._ll_params, self.grads, self.grad_dims, t)
                 # Build index tensor on the same device as stored gradients.
-                indx_device = self.grads.device if hasattr(self.grads, "device") else None
+                indx_device = (
+                    self.grads.device if hasattr(self.grads, "device") else None
+                )
                 indx = torch.tensor(
                     self.observed_tasks[:-1],
                     dtype=torch.long,
                     device=indx_device,
                 )
 
-                projectgrad(self.grads[:, t].unsqueeze(1),                                           
-                              self.grads.index_select(1, indx), oiter = self.iter)
+                projectgrad(
+                    self.grads[:, t].unsqueeze(1),
+                    self.grads.index_select(1, indx),
+                    oiter=self.iter,
+                )
                 # copy gradients back
-                overwrite_grad(self._ll_params, self.grads[:, t],
-                               self.grad_dims)
+                overwrite_grad(self._ll_params, self.grads[:, t], self.grad_dims)
 
             self.opt.step()
-        
+
         x_for_storage = self._input_for_replay(x)
         xi = x_for_storage.data.cpu().numpy()
-        yi = y[0].data.cpu().numpy() if isinstance(y, (list, tuple)) else y.data.cpu().numpy()
-        for i in range(0,x.size()[0]):
+        yi = (
+            y[0].data.cpu().numpy()
+            if isinstance(y, (list, tuple))
+            else y.data.cpu().numpy()
+        )
+        for i in range(0, x.size()[0]):
             self.age += 1
             # Reservoir sampling memory update:
             if len(self.M) < self.memories:
-                self.M.append([xi[i],yi[i],t])
+                self.M.append([xi[i], yi[i], t])
 
             else:
-                p = random.randint(0,self.age)
+                p = random.randint(0, self.age)
                 if p < self.memories:
-                    self.M[p] = [xi[i],yi[i],t]
+                    self.M[p] = [xi[i], yi[i], t]
 
         # if getattr(self, "det_enabled", True):
         #     self.det_opt.zero_grad()
@@ -456,5 +480,5 @@ class Net(DetectionReplayMixin, nn.Module):
         #     det_loss.backward()
         #     self.det_opt.step()
 
-        avg_cls_tr_rec = sum(cls_tr_rec)/len(cls_tr_rec) if cls_tr_rec else 0.0
+        avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
         return loss.item(), avg_cls_tr_rec

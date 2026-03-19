@@ -15,6 +15,7 @@ import torch.optim as optim
 import random
 import ipdb
 import warnings
+
 warnings.filterwarnings("ignore")
 from model.resnet1d import ResNet1D
 from utils.training_metrics import macro_recall
@@ -46,22 +47,23 @@ class MerAlgConfig:
                 setattr(cfg, field, getattr(args, field))
         return cfg
 
+
 class Net(nn.Module):
-    def __init__(self,
-                 n_inputs,
-                 n_outputs,
-                 n_tasks,
-                 args):
+    def __init__(self, n_inputs, n_outputs, n_tasks, args):
         super(Net, self).__init__()
         self.cfg = MerAlgConfig.from_args(args)
-        self.is_cifar = (self.cfg.dataset == 'cifar100' or self.cfg.dataset == 'tinyimagenet')
+        self.is_cifar = (
+            self.cfg.dataset == "cifar100" or self.cfg.dataset == "tinyimagenet"
+        )
 
         # --- IQ mode toggle ---
         self.input_channels = self.cfg.input_channels
         self.is_iq = (self.cfg.dataset == "iq") or (self.input_channels == 2)
 
-        if self.cfg.arch != 'resnet1d':
-            raise ValueError(f"Unsupported arch {self.cfg.arch}; only resnet1d is available now.")
+        if self.cfg.arch != "resnet1d":
+            raise ValueError(
+                f"Unsupported arch {self.cfg.arch}; only resnet1d is available now."
+            )
         self.net = ResNet1D(n_outputs, args)
         self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
 
@@ -73,7 +75,8 @@ class Net(nn.Module):
         self.classes_per_task = misc_utils.build_task_class_list(
             n_tasks,
             n_outputs,
-            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            nc_per_task=getattr(args, "nc_per_task_list", "")
+            or getattr(args, "nc_per_task", None),
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
@@ -99,7 +102,6 @@ class Net(nn.Module):
         if self.use_cuda:
             self.net = self.net.cuda()
 
-
     def forward(self, x, t):
         output = self.netforward(x)
         if self.is_iq:
@@ -107,9 +109,9 @@ class Net(nn.Module):
             if offset1 > 0:
                 output[:, :offset1].data.fill_(-10e10)
             if offset2 < self.n_outputs:
-                output[:, int(offset2):self.n_outputs].data.fill_(-10e10)
+                output[:, int(offset2) : self.n_outputs].data.fill_(-10e10)
         return output
-    
+
     def compute_offsets(self, task):
         if self.is_task_incremental:
             return misc_utils.compute_offsets(task, self.classes_per_task)
@@ -130,14 +132,16 @@ class Net(nn.Module):
         own_params.update(dict(self.net.model.named_buffers()))
         with torch.no_grad():
             for name, tensor in own_params.items():
-                tensor.copy_(base_state[name] + (target_state[name] - base_state[name]) * mix)
+                tensor.copy_(
+                    base_state[name] + (target_state[name] - base_state[name]) * mix
+                )
 
-    def getBatch(self,x,y,t):
+    def getBatch(self, x, y, t):
         samples = []
         if x is not None:
             samples.append((x, y, t))
         if len(self.M) > 0:
-            osize = min(self.batchSize,len(self.M))
+            osize = min(self.batchSize, len(self.M))
             indices = random.sample(range(len(self.M)), osize)
             for idx in indices:
                 samples.append(self.M[idx])
@@ -155,8 +159,7 @@ class Net(nn.Module):
             bys.append(by)
             bts.append(st)
 
-        return bxs,bys,bts
-               
+        return bxs, bys, bts
 
     def observe(self, x, y, t):
 
@@ -165,7 +168,7 @@ class Net(nn.Module):
         batch_targets = []
 
         task_id = int(t) if isinstance(t, int) else int(t.item())
-        for i in range(0,x.size()[0]):
+        for i in range(0, x.size()[0]):
 
             self.age += 1
             xi = x[i].detach().cpu()
@@ -173,31 +176,30 @@ class Net(nn.Module):
             self.net.zero_grad()
 
             before = self._clone_model_state()
-            for step in range(0,self.steps):
+            for step in range(0, self.steps):
                 weights_before = self._clone_model_state()
                 ##Check for nan
                 if weights_before != weights_before:
                     ipdb.set_trace()
                 # Draw batch from buffer:
-                bxs, bys, bts = self.getBatch(xi,yi,task_id)          
+                bxs, bys, bts = self.getBatch(xi, yi, task_id)
                 loss = 0.0
                 total_loss = 0.0
                 for idx in range(len(bxs)):
 
                     self.net.zero_grad()
-                    bx = bxs[idx] 
-                    by = bys[idx] 
+                    bx = bxs[idx]
+                    by = bys[idx]
                     bt = bts[idx]
 
                     if self.is_iq:
                         offset1, offset2 = self.compute_offsets(bt)
-                        prediction = (self.netforward(bx)[:, offset1:offset2])
-                        loss = self.bce(prediction,
-                                        by - offset1)
+                        prediction = self.netforward(bx)[:, offset1:offset2]
+                        loss = self.bce(prediction, by - offset1)
                         preds = torch.argmax(prediction, dim=1)
                         target = by - offset1
                     else:
-                        prediction = self.forward(bx,0)
+                        prediction = self.forward(bx, 0)
                         loss = self.bce(prediction, by)
                         preds = torch.argmax(prediction, dim=1)
                         target = by
@@ -206,7 +208,9 @@ class Net(nn.Module):
 
                     loss.backward()
                     if self.cfg.grad_clip_norm:
-                        torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.cfg.grad_clip_norm)
+                        torch.nn.utils.clip_grad_norm_(
+                            self.net.parameters(), self.cfg.grad_clip_norm
+                        )
                     self.opt.step()
                     batch_preds.append(preds.detach().cpu())
                     batch_targets.append(target.detach().cpu())
@@ -228,7 +232,7 @@ class Net(nn.Module):
                 self.M.append((xi.clone(), yi.clone(), task_id))
 
             else:
-                p = random.randint(0,self.age)
+                p = random.randint(0, self.age)
                 if p < self.memories:
                     self.M[p] = (xi.clone(), yi.clone(), task_id)
 
@@ -238,4 +242,4 @@ class Net(nn.Module):
             avg_cls_tr_rec = macro_recall(stacked_preds, stacked_targets)
         else:
             avg_cls_tr_rec = 0.0
-        return total_loss/self.steps, avg_cls_tr_rec
+        return total_loss / self.steps, avg_cls_tr_rec

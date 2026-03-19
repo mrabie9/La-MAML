@@ -11,20 +11,25 @@ from torch.nn.functional import relu, normalize
 from itertools import chain
 from model.resnet1d import _ResNet1D, BasicBlock1D, AdcIqAdapter
 
+
 def Xavier(m):
-    if m.__class__.__name__ == 'Linear':
+    if m.__class__.__name__ == "Linear":
         fan_in, fan_out = m.weight.data.size(1), m.weight.data.size(0)
         std = 1.0 * math.sqrt(2.0 / (fan_in + fan_out))
         a = math.sqrt(3.0) * std
         m.weight.data.uniform_(-a, a)
         m.bias.data.fill_(0.0)
-       
+
+
 def conv3x3(in_planes, out_planes, stride=1):
-    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
-                     padding=1, bias=False)
+    return nn.Conv2d(
+        in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False
+    )
+
 
 def Flatten(x):
     return x.view(x.size(0), -1)
+
 
 class noReLUBlock(nn.Module):
     expansion = 1
@@ -35,13 +40,18 @@ class noReLUBlock(nn.Module):
         self.bn1 = nn.BatchNorm2d(planes)
         self.conv2 = conv3x3(planes, planes)
         self.bn2 = nn.BatchNorm2d(planes)
-        
+
         self.shortcut = nn.Sequential()
         if stride != 1 or in_planes != self.expansion * planes:
             self.shortcut = nn.Sequential(
-                nn.Conv2d(in_planes, self.expansion * planes, kernel_size=1,
-                          stride=stride, bias=False),
-                nn.BatchNorm2d(self.expansion * planes)
+                nn.Conv2d(
+                    in_planes,
+                    self.expansion * planes,
+                    kernel_size=1,
+                    stride=stride,
+                    bias=False,
+                ),
+                nn.BatchNorm2d(self.expansion * planes),
             )
 
     def forward(self, x):
@@ -50,8 +60,9 @@ class noReLUBlock(nn.Module):
         out += self.shortcut(x)
         return out
 
+
 class ContextNet(nn.Module):
-    def __init__(self, num_classes, in_channels = 2, task_emb=64 , n_tasks = 17):
+    def __init__(self, num_classes, in_channels=2, task_emb=64, n_tasks=17):
         super(ContextNet, self).__init__()
         self.in_planes = nf = 64
         # self.conv1 = conv3x3(3, nf * 1)
@@ -72,13 +83,14 @@ class ContextNet(nn.Module):
         )
         self.feature_dim = self.model.fc.in_features
         self.det_head = nn.Linear(self.feature_dim, 1)
-        
-        #self.film1 = nn.Linear(task_emb, nf * 1 * 2)
-        #self.film2 = nn.Linear(task_emb, nf * 2 * 2)
-        #self.film3 = nn.Linear(task_emb, nf * 4 * 2)
+
+        # self.film1 = nn.Linear(task_emb, nf * 1 * 2)
+        # self.film2 = nn.Linear(task_emb, nf * 2 * 2)
+        # self.film3 = nn.Linear(task_emb, nf * 4 * 2)
         self.film4 = nn.Linear(task_emb, nf * 8 * 2)
         self.nf = nf
         self.emb = torch.nn.Embedding(n_tasks, task_emb)
+
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1] * (num_blocks - 1)
         layers = []
@@ -94,7 +106,7 @@ class ContextNet(nn.Module):
         )
         for param in base_iter:
             yield param
-    
+
     def context_param(self):
         film_iter = chain(self.emb.parameters(), self.film4.parameters())
         for param in film_iter:
@@ -127,7 +139,7 @@ class ContextNet(nn.Module):
             film4 = self.film4(t)
             gamma4, beta4 = film4.split(C, 1)
             gamma4 = normalize(gamma4, p=2, dim=1).view(B, C, 1)
-            beta4  = normalize(beta4,  p=2, dim=1).view(B, C, 1)
+            beta4 = normalize(beta4, p=2, dim=1).view(B, C, 1)
             h4_new = gamma4 * h4 + beta4
 
         if use_all:
@@ -138,12 +150,12 @@ class ContextNet(nn.Module):
         out = self.model.avgpool(h4)
         return out.view(out.size(0), -1)
 
-    def forward_features(self, x, t=None, use_all = True):
+    def forward_features(self, x, t=None, use_all=True):
         h4 = self.forward_h4(x)
         h4 = self._apply_film(h4, t, use_all=use_all)
         return self._pool_features(h4)
 
-    def forward_heads(self, x, t=None, use_all = True):
+    def forward_heads(self, x, t=None, use_all=True):
         h4 = self.forward_h4(x)
         det_feat = self._pool_features(h4)
         det_logits = self.det_head(det_feat).squeeze(1)
@@ -152,17 +164,18 @@ class ContextNet(nn.Module):
         cls_logits = self.model.fc(cls_feat)
         return det_logits, cls_logits
 
-    def forward_det_agnostic(self, x, use_all = True):
+    def forward_det_agnostic(self, x, use_all=True):
         h4 = self.forward_h4(x)
         feat = self._pool_features(h4)
         return self.det_head(feat).squeeze(1)
 
-    def forward(self, x, t, use_all = True):
+    def forward(self, x, t, use_all=True):
         h4 = self.forward_h4(x)
         h4 = self._apply_film(h4, t, use_all=use_all)
         feat = self._pool_features(h4)
-        y = self.model.fc(feat)       
+        y = self.model.fc(feat)
         return y
 
-def ContextNet18(num_classes, n_tasks = 17, task_emb = 64):
-    return ContextNet(num_classes, n_tasks = n_tasks, task_emb = task_emb)
+
+def ContextNet18(num_classes, n_tasks=17, task_emb=64):
+    return ContextNet(num_classes, n_tasks=n_tasks, task_emb=task_emb)

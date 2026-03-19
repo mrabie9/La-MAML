@@ -38,34 +38,39 @@ class LamamlBaseConfig:
                 setattr(cfg, field, getattr(args, field))
         return cfg
 
+
 class BaseNet(torch.nn.Module):
 
-    def __init__(self,
-                 n_inputs,
-                 n_outputs,
-                 n_tasks,           
-                 args):
+    def __init__(self, n_inputs, n_outputs, n_tasks, args):
         super(BaseNet, self).__init__()
 
         self.args = args
         self.cfg = LamamlBaseConfig.from_args(args)
-        if self.cfg.arch != 'resnet1d':
-            raise ValueError(f"Unsupported arch {self.cfg.arch}; only resnet1d is available now.")
+        if self.cfg.arch != "resnet1d":
+            raise ValueError(
+                f"Unsupported arch {self.cfg.arch}; only resnet1d is available now."
+            )
         self.net = ResNet1D(n_outputs, args)
         self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
 
-        self.opt_wt = torch.optim.SGD(list(self.net.parameters()), lr=self.cfg.opt_wt, momentum=0.9)
-        self.opt_lr = torch.optim.SGD(list(self.net.alpha_lr.parameters()), lr=self.cfg.opt_lr, momentum=0.9)
+        self.opt_wt = torch.optim.SGD(
+            list(self.net.parameters()), lr=self.cfg.opt_wt, momentum=0.9
+        )
+        self.opt_lr = torch.optim.SGD(
+            list(self.net.alpha_lr.parameters()), lr=self.cfg.opt_lr, momentum=0.9
+        )
 
         self.epoch = 0
         # allocate buffer
-        self.M = []        
+        self.M = []
         self.M_new = []
         self.age = 0
 
         # setup losses
         self.loss = torch.nn.CrossEntropyLoss()
-        self.is_cifar = ((self.cfg.dataset == 'cifar100') or (self.cfg.dataset == 'tinyimagenet'))
+        self.is_cifar = (self.cfg.dataset == "cifar100") or (
+            self.cfg.dataset == "tinyimagenet"
+        )
         self.glances = self.cfg.glances
         self.pass_itr = 0
         self.real_epoch = 0
@@ -82,7 +87,8 @@ class BaseNet(torch.nn.Module):
         self.classes_per_task = misc_utils.build_task_class_list(
             n_tasks,
             n_outputs,
-            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            nc_per_task=getattr(args, "nc_per_task_list", "")
+            or getattr(args, "nc_per_task", None),
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
@@ -93,10 +99,10 @@ class BaseNet(torch.nn.Module):
         of data points to replay/memory buffer
         """
 
-        if(self.real_epoch > 0 or self.pass_itr>0):
+        if self.real_epoch > 0 or self.pass_itr > 0:
             return
         batch_x = batch_x.cpu()
-        batch_y = batch_y.cpu()              
+        batch_y = batch_y.cpu()
         t = t.cpu()
 
         for i in range(batch_x.shape[0]):
@@ -104,31 +110,30 @@ class BaseNet(torch.nn.Module):
             if len(self.M_new) < self.memories:
                 self.M_new.append([batch_x[i], batch_y[i], t])
             else:
-                p = random.randint(0,self.age)  
+                p = random.randint(0, self.age)
                 if p < self.memories:
                     self.M_new[p] = [batch_x[i], batch_y[i], t]
 
-
     def getBatch(self, x, y, t, batch_size=None):
         """
-        Given the new data points, create a batch of old + new data, 
+        Given the new data points, create a batch of old + new data,
         where old data is sampled from the memory buffer
         """
 
-        if(x is not None):
+        if x is not None:
             mxi = np.array(x)
             myi = np.array(y)
-            mti = np.ones(x.shape[0], dtype=int)*t        
+            mti = np.ones(x.shape[0], dtype=int) * t
         else:
-            mxi = np.empty( shape=(0, 0) )
-            myi = np.empty( shape=(0, 0) )
-            mti = np.empty( shape=(0, 0) )    
+            mxi = np.empty(shape=(0, 0))
+            myi = np.empty(shape=(0, 0))
+            mti = np.empty(shape=(0, 0))
 
         bxs = []
         bys = []
         bts = []
 
-        if self.cfg.use_old_task_memory and t>0:
+        if self.cfg.use_old_task_memory and t > 0:
             MEM = self.M
         else:
             MEM = self.M_new
@@ -137,14 +142,14 @@ class BaseNet(torch.nn.Module):
 
         # Sample from memory buffer if not empty
         if len(MEM) > 0:
-            order = [i for i in range(0,len(MEM))]
-            osize = min(batch_size,len(MEM))
-            for j in range(0,osize):
+            order = [i for i in range(0, len(MEM))]
+            osize = min(batch_size, len(MEM))
+            for j in range(0, osize):
 
                 # randomly sample from self.M_new memory buffer
                 shuffle(order)
                 k = order[j]
-                x,y,t = MEM[k]
+                x, y, t = MEM[k]
 
                 xi = np.array(x)
                 yi = np.array(y)
@@ -159,17 +164,17 @@ class BaseNet(torch.nn.Module):
             bys.append(myi[j])
             bts.append(mti[j])
 
-        bxs = Variable(torch.from_numpy(np.array(bxs))).float() 
+        bxs = Variable(torch.from_numpy(np.array(bxs))).float()
         bys = Variable(torch.from_numpy(np.array(bys))).long().view(-1)
         bts = Variable(torch.from_numpy(np.array(bts))).long().view(-1)
-        
+
         # handle gpus if specified
         if self.use_cuda:
             bxs = bxs.cuda()
             bys = bys.cuda()
             bts = bts.cuda()
 
-        return bxs,bys,bts
+        return bxs, bys, bts
 
     def compute_offsets(self, task):
         # mapping from classes [1-100] to their idx within a task
@@ -182,4 +187,3 @@ class BaseNet(torch.nn.Module):
         self.opt_wt.zero_grad()
         self.net.zero_grad()
         self.net.alpha_lr.zero_grad()
-        

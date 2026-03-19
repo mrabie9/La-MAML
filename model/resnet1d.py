@@ -19,8 +19,14 @@ class BasicBlock1D(nn.Module):
 
     expansion = 1
 
-    def __init__(self, inplanes: int, planes: int, stride: int = 1,
-                 downsample: nn.Module | None = None, norm_layer=None) -> None:
+    def __init__(
+        self,
+        inplanes: int,
+        planes: int,
+        stride: int = 1,
+        downsample: nn.Module | None = None,
+        norm_layer=None,
+    ) -> None:
         super().__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm1d
@@ -60,13 +66,13 @@ class AdcIqAdapter(nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
-        self.weight = nn.Parameter(torch.empty(2, 3))
+        self.weight = nn.Parameter(torch.ones(2, 3))
         self.bias = nn.Parameter(torch.zeros(2))
-        nn.init.xavier_uniform_(self.weight)
+        # nn.init.xavier_uniform_(self.weight)
         self.proj_3ch = nn.Conv1d(3, 2, kernel_size=1)
-        weight_4d = torch.tensor([[1,  1,  1 ],
-                                    [1,  1, 1 ]])
-        bias_4d = torch.tensor([0.0,  0.0])
+        weight_4d = torch.tensor([[1, 1, 1], [1, 1, 1]])
+        bias_4d = torch.tensor([0.0, 0.0])
+        print(f"weight: {self.weight}", f"bias: {self.bias}")
         # self.set_initial_parameters(weight_4d=weight_4d, bias_4d=bias_4d)
 
     def set_initial_parameters(
@@ -168,8 +174,15 @@ class AdcIqAdapter(nn.Module):
 class _ResNet1D(nn.Module):
     """Internal utility that mirrors ``torchvision``'s ``ResNet`` logic."""
 
-    def __init__(self, block: type[nn.Module], layers: list[int], num_classes: int,
-                 in_channels: int = 2, norm_layer=None, input_adapter: nn.Module | None = None) -> None:
+    def __init__(
+        self,
+        block: type[nn.Module],
+        layers: list[int],
+        num_classes: int,
+        in_channels: int = 2,
+        norm_layer=None,
+        input_adapter: nn.Module | None = None,
+    ) -> None:
         super().__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm1d
@@ -195,26 +208,40 @@ class _ResNet1D(nn.Module):
         out_dim = 512 * block.expansion
         self.fc = nn.Linear(out_dim, num_classes)
 
-    def _make_layer(self, block: type[nn.Module], planes: int, blocks: int,
-                    stride: int = 1) -> nn.Sequential:
+    def _make_layer(
+        self, block: type[nn.Module], planes: int, blocks: int, stride: int = 1
+    ) -> nn.Sequential:
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
                 nn.Conv1d(
-                    self.inplanes, planes * block.expansion, kernel_size=1,
-                    stride=stride, bias=False
+                    self.inplanes,
+                    planes * block.expansion,
+                    kernel_size=1,
+                    stride=stride,
+                    bias=False,
                 ),
                 self._norm_layer(planes * block.expansion),
             )
 
-        layers = [block(self.inplanes, planes, stride, downsample, norm_layer=self._norm_layer)]
+        layers = [
+            block(
+                self.inplanes, planes, stride, downsample, norm_layer=self._norm_layer
+            )
+        ]
         self.inplanes = planes * block.expansion
         for _ in range(1, blocks):
             layers.append(block(self.inplanes, planes, norm_layer=self._norm_layer))
         return nn.Sequential(*layers)
 
-    def forward(self, x: torch.Tensor, return_features=False, classify_feats=False, return_h4=False) -> torch.Tensor:  # pragma: no cover -
-        
+    def forward(
+        self,
+        x: torch.Tensor,
+        return_features=False,
+        classify_feats=False,
+        return_h4=False,
+    ) -> torch.Tensor:  # pragma: no cover -
+
         if classify_feats:
             return self.fc(x)
         else:
@@ -223,8 +250,10 @@ class _ResNet1D(nn.Module):
                     x = self.input_adapter(x)
                 else:
                     raise ValueError("Received 4D input but no adapter is configured.")
-            elif x.dim() == 3 and x.size(1) != 2 and not isinstance(
-                self.input_adapter, nn.Identity
+            elif (
+                x.dim() == 3
+                and x.size(1) != 2
+                and not isinstance(self.input_adapter, nn.Identity)
             ):
                 x = self.input_adapter(x)
 
@@ -277,14 +306,24 @@ class ResNet1D(nn.Module):
         self.vars = list(self.model.parameters())
         alpha_init = getattr(args, "alpha_init", 1e-3) if args is not None else 1e-3
         self.alpha_lr = nn.ParameterList(
-            [nn.Parameter(torch.ones_like(p) * alpha_init) for p in self.model.parameters()]
+            [
+                nn.Parameter(torch.ones_like(p) * alpha_init)
+                for p in self.model.parameters()
+            ]
         )
 
     # def classify_feats(self, x: torch.Tensor) -> torch.Tensor:
     #     logits = self.model.fc(x)
     #     return logits
 
-    def forward(self, x: torch.Tensor, vars=None, bn_training: bool = True, classify_feats=False, ret_feats = False) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        vars=None,
+        bn_training: bool = True,
+        classify_feats=False,
+        ret_feats=False,
+    ) -> torch.Tensor:
         prev = self.model.training
         self.model.train(bn_training)
         try:
@@ -293,11 +332,13 @@ class ResNet1D(nn.Module):
                 x = self._prepare_input(x)
                 # print(f"Prepared input shape: {tuple(x.shape)}")
             if vars is None:
-                out = self.model(x, return_features=ret_feats, classify_feats=classify_feats)
-            else:
-                assert len(vars) == len(self.param_names), (
-                    f"len(vars)={len(vars)} vs params={len(self.param_names)}"
+                out = self.model(
+                    x, return_features=ret_feats, classify_feats=classify_feats
                 )
+            else:
+                assert len(vars) == len(
+                    self.param_names
+                ), f"len(vars)={len(vars)} vs params={len(self.param_names)}"
                 param_dict = {n: p for n, p in zip(self.param_names, vars)}
                 out = functional_call(
                     self.model,
@@ -309,11 +350,17 @@ class ResNet1D(nn.Module):
             self.model.train(prev)
         return out
 
-    def forward_features(self, x: torch.Tensor, vars=None, bn_training: bool = True) -> torch.Tensor:
+    def forward_features(
+        self, x: torch.Tensor, vars=None, bn_training: bool = True
+    ) -> torch.Tensor:
         return self.forward(x, vars=vars, bn_training=bn_training, ret_feats=True)
 
-    def forward_classifier(self, feats: torch.Tensor, vars=None, bn_training: bool = True) -> torch.Tensor:
-        return self.forward(feats, vars=vars, bn_training=bn_training, classify_feats=True)
+    def forward_classifier(
+        self, feats: torch.Tensor, vars=None, bn_training: bool = True
+    ) -> torch.Tensor:
+        return self.forward(
+            feats, vars=vars, bn_training=bn_training, classify_feats=True
+        )
 
     def forward_detection(self, feats: torch.Tensor) -> torch.Tensor:
         return self.det_head(feats).squeeze(1)
@@ -333,7 +380,10 @@ class ResNet1D(nn.Module):
 
     def define_task_lr_params(self, alpha_init: float = 1e-3) -> None:
         self.alpha_lr = nn.ParameterList(
-            [nn.Parameter(torch.ones_like(p) * alpha_init) for p in self.model.parameters()]
+            [
+                nn.Parameter(torch.ones_like(p) * alpha_init)
+                for p in self.model.parameters()
+            ]
         )
 
     # ------------------------------------------------------------------
@@ -396,5 +446,6 @@ class ResNet1D(nn.Module):
 
         #     return gn_factory
         return lambda c: nn.BatchNorm1d(c)
+
 
 __all__ = ["ResNet1D"]

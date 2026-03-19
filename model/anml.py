@@ -7,12 +7,14 @@ import torch
 from torch import nn
 from torch import optim
 from torch.nn import functional as F
+
 # from model.resnet1d import ResNet1D
-from model.anml_base import NeuromodNet1D #as Learner
+from model.anml_base import NeuromodNet1D  # as Learner
 from random import shuffle
 from torch.autograd import Variable
 from model.resnet1d import ResNet1D
 import random
+
 # import model.learner as Learner
 from utils.training_metrics import macro_recall
 
@@ -55,7 +57,7 @@ class Net(nn.Module):
 
         # self.net = Learner(n_outputs, self.args, neuromodulation=neuromodulation)
         # self.net = Learner.Learner(config, neuromodulation)
-        self.nm = NeuromodNet1D(in_ch=2, mask_dim=512, conv_ch=(64,112,112))
+        self.nm = NeuromodNet1D(in_ch=2, mask_dim=512, conv_ch=(64, 112, 112))
         self.backbone = ResNet1D(n_outputs, args, in_channels=2)
         self.optimizer = optim.Adam(self.parameters(), lr=self.meta_lr)
         self.meta_iteration = 0
@@ -64,14 +66,18 @@ class Net(nn.Module):
         self.layers_to_fix = []
 
         self.param_names = [n for n, _ in self.backbone.named_parameters()]
-        self.feature_param_names = [n for n in self.param_names if not n.startswith("fc")]
-        self.classifier_param_names = [n for n in self.param_names if n.startswith("fc")]
+        self.feature_param_names = [
+            n for n in self.param_names if not n.startswith("fc")
+        ]
+        self.classifier_param_names = [
+            n for n in self.param_names if n.startswith("fc")
+        ]
         self.feature_param_count = len(self.feature_param_names)
 
         self.epoch = 0
         self.current_task = 0
         self.batchSize = int(self.cfg.replay_batch_size)
-        self.M = []        
+        self.M = []
         self.M_new = []
         self.age = 0
         self.memories = self.cfg.memories
@@ -83,7 +89,7 @@ class Net(nn.Module):
 
     def reset_layer(self, layer_to_reset):
         if layer_to_reset % 2 == 0:
-            weight = self.parameters()[layer_to_reset]#-2]
+            weight = self.parameters()[layer_to_reset]  # -2]
             torch.nn.init.kaiming_normal_(weight)
         else:
             bias = self.parameters()[layer_to_reset]
@@ -93,28 +99,28 @@ class Net(nn.Module):
         boxSize = 8
         if task_num == 1:
             try:
-                images[:,:,:boxSize+1,:boxSize+1] = torch.min(images)
+                images[:, :, : boxSize + 1, : boxSize + 1] = torch.min(images)
             except:
-                images[:,:boxSize+1,:boxSize+1] = torch.min(images)
+                images[:, : boxSize + 1, : boxSize + 1] = torch.min(images)
         elif task_num == 2:
-            images[:,:,-(boxSize+1):,-(boxSize+1):] = torch.min(images)
+            images[:, :, -(boxSize + 1) :, -(boxSize + 1) :] = torch.min(images)
         elif task_num == 3:
-            images[:,:,:boxSize+1, -(boxSize+1):] = torch.min(images)
+            images[:, :, : boxSize + 1, -(boxSize + 1) :] = torch.min(images)
         elif task_num == 4:
-            images[:,:,-(boxSize+1):, :boxSize+1] = torch.min(images)
+            images[:, :, -(boxSize + 1) :, : boxSize + 1] = torch.min(images)
         return images
 
     def shuffle_labels(self, targets, batch=False):
         if batch:
-            new_target = (targets[0]+2)%1000
+            new_target = (targets[0] + 2) % 1000
             for t in range(len(targets)):
                 targets[t] = new_target
 
-            return(targets)
-        
+            return targets
+
         else:
-            new_target = (targets+2)%1000
-            return(new_target)
+            new_target = (targets + 2) % 1000
+            return new_target
 
     def inner_update(self, x, fast_weights, y, bn_training):
 
@@ -124,7 +130,9 @@ class Net(nn.Module):
         if fast_weights is None:
             fast_weights = list(self.parameters())
 
-        grads = torch.autograd.grad(loss, fast_weights, create_graph=True, allow_unused=True)
+        grads = torch.autograd.grad(
+            loss, fast_weights, create_graph=True, allow_unused=True
+        )
 
         new_fast_weights = []
         for g, w in zip(grads, fast_weights):
@@ -149,7 +157,7 @@ class Net(nn.Module):
         pred_q = F.softmax(logits, dim=1).argmax(dim=1)
         correct = torch.eq(pred_q, y).sum().item()
         return correct
-    
+
     def forward(self, x, fast_weights):
         mask = self.nm(x)
 
@@ -165,18 +173,19 @@ class Net(nn.Module):
 
             feats = self.backbone.forward(x, vars=feature_fast, ret_feats=True)
             feats = feats * mask
-            logits = self.backbone.forward(feats, vars=classifier_fast, classify_feats=True)
+            logits = self.backbone.forward(
+                feats, vars=classifier_fast, classify_feats=True
+            )
         return logits
-
 
     def freeze_layers(self, layers_to_freeze):
 
         for name, param in self.named_parameters():
             param.learn = True
-        
+
         for name, param in self.nm.named_parameters():
             param.learn = False
-        
+
         # for name, param in self.backbone.named_parameters():
         #     param.learn = True
 
@@ -194,21 +203,21 @@ class Net(nn.Module):
         # for a in list_of_names:
         #     logger.info("TLN layer = %s", a[0])
 
-        
     def observe(self, x, y, t):
         self.freeze_layers(self.cfg.rln)
-        self.backbone.train(); self.nm.train()
+        self.backbone.train()
+        self.nm.train()
 
         cls_tr_rec = []
 
         for pass_itr in range(self.update_steps):
             self.pass_itr = pass_itr
-            
+
             # shuffle the data (again)
             perm = torch.randperm(x.size(0))
             x = x[perm]
             y = y[perm]
-            
+
             self.epoch += 1
             self.zero_grads()
 
@@ -216,19 +225,21 @@ class Net(nn.Module):
                 self.M = self.M_new
                 self.current_task = t
             # create mini-batches from the main batch
-            x_spt = self.make_minibatches(x, int(self.update_steps)) 
+            x_spt = self.make_minibatches(x, int(self.update_steps))
             y_spt = self.make_minibatches(y, int(self.update_steps))
-            
-            steps = min(self.update_steps, x.size(0)//self.update_steps)
+
+            steps = min(self.update_steps, x.size(0) // self.update_steps)
             for i in range(steps):
-                fast_weights = self.inner_update(x_spt[i], None, y_spt[i], t) # Update task-specific fast weights
+                fast_weights = self.inner_update(
+                    x_spt[i], None, y_spt[i], t
+                )  # Update task-specific fast weights
 
             batch_sz = x.shape[0]
-            # meta_losses = [0 for _ in range(batch_sz)] 
+            # meta_losses = [0 for _ in range(batch_sz)]
 
             bx, by, bt = self.getBatch(x.cpu().numpy(), y.cpu().numpy(), t)
             fast_weights = None
-            
+
             self.zero_grads()
             # meta-loss on the entire batch + memory
             for i in range(0, batch_sz):
@@ -238,11 +249,17 @@ class Net(nn.Module):
                 # if(self.real_epoch == 0):
                 #     self.push_to_mem(batch_x, batch_y, torch.tensor(t))
 
-                if self.real_epoch == 0: # always true
+                if self.real_epoch == 0:  # always true
                     with torch.no_grad():
-                        self.push_to_mem(batch_x.detach().cpu(), batch_y.detach().cpu(), torch.tensor(t))
+                        self.push_to_mem(
+                            batch_x.detach().cpu(),
+                            batch_y.detach().cpu(),
+                            torch.tensor(t),
+                        )
 
-                meta_loss, logits = self.meta_loss(bx, fast_weights, by) # loss on the meta batch
+                meta_loss, logits = self.meta_loss(
+                    bx, fast_weights, by
+                )  # loss on the meta batch
                 with torch.no_grad():
                     preds = torch.argmax(logits, dim=1)
                     cls_tr_rec.append(macro_recall(preds, by))
@@ -250,7 +267,6 @@ class Net(nn.Module):
                 assert meta_loss.requires_grad, "meta_loss has no grad path to alpha"
                 (meta_loss / batch_sz).backward()
 
-    
             # Taking the meta gradient step (will update the learning rates)
             # self.zero_grad()
 
@@ -259,8 +275,10 @@ class Net(nn.Module):
             # meta_loss.backward()
 
             if self.cfg.grad_clip_norm:
-                torch.nn.utils.clip_grad_norm_(self.parameters(), self.cfg.grad_clip_norm)
-            self.optimizer.step()       
+                torch.nn.utils.clip_grad_norm_(
+                    self.parameters(), self.cfg.grad_clip_norm
+                )
+            self.optimizer.step()
 
             # better zeroing (lower mem)
             self.zero_grad(set_to_none=True)
@@ -268,17 +286,17 @@ class Net(nn.Module):
 
         avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
         return meta_loss.item(), avg_cls_tr_rec
-    
+
     def push_to_mem(self, batch_x, batch_y, t):
         """
         Reservoir sampling to push subsampled stream
         of data points to replay/memory buffer
         """
 
-        if(self.real_epoch > 0 or self.pass_itr>0):
+        if self.real_epoch > 0 or self.pass_itr > 0:
             return
         batch_x = batch_x.cpu()
-        batch_y = batch_y.cpu()              
+        batch_y = batch_y.cpu()
         t = t.cpu()
 
         for i in range(batch_x.shape[0]):
@@ -286,30 +304,30 @@ class Net(nn.Module):
             if len(self.M_new) < self.memories:
                 self.M_new.append([batch_x[i], batch_y[i], t])
             else:
-                p = random.randint(0,self.age)  
+                p = random.randint(0, self.age)
                 if p < self.memories:
                     self.M_new[p] = [batch_x[i], batch_y[i], t]
 
     def getBatch(self, x, y, t, batch_size=None):
         """
-        Given the new data points, create a batch of old + new data, 
+        Given the new data points, create a batch of old + new data,
         where old data is sampled from the memory buffer
         """
 
-        if(x is not None):
+        if x is not None:
             mxi = np.array(x)
             myi = np.array(y)
-            mti = np.ones(x.shape[0], dtype=int)*t        
+            mti = np.ones(x.shape[0], dtype=int) * t
         else:
-            mxi = np.empty( shape=(0, 0) )
-            myi = np.empty( shape=(0, 0) )
-            mti = np.empty( shape=(0, 0) )    
+            mxi = np.empty(shape=(0, 0))
+            myi = np.empty(shape=(0, 0))
+            mti = np.empty(shape=(0, 0))
 
         bxs = []
         bys = []
         bts = []
 
-        if self.cfg.use_old_task_memory and t>0:
+        if self.cfg.use_old_task_memory and t > 0:
             MEM = self.M
         else:
             MEM = self.M_new
@@ -318,14 +336,14 @@ class Net(nn.Module):
 
         # Sample from memory buffer if not empty
         if len(MEM) > 0:
-            order = [i for i in range(0,len(MEM))]
-            osize = min(batch_size,len(MEM))
-            for j in range(0,osize):
+            order = [i for i in range(0, len(MEM))]
+            osize = min(batch_size, len(MEM))
+            for j in range(0, osize):
 
                 # randomly sample from self.M_new memory buffer
                 shuffle(order)
                 k = order[j]
-                x,y,t = MEM[k]
+                x, y, t = MEM[k]
 
                 xi = np.array(x)
                 yi = np.array(y)
@@ -340,18 +358,18 @@ class Net(nn.Module):
             bys.append(myi[j])
             bts.append(mti[j])
 
-        bxs = Variable(torch.from_numpy(np.array(bxs))).float() 
+        bxs = Variable(torch.from_numpy(np.array(bxs))).float()
         bys = Variable(torch.from_numpy(np.array(bys))).long().view(-1)
         bts = Variable(torch.from_numpy(np.array(bts))).long().view(-1)
-        
+
         # handle gpus if specified
         if self.use_cuda:
             bxs = bxs.cuda()
             bys = bys.cuda()
             bts = bts.cuda()
 
-        return bxs,bys,bts
-    
+        return bxs, bys, bts
+
     def zero_grads(self, vars=None):
         """
         :param vars:
@@ -367,7 +385,9 @@ class Net(nn.Module):
                     if p.grad is not None:
                         p.grad.zero_()
 
-    def make_minibatches(self, batch: torch.Tensor, mb_size: int, drop_last: bool = False):
+    def make_minibatches(
+        self, batch: torch.Tensor, mb_size: int, drop_last: bool = False
+    ):
         """
         Split a batch [B, ...] into minibatches of size mb_size,
         return as a single tensor stacked with leading dim = num_minibatches.
@@ -376,10 +396,12 @@ class Net(nn.Module):
         num_full = B // mb_size
         remainder = B % mb_size
 
-        minibatches = [batch[i:i+mb_size] for i in range(0, num_full * mb_size, mb_size)]
+        minibatches = [
+            batch[i : i + mb_size] for i in range(0, num_full * mb_size, mb_size)
+        ]
 
         if remainder > 0 and not drop_last:
-            minibatches.append(batch[num_full * mb_size:])
+            minibatches.append(batch[num_full * mb_size :])
 
         # Now stack into one tensor, padding if necessary
         if drop_last or remainder == 0:

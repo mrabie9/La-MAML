@@ -52,7 +52,9 @@ class EwcConfig:
 class Net(DetectionReplayMixin, nn.Module):
     """EWC continual learner built on top of ``ResNet1D``."""
 
-    def __init__(self, n_inputs: int, n_outputs: int, n_tasks: int, args: object) -> None:
+    def __init__(
+        self, n_inputs: int, n_outputs: int, n_tasks: int, args: object
+    ) -> None:
         super().__init__()
 
         assert n_tasks > 0, "EWC requires a positive number of tasks"
@@ -63,7 +65,8 @@ class Net(DetectionReplayMixin, nn.Module):
         self.classes_per_task = misc_utils.build_task_class_list(
             n_tasks,
             n_outputs,
-            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            nc_per_task=getattr(args, "nc_per_task_list", "")
+            or getattr(args, "nc_per_task", None),
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
@@ -91,15 +94,22 @@ class Net(DetectionReplayMixin, nn.Module):
 
         self._fisher_accum: Optional[Dict[str, torch.Tensor]] = None
         self._fisher_count: int = 0
+
     # ------------------------------------------------------------------
-    def forward(self, x: torch.Tensor, t: int, return_det: bool = False) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, t: int, return_det: bool = False
+    ) -> torch.Tensor:
         det_logits, cls_logits = self._forward_heads(x)
         offset1, offset2 = self._compute_offsets(t)
         masked = cls_logits.clone()
         if offset1 > 0:
-            masked[:, :offset1] = masked[:, :offset1].new_full(masked[:, :offset1].shape, -1e9)
+            masked[:, :offset1] = masked[:, :offset1].new_full(
+                masked[:, :offset1].shape, -1e9
+            )
         if offset2 < self.n_outputs:
-            masked[:, offset2:] = masked[:, offset2:].new_full(masked[:, offset2:].shape, -1e9)
+            masked[:, offset2:] = masked[:, offset2:].new_full(
+                masked[:, offset2:].shape, -1e9
+            )
         if return_det:
             return det_logits, masked
         return masked
@@ -164,9 +174,11 @@ class Net(DetectionReplayMixin, nn.Module):
         #     mem_det_logits, _ = self._forward_heads(mem_x)
         #     mem_loss = self.det_loss(mem_det_logits, mem_y.float())
         #     det_loss = 0.5 * (det_loss + mem_loss)
-        loss = (self.cls_lambda * loss_ce
-                # + self.det_lambda * det_loss
-                + 0.5 * self.lamb * self._ewc_penalty())
+        loss = (
+            self.cls_lambda * loss_ce
+            # + self.det_lambda * det_loss
+            + 0.5 * self.lamb * self._ewc_penalty()
+        )
         loss.backward()
 
         if self.clipgrad is not None:
@@ -198,7 +210,6 @@ class Net(DetectionReplayMixin, nn.Module):
 
     def _forward_heads(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         return self.net.forward_heads(x)
-
 
     # ------------------------------------------------------------------
     def _accumulate_fisher(self, batch_size: int) -> None:
@@ -239,7 +250,9 @@ class Net(DetectionReplayMixin, nn.Module):
             fisher_est = fisher_est * scale
             if name in self.fisher:
                 prev = self.fisher[name]
-                merged = (prev * self._tasks_consolidated + fisher_est) / (self._tasks_consolidated + 1)
+                merged = (prev * self._tasks_consolidated + fisher_est) / (
+                    self._tasks_consolidated + 1
+                )
                 self.fisher[name] = merged
             else:
                 self.fisher[name] = fisher_est
@@ -256,7 +269,9 @@ class Net(DetectionReplayMixin, nn.Module):
         for name, param in self.net.named_parameters():
             if name not in self.fisher:
                 continue
-            penalty += (self.fisher[name] * (param - self.param_star[name]).pow(2)).sum()
+            penalty += (
+                self.fisher[name] * (param - self.param_star[name]).pow(2)
+            ).sum()
         return penalty
 
     # ------------------------------------------------------------------

@@ -26,6 +26,7 @@ _pre_parser.add_argument("-o", "--output-dir", type=Path, default=None)
 _pre_args, _ = _pre_parser.parse_known_args()
 if _pre_args.output_dir is not None:
     import matplotlib
+
     matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
@@ -204,7 +205,9 @@ def plot_per_task_curves(
         if acc_values is None:
             raise KeyError("Neither 'cls_tr_rec' nor 'tr_acc' found in task metrics.")
         c = get_task_color(task_idx, task_names)
-        axes[0].plot(steps, task["losses"], label=f"Task {task_idx}", color=c, alpha=0.8)
+        axes[0].plot(
+            steps, task["losses"], label=f"Task {task_idx}", color=c, alpha=0.8
+        )
         axes[1].plot(
             steps,
             np.asarray(acc_values, dtype=float),
@@ -226,7 +229,9 @@ def plot_per_task_curves(
 
     plt.tight_layout()
     if output_dir:
-        fig.savefig(output_dir / "per_task_loss_and_acc.png", dpi=150, bbox_inches="tight")
+        fig.savefig(
+            output_dir / "per_task_loss_and_acc.png", dpi=150, bbox_inches="tight"
+        )
     else:
         plt.show()
     plt.close()
@@ -252,7 +257,9 @@ def plot_per_epoch_curves(
         acc_ep = _aggregate_per_epoch(np.asarray(acc_values, dtype=float), n_epochs)
         epochs = np.arange(len(loss_ep))
         c = get_task_color(task_idx, task_names)
-        axes[0].plot(epochs, loss_ep, "o-", label=f"Task {task_idx}", color=c, alpha=0.8)
+        axes[0].plot(
+            epochs, loss_ep, "o-", label=f"Task {task_idx}", color=c, alpha=0.8
+        )
         axes[1].plot(epochs, acc_ep, "o-", label=f"Task {task_idx}", color=c, alpha=0.8)
 
     axes[0].set_ylabel("Loss (mean)")
@@ -268,7 +275,9 @@ def plot_per_epoch_curves(
 
     plt.tight_layout()
     if output_dir:
-        fig.savefig(output_dir / "per_epoch_loss_and_acc.png", dpi=150, bbox_inches="tight")
+        fig.savefig(
+            output_dir / "per_epoch_loss_and_acc.png", dpi=150, bbox_inches="tight"
+        )
     else:
         plt.show()
     plt.close()
@@ -297,11 +306,7 @@ def plot_final_validation(
     if val_acc is None and val_det_acc is None and val_det_fa is None:
         return
 
-    lengths = [
-        len(v)
-        for v in (val_det_fa, val_det_acc, val_acc)
-        if v is not None
-    ]
+    lengths = [len(v) for v in (val_det_fa, val_det_acc, val_acc) if v is not None]
     if not lengths:
         return
     n_tasks = min(lengths)
@@ -519,8 +524,11 @@ def main() -> None:
         raise SystemExit(f"Not a directory: {metrics_dir}")
 
     import matplotlib
+
     if args.output_dir is None and matplotlib.get_backend().lower() == "agg":
-        print(f"Non-interactive backend detected. Defaulting to saving plots in {metrics_dir}")
+        print(
+            f"Non-interactive backend detected. Defaulting to saving plots in {metrics_dir}"
+        )
         args.output_dir = metrics_dir
 
     if args.output_dir is not None:

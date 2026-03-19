@@ -12,7 +12,7 @@ from torch.utils.data import ConcatDataset, DataLoader
 import parser as file_parser
 from main import (
     _split_labels,
-    _noise_label_for_task,
+    _noise_label_max_for_task,
     _get_det_logits,
     _false_alarm_rate,
     eval_tasks,
@@ -22,7 +22,11 @@ from main import (
 )
 from metrics.metrics import confusion_matrix
 from utils import misc_utils
-from utils.training_metrics import macro_f1_including_noise, macro_precision_signal_only, macro_recall
+from utils.training_metrics import (
+    macro_f1_including_noise,
+    macro_precision_signal_only,
+    macro_recall,
+)
 
 
 def _default_main_config_chain() -> List[str]:
@@ -117,7 +121,9 @@ def build_single_round_loaders(
         train_loader, test_loader, indices = build_single_round_loaders(args, loader)
     """
     task_names = getattr(loader, "task_names", [])
-    selected_indices = _select_task_indices_from_order(task_names, getattr(args, "task_order_files", ""))
+    selected_indices = _select_task_indices_from_order(
+        task_names, getattr(args, "task_order_files", "")
+    )
     if not selected_indices:
         raise SystemExit("No tasks selected for single-round experiment.")
 
@@ -147,10 +153,14 @@ def build_single_round_loaders(
         print("combining....")
 
     combined_train_dataset = (
-        ConcatDataset(selected_train_datasets) if len(selected_train_datasets) > 1 else selected_train_datasets[0]
+        ConcatDataset(selected_train_datasets)
+        if len(selected_train_datasets) > 1
+        else selected_train_datasets[0]
     )
     combined_test_dataset = (
-        ConcatDataset(selected_test_datasets) if len(selected_test_datasets) > 1 else selected_test_datasets[0]
+        ConcatDataset(selected_test_datasets)
+        if len(selected_test_datasets) > 1
+        else selected_test_datasets[0]
     )
 
     train_loader = DataLoader(
@@ -195,7 +205,9 @@ def run_single_round_training(
     Usage:
         result_val_t, result_val_a, time_spent = run_single_round_training(model, train_loader, test_loader, args)
     """
-    device = torch.device("cuda" if getattr(args, "cuda", False) and torch.cuda.is_available() else "cpu")
+    device = torch.device(
+        "cuda" if getattr(args, "cuda", False) and torch.cuda.is_available() else "cpu"
+    )
     model.to(device)
 
     from tqdm import tqdm  # Imported lazily to keep top-level imports minimal.
@@ -215,7 +227,7 @@ def run_single_round_training(
     time_start = time.time()
 
     current_task_index = 0
-    evaluator = eval_tasks
+    noise_label_for_task = _noise_label_max_for_task(train_loader)
 
     for epoch in range(args.n_epochs):
         model.real_epoch = epoch
@@ -236,53 +248,64 @@ def run_single_round_training(
                 raise ValueError("Unexpected batch structure in single-round training.")
 
             xb = xb.to(device)
-            yb_cls, yb_det = _split_labels(yb)
-            if not torch.is_tensor(yb_cls):
-                yb_cls = torch.as_tensor(yb_cls)
-            if yb_det is not None and not torch.is_tensor(yb_det):
-                yb_det = torch.as_tensor(yb_det)
-            if yb_det is not None:
-                yb = (yb_cls.to(device), yb_det.to(device))
+            y_cls = _split_labels(yb)
+            if not torch.is_tensor(y_cls):
+                y_cls = torch.as_tensor(y_cls)
+
+            if getattr(args, "use_detector_arch", False):
+                if isinstance(yb, (tuple, list)) and len(yb) == 2:
+                    cls_part, det_part = yb[0], yb[1]
+                    if not torch.is_tensor(cls_part):
+                        cls_part = torch.as_tensor(cls_part)
+                    if not torch.is_tensor(det_part):
+                        det_part = torch.as_tensor(det_part)
+                    y_for_observe = (cls_part.to(device), det_part.to(device))
+                elif torch.is_tensor(yb) and yb.dim() == 2 and yb.size(1) == 2:
+                    y_for_observe = (yb[:, 0].to(device), yb[:, 1].to(device))
+                elif isinstance(yb, np.ndarray) and yb.ndim == 2 and yb.shape[1] == 2:
+                    y_for_observe = (
+                        torch.as_tensor(yb[:, 0]).to(device),
+                        torch.as_tensor(yb[:, 1]).to(device),
+                    )
+                else:
+                    y_for_observe = y_cls.to(device)
             else:
-                yb = yb_cls.to(device)
+                y_for_observe = y_cls.to(device)
 
             model.train()
-            loss, cls_tr_rec = model.observe(xb, yb, current_task_index)
+            loss, cls_tr_rec = model.observe(xb, y_for_observe, current_task_index)
 
             epoch_losses.append(float(loss))
 
             model.eval()
             with torch.no_grad():
-                logits = model(xb, current_task_index) if args.model != "anml" else model(xb, fast_weights=None)
+                logits = (
+                    model(xb, current_task_index)
+                    if args.model != "anml"
+                    else model(xb, fast_weights=None)
+                )
                 predictions = torch.argmax(logits, dim=1).cpu()
                 det_logits = _get_det_logits(model, xb, current_task_index)
             model.train()
 
-            y_cls_for_metric = yb_cls.cpu()
-            y_det_for_metric = (
-                yb_det.cpu()
-                if yb_det is not None and torch.is_tensor(yb_det)
-                else (torch.as_tensor(yb_det) if yb_det is not None else None)
-            )
-            noise_label = _noise_label_for_task(args, current_task_index, getattr(args, "classes_per_task", None))
+            y_cls_for_metric = y_cls.cpu()
+            noise_label = noise_label_for_task
             if getattr(model, "split", False):
                 offset1, _ = model.compute_offsets(current_task_index)
                 y_cls_for_metric = y_cls_for_metric - offset1
                 if noise_label is not None:
                     noise_label = noise_label - offset1
 
-            precision = macro_precision_signal_only(predictions, y_cls_for_metric, noise_label)
+            precision = macro_precision_signal_only(
+                predictions, y_cls_for_metric, noise_label
+            )
             f1 = macro_f1_including_noise(predictions, y_cls_for_metric)
-            if y_det_for_metric is not None:
-                cls_mask = y_det_for_metric == 1
-                if cls_mask.any():
-                    cls_tr_rec = macro_recall(predictions[cls_mask], y_cls_for_metric[cls_mask])
-                else:
-                    cls_tr_rec = 0.0
-            elif noise_label is not None:
+            if noise_label is not None:
                 cls_mask = y_cls_for_metric != noise_label
                 if cls_mask.any():
-                    cls_tr_rec = macro_recall(predictions[cls_mask], y_cls_for_metric[cls_mask])
+                    cls_tr_rec = macro_recall(
+                        predictions[cls_mask], y_cls_for_metric[cls_mask]
+                    )
                 else:
                     cls_tr_rec = 0.0
             else:
@@ -290,13 +313,12 @@ def run_single_round_training(
 
             det_rec = 0.0
             det_fa = 0.0
-            if det_logits is not None and y_det_for_metric is not None:
-                det_pred = (det_logits >= 0).long().cpu()
-                det_rec = macro_recall(det_pred, y_det_for_metric)
-                det_fa = _false_alarm_rate(det_pred, y_det_for_metric)
-            elif noise_label is not None:
+            if noise_label is not None:
                 det_targets = (y_cls_for_metric != noise_label).long()
-                det_pred = (predictions != noise_label).long()
+                if det_logits is not None:
+                    det_pred = (det_logits >= 0).long().cpu()
+                else:
+                    det_pred = (predictions != noise_label).long()
                 det_rec = macro_recall(det_pred, det_targets)
                 det_fa = _false_alarm_rate(det_pred, det_targets)
 
@@ -320,7 +342,9 @@ def run_single_round_training(
         # Validation at end of epoch on the combined test loader.
         val_loaders = [test_loader]
         val_outputs = eval_tasks(model, val_loaders, args)
-        val_acc, val_prec, val_f1, val_det_acc, val_det_fa = _split_eval_output(val_outputs)
+        val_acc, val_prec, val_f1, val_det_acc, val_det_fa = _split_eval_output(
+            val_outputs
+        )
         if isinstance(val_acc, (list, tuple)):
             val_acc_values = [float(v) for v in val_acc]
             cur_val_acc = float(val_acc[0])
@@ -351,18 +375,28 @@ def run_single_round_training(
 
         avg_loss = float(np.mean(epoch_losses)) if epoch_losses else float("nan")
         avg_rec = float(np.mean(epoch_recalls)) if epoch_recalls else float("nan")
-        avg_prec = float(np.mean(epoch_precisions)) if epoch_precisions else float("nan")
+        avg_prec = (
+            float(np.mean(epoch_precisions)) if epoch_precisions else float("nan")
+        )
         avg_f1 = float(np.mean(epoch_f1s)) if epoch_f1s else float("nan")
-        avg_det_rec = float(np.mean(epoch_det_recalls)) if epoch_det_recalls else float("nan")
+        avg_det_rec = (
+            float(np.mean(epoch_det_recalls)) if epoch_det_recalls else float("nan")
+        )
         avg_det_fa = float(np.mean(epoch_det_fas)) if epoch_det_fas else float("nan")
 
         per_epoch_losses.append(avg_loss)
         per_epoch_train_recalls.append(avg_rec)
         per_epoch_train_det_rec.append(avg_det_rec)
         per_epoch_train_det_pfa.append(avg_det_fa)
-        per_epoch_val_cls_rec.append(cur_val_acc if cur_val_acc is not None else float("nan"))
-        per_epoch_val_det_rec.append(cur_val_det_rec if cur_val_det_rec is not None else float("nan"))
-        per_epoch_val_det_pfa.append(cur_val_det_fa if cur_val_det_fa is not None else float("nan"))
+        per_epoch_val_cls_rec.append(
+            cur_val_acc if cur_val_acc is not None else float("nan")
+        )
+        per_epoch_val_det_rec.append(
+            cur_val_det_rec if cur_val_det_rec is not None else float("nan")
+        )
+        per_epoch_val_det_pfa.append(
+            cur_val_det_fa if cur_val_det_fa is not None else float("nan")
+        )
         per_epoch_train_f1.append(avg_f1)
         per_epoch_val_f1.append(cur_val_f1 if cur_val_f1 is not None else float("nan"))
 
@@ -385,7 +419,6 @@ def run_single_round_training(
         padded_val[row_idx, : len(row)] = torch.as_tensor(row, dtype=torch.float)
 
     time_spent = time.time() - time_start
-
 
     metrics_payload: Dict[str, np.ndarray] = {
         "losses": np.asarray(per_epoch_losses, dtype=float),
@@ -490,9 +523,14 @@ def main() -> None:
             pass
     print(args.cuda)
     print("Model device:", next(model.parameters()).device)
-    log_state(args.state_logging, "Model initialized on device {}".format(next(model.parameters()).device))
+    log_state(
+        args.state_logging,
+        "Model initialized on device {}".format(next(model.parameters()).device),
+    )
 
-    train_loader, test_loader, selected_indices = build_single_round_loaders(args, loader)
+    train_loader, test_loader, selected_indices = build_single_round_loaders(
+        args, loader
+    )
     print("Single-round using task indices:", selected_indices)
 
     result_val_t, result_val_a, time_spent, metrics_payload = run_single_round_training(
@@ -508,7 +546,9 @@ def main() -> None:
     task_order_path = os.path.join(logs_dir, "task_order.txt")
     task_names = getattr(loader, "task_names", None)
     if task_names and selected_indices:
-        combined_name = "+".join(task_names[i] for i in selected_indices if 0 <= i < len(task_names))
+        combined_name = "+".join(
+            task_names[i] for i in selected_indices if 0 <= i < len(task_names)
+        )
     else:
         combined_name = "task0"
     with open(task_order_path, "a", encoding="utf-8") as f_task_order:
@@ -516,9 +556,16 @@ def main() -> None:
 
     dummy_test_t = torch.empty((0,), dtype=torch.long)
     dummy_test_a = torch.empty((0, 0), dtype=torch.float)
-    _ = confusion_matrix(result_val_t, result_val_a, args.log_dir, "results_single_round.txt")
-    save_results(args, result_val_t, result_val_a, dummy_test_t, dummy_test_a, model, time_spent)
-    log_state(args.state_logging, "Single-round results saved; total runtime {:.2f}s".format(time_spent))
+    _ = confusion_matrix(
+        result_val_t, result_val_a, args.log_dir, "results_single_round.txt"
+    )
+    save_results(
+        args, result_val_t, result_val_a, dummy_test_t, dummy_test_a, model, time_spent
+    )
+    log_state(
+        args.state_logging,
+        "Single-round results saved; total runtime {:.2f}s".format(time_spent),
+    )
 
     # Print and append total runtime for this single-round experiment.
     print("Total runtime: {:.2f} seconds".format(time_spent))
@@ -534,4 +581,3 @@ def main() -> None:
 if __name__ == "__main__":
     print("New Single-Round Experiment Starting...")
     main()
-

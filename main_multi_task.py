@@ -4,6 +4,7 @@ from tqdm import tqdm
 import torch
 from torch.autograd import Variable
 
+
 def eval_iid_tasks(model, tasks, args):
 
     model.eval()
@@ -11,7 +12,7 @@ def eval_iid_tasks(model, tasks, args):
     for t, task_loader in enumerate(tasks):
         rt = 0
 
-        for (i, (x, y, super_y)) in enumerate(task_loader):
+        for i, (x, y, super_y) in enumerate(task_loader):
             if args.cuda:
                 x = x.cuda()
             _, p = torch.max(model(x, super_y).data.cpu(), 1, keepdim=False)
@@ -19,6 +20,7 @@ def eval_iid_tasks(model, tasks, args):
 
         result.append(rt / len(task_loader.dataset))
     return result
+
 
 def life_experience_iid(model, inc_loader, args):
     result_val_a = []
@@ -38,8 +40,8 @@ def life_experience_iid(model, inc_loader, args):
         model.real_epoch = ep
 
         prog_bar = tqdm(train_loader)
-        for (i, (x, y, super_y)) in enumerate(prog_bar):
-            if((i % args.log_every) == 0):
+        for i, (x, y, super_y) in enumerate(prog_bar):
+            if (i % args.log_every) == 0:
                 result_val_a.append(evaluator(model, val_tasks, args))
                 result_val_t.append(task_info["task"])
 
@@ -54,13 +56,23 @@ def life_experience_iid(model, inc_loader, args):
 
             model.train()
 
-            loss, cls_tr_rec = model.observe(Variable(v_x), Variable(v_y), Variable(super_v_y))
+            loss, cls_tr_rec = model.observe(
+                Variable(v_x), Variable(v_y), Variable(super_v_y)
+            )
 
-            val_acc = sum(result_val_a[-1]).item()/len(result_val_a[-1]) if result_val_a else 0.0
+            val_acc = (
+                sum(result_val_a[-1]).item() / len(result_val_a[-1])
+                if result_val_a
+                else 0.0
+            )
             prog_bar.set_description(
                 "Epoch: {}/{} | Iter: {} | Loss: {} | Acc: Tr: {} Val: {}".format(
-                    ep+1, args.n_epochs, i%(1000*args.n_epochs), round(loss, 3),
-                    round(cls_tr_rec, 5), round(val_acc, 5)
+                    ep + 1,
+                    args.n_epochs,
+                    i % (1000 * args.n_epochs),
+                    round(loss, 3),
+                    round(cls_tr_rec, 5),
+                    round(val_acc, 5),
                 )
             )
 
@@ -71,14 +83,20 @@ def life_experience_iid(model, inc_loader, args):
         result_test_a.append(evaluator(model, test_tasks, args))
         result_test_t.append(task_info["task"])
 
-
     print("####Final Validation Accuracy####")
-    print("Final Results:- \n Total Accuracy: {} \n Individual Accuracy: {}".format(sum(result_val_a[-1])/len(result_val_a[-1]), result_val_a[-1]))
+    print(
+        "Final Results:- \n Total Accuracy: {} \n Individual Accuracy: {}".format(
+            sum(result_val_a[-1]) / len(result_val_a[-1]), result_val_a[-1]
+        )
+    )
 
     if args.calc_test_accuracy:
         print("####Final Test Accuracy####")
-        print("Final Results:- \n Total Accuracy: {} \n Individual Accuracy: {}".format(sum(result_test_a[-1])/len(result_test_a[-1]), result_test_a[-1]))
-
+        print(
+            "Final Results:- \n Total Accuracy: {} \n Individual Accuracy: {}".format(
+                sum(result_test_a[-1]) / len(result_test_a[-1]), result_test_a[-1]
+            )
+        )
 
     time_end = time.time()
     time_spent = time_end - time_start

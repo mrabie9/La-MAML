@@ -10,6 +10,7 @@ import torch
 import pytest
 from model.resnet1d import AdcIqAdapter
 
+
 def test_adc_iq_adapter_shape_and_type():
     adapter = AdcIqAdapter()
     x = torch.randn(5, 3, 2, 128, dtype=torch.float32)  # (B, 3, 2, L)
@@ -19,6 +20,7 @@ def test_adc_iq_adapter_shape_and_type():
     assert y.shape == (5, 2, 128)
     assert y.dtype == x.dtype
     assert y.device == x.device
+
 
 def test_adc_iq_adapter_linear_mixing():
     B, L = 2, 4
@@ -47,6 +49,7 @@ def test_adc_iq_adapter_linear_mixing():
     # channel 1: 1 - 2 = -1
     assert torch.allclose(y[:, 0, :], torch.full((B, L), 6.0))
     assert torch.allclose(y[:, 1, :], torch.full((B, L), -1.0))
+
 
 def test_adc_iq_adapter_raises_on_invalid_shape():
     adapter = AdcIqAdapter()

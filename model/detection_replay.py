@@ -15,7 +15,9 @@ class _ZeroLoss(nn.Module):
 class DetectionReplayMixin:
     """Shared detection replay buffer utilities for continual learners."""
 
-    def _init_det_replay(self, det_memories: int, det_replay_batch: int, enabled: bool | None = None) -> None:
+    def _init_det_replay(
+        self, det_memories: int, det_replay_batch: int, enabled: bool | None = None
+    ) -> None:
         self.det_enabled = True if enabled is None else bool(enabled)
         self.det_loss = nn.BCEWithLogitsLoss()
         self.det_memories = int(det_memories)

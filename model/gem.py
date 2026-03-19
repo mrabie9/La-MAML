@@ -1,6 +1,6 @@
 # TODO: update mmemory buffer to store IQ values together
 
-### This is a copy of GEM from https://github.com/facebookresearch/GradientEpisodicMemory. 
+### This is a copy of GEM from https://github.com/facebookresearch/GradientEpisodicMemory.
 ### In order to ensure complete reproducability, we do not change the file and treat it as a baseline.
 
 # Copyright 2019-present, IBM Research
@@ -28,7 +28,7 @@ from utils import misc_utils
 
 @dataclass
 class GemConfig:
-    memory_strength: float = 0.0 # lambda in the paper
+    memory_strength: float = 0.0  # lambda in the paper
     glances: int = 1
     lr: float = 1e-3
     n_memories: int = 0
@@ -51,23 +51,25 @@ class GemConfig:
                 setattr(cfg, field, getattr(args, field))
         return cfg
 
+
 # Auxiliary functions useful for GEM's inner optimization.
+
 
 def compute_offsets(task, nc_per_task, is_cifar):
     """
-        Compute offsets for cifar to determine which
-        outputs to select for a given task.
+    Compute offsets for cifar to determine which
+    outputs to select for a given task.
     """
     return misc_utils.compute_offsets(task, nc_per_task)
 
 
 def store_grad(pp, grads, grad_dims, tid):
     """
-        This stores parameter gradients of past tasks.
-        pp: parameters
-        grads: gradients
-        grad_dims: list with number of parameters per layers
-        tid: task id
+    This stores parameter gradients of past tasks.
+    pp: parameters
+    grads: gradients
+    grad_dims: list with number of parameters per layers
+    tid: task id
     """
     # store the gradients
     grads[:, tid].fill_(0.0)
@@ -75,45 +77,43 @@ def store_grad(pp, grads, grad_dims, tid):
     for param in pp():
         if param.grad is not None:
             beg = 0 if cnt == 0 else sum(grad_dims[:cnt])
-            en = sum(grad_dims[:cnt + 1])
-            grads[beg: en, tid].copy_(param.grad.data.view(-1))
+            en = sum(grad_dims[: cnt + 1])
+            grads[beg:en, tid].copy_(param.grad.data.view(-1))
         cnt += 1
 
 
 def overwrite_grad(pp, newgrad, grad_dims):
     """
-        This is used to overwrite the gradients with a new gradient
-        vector, whenever violations occur.
-        pp: parameters
-        newgrad: corrected gradient
-        grad_dims: list storing number of parameters at each layer
+    This is used to overwrite the gradients with a new gradient
+    vector, whenever violations occur.
+    pp: parameters
+    newgrad: corrected gradient
+    grad_dims: list storing number of parameters at each layer
     """
     cnt = 0
     for param in pp():
         if param.grad is not None:
             beg = 0 if cnt == 0 else sum(grad_dims[:cnt])
-            en = sum(grad_dims[:cnt + 1])
-            this_grad = newgrad[beg: en].contiguous().view(
-                param.grad.data.size())
+            en = sum(grad_dims[: cnt + 1])
+            this_grad = newgrad[beg:en].contiguous().view(param.grad.data.size())
             param.grad.data.copy_(this_grad)
         cnt += 1
 
 
-
-def project2cone2(gradient, memories, margin=0.5, eps = 1e-3):
+def project2cone2(gradient, memories, margin=0.5, eps=1e-3):
     """
-        Solves the GEM dual QP described in the paper given a proposed
-        gradient "gradient", and a memory of task gradients "memories".
-        Overwrites "gradient" with the final projected update.
-        input:  gradient, p-vector
-        input:  memories, (t * p)-vector
-        output: x, p-vector
+    Solves the GEM dual QP described in the paper given a proposed
+    gradient "gradient", and a memory of task gradients "memories".
+    Overwrites "gradient" with the final projected update.
+    input:  gradient, p-vector
+    input:  memories, (t * p)-vector
+    output: x, p-vector
     """
     memories_np = memories.cpu().t().double().numpy()
     gradient_np = gradient.cpu().contiguous().view(-1).double().numpy()
     t = memories_np.shape[0]
     P = np.dot(memories_np, memories_np.transpose())
-    P = 0.5 * (P + P.transpose())  + np.eye(t) * eps
+    P = 0.5 * (P + P.transpose()) + np.eye(t) * eps
     q = np.dot(memories_np, gradient_np) * -1
     G = np.eye(t)
     h = np.zeros(t) + margin
@@ -123,24 +123,22 @@ def project2cone2(gradient, memories, margin=0.5, eps = 1e-3):
 
 
 class Net(DetectionReplayMixin, nn.Module):
-    def __init__(self,
-                 n_inputs,
-                 n_outputs,
-                 n_tasks,
-                 args):
+    def __init__(self, n_inputs, n_outputs, n_tasks, args):
         super(Net, self).__init__()
         self.cfg = GemConfig.from_args(args)
         self.margin = self.cfg.memory_strength
-        self.is_cifar = (
-            (self.cfg.dataset == 'cifar100') or (self.cfg.dataset == 'tinyimagenet')
+        self.is_cifar = (self.cfg.dataset == "cifar100") or (
+            self.cfg.dataset == "tinyimagenet"
         )
 
         # --- IQ mode toggle ---
         self.input_channels = self.cfg.input_channels
         self.is_iq = (self.cfg.dataset == "iq") or (self.input_channels == 2)
 
-        if self.cfg.arch != 'resnet1d':
-            raise ValueError(f"Unsupported arch {self.cfg.arch}; only resnet1d is available now.")
+        if self.cfg.arch != "resnet1d":
+            raise ValueError(
+                f"Unsupported arch {self.cfg.arch}; only resnet1d is available now."
+            )
         self.net = ResNet1D(n_outputs, args)
         self.net.define_task_lr_params(alpha_init=self.cfg.alpha_init)
         self.netforward = self.net.forward
@@ -156,7 +154,9 @@ class Net(DetectionReplayMixin, nn.Module):
         )
 
         self.opt = optim.SGD(self._ll_params(), self.cfg.lr, momentum=0.9)
-        self.det_opt = optim.SGD(self.net.det_head.parameters(), self.cfg.lr, momentum=0.9)
+        self.det_opt = optim.SGD(
+            self.net.det_head.parameters(), self.cfg.lr, momentum=0.9
+        )
 
         self.n_memories = int(self.cfg.n_memories)
         self.task_memory_capacities = self._build_task_memory_capacities(
@@ -171,10 +171,14 @@ class Net(DetectionReplayMixin, nn.Module):
             assert n_inputs % 2 == 0, f"n_inputs={n_inputs} must be 2*L for IQ."
             self.seq_len = n_inputs // 2
             # (task, mem, C=2, L)
-            self.memory_data = torch.FloatTensor(n_tasks, self.max_task_memories, 2, self.seq_len)
+            self.memory_data = torch.FloatTensor(
+                n_tasks, self.max_task_memories, 2, self.seq_len
+            )
         else:
             # (task, mem, F)
-            self.memory_data = torch.FloatTensor(n_tasks, self.max_task_memories, n_inputs)
+            self.memory_data = torch.FloatTensor(
+                n_tasks, self.max_task_memories, n_inputs
+            )
 
         self.memory_labs = torch.LongTensor(n_tasks, self.max_task_memories)
         if self.gpu:
@@ -200,7 +204,8 @@ class Net(DetectionReplayMixin, nn.Module):
         self.classes_per_task = misc_utils.build_task_class_list(
             n_tasks,
             n_outputs,
-            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            nc_per_task=getattr(args, "nc_per_task_list", "")
+            or getattr(args, "nc_per_task", None),
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
@@ -208,7 +213,9 @@ class Net(DetectionReplayMixin, nn.Module):
         if self.gpu:
             self.cuda()
 
-    def _build_task_memory_capacities(self, total_memories: int, n_tasks: int) -> list[int]:
+    def _build_task_memory_capacities(
+        self, total_memories: int, n_tasks: int
+    ) -> list[int]:
         """Split a total memory budget across tasks.
 
         Args:
@@ -242,7 +249,9 @@ class Net(DetectionReplayMixin, nn.Module):
             L = F // 2
             return x.view(B, 2, L)
         else:
-            raise ValueError(f"Unexpected IQ input shape {tuple(x.shape)}; expected (B, 2, L) or (B, 2L).")
+            raise ValueError(
+                f"Unexpected IQ input shape {tuple(x.shape)}; expected (B, 2, L) or (B, 2L)."
+            )
 
     def _adapt_for_memory(self, x: torch.Tensor) -> torch.Tensor:
         """Convert IQ inputs to the canonical replay-memory shape.
@@ -286,9 +295,9 @@ class Net(DetectionReplayMixin, nn.Module):
             yield param
 
     def forward(self, x, t):
-        if self.cfg.dataset == 'tinyimagenet':
+        if self.cfg.dataset == "tinyimagenet":
             x = x.view(-1, 3, 64, 64)
-        elif self.cfg.dataset == 'cifar100':
+        elif self.cfg.dataset == "cifar100":
             x = x.view(-1, 3, 32, 32)
         elif self.is_iq:
             x = self._ensure_iq_shape(x)  # (B, 2, L)
@@ -300,7 +309,7 @@ class Net(DetectionReplayMixin, nn.Module):
         if offset1 > 0:
             output[:, :offset1].data.fill_(-10e10)
         if offset2 < self.n_outputs:
-            output[:, offset2:self.n_outputs].data.fill_(-10e10)
+            output[:, offset2 : self.n_outputs].data.fill_(-10e10)
         return output
 
     def observe(self, x, y, t):
@@ -363,7 +372,11 @@ class Net(DetectionReplayMixin, nn.Module):
                 if task_capacity > 0:
                     write_pointer = int(self.task_mem_ptr[t].item())
                     # extract the true batch size
-                    bsz = y[0].data.size(0) if isinstance(y, (tuple, list)) else y.data.size(0)
+                    bsz = (
+                        y[0].data.size(0)
+                        if isinstance(y, (tuple, list))
+                        else y.data.size(0)
+                    )
                     endcnt = min(write_pointer + bsz, task_capacity)
                     effbsz = endcnt - write_pointer
                     # Store adapter output (e.g. 3-ADC -> 2-channel) so replay matches forward
@@ -371,15 +384,23 @@ class Net(DetectionReplayMixin, nn.Module):
                     self.memory_data[t, write_pointer:endcnt].copy_(mem_x)
 
                     if bsz == 1:
-                        y_val = y[0].data[0] if isinstance(y, (tuple, list)) else y.data[0]
+                        y_val = (
+                            y[0].data[0] if isinstance(y, (tuple, list)) else y.data[0]
+                        )
                         self.memory_labs[t, write_pointer] = y_val
                     else:
-                        y_slice = y[0].data[:effbsz] if isinstance(y, (tuple, list)) else y.data[:effbsz]
+                        y_slice = (
+                            y[0].data[:effbsz]
+                            if isinstance(y, (tuple, list))
+                            else y.data[:effbsz]
+                        )
                         self.memory_labs[t, write_pointer:endcnt].copy_(y_slice)
 
                     if effbsz > 0:
                         filled_before_update = int(self.task_mem_filled[t].item())
-                        self.task_mem_filled[t] = min(task_capacity, filled_before_update + effbsz)
+                        self.task_mem_filled[t] = min(
+                            task_capacity, filled_before_update + effbsz
+                        )
                     self.task_mem_ptr[t] = 0 if endcnt == task_capacity else endcnt
 
             # gradients on past tasks (replay)
@@ -387,18 +408,25 @@ class Net(DetectionReplayMixin, nn.Module):
                 for tt in range(len(self.observed_tasks) - 1):
                     self.zero_grad()
                     past_task = self.observed_tasks[tt]
-                    offset1, offset2 = compute_offsets(past_task, self.classes_per_task, self.is_cifar)
+                    offset1, offset2 = compute_offsets(
+                        past_task, self.classes_per_task, self.is_cifar
+                    )
                     filled = int(self.task_mem_filled[past_task].item())
                     if filled == 0:
                         continue  # nothing stored for this task yet
 
                     # replay batch (shape already in memory)
-                    mem_x = Variable(self.memory_data[past_task, :filled])          # (mem, F) or (mem, 2, L)
-                    mem_y = Variable(self.memory_labs[past_task, :filled])          # (mem,)
+                    mem_x = Variable(
+                        self.memory_data[past_task, :filled]
+                    )  # (mem, F) or (mem, 2, L)
+                    mem_y = Variable(self.memory_labs[past_task, :filled])  # (mem,)
 
                     logits_replay = self.forward(mem_x, past_task)[:, offset1:offset2]
                     targets_replay = mem_y - offset1
-                    if targets_replay.min() < 0 or targets_replay.max() >= logits_replay.size(1):
+                    if (
+                        targets_replay.min() < 0
+                        or targets_replay.max() >= logits_replay.size(1)
+                    ):
                         raise ValueError(
                             f"GEM replay target out of range for task {past_task}: "
                             f"min={int(targets_replay.min())}, max={int(targets_replay.max())}, "
@@ -407,7 +435,9 @@ class Net(DetectionReplayMixin, nn.Module):
                     ptloss = self.ce(logits_replay, targets_replay)
                     ptloss.backward()
                     if self.cfg.grad_clip_norm:
-                        torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.cfg.grad_clip_norm)
+                        torch.nn.utils.clip_grad_norm_(
+                            self.net.parameters(), self.cfg.grad_clip_norm
+                        )
                     store_grad(self._ll_params, self.grads, self.grad_dims, past_task)
 
             # current batch
@@ -426,17 +456,26 @@ class Net(DetectionReplayMixin, nn.Module):
             loss = self.ce(logits, targets)
             loss.backward()
             if self.cfg.grad_clip_norm:
-                torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.cfg.grad_clip_norm)
+                torch.nn.utils.clip_grad_norm_(
+                    self.net.parameters(), self.cfg.grad_clip_norm
+                )
 
             # GEM projection if needed
             if len(self.observed_tasks) > 1:
                 store_grad(self._ll_params, self.grads, self.grad_dims, t)
                 device = torch.device("cuda") if self.gpu else torch.device("cpu")
-                indx = torch.tensor(self.observed_tasks[:-1], dtype=torch.long, device=device)
-                dotp = torch.mm(self.grads[:, t].unsqueeze(0), self.grads.index_select(1, indx))
+                indx = torch.tensor(
+                    self.observed_tasks[:-1], dtype=torch.long, device=device
+                )
+                dotp = torch.mm(
+                    self.grads[:, t].unsqueeze(0), self.grads.index_select(1, indx)
+                )
                 if (dotp < 0).sum() != 0:
-                    project2cone2(self.grads[:, t].unsqueeze(1),
-                                  self.grads.index_select(1, indx), self.margin)
+                    project2cone2(
+                        self.grads[:, t].unsqueeze(1),
+                        self.grads.index_select(1, indx),
+                        self.margin,
+                    )
                     overwrite_grad(self._ll_params, self.grads[:, t], self.grad_dims)
 
             self.opt.step()

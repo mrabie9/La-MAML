@@ -90,7 +90,9 @@ def _parse_epoch_timings(lines: Iterable[str]) -> List[EpochTiming]:
     return timings
 
 
-def _summarise_current_training(timings: List[EpochTiming]) -> Tuple[float, float, float]:
+def _summarise_current_training(
+    timings: List[EpochTiming],
+) -> Tuple[float, float, float]:
     """Summarise current total, eval, and train time.
 
     Args:
@@ -212,4 +214,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

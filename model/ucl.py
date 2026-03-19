@@ -71,16 +71,24 @@ class BayesianLinear(nn.Module):
         self.weight_mu = nn.Parameter(torch.Tensor(out_features, in_features))
         fan_in, _ = _calculate_fan_in_and_fan_out(self.weight_mu)
         total_var = 2.0 / fan_in
-        noise_var = total_var * ratio # spread of posterior over mu of weights (epistemic uncertainty)
-        mu_var = total_var - noise_var # init variance of mu (to enable learning)
+        noise_var = (
+            total_var * ratio
+        )  # spread of posterior over mu of weights (epistemic uncertainty)
+        mu_var = total_var - noise_var  # init variance of mu (to enable learning)
 
         noise_std = noise_var**0.5
         mu_std = mu_var**0.5
-        bound = (3.0**0.5) * mu_std 
-        nn.init.uniform_(self.weight_mu, -bound, bound) # init uniform distr. for mu in [-bound, bound]
+        bound = (3.0**0.5) * mu_std
+        nn.init.uniform_(
+            self.weight_mu, -bound, bound
+        )  # init uniform distr. for mu in [-bound, bound]
 
-        rho_init = float(torch.log(torch.expm1(torch.tensor(noise_std)))) # std = log(1 + exp(rho)) => rho = log(exp(std) - 1)
-        self.weight_rho = nn.Parameter(torch.full((out_features, in_features), rho_init)) # each weight has its own rho
+        rho_init = float(
+            torch.log(torch.expm1(torch.tensor(noise_std)))
+        )  # std = log(1 + exp(rho)) => rho = log(exp(std) - 1)
+        self.weight_rho = nn.Parameter(
+            torch.full((out_features, in_features), rho_init)
+        )  # each weight has its own rho
 
         self.bias = nn.Parameter(torch.zeros(out_features))
         self.weight = Gaussian(self.weight_mu, self.weight_rho)
@@ -112,8 +120,15 @@ class UCLConfig:
 class BayesianClassifier(nn.Module):
     """ResNet1D feature extractor followed by per-task Bayesian heads."""
 
-    def __init__(self, n_inputs: int, n_outputs: int, n_tasks: int,
-                 cfg: UCLConfig, args: object | None, classes_per_task: Optional[List[int]] = None) -> None:
+    def __init__(
+        self,
+        n_inputs: int,
+        n_outputs: int,
+        n_tasks: int,
+        cfg: UCLConfig,
+        args: object | None,
+        classes_per_task: Optional[List[int]] = None,
+    ) -> None:
         super().__init__()
         self.cfg = cfg
         self.n_tasks = n_tasks
@@ -134,13 +149,17 @@ class BayesianClassifier(nn.Module):
         self.feature_net.model.fc = nn.Identity()
 
         self.heads = nn.ModuleList(
-            [BayesianLinear(self.feature_dim, c, ratio=cfg.ratio)
-             for c in classes_per_task]
+            [
+                BayesianLinear(self.feature_dim, c, ratio=cfg.ratio)
+                for c in classes_per_task
+            ]
         )
 
         self.split = cfg.split
 
-    def forward(self, x: torch.Tensor, sample: bool = False) -> List[torch.Tensor] | torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, sample: bool = False
+    ) -> List[torch.Tensor] | torch.Tensor:
         feats = self.feature_net.forward(x, ret_feats=True)
         if isinstance(self.heads, nn.ModuleList):
             outputs = [head(feats, sample=sample) for head in self.heads]
@@ -154,7 +173,9 @@ class BayesianClassifier(nn.Module):
 class Net(nn.Module):
     """UCL learner compatible with ``main.py``."""
 
-    def __init__(self, n_inputs: int, n_outputs: int, n_tasks: int, args: object) -> None:
+    def __init__(
+        self, n_inputs: int, n_outputs: int, n_tasks: int, args: object
+    ) -> None:
         super().__init__()
 
         self.cfg = UCLConfig.from_args(args)
@@ -167,12 +188,15 @@ class Net(nn.Module):
         self.classes_per_task = misc_utils.build_task_class_list(
             n_tasks,
             n_outputs,
-            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            nc_per_task=getattr(args, "nc_per_task_list", "")
+            or getattr(args, "nc_per_task", None),
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
 
-        self.model = BayesianClassifier(n_inputs, n_outputs, n_tasks, self.cfg, args, self.classes_per_task)
+        self.model = BayesianClassifier(
+            n_inputs, n_outputs, n_tasks, self.cfg, args, self.classes_per_task
+        )
         self.split = self.cfg.split
 
         # Optimiser: deterministic layers + Bayesian mu share lr, rho parameters get lr_rho
@@ -201,17 +225,19 @@ class Net(nn.Module):
 
     # ------------------------------------------------------------------
     def compute_offsets(self, task):
-            if self.is_task_incremental:
-                offset1, offset2 = misc_utils.compute_offsets(task, self.classes_per_task)
-            else:
-                offset1 = 0
-                offset2 = self.n_outputs
-            return int(offset1), int(offset2)
+        if self.is_task_incremental:
+            offset1, offset2 = misc_utils.compute_offsets(task, self.classes_per_task)
+        else:
+            offset1 = 0
+            offset2 = self.n_outputs
+        return int(offset1), int(offset2)
 
     def _device(self) -> torch.device:
         return next(self.parameters()).device
 
-    def forward(self, x: torch.Tensor, t: int, s: Optional[float] = None) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, t: int, s: Optional[float] = None
+    ) -> torch.Tensor:
         outputs = self.model(x, sample=False)
         if self.split:
             # offset1, offset2 = self.compute_offsets(t)
@@ -232,8 +258,10 @@ class Net(nn.Module):
             y_local = y.clone()
             y_local = y_local - offset1
             task_classes = self.classes_per_task[t]
-            if (y_local.min() < 0 ) or (y_local.max() >= task_classes):
-                raise ValueError(f"Labels out of range for task {t}: expected in [0, {task_classes-1}] after offset, got [{int(y_local.min())}, {int(y_local.max())}]")
+            if (y_local.min() < 0) or (y_local.max() >= task_classes):
+                raise ValueError(
+                    f"Labels out of range for task {t}: expected in [0, {task_classes-1}] after offset, got [{int(y_local.min())}, {int(y_local.max())}]"
+                )
             y = y_local
 
         x = x.to(device)
@@ -243,7 +271,7 @@ class Net(nn.Module):
         for module in self.model.modules():
             if isinstance(module, nn.BatchNorm1d):
                 module.track_running_stats = False
-        
+
         # offset1, offset2 = self.compute_offsets(t)
         outputs = self.model(x, sample=True)
         logits = outputs[t] if self.split else outputs
@@ -280,7 +308,9 @@ class Net(nn.Module):
             param.requires_grad_(False)
         return clone
 
-    def _apply_regularisation(self, base_loss: torch.Tensor, batch_size: int) -> torch.Tensor:
+    def _apply_regularisation(
+        self, base_loss: torch.Tensor, batch_size: int
+    ) -> torch.Tensor:
         if not self.saved or self.model_old is None:
             return base_loss
 
@@ -293,13 +323,17 @@ class Net(nn.Module):
 
         eps = 1e-8
         for old_head, new_head in zip(self.model_old.heads, self.model.heads):
-            trainer_weight_mu = new_head.weight_mu # t = t
-            saver_weight_mu = old_head.weight_mu # t = t-1
+            trainer_weight_mu = new_head.weight_mu  # t = t
+            saver_weight_mu = old_head.weight_mu  # t = t-1
             trainer_bias = new_head.bias
             saver_bias = old_head.bias
 
-            trainer_weight_sigma = torch.log1p(torch.exp(new_head.weight_rho)) # noise var
-            saver_weight_sigma = torch.log1p(torch.exp(old_head.weight_rho)) # noise var
+            trainer_weight_sigma = torch.log1p(
+                torch.exp(new_head.weight_rho)
+            )  # noise var
+            saver_weight_sigma = torch.log1p(
+                torch.exp(old_head.weight_rho)
+            )  # noise var
 
             fan_in, _ = _calculate_fan_in_and_fan_out(trainer_weight_mu)
             std_init = math.sqrt((2.0 / fan_in) * self.cfg.ratio)
@@ -307,30 +341,52 @@ class Net(nn.Module):
             saver_strength = std_init / (saver_weight_sigma + eps)
             bias_strength = saver_strength.mean(dim=1)
 
-            mu_weight_reg = mu_weight_reg + ((saver_strength * (trainer_weight_mu - saver_weight_mu)) ** 2).sum()
-            mu_bias_reg = mu_bias_reg + ((bias_strength * (trainer_bias - saver_bias)) ** 2).sum()
+            mu_weight_reg = (
+                mu_weight_reg
+                + ((saver_strength * (trainer_weight_mu - saver_weight_mu)) ** 2).sum()
+            )
+            mu_bias_reg = (
+                mu_bias_reg + ((bias_strength * (trainer_bias - saver_bias)) ** 2).sum()
+            )
 
-            l1_mu_weight_reg = l1_mu_weight_reg + (
-                (saver_weight_mu.pow(2) / saver_weight_sigma.pow(2))
-                * (trainer_weight_mu - saver_weight_mu).abs()
-            ).sum()
-            l1_mu_bias_reg = l1_mu_bias_reg + (
-                (saver_bias.pow(2) / (saver_weight_sigma.mean(dim=1).pow(2) + eps))
-                * (trainer_bias - saver_bias).abs()
-            ).sum()
+            l1_mu_weight_reg = (
+                l1_mu_weight_reg
+                + (
+                    (saver_weight_mu.pow(2) / saver_weight_sigma.pow(2))
+                    * (trainer_weight_mu - saver_weight_mu).abs()
+                ).sum()
+            )
+            l1_mu_bias_reg = (
+                l1_mu_bias_reg
+                + (
+                    (saver_bias.pow(2) / (saver_weight_sigma.mean(dim=1).pow(2) + eps))
+                    * (trainer_bias - saver_bias).abs()
+                ).sum()
+            )
 
-            weight_sigma_ratio = trainer_weight_sigma.pow(2) / (saver_weight_sigma.pow(2) + eps)
-            sigma_weight_reg = sigma_weight_reg + (weight_sigma_ratio - torch.log(weight_sigma_ratio + eps)).sum()
-            sigma_weight_normal_reg = sigma_weight_normal_reg + (
-                trainer_weight_sigma.pow(2) - torch.log(trainer_weight_sigma.pow(2) + eps)
-            ).sum()
+            weight_sigma_ratio = trainer_weight_sigma.pow(2) / (
+                saver_weight_sigma.pow(2) + eps
+            )
+            sigma_weight_reg = (
+                sigma_weight_reg
+                + (weight_sigma_ratio - torch.log(weight_sigma_ratio + eps)).sum()
+            )
+            sigma_weight_normal_reg = (
+                sigma_weight_normal_reg
+                + (
+                    trainer_weight_sigma.pow(2)
+                    - torch.log(trainer_weight_sigma.pow(2) + eps)
+                ).sum()
+            )
 
         loss = base_loss
         loss = loss + self.cfg.alpha * (mu_weight_reg + mu_bias_reg) / (2 * batch_size)
         loss = loss + self.saved * (l1_mu_weight_reg + l1_mu_bias_reg) / batch_size
-        loss = loss + self.cfg.beta * (sigma_weight_reg + sigma_weight_normal_reg) / (2 * batch_size)
+        loss = loss + self.cfg.beta * (sigma_weight_reg + sigma_weight_normal_reg) / (
+            2 * batch_size
+        )
         return loss
-    
+
     @torch.no_grad()
     def mc_epistemic_classification(self, x, t, S=20, temperature=1.0, clamp_eps=1e-8):
         """
@@ -345,34 +401,33 @@ class Net(nn.Module):
         model = self.model
         model.eval()
         logits_accum = []
-        probs_accum  = []
+        probs_accum = []
 
         for _ in range(S):
-            logits = model(x, sample=True)[t] #/ temperature                  # (B, C)
-            probs  = F.softmax(logits, dim=-1)                            # (B, C)
+            logits = model(x, sample=True)[t]  # / temperature                  # (B, C)
+            probs = F.softmax(logits, dim=-1)  # (B, C)
             # logits_accum.append(logits)
             probs_accum.append(probs)
 
         # Stack over samples
-        probs_stack = torch.stack(probs_accum, dim=0)                     # (S, B, C)
+        probs_stack = torch.stack(probs_accum, dim=0)  # (S, B, C)
 
         # Predictive mean probability
-        p_mean = probs_stack.mean(dim=0)                                  # (B, C)
+        p_mean = probs_stack.mean(dim=0)  # (B, C)
 
         # Entropy of the mean H[p_mean]
         p_mean_clamped = p_mean.clamp(min=clamp_eps, max=1.0)
-        H_pred = -(p_mean_clamped * p_mean_clamped.log()).sum(dim=-1)     # (B,)
+        H_pred = -(p_mean_clamped * p_mean_clamped.log()).sum(dim=-1)  # (B,)
 
         # Expected entropy E_s[ H[p_s] ]
         probs_clamped = probs_stack.clamp(min=clamp_eps, max=1.0)
-        entropies = -(probs_clamped * probs_clamped.log()).sum(dim=-1)    # (S, B)
-        EH = entropies.mean(dim=0)                                        # (B,)
+        entropies = -(probs_clamped * probs_clamped.log()).sum(dim=-1)  # (S, B)
+        EH = entropies.mean(dim=0)  # (B,)
 
         # Mutual information (epistemic)
-        MI = H_pred - EH                                                   # (B,)
+        MI = H_pred - EH  # (B,)
 
         return p_mean, H_pred, EH, MI
-
 
 
 __all__ = ["Net"]

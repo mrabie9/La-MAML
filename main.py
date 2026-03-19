@@ -118,18 +118,23 @@ def enable_output_tee(log_file_path: str) -> None:
 
 
 def _split_labels(y):
-    y_det = None
+    """Extract and return class labels from a batch label object.
+
+    Supports multiple label formats:
+    - `(y_cls, det_targets)` tuples/lists: returns `y_cls`
+    - dict-like labels with `y_cls` or `y`: returns `y_cls`
+    - 2D arrays/tensors shaped `[N, 2]`: returns the first column (class label)
+    - otherwise: returns `y` as-is
+    """
+    if isinstance(y, dict):
+        return y.get("y_cls", y.get("y"))
     if isinstance(y, (tuple, list)) and len(y) == 2:
-        return y[0], y[1]
+        return y[0]
     if isinstance(y, np.ndarray) and y.ndim == 2 and y.shape[1] == 2:
-        y_cls = y[:, 0]
-        y_det = y[:, 1]
-    elif torch.is_tensor(y) and y.dim() == 2 and y.size(1) == 2:
-        y_cls = y[:, 0]
-        y_det = y[:, 1]
-    else:
-        y_cls = y
-    return y_cls, y_det
+        return y[:, 0]
+    if torch.is_tensor(y) and y.dim() == 2 and y.size(1) == 2:
+        return y[:, 0]
+    return y
 
 
 def _split_eval_output(output):
@@ -187,6 +192,34 @@ def _noise_label_for_task(
     return offset2 - 1  # Assume noise label is highest in task
 
 
+def _noise_label_max_for_task(task: object) -> int | None:
+    """Compute noise label as the maximum class label value in a task.
+
+    This is the "largest label in each task" rule used for detection metrics.
+    """
+    task_labels = _extract_task_labels(task)
+    if task_labels is not None:
+        y_cls = _split_labels(task_labels)
+        y_cls_np = _labels_to_numpy(y_cls).reshape(-1)
+        if y_cls_np.size == 0:
+            return None
+        return int(np.max(y_cls_np))
+
+    max_label: int | None = None
+    for batch in task:  # type: ignore[assignment]
+        if isinstance(batch, (list, tuple)) and len(batch) >= 2:
+            _, y_batch = batch[:2]
+        else:
+            continue
+        y_cls = _split_labels(y_batch)
+        y_cls_tensor = y_cls if torch.is_tensor(y_cls) else torch.as_tensor(y_cls)
+        if y_cls_tensor.numel() == 0:
+            continue
+        batch_max = int(y_cls_tensor.reshape(-1).max().item())
+        max_label = batch_max if max_label is None else max(max_label, batch_max)
+    return max_label
+
+
 def _labels_to_numpy(labels: object) -> np.ndarray:
     """Return labels as a NumPy array regardless of source container type."""
     if torch.is_tensor(labels):
@@ -221,7 +254,7 @@ def _infer_class_counts_from_tasks(tasks: List[object]) -> List[int] | None:
         task_labels = _extract_task_labels(task)
         if task_labels is None:
             return None
-        y_cls, _ = _split_labels(task_labels)
+        y_cls = _split_labels(task_labels)
         y_cls_array = np.asarray(y_cls).reshape(-1)
         inferred_counts.append(int(np.unique(y_cls_array).size))
     return inferred_counts
@@ -231,27 +264,19 @@ def eval_class_tasks(model, tasks, args):
 
     model.eval()
     result = []
-    class_counts = _infer_class_counts_from_tasks(tasks)
     for t, task_loader in enumerate(tasks):
         correct = 0.0
         total = 0.0
-        noise_label = _noise_label_for_task(args, t, class_counts)
+        noise_label = _noise_label_max_for_task(task_loader)
 
         for i, (x, y) in enumerate(task_loader):
-            y_cls, y_det = _split_labels(y)
+            y_cls = _split_labels(y)
             if not torch.is_tensor(y_cls):
                 y_cls = torch.as_tensor(y_cls)
-            if y_det is not None and not torch.is_tensor(y_det):
-                y_det = torch.as_tensor(y_det)
             if args.cuda:
                 x = x.cuda()
             _, p = torch.max(model(x, t).data.cpu(), 1, keepdim=False)
-            if y_det is not None:
-                mask = y_det == 1
-                if mask.any():
-                    correct += (p[mask] == y_cls[mask]).float().sum().item()
-                    total += float(mask.sum().item())
-            elif noise_label is not None:
+            if noise_label is not None:
                 mask = y_cls != noise_label
                 if mask.any():
                     correct += (p[mask] == y_cls[mask]).float().sum().item()
@@ -289,7 +314,7 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
         f1s = []
         det_recalls = []
         det_false_alarms = []
-        noise_label = _noise_label_for_task(args, t, class_counts)
+        noise_label = _noise_label_max_for_task(task)
         for batch in task:
             if isinstance(batch, (list, tuple)) and len(batch) == 3:
                 xb, yb, _ = batch
@@ -298,58 +323,41 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
             xb = xb.to(device)
             if getattr(args, "arch", "").lower() == "linear":
                 xb = xb.view(xb.size(0), -1)
-            yb_cls, yb_det = _split_labels(yb)
+            yb_cls = _split_labels(yb)
             if not torch.is_tensor(yb_cls):
                 yb_cls = torch.as_tensor(yb_cls)
-            if not getattr(args, "use_detector_arch", False):
-                yb_det = None
-            elif yb_det is not None and not torch.is_tensor(yb_det):
-                yb_det = torch.as_tensor(yb_det)
 
             logits = (
                 model(xb, t) if args.model != "anml" else model(xb, fast_weights=None)
             )
             pb = torch.argmax(logits, dim=1).cpu()
             yb_cls_cpu = yb_cls.detach().cpu()
-            yb_det_cpu = yb_det.detach().cpu() if yb_det is not None else None
             yb_cls_for_metrics = yb_cls_cpu
             noise_label_for_metrics = noise_label
             if "ucl" in args.model:
                 offset1, _ = misc_utils.compute_offsets(
                     t, class_counts if class_counts is not None else args.nc_per_task
                 )
-                if yb_det_cpu is not None:
+                if getattr(args, "use_detector_arch", False):
                     yb_cls_for_metrics = yb_cls_cpu.clone()
-                    cls_target_mask = yb_det_cpu == 1
-                    if cls_target_mask.any():
-                        yb_cls_for_metrics[cls_target_mask] = (
-                            yb_cls_for_metrics[cls_target_mask] - offset1
-                        )
+                    if noise_label_for_metrics is not None:
+                        signal_mask = yb_cls_for_metrics != noise_label_for_metrics
+                        if signal_mask.any():
+                            yb_cls_for_metrics[signal_mask] = (
+                                yb_cls_for_metrics[signal_mask] - offset1
+                            )
                 else:
                     yb_cls_for_metrics = yb_cls_cpu - offset1
                     if noise_label_for_metrics is not None:
                         noise_label_for_metrics = noise_label_for_metrics - offset1
             # Record total F1 score for all classes including noise
-            if yb_det is None:
+            if not getattr(args, "use_detector_arch", False):
                 f1s.append(macro_f1_including_noise(pb, yb_cls_for_metrics))
             else:
                 print("[WARNING] F1 not supported for detection architecture.")
                 f1s.append(0.0)
 
-            if yb_det_cpu is not None:
-                cls_mask = yb_det_cpu == 1
-                if cls_mask.any():
-                    recalls.append(
-                        macro_recall(pb[cls_mask], yb_cls_for_metrics[cls_mask])
-                    )
-                    precisions.append(
-                        macro_precision_signal_only(
-                            pb[cls_mask],
-                            yb_cls_for_metrics[cls_mask],
-                            noise_label_for_metrics,
-                        )
-                    )
-            elif noise_label_for_metrics is not None:
+            if noise_label_for_metrics is not None:
                 cls_mask = yb_cls_for_metrics != noise_label_for_metrics
                 if cls_mask.any():
                     recalls.append(
@@ -370,15 +378,13 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
                     )
                 )
 
-            if yb_det_cpu is not None:
+            if noise_label_for_metrics is not None:
+                det_targets = (yb_cls_for_metrics != noise_label_for_metrics).long()
                 det_logits = _get_det_logits(model, xb, t)
                 if det_logits is not None:
                     det_pred = (det_logits >= 0).long().cpu()
-                    det_recalls.append(macro_recall(det_pred, yb_det_cpu))
-                    det_false_alarms.append(_false_alarm_rate(det_pred, yb_det_cpu))
-            elif noise_label_for_metrics is not None:
-                det_targets = (yb_cls_for_metrics != noise_label_for_metrics).long()
-                det_pred = (pb != noise_label_for_metrics).long()
+                else:
+                    det_pred = (pb != noise_label_for_metrics).long()
                 det_recalls.append(macro_recall(det_pred, det_targets))
                 det_false_alarms.append(_false_alarm_rate(det_pred, det_targets))
 
@@ -435,6 +441,7 @@ def life_experience(model, inc_loader, args):
         train_task_loaders.append(train_loader)
         test_task_loaders.append(test_loader)
         current_task = task_info["task"]
+        noise_label_for_task = _noise_label_max_for_task(train_loader)
 
         # Per-epoch training metrics for this task (classification + detection).
         per_epoch_train_cls_rec = []
@@ -478,12 +485,29 @@ def life_experience(model, inc_loader, args):
             for i, (x, y) in enumerate(prog_bar):
 
                 v_x = x
-                y_cls, y_det = _split_labels(y)
+                y_cls = _split_labels(y)
                 if not torch.is_tensor(y_cls):
                     y_cls = torch.as_tensor(y_cls)
-                if y_det is not None and not torch.is_tensor(y_det):
-                    y_det = torch.as_tensor(y_det)
-                v_y = (y_cls, y_det) if y_det is not None else y_cls
+
+                # Hybrid mode: keep passing detector targets into `model.observe`
+                # when the dataloader provides them, but only use class labels
+                # for metric computation.
+                if getattr(args, "use_detector_arch", False):
+                    if isinstance(y, (tuple, list)) and len(y) == 2:
+                        cls_part, det_part = y[0], y[1]
+                        if not torch.is_tensor(cls_part):
+                            cls_part = torch.as_tensor(cls_part)
+                        if not torch.is_tensor(det_part):
+                            det_part = torch.as_tensor(det_part)
+                        v_y = (cls_part, det_part)
+                    elif torch.is_tensor(y) and y.dim() == 2 and y.size(1) == 2:
+                        v_y = (y[:, 0], y[:, 1])
+                    elif isinstance(y, np.ndarray) and y.ndim == 2 and y.shape[1] == 2:
+                        v_y = (y[:, 0], y[:, 1])
+                    else:
+                        v_y = y_cls
+                else:
+                    v_y = y_cls
                 if args.cuda:
                     v_x = v_x.cuda()
                     if isinstance(v_y, (tuple, list)) and len(v_y) == 2:
@@ -493,7 +517,7 @@ def life_experience(model, inc_loader, args):
                 model.train()
 
                 loss, cls_tr_rec = model.observe(Variable(v_x), v_y, task_info["task"])
-                # debug_noise_label = _noise_label_for_task(args, task_info["task"])
+                # debug_noise_label = _noise_label_max_for_task(train_loader)
                 # model.eval()
                 # with torch.no_grad():
                 #     debug_logits = (
@@ -502,40 +526,22 @@ def life_experience(model, inc_loader, args):
                 #         else model(v_x, fast_weights=None)
                 #     )
                 #     debug_preds = torch.argmax(debug_logits, dim=1).cpu()
-                #     debug_y_cls, debug_y_det = _split_labels(v_y)
-                #     if torch.is_tensor(debug_y_cls):
-                #         debug_y_cls_cpu = debug_y_cls.detach().cpu()
-                #     else:
-                #         debug_y_cls_cpu = torch.as_tensor(debug_y_cls)
-                #     debug_eval_recall = 0.0
-                #     if debug_y_det is not None:
-                #         debug_y_det_cpu = (
-                #             debug_y_det.detach().cpu()
-                #             if torch.is_tensor(debug_y_det)
-                #             else torch.as_tensor(debug_y_det)
-                #         )
-                #         debug_mask = debug_y_det_cpu == 1
-                #         if debug_mask.any():
-                #             debug_eval_recall = macro_recall(
-                #                 debug_preds[debug_mask],
-                #                 debug_y_cls_cpu[debug_mask],
-                #             )
-                #     elif debug_noise_label is not None:
-                #         debug_mask = debug_y_cls_cpu != debug_noise_label
-                #         if debug_mask.any():
-                #             debug_eval_recall = macro_recall(
-                #                 debug_preds[debug_mask],
-                #                 debug_y_cls_cpu[debug_mask],
-                #             )
-                #     else:
-                #         debug_eval_recall = macro_recall(debug_preds, debug_y_cls_cpu)
-                #     epoch_eval_mode_recalls.append(float(debug_eval_recall))
-                #     if i == 0:
-                #         print(
-                #             "DEBUG batch0: cls_tr_rec {:.5f} | eval_mode_recall {:.5f} | noise_label {}".format(
-                #                 float(cls_tr_rec), float(debug_eval_recall), debug_noise_label
-                #             )
-                #         )
+                #     debug_y_cls = _split_labels(v_y)
+                #     debug_y_cls_cpu = (
+                #         debug_y_cls.detach().cpu()
+                #         if torch.is_tensor(debug_y_cls)
+                #         else torch.as_tensor(debug_y_cls)
+                #     )
+                #     debug_mask = (
+                #         debug_y_cls_cpu != debug_noise_label
+                #         if debug_noise_label is not None
+                #         else torch.ones_like(debug_y_cls_cpu, dtype=torch.bool)
+                #     )
+                #     debug_eval_recall = (
+                #         macro_recall(debug_preds[debug_mask], debug_y_cls_cpu[debug_mask])
+                #         if debug_mask.any()
+                #         else 0.0
+                #     )
                 # model.train()
                 # logits = model(x, task_i) if args.model != 'anml' else model(x, task_i, fast_weights=None)
                 # pb = torch.argmax(logits, dim=1)
@@ -547,7 +553,7 @@ def life_experience(model, inc_loader, args):
                 epoch_train_accs.append(cls_tr_rec)
 
                 # Batch-level precision (signal only) and F1 (all classes incl. noise) for progress bar
-                noise_label = _noise_label_for_task(args, task_info["task"])
+                noise_label = noise_label_for_task
                 model.eval()
                 with torch.no_grad():
                     logits = (
@@ -561,11 +567,6 @@ def life_experience(model, inc_loader, args):
 
                 y_cls_for_metric = (
                     y_cls.cpu() if torch.is_tensor(y_cls) else torch.as_tensor(y_cls)
-                )
-                y_det_for_metric = (
-                    y_det.cpu()
-                    if y_det is not None and torch.is_tensor(y_det)
-                    else (torch.as_tensor(y_det) if y_det is not None else None)
                 )
                 noise_label_for_metric = noise_label
 
@@ -582,15 +583,7 @@ def life_experience(model, inc_loader, args):
                 )
                 f1 = macro_f1_including_noise(pb, y_cls_for_metric)
 
-                if y_det_for_metric is not None:
-                    cls_mask = y_det_for_metric == 1
-                    if cls_mask.any():
-                        cls_tr_rec = macro_recall(
-                            pb[cls_mask], y_cls_for_metric[cls_mask]
-                        )
-                    else:
-                        cls_tr_rec = 0.0
-                elif noise_label_for_metric is not None:
+                if noise_label_for_metric is not None:
                     cls_mask = y_cls_for_metric != noise_label_for_metric
                     if cls_mask.any():
                         cls_tr_rec = macro_recall(
@@ -603,13 +596,12 @@ def life_experience(model, inc_loader, args):
 
                 det_rec = 0.0
                 det_fa = 0.0
-                if det_logits is not None and y_det_for_metric is not None:
-                    det_pred = (det_logits >= 0).long().cpu()
-                    det_rec = macro_recall(det_pred, y_det_for_metric)
-                    det_fa = _false_alarm_rate(det_pred, y_det_for_metric)
-                elif noise_label_for_metric is not None:
+                if noise_label_for_metric is not None:
                     det_targets = (y_cls_for_metric != noise_label_for_metric).long()
-                    det_pred = (pb != noise_label_for_metric).long()
+                    if det_logits is not None:
+                        det_pred = (det_logits >= 0).long().cpu()
+                    else:
+                        det_pred = (pb != noise_label_for_metric).long()
                     det_rec = macro_recall(det_pred, det_targets)
                     det_fa = _false_alarm_rate(det_pred, det_targets)
 

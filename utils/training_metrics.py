@@ -4,17 +4,20 @@ import numpy as np
 import torch
 from sklearn.metrics import f1_score, precision_score, recall_score
 
-
 TensorLike = Union[torch.Tensor, np.ndarray]
 
 
 def _to_numpy(preds: TensorLike, targets: TensorLike) -> tuple[np.ndarray, np.ndarray]:
     """Convert preds and targets to numpy arrays."""
     preds_np = (
-        preds.detach().cpu().numpy() if isinstance(preds, torch.Tensor) else np.asarray(preds)
+        preds.detach().cpu().numpy()
+        if isinstance(preds, torch.Tensor)
+        else np.asarray(preds)
     )
     targets_np = (
-        targets.detach().cpu().numpy() if isinstance(targets, torch.Tensor) else np.asarray(targets)
+        targets.detach().cpu().numpy()
+        if isinstance(targets, torch.Tensor)
+        else np.asarray(targets)
     )
     return preds_np, targets_np
 
@@ -34,9 +37,7 @@ def macro_precision_signal_only(
             return 0.0
         preds_np = preds_np[mask]
         targets_np = targets_np[mask]
-    return precision_score(
-        targets_np, preds_np, average="macro", zero_division=0
-    )
+    return precision_score(targets_np, preds_np, average="macro", zero_division=0)
 
 
 def macro_f1_including_noise(preds: TensorLike, targets: TensorLike) -> float:

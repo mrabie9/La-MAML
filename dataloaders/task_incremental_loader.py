@@ -33,7 +33,10 @@ def _normalize_label_array(labels, expected_len, source):
         if arr.ndim == 0:
             arr = arr.reshape(1)
         if arr.shape and arr.shape[0] != expected_len:
-            axis = next((idx for idx, size in enumerate(arr.shape) if size == expected_len), None)
+            axis = next(
+                (idx for idx, size in enumerate(arr.shape) if size == expected_len),
+                None,
+            )
             if axis is None:
                 raise ValueError(
                     f"{source} labels have shape {arr.shape}, which is incompatible with "
@@ -110,19 +113,27 @@ def _apply_data_scaling(
         test_real = test_samples.real
         test_imag = test_samples.imag
 
-        real_offset, real_scale = _compute_scaling_offset_and_scale(train_real, scaling_mode)
-        imag_offset, imag_scale = _compute_scaling_offset_and_scale(train_imag, scaling_mode)
+        real_offset, real_scale = _compute_scaling_offset_and_scale(
+            train_real, scaling_mode
+        )
+        imag_offset, imag_scale = _compute_scaling_offset_and_scale(
+            train_imag, scaling_mode
+        )
 
         scaled_train = (train_real - real_offset) / real_scale
         scaled_test = (test_real - real_offset) / real_scale
         scaled_train = scaled_train + 1j * ((train_imag - imag_offset) / imag_scale)
         scaled_test = scaled_test + 1j * ((test_imag - imag_offset) / imag_scale)
-        return scaled_train.astype(np.complex64, copy=False), scaled_test.astype(np.complex64, copy=False)
+        return scaled_train.astype(np.complex64, copy=False), scaled_test.astype(
+            np.complex64, copy=False
+        )
 
     offset, scale = _compute_scaling_offset_and_scale(training_samples, scaling_mode)
     scaled_training = (training_samples - offset) / scale
     scaled_test = (test_samples - offset) / scale
-    return scaled_training.astype(np.float32, copy=False), scaled_test.astype(np.float32, copy=False)
+    return scaled_training.astype(np.float32, copy=False), scaled_test.astype(
+        np.float32, copy=False
+    )
 
 
 def _resolve_task_file_order(all_files: Sequence[str], order_arg: str) -> List[str]:
@@ -235,8 +246,8 @@ class IncrementalLoader:
         seed=1,
     ):
         self._args = args
-        validation_split=args.validation
-        increment=args.increment
+        validation_split = args.validation
+        increment = args.increment
 
         self.classes_per_task = []
         self.task_names: list[str] = []
@@ -244,13 +255,13 @@ class IncrementalLoader:
             class_order_type=args.class_order,
             seed=seed,
             increment=increment,
-            validation_split=validation_split
+            validation_split=validation_split,
         )
 
         self._current_task = 0
 
         self._batch_size = args.batch_size
-        self._test_batch_size = args.test_batch_size        
+        self._test_batch_size = args.test_batch_size
         self._workers = args.workers
         self._shuffle = shuffle
 
@@ -259,15 +270,23 @@ class IncrementalLoader:
     @property
     def n_tasks(self):
         return len(self.test_dataset)
-    
+
     def new_task(self):
         if self._current_task >= len(self.test_dataset):
             raise Exception("No more tasks.")
 
         p_tr, p_te = self.sample_permutations[self._current_task]
-        print(f"Task {self._current_task}: {len(p_tr)} training samples, {len(p_te)} test samples.")
-        x_train, y_train = self.train_dataset[self._current_task][1][p_tr], self.train_dataset[self._current_task][2][p_tr]
-        x_test, y_test = self.test_dataset[self._current_task][1][p_te], self.test_dataset[self._current_task][2][p_te]
+        print(
+            f"Task {self._current_task}: {len(p_tr)} training samples, {len(p_te)} test samples."
+        )
+        x_train, y_train = (
+            self.train_dataset[self._current_task][1][p_tr],
+            self.train_dataset[self._current_task][2][p_tr],
+        )
+        x_test, y_test = (
+            self.test_dataset[self._current_task][1][p_te],
+            self.test_dataset[self._current_task][2][p_te],
+        )
 
         train_loader = self._get_loader(x_train, y_train, mode="train")
         test_loader = self._get_loader(x_test, y_test, mode="test")
@@ -284,7 +303,7 @@ class IncrementalLoader:
             "task_name": task_name,
             "max_task": len(self.test_dataset),
             "n_train_data": len(x_train),
-            "n_test_data": len(x_test)
+            "n_test_data": len(x_test),
         }
 
         self._current_task += 1
@@ -295,28 +314,38 @@ class IncrementalLoader:
         self.test_tasks = []
         for i in range(len(self.test_dataset)):
             # .append(x, y, mode="test")
-            self.test_tasks.append(self._get_loader(self.test_dataset[i][1], self.test_dataset[i][2], mode="test"))
+            self.test_tasks.append(
+                self._get_loader(
+                    self.test_dataset[i][1], self.test_dataset[i][2], mode="test"
+                )
+            )
 
-    def get_tasks(self, dataset_type='test'):
+    def get_tasks(self, dataset_type="test"):
         """Return a list of DataLoaders, one per task, for use by eval_tasks."""
-        if dataset_type == 'test':
+        if dataset_type == "test":
             dataset = self.test_dataset
             perm_index = 1
-        elif dataset_type == 'val':
+        elif dataset_type == "val":
             dataset = self.test_dataset
             perm_index = 1
-        elif dataset_type == 'train':
+        elif dataset_type == "train":
             dataset = self.train_dataset
             perm_index = 0
         else:
             raise NotImplementedError("Unknown mode {}.".format(dataset_type))
 
         if self._args.samples_per_task <= 0:
-            if dataset_type in ('test', 'val'):
+            if dataset_type in ("test", "val"):
                 return list(self.test_tasks)
             loaders = []
             for task in dataset:
-                loaders.append(self._get_loader(task[1], task[2], mode="train" if dataset_type == 'train' else "test"))
+                loaders.append(
+                    self._get_loader(
+                        task[1],
+                        task[2],
+                        mode="train" if dataset_type == "train" else "test",
+                    )
+                )
             return loaders
 
         trimmed = []
@@ -325,13 +354,15 @@ class IncrementalLoader:
             if isinstance(perms, (list, tuple)):
                 perm = perms[perm_index]
             else:
-                perm = perms if dataset_type == 'train' else None
+                perm = perms if dataset_type == "train" else None
             if perm is None:
                 trimmed.append((task[0], task[1], task[2]))
                 continue
             trimmed.append((task[0], task[1][perm], task[2][perm]))
         return [
-            self._get_loader(t[1], t[2], mode="train" if dataset_type == 'train' else "test")
+            self._get_loader(
+                t[1], t[2], mode="train" if dataset_type == "train" else "test"
+            )
             for t in trimmed
         ]
 
@@ -402,7 +433,6 @@ class IncrementalLoader:
             return int(test_data.shape[0])
         return int(test_data.size(0))
 
-
     def _get_loader(self, x, y, shuffle=False, mode="train"):
         if mode == "train":
             batch_size = self._batch_size
@@ -419,21 +449,26 @@ class IncrementalLoader:
             dataset,
             batch_size=batch_size,
             shuffle=shuffle,
-            num_workers=0#self._workers
+            num_workers=0,  # self._workers
         )
 
-
-    def _setup_data(self, class_order_type=False, seed=1, increment=10, validation_split=0.):
+    def _setup_data(
+        self, class_order_type=False, seed=1, increment=10, validation_split=0.0
+    ):
         # FIXME: handles online loading of images
         torch.manual_seed(seed)
 
-        data_files = [f for f in os.listdir(self._args.data_path) if f.endswith('.npz')]
-        if data_files and self._args.dataset.lower() == 'iq':
-            data_files = _resolve_task_file_order(data_files, self._args.task_order_files)
+        data_files = [f for f in os.listdir(self._args.data_path) if f.endswith(".npz")]
+        if data_files and self._args.dataset.lower() == "iq":
+            data_files = _resolve_task_file_order(
+                data_files, self._args.task_order_files
+            )
             raw_datasets = []
             all_labels = []
             labels_offset = 0
-            collapse_noise_across_tasks = str(getattr(self._args, "model", "")).lower() == "iid2"
+            collapse_noise_across_tasks = (
+                str(getattr(self._args, "model", "")).lower() == "iid2"
+            )
             global_noise_label: int | None = None
 
             # Track human-readable task names based on file names.
@@ -449,14 +484,18 @@ class IncrementalLoader:
                             return data[k]
                     return None
 
-                x_train = _get(['x_train', 'X_train', 'Xtr', 'xtr', 'Xcv', 'xcv', 'x', 'X'])
-                y_train = _get(['y_train', 'Y_train', 'ytr', 'ycv', 'y', 'Y'])
-                x_test = _get(['x_test', 'X_test', 'Xte', 'xte'])
-                y_test = _get(['y_test', 'Y_test', 'yte'])
+                x_train = _get(
+                    ["x_train", "X_train", "Xtr", "xtr", "Xcv", "xcv", "x", "X"]
+                )
+                y_train = _get(["y_train", "Y_train", "ytr", "ycv", "y", "Y"])
+                x_test = _get(["x_test", "X_test", "Xte", "xte"])
+                y_test = _get(["y_test", "Y_test", "yte"])
 
                 if x_train is not None and y_train is not None:
                     before = x_train.shape
-                    x_train = _maybe_move_sample_axis(x_train, y_train, f"{fname} train")
+                    x_train = _maybe_move_sample_axis(
+                        x_train, y_train, f"{fname} train"
+                    )
                     after = x_train.shape
                     if before != after:
                         print(f"{fname} train: moved sample axis {before} -> {after}")
@@ -471,13 +510,26 @@ class IncrementalLoader:
                         # x_test = x_test[:,0,:]
                         # print("Dropped ADC channel from test data, new shape:", x_test.shape)
                 if x_train is not None and y_train is not None:
-                    y_train = _normalize_label_array(y_train, x_train.shape[0], f"{fname} train")
-                    print(f"{fname} train: x={x_train.shape}, y={np.asarray(y_train).shape}")
+                    y_train = _normalize_label_array(
+                        y_train, x_train.shape[0], f"{fname} train"
+                    )
+                    print(
+                        f"{fname} train: x={x_train.shape}, y={np.asarray(y_train).shape}"
+                    )
                 if x_test is not None and y_test is not None:
-                    y_test = _normalize_label_array(y_test, x_test.shape[0], f"{fname} test")
-                    print(f"{fname} test: x={x_test.shape}, y={np.asarray(y_test).shape}")
+                    y_test = _normalize_label_array(
+                        y_test, x_test.shape[0], f"{fname} test"
+                    )
+                    print(
+                        f"{fname} test: x={x_test.shape}, y={np.asarray(y_test).shape}"
+                    )
 
-                if x_train is None or y_train is None or x_test is None or y_test is None:
+                if (
+                    x_train is None
+                    or y_train is None
+                    or x_test is None
+                    or y_test is None
+                ):
                     missing = []
                     training_set = True
                     testing_set = True
@@ -489,9 +541,14 @@ class IncrementalLoader:
                         training_set = False
                     if training_set:
                         from sklearn.model_selection import train_test_split
+
                         x_train, x_test, y_train, y_test = train_test_split(
-                                                            x_train, y_train, test_size=validation_split, 
-                                                            random_state=42, stratify=y_train)
+                            x_train,
+                            y_train,
+                            test_size=validation_split,
+                            random_state=42,
+                            stratify=y_train,
+                        )
                     if x_test is None:
                         missing.append("x_test")
                         testing_set = False
@@ -499,7 +556,7 @@ class IncrementalLoader:
                         missing.append("y_test")
                         testing_set = False
                     available = ", ".join(sorted(data.keys()))
-                    if not testing_set or not training_set: 
+                    if not testing_set or not training_set:
                         raise ValueError(
                             f"Missing dataset entries ({', '.join(missing)}) in {fname}. "
                             f"Available keys: {available}"
@@ -511,9 +568,13 @@ class IncrementalLoader:
                     print(f"{fname}: applied data scaling mode '{scaling_mode}'.")
                 else:
                     raise ValueError(f"Unsupported data scaling mode '{scaling_mode}'.")
-                
+
                 size_tr = x_train.shape[0]
-                size_te = min(x_test.shape[0], int(size_tr * validation_split)) if validation_split > 0. else x_test.shape[0]
+                size_te = (
+                    min(x_test.shape[0], int(size_tr * validation_split))
+                    if validation_split > 0.0
+                    else x_test.shape[0]
+                )
                 x_test = x_test[:size_te]
                 y_test = y_test[:size_te]
 
@@ -526,7 +587,9 @@ class IncrementalLoader:
                 y_train = np.asarray(y_train, dtype=np.int64)
                 y_test = np.asarray(y_test, dtype=np.int64)
 
-                print(f"Noise labels ratio in {fname} train: {(y_train < 0).mean():.2f}, test: {(y_test < 0).mean():.2f}")
+                print(
+                    f"Noise labels ratio in {fname} train: {(y_train < 0).mean():.2f}, test: {(y_test < 0).mean():.2f}"
+                )
 
                 # Remap labels to a contiguous global range starting from 0
                 if y_train.ndim == 2 and y_train.shape[1] == 2:
@@ -534,14 +597,15 @@ class IncrementalLoader:
                     y_train_det = y_train[:, 1]
                     y_test_cls = y_test[:, 0]
                     y_test_det = y_test[:, 1]
-                    use_detector_arch = bool(getattr(self._args, "use_detector_arch", False))
+                    use_detector_arch = bool(
+                        getattr(self._args, "use_detector_arch", False)
+                    )
                     # print(f"Using detector architecture: {use_detector_arch}")
                     has_negatives = (y_train_cls < 0).any() or (y_test_cls < 0).any()
 
                     unique_labels = np.unique(y_train_cls[y_train_cls >= 0])
-                    needs_remap = (
-                        unique_labels.size > 0
-                        and not np.array_equal(unique_labels, np.arange(unique_labels.size))
+                    needs_remap = unique_labels.size > 0 and not np.array_equal(
+                        unique_labels, np.arange(unique_labels.size)
                     )
                     y_train_cls_remap = y_train_cls.copy()
                     y_test_cls_remap = y_test_cls.copy()
@@ -549,14 +613,20 @@ class IncrementalLoader:
                     mask_test = y_test_cls >= 0
                     if needs_remap:
                         y_train_cls_remap[mask_train] = (
-                            unique_labels.searchsorted(y_train_cls[mask_train]) + labels_offset
+                            unique_labels.searchsorted(y_train_cls[mask_train])
+                            + labels_offset
                         )
                         y_test_cls_remap[mask_test] = (
-                            unique_labels.searchsorted(y_test_cls[mask_test]) + labels_offset
+                            unique_labels.searchsorted(y_test_cls[mask_test])
+                            + labels_offset
                         )
                     else:
-                        y_train_cls_remap[mask_train] = y_train_cls[mask_train] + labels_offset
-                        y_test_cls_remap[mask_test] = y_test_cls[mask_test] + labels_offset
+                        y_train_cls_remap[mask_train] = (
+                            y_train_cls[mask_train] + labels_offset
+                        )
+                        y_test_cls_remap[mask_test] = (
+                            y_test_cls[mask_test] + labels_offset
+                        )
                     extra_class = 0
                     if (not use_detector_arch) and has_negatives:
                         if collapse_noise_across_tasks:
@@ -577,12 +647,13 @@ class IncrementalLoader:
                         y_train = y_train_cls_remap
                         y_test = y_test_cls_remap
                 else:
-                    use_detector_arch = bool(getattr(self._args, "use_detector_arch", False))
+                    use_detector_arch = bool(
+                        getattr(self._args, "use_detector_arch", False)
+                    )
                     has_negatives = (y_train < 0).any() or (y_test < 0).any()
                     unique_labels = np.unique(y_train[y_train >= 0])
-                    needs_remap = (
-                        unique_labels.size > 0
-                        and not np.array_equal(unique_labels, np.arange(unique_labels.size))
+                    needs_remap = unique_labels.size > 0 and not np.array_equal(
+                        unique_labels, np.arange(unique_labels.size)
                     )
                     y_train_remap = y_train.copy()
                     y_test_remap = y_test.copy()
@@ -590,10 +661,12 @@ class IncrementalLoader:
                     mask_test = y_test >= 0
                     if needs_remap:
                         y_train_remap[mask_train] = (
-                            unique_labels.searchsorted(y_train[mask_train]) + labels_offset
+                            unique_labels.searchsorted(y_train[mask_train])
+                            + labels_offset
                         )
                         y_test_remap[mask_test] = (
-                            unique_labels.searchsorted(y_test[mask_test]) + labels_offset
+                            unique_labels.searchsorted(y_test[mask_test])
+                            + labels_offset
                         )
                     else:
                         y_train_remap[mask_train] = y_train[mask_train] + labels_offset
@@ -622,7 +695,9 @@ class IncrementalLoader:
                     remapped = np.unique(y_train[:, 0])
                 else:
                     remapped = np.unique(y_train)
-                print(f"Loaded {fname}: Remapped labels: {remapped}. Size: {x_train.shape[0]})")
+                print(
+                    f"Loaded {fname}: Remapped labels: {remapped}. Size: {x_train.shape[0]})"
+                )
 
                 # 3D array[task, split (xtr/yte/xte/yte), data]
                 raw_datasets.append((x_train, y_train, x_test, y_test))
@@ -634,7 +709,9 @@ class IncrementalLoader:
                     all_labels.append(y_test.reshape(-1))
 
             if not raw_datasets:
-                raise ValueError("No IQ datasets were loaded. Please check the data path.")
+                raise ValueError(
+                    "No IQ datasets were loaded. Please check the data path."
+                )
 
             self.train_dataset, self.test_dataset = [], []
             for x_train, y_train, x_test, y_test in raw_datasets:
@@ -672,7 +749,7 @@ class IncrementalLoader:
 
             self.sample_permutations = []
             for t in range(len(self.train_dataset)):
-                N = self.train_dataset[t][1].shape[0] # number of samples in task t
+                N = self.train_dataset[t][1].shape[0]  # number of samples in task t
                 if self._args.samples_per_task <= 0:
                     n = N
                 else:
@@ -695,7 +772,10 @@ class IncrementalLoader:
                 else:
                     labels = labels[labels >= 0]
                 return int(np.unique(labels).size)
-            self.classes_per_task = [_task_class_count(task) for task in self.train_dataset]
+
+            self.classes_per_task = [
+                _task_class_count(task) for task in self.train_dataset
+            ]
             print("Built classes_per_task:", self.classes_per_task)
             # Persist on args for convenience.
             self._args.classes_per_task = self.classes_per_task
@@ -726,7 +806,11 @@ class IncrementalLoader:
                 p_te = torch.randperm(N_test)[0:n_test]
                 self.sample_permutations.append([p_tr, p_te])
             self.classes_per_task = [
-                int(torch.unique(task[2]).numel()) if hasattr(torch, "unique") else len(np.unique(task[2]))
+                (
+                    int(torch.unique(task[2]).numel())
+                    if hasattr(torch, "unique")
+                    else len(np.unique(task[2]))
+                )
                 for task in self.train_dataset
             ]
             self._args.classes_per_task = self.classes_per_task

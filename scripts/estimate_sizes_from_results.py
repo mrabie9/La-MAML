@@ -29,20 +29,19 @@ import importlib
 import sys
 from pathlib import Path
 from typing import Iterable
+import pickle
 
-# Repo root on path for imports
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 import torch
+from main import estimate_memory_buffer_size_bytes
 
 try:
     from torch.serialization import add_safe_globals
 except ImportError:
     add_safe_globals = None
-
-from main import estimate_memory_buffer_size_bytes
 
 
 def parse_cli() -> argparse.Namespace:
@@ -63,6 +62,11 @@ def parse_cli() -> argparse.Namespace:
         "--pattern",
         type=str,
         help="Only process paths containing this substring",
+    )
+    parser.add_argument(
+        "--breakdown",
+        action="store_true",
+        help="Also print an approximate size breakdown of the results.pt contents.",
     )
     return parser.parse_args()
 
@@ -110,8 +114,8 @@ def instantiate_model(args: object) -> object:
     return model
 
 
-def compute_sizes(results_path: Path) -> tuple[float, float]:
-    """Load results.pt, rebuild model, and return (model_size_gb, memory_buffer_size_gb)."""
+def _load_results_bundle(results_path: Path):
+    """Load a results.pt bundle from disk."""
     if add_safe_globals is not None:
         add_safe_globals([argparse.Namespace])
 
@@ -119,10 +123,79 @@ def compute_sizes(results_path: Path) -> tuple[float, float]:
         bundle = torch.load(results_path, map_location="cpu", weights_only=False)
     except TypeError:
         bundle = torch.load(results_path, map_location="cpu")
+    return bundle
+
+
+def _tensor_storage_bytes(obj) -> int:
+    """Recursively sum tensor storage (in bytes) for a nested structure."""
+    if torch.is_tensor(obj):
+        return obj.element_size() * obj.numel()
+    if isinstance(obj, dict):
+        return sum(_tensor_storage_bytes(v) for v in obj.values())
+    if isinstance(obj, (list, tuple)):
+        return sum(_tensor_storage_bytes(v) for v in obj)
+    return 0
+
+
+def describe_checkpoint_sizes(results_path: Path, bundle) -> list[tuple[str, float]]:
+    """Return a human-readable size breakdown for results.pt contents.
+
+    Sizes are reported in megabytes and focus on tensor-heavy components.
+    """
     try:
-        (_result_val_t, _result_val_a, _state_dict, _val_stats, _one_liner, saved_args) = bundle
+        result_val_t, result_val_a, state_dict, val_stats, one_liner, saved_args = (
+            bundle
+        )
     except ValueError as exc:
-        raise RuntimeError(f"Unexpected checkpoint structure at {results_path}") from exc
+        raise RuntimeError(
+            f"Unexpected checkpoint structure at {results_path}"
+        ) from exc
+
+    entries: list[tuple[str, float]] = []
+    entries.append(
+        ("result_val_t (tensors)", _tensor_storage_bytes(result_val_t) / (1024**2))
+    )
+    entries.append(
+        ("result_val_a (tensors)", _tensor_storage_bytes(result_val_a) / (1024**2))
+    )
+    entries.append(
+        ("state_dict (tensors)", _tensor_storage_bytes(state_dict) / (1024**2))
+    )
+    entries.append(
+        ("val_stats (tensors)", _tensor_storage_bytes(val_stats) / (1024**2))
+    )
+
+    # Rough pickle-based sizes for non-tensor payloads.
+    try:
+        one_liner_mb = len(pickle.dumps(one_liner)) / (1024**2)
+    except Exception:
+        one_liner_mb = 0.0
+    try:
+        args_mb = len(pickle.dumps(saved_args)) / (1024**2)
+    except Exception:
+        args_mb = 0.0
+    entries.append(("one_liner (serialized)", one_liner_mb))
+    entries.append(("args (serialized)", args_mb))
+    return entries
+
+
+def compute_sizes(results_path: Path, bundle=None) -> tuple[float, float]:
+    """Rebuild model and return (model_size_gb, memory_buffer_size_gb)."""
+    if bundle is None:
+        bundle = _load_results_bundle(results_path)
+    try:
+        (
+            _result_val_t,
+            _result_val_a,
+            _state_dict,
+            _val_stats,
+            _one_liner,
+            saved_args,
+        ) = bundle
+    except ValueError as exc:
+        raise RuntimeError(
+            f"Unexpected checkpoint structure at {results_path}"
+        ) from exc
 
     run_dir = results_path.parent
     args = build_args_for_sizes(saved_args, run_dir)
@@ -144,7 +217,8 @@ def main() -> int:
 
     for results_path in results_list:
         try:
-            model_gb, mem_gb = compute_sizes(results_path)
+            bundle = _load_results_bundle(results_path)
+            model_gb, mem_gb = compute_sizes(results_path, bundle=bundle)
         except Exception as exc:
             print(f"[FAILED] {results_path}: {exc}", file=sys.stderr)
             continue
@@ -153,7 +227,15 @@ def main() -> int:
         print(f"Model size: {model_gb:.4f} GB")
         print(f"Memory buffer size: {mem_gb:.4f} GB")
         print(f"  # sizes: model_gb={model_gb:.4f} mem_gb={mem_gb:.4f}")
-        print()
+
+        if opts.breakdown:
+            file_mb = results_path.stat().st_size / (1024**2)
+            print(f"  results.pt on disk: {file_mb:.2f} MB")
+            for label, size_mb in describe_checkpoint_sizes(results_path, bundle):
+                print(f"    - {label}: {size_mb:.2f} MB")
+            print()
+        else:
+            print()
 
     return 0
 

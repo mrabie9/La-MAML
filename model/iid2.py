@@ -57,7 +57,9 @@ class Net(torch.nn.Module):
         loss, rec = model.observe(x, y, t)
     """
 
-    def __init__(self, n_inputs: int, n_outputs: int, n_tasks: int, args: object) -> None:
+    def __init__(
+        self, n_inputs: int, n_outputs: int, n_tasks: int, args: object
+    ) -> None:
         super().__init__()
         del n_inputs  # ResNet1D determines its own front-end shape
         del n_tasks
@@ -66,7 +68,9 @@ class Net(torch.nn.Module):
         self.n_outputs = n_outputs
 
         if self.cfg.arch != "resnet1d":
-            raise ValueError(f"Unsupported arch {self.cfg.arch}; only resnet1d is available now.")
+            raise ValueError(
+                f"Unsupported arch {self.cfg.arch}; only resnet1d is available now."
+            )
 
         # Shared backbone with other models.
         self.net = ResNet1D(n_outputs, args)
@@ -75,7 +79,9 @@ class Net(torch.nn.Module):
         self.opt = torch.optim.SGD(self.parameters(), lr=self.cfg.lr, momentum=0.9)
         self.loss = torch.nn.CrossEntropyLoss()
 
-    def forward(self, x: torch.Tensor, t: torch.Tensor | int) -> torch.Tensor:  # pragma: no cover - thin wrapper
+    def forward(
+        self, x: torch.Tensor, t: torch.Tensor | int
+    ) -> torch.Tensor:  # pragma: no cover - thin wrapper
         """Return logits for all classes, ignoring task information."""
         del t
         return self.net(x)
@@ -119,4 +125,3 @@ class Net(torch.nn.Module):
 
 
 __all__ = ["Net"]
-
