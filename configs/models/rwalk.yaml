@@ -4,6 +4,7 @@ lr: 0.01
 lamb: 1.0
 alpha: 0.9
 # task_order_files: "t2-uclresm-25noise,t1-uclresm-25noise,t0-uclresm-25noise,t2-rcn,t0-rcn,t0-deeprad,t1-deeprad,t3-deeprad,t1-rcn,t2-deeprad,"
+# task_order_files: "t2-uclresm-25noise,t1-uclresm-25noise,t0-uclresm-25noise,t2-rcn,t0-rcn,t0-deeprad,t1-deeprad,t3-deeprad,t1-rcn,t2-deeprad,"
 
 task_order_files: "t2-uclresm-25noise, t1-uclresm-25noise, t0-uclresm-25noise"
 data_path: data/rff/radar/uclresm_25noise

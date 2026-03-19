@@ -250,7 +250,7 @@ def log_sum_exp(input, dim=None, keepdim=False):
     return output
 
 
-_REFERENCE_BATCH_SIZE: Final[int] = 128
+_REFERENCE_BATCH_SIZE: Final[int] = 256
 
 
 def scale_learning_rate_for_batch_size(

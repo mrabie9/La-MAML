@@ -62,7 +62,15 @@ class noReLUBlock(nn.Module):
 
 
 class ContextNet(nn.Module):
-    def __init__(self, num_classes, in_channels=2, task_emb=64, n_tasks=17):
+    def __init__(
+        self,
+        num_classes,
+        in_channels=2,
+        task_emb=64,
+        n_tasks=17,
+        use_iq_aug_features: bool = False,
+        iq_aug_scaling_mode: str = "none",
+    ):
         super(ContextNet, self).__init__()
         self.in_planes = nf = 64
         # self.conv1 = conv3x3(3, nf * 1)
@@ -80,6 +88,8 @@ class ContextNet(nn.Module):
             num_classes,
             in_channels=in_channels,
             input_adapter=AdcIqAdapter(),
+            use_iq_aug_features=use_iq_aug_features,
+            iq_aug_scaling_mode=iq_aug_scaling_mode,
         )
         self.feature_dim = self.model.fc.in_features
         self.det_head = nn.Linear(self.feature_dim, 1)
@@ -176,6 +186,19 @@ class ContextNet(nn.Module):
         y = self.model.fc(feat)
         return y
 
-
-def ContextNet18(num_classes, n_tasks=17, task_emb=64):
-    return ContextNet(num_classes, n_tasks=n_tasks, task_emb=task_emb)
+def ContextNet18(
+    num_classes,
+    in_channels=2,
+    n_tasks=17,
+    task_emb=64,
+    use_iq_aug_features: bool = False,
+    iq_aug_scaling_mode: str = "none",
+):
+    return ContextNet(
+        num_classes,
+        in_channels=in_channels,
+        n_tasks=n_tasks,
+        task_emb=task_emb,
+        use_iq_aug_features=use_iq_aug_features,
+        iq_aug_scaling_mode=iq_aug_scaling_mode,
+    )

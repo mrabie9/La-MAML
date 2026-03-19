@@ -2,3 +2,8 @@
 model: ewc
 lr: 0.003
 lamb: 1
+
+task_order_files: "t0-uclresm-25noise,t2-rcn,t0-rcn,t0-deeprad,t1-deeprad,t3-deeprad,t1-rcn,t2-deeprad,t2-uclresm-25noise,t1-uclresm-25noise,"
+n_epochs: 1
+samples_per_task: 256
+expt_name: ignore

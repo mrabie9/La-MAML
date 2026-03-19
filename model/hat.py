@@ -20,6 +20,7 @@ import torch.nn as nn
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 from model.resnet1d import AdcIqAdapter
+from utils.iq_features import append_iq_augmented_features
 
 
 class HatInputAdapter(nn.Module):
@@ -281,7 +282,9 @@ class HatBackbone(nn.Module):
         if cfg.dataset.lower() == "iq" or cfg.input_channels == 2:
             if n_inputs % 2 != 0:
                 raise ValueError("IQ inputs must have an even number of features")
-            self.in_channels = 2
+            self.use_iq_aug_features = bool(getattr(args, "use_iq_aug_features", False))
+            self.iq_aug_scaling_mode = str(getattr(args, "data_scaling", "none"))
+            self.in_channels = 4 if self.use_iq_aug_features else 2
             self.seq_len = n_inputs // 2
         else:
             raise NotImplementedError
@@ -327,7 +330,7 @@ class HatBackbone(nn.Module):
                 }
 
         self.param_gate_map: Dict[str, Dict[str, Optional[str]]] = {}
-        self.model = HatResNet1D(2, n_outputs, registry, param_register)
+        self.model = HatResNet1D(self.in_channels, n_outputs, registry, param_register)
 
         self.gate_specs = registry.specs
         self.gate_to_idx = {
@@ -382,10 +385,15 @@ class HatBackbone(nn.Module):
     ) -> Tuple[torch.Tensor, List[torch.Tensor]] | torch.Tensor:
         x = self._ensure_iq_shape(x)
         x = self.input_adapter(x)
-        masks = self.mask(task, s)  # mask for each stage
-        mask_dict = {  # dict of masks per layer
-            spec["name"]: masks[idx].view(-1)
-            for idx, spec in enumerate(self.gate_specs)
+        if x.dim() == 3 and x.size(1) == 2:
+            x = append_iq_augmented_features(
+                x,
+                enabled=self.use_iq_aug_features,
+                scaling_mode=self.iq_aug_scaling_mode,
+            )
+        masks = self.mask(task, s) # mask for each stage
+        mask_dict = { # dict of masks per layer
+            spec["name"]: masks[idx].view(-1) for idx, spec in enumerate(self.gate_specs)
         }
         logits = self.model(x, mask_dict)
         if return_masks:

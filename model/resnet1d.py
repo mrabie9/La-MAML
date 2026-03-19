@@ -12,6 +12,7 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 from torch.func import functional_call
+from utils.iq_features import append_iq_augmented_features
 
 
 class BasicBlock1D(nn.Module):
@@ -70,9 +71,9 @@ class AdcIqAdapter(nn.Module):
         self.bias = nn.Parameter(torch.zeros(2))
         # nn.init.xavier_uniform_(self.weight)
         self.proj_3ch = nn.Conv1d(3, 2, kernel_size=1)
-        weight_4d = torch.tensor([[1, 1, 1], [1, 1, 1]])
-        bias_4d = torch.tensor([0.0, 0.0])
-        print(f"weight: {self.weight}", f"bias: {self.bias}")
+        # weight_4d = torch.tensor([[1,  1,  1 ],
+        #                             [1,  1, 1 ]])
+        # bias_4d = torch.tensor([0.0,  0.0])
         # self.set_initial_parameters(weight_4d=weight_4d, bias_4d=bias_4d)
 
     def set_initial_parameters(
@@ -159,6 +160,8 @@ class AdcIqAdapter(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if x.dim() == 3 and x.size(1) == 3:
             return self.proj_3ch(x)
+        if x.dim() == 3 and x.size(1) == 2:
+            return x
         if x.dim() != 4 or x.size(1) != 3 or x.size(2) != 2:
             raise ValueError(
                 f"ADC adapter expects (B, 3, 2, L) or (B, 3, L); got shape {tuple(x.shape)}."
@@ -174,23 +177,19 @@ class AdcIqAdapter(nn.Module):
 class _ResNet1D(nn.Module):
     """Internal utility that mirrors ``torchvision``'s ``ResNet`` logic."""
 
-    def __init__(
-        self,
-        block: type[nn.Module],
-        layers: list[int],
-        num_classes: int,
-        in_channels: int = 2,
-        norm_layer=None,
-        input_adapter: nn.Module | None = None,
-    ) -> None:
+    def __init__(self, block: type[nn.Module], layers: list[int], num_classes: int,
+                 in_channels: int = 2, norm_layer=None, input_adapter: nn.Module | None = None,
+                 use_iq_aug_features: bool = False, iq_aug_scaling_mode: str = "none") -> None:
         super().__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm1d
         self._norm_layer = norm_layer
         self.inplanes = 64
         self.input_adapter = input_adapter or nn.Identity()
+        self.use_iq_aug_features = bool(use_iq_aug_features)
+        self.iq_aug_scaling_mode = iq_aug_scaling_mode
 
-        self.conv1 = nn.Conv1d(2, 64, kernel_size=7, stride=2, padding=1, bias=False)
+        self.conv1 = nn.Conv1d(in_channels, 64, kernel_size=7, stride=2, padding=1, bias=False)
         self.bn1 = norm_layer(64)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
@@ -250,12 +249,16 @@ class _ResNet1D(nn.Module):
                     x = self.input_adapter(x)
                 else:
                     raise ValueError("Received 4D input but no adapter is configured.")
-            elif (
-                x.dim() == 3
-                and x.size(1) != 2
-                and not isinstance(self.input_adapter, nn.Identity)
+            elif x.dim() == 3 and x.size(1) != 2 and not isinstance(
+                self.input_adapter, nn.Identity
             ):
                 x = self.input_adapter(x)
+            if x.dim() == 3 and x.size(1) == 2:
+                x = append_iq_augmented_features(
+                    x,
+                    enabled=self.use_iq_aug_features,
+                    scaling_mode=self.iq_aug_scaling_mode,
+                )
 
             x = self.bn1(self.conv1(x))
             x = self.relu(x)
@@ -287,15 +290,20 @@ class ResNet1D(nn.Module):
     def __init__(self, num_classes: int, args=None, in_channels: int = 2) -> None:
         super().__init__()
         self.args = args
+        self.use_iq_aug_features = bool(getattr(args, "use_iq_aug_features", False))
+        self.iq_aug_scaling_mode = str(getattr(args, "data_scaling", "none"))
+        effective_in_channels = 4 if self.use_iq_aug_features else in_channels
         norm_layer = self._build_norm_factory(args)
         self.input_adapter = AdcIqAdapter()
         self.model = _ResNet1D(
             BasicBlock1D,
             [2, 2, 2, 2],
             num_classes,
-            in_channels=in_channels,
+            in_channels=effective_in_channels,
             norm_layer=norm_layer,
             input_adapter=self.input_adapter,
+            use_iq_aug_features=self.use_iq_aug_features,
+            iq_aug_scaling_mode=self.iq_aug_scaling_mode,
         )
         self.feature_dim = self.model.fc.in_features
         self.det_head = nn.Linear(self.feature_dim, 1)

@@ -19,6 +19,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from model.resnet1d import AdcIqAdapter, ResNet1D
+from utils.iq_features import append_iq_augmented_features
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 
@@ -378,7 +379,10 @@ class BayesianClassifier(nn.Module):
             )
 
         self.input_adapter = AdcIqAdapter()
-        self.feature_net = BayesianResNet1D(in_channels=2, ratio=cfg.ratio)
+        self.use_iq_aug_features = bool(getattr(args, "use_iq_aug_features", False))
+        self.iq_aug_scaling_mode = str(getattr(args, "data_scaling", "none"))
+        feature_in_channels = 4 if self.use_iq_aug_features else 2
+        self.feature_net = BayesianResNet1D(in_channels=feature_in_channels, ratio=cfg.ratio)
         self.feature_dim = self.feature_net.feature_dim
 
         self.heads = nn.ModuleList(
@@ -397,6 +401,12 @@ class BayesianClassifier(nn.Module):
             x = self.input_adapter(x)
         elif x.dim() == 4 and x.size(1) == 3 and x.size(2) == 2:
             x = self.input_adapter(x)
+        if x.dim() == 3 and x.size(1) == 2:
+            x = append_iq_augmented_features(
+                x,
+                enabled=self.use_iq_aug_features,
+                scaling_mode=self.iq_aug_scaling_mode,
+            )
         feats = self.feature_net(x, sample=sample, ret_feats=True)
         outputs = [head(feats, sample=sample) for head in self.heads]
         if self.split:

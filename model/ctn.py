@@ -58,8 +58,16 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         # setup network
         if self.cfg.arch == "resnet1d":
             # self.net = ResNet1D(n_outputs, args)
+            use_iq_aug_features = bool(getattr(args, "use_iq_aug_features", False))
+            iq_aug_scaling_mode = str(getattr(args, "data_scaling", "none"))
+            in_channels = 4 if use_iq_aug_features else 2
             self.net = ContextNet18(
-                n_outputs, n_tasks=n_tasks, task_emb=self.cfg.task_emb
+                n_outputs,
+                in_channels=in_channels,
+                n_tasks=n_tasks,
+                task_emb=self.cfg.task_emb,
+                use_iq_aug_features=use_iq_aug_features,
+                iq_aug_scaling_mode=iq_aug_scaling_mode,
             )
         # self.net.define_task_lr_params(alpha_init=args.alpha_init)
         else:
