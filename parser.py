@@ -198,6 +198,14 @@ def get_parser():
             "I**2 + Q**2 and I*Q."
         ),
     )
+    parser.add_argument(
+        "--iq_aug_feature_type",
+        type=str,
+        default="power",
+        choices=["power", "cross"],
+        help="When `--use_iq_aug_features` is enabled, select which derived IQ "
+        "channel to append: `power` => I**2 + Q**2, `cross` => I*Q.",
+    )
     parser.add_argument("-order", "--class_order", default="old", type=str,
                         help="define classes order of increment ",
                         choices = ["random", "chrono", "old", "super"])
