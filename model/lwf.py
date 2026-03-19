@@ -49,10 +49,13 @@ class LwfConfig:
                 setattr(cfg, field, getattr(args, field))
         return cfg
 
+
 class Net(DetectionReplayMixin, nn.Module):
     """LwF learner that plugs directly into the repository training loop."""
 
-    def __init__(self, n_inputs: int, n_outputs: int, n_tasks: int, args: object) -> None:
+    def __init__(
+        self, n_inputs: int, n_outputs: int, n_tasks: int, args: object
+    ) -> None:
         super().__init__()
         if n_tasks <= 0:
             raise ValueError("LwF requires a positive number of tasks")
@@ -64,7 +67,8 @@ class Net(DetectionReplayMixin, nn.Module):
         self.classes_per_task = misc_utils.build_task_class_list(
             n_tasks,
             n_outputs,
-            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            nc_per_task=getattr(args, "nc_per_task_list", "")
+            or getattr(args, "nc_per_task", None),
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
@@ -165,9 +169,11 @@ class Net(DetectionReplayMixin, nn.Module):
         #     mem_loss = self.det_loss(mem_det_logits, mem_y.float())
         #     det_loss = 0.5 * (det_loss + mem_loss)
 
-        loss = (self.cls_lambda * loss_ce
-                # + self.det_lambda * det_loss
-                + self.distill_lambda * distill_loss)
+        loss = (
+            self.cls_lambda * loss_ce
+            # + self.det_lambda * det_loss
+            + self.distill_lambda * distill_loss
+        )
 
         self.opt.zero_grad()
         loss.backward()
@@ -182,7 +188,9 @@ class Net(DetectionReplayMixin, nn.Module):
         arch = getattr(args, "arch", "resnet1d")
         arch = arch.lower() if isinstance(arch, str) else "resnet1d"
         if arch != "resnet1d":
-            raise ValueError(f"Unsupported arch {arch}; only resnet1d is available now.")
+            raise ValueError(
+                f"Unsupported arch {arch}; only resnet1d is available now."
+            )
         return ResNet1D(n_outputs, args)
 
     # ------------------------------------------------------------------
@@ -196,7 +204,7 @@ class Net(DetectionReplayMixin, nn.Module):
             return opt_cls(params, lr=lr)
         if optim_name == "adagrad":
             return torch.optim.Adagrad(params, lr=lr)
-        
+
         return torch.optim.SGD(params, lr=lr, momentum=0.9)
 
     # ------------------------------------------------------------------
@@ -211,14 +219,16 @@ class Net(DetectionReplayMixin, nn.Module):
         if self.teacher is None or not prev_class_ids:
             return torch.zeros(1, device=student_logits.device)
 
-        idx = torch.as_tensor(prev_class_ids, dtype=torch.long, device=student_logits.device)
+        idx = torch.as_tensor(
+            prev_class_ids, dtype=torch.long, device=student_logits.device
+        )
         student_prev = student_logits.index_select(1, idx)
         with torch.no_grad():
             teacher_logits = self.teacher(x).index_select(1, idx)
             teacher_probs = F.softmax(teacher_logits / self.temperature, dim=1)
 
         student_log_probs = F.log_softmax(student_prev / self.temperature, dim=1)
-        loss = self.kl(student_log_probs, teacher_probs) * (self.temperature ** 2)
+        loss = self.kl(student_log_probs, teacher_probs) * (self.temperature**2)
         return loss
 
     def _collect_previous_class_ids(self, current_task: int) -> List[int]:
@@ -246,7 +256,9 @@ class Net(DetectionReplayMixin, nn.Module):
         mapped = [label_map[int(lbl)] for lbl in labels.detach().cpu().tolist()]
         return torch.tensor(mapped, dtype=torch.long, device=labels.device)
 
-    def _select_task_logits(self, logits: torch.Tensor, class_ids: List[int]) -> torch.Tensor:
+    def _select_task_logits(
+        self, logits: torch.Tensor, class_ids: List[int]
+    ) -> torch.Tensor:
         idx = torch.as_tensor(class_ids, dtype=torch.long, device=logits.device)
         return logits.index_select(1, idx)
 
@@ -258,7 +270,7 @@ class Net(DetectionReplayMixin, nn.Module):
         student_log_probs = F.log_softmax(
             student_logits[:, :previous_classes] / self.temperature, dim=1
         )
-        loss = self.kl(student_log_probs, teacher_probs) * (self.temperature ** 2)
+        loss = self.kl(student_log_probs, teacher_probs) * (self.temperature**2)
         return loss
 
     # ------------------------------------------------------------------

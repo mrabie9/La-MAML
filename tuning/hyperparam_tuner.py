@@ -17,6 +17,7 @@ from typing import Any, Callable, Dict, List, Sequence
 
 import torch
 import sys
+
 sys.path.append("/home/lunet/wsmr11/repos/La-MAML")  # to import from parent directory
 import parser as file_parser
 from main import life_experience, life_experience_iid
@@ -60,7 +61,9 @@ class TuningPreset:
     def resolve_description(self) -> str:
         if self.description:
             return self.description
-        return f"Run grid or random search over {self.model_name.upper()} hyperparameters."
+        return (
+            f"Run grid or random search over {self.model_name.upper()} hyperparameters."
+        )
 
     def resolve_output_root(self) -> str:
         if self.default_output_root:
@@ -178,7 +181,9 @@ def build_cli(preset: TuningPreset) -> argparse.ArgumentParser:
     return parser
 
 
-def get_reference(key: str, base_args: argparse.Namespace, type_hints: TypeHints) -> Any:
+def get_reference(
+    key: str, base_args: argparse.Namespace, type_hints: TypeHints
+) -> Any:
     if hasattr(base_args, key):
         return getattr(base_args, key)
     return type_hints.get(key)
@@ -480,7 +485,9 @@ def run_single_trial(
     }
 
 
-def dump_summary(session_dir: Path, summary: Dict[str, Any], successes: List[Dict[str, Any]]) -> None:
+def dump_summary(
+    session_dir: Path, summary: Dict[str, Any], successes: List[Dict[str, Any]]
+) -> None:
     summary_path = session_dir / "summary.json"
     session_dir.mkdir(parents=True, exist_ok=True)
     with summary_path.open("w", encoding="utf-8") as fh:
@@ -543,7 +550,9 @@ def run_tuning(preset: TuningPreset) -> None:
     if getattr(base_args, "model", preset.model_name) != preset.model_name:
         base_args.model = preset.model_name
 
-    constant_overrides = parse_override_specs(cli.override, base_args, preset.type_hints)
+    constant_overrides = parse_override_specs(
+        cli.override, base_args, preset.type_hints
+    )
 
     if cli.grid:
         search_space = parse_grid_specs(cli.grid, base_args, preset.type_hints)
@@ -583,7 +592,9 @@ def run_tuning(preset: TuningPreset) -> None:
         lr_first = False
 
     full_search_space = {key: values[:] for key, values in search_space.items()}
-    trials = expand_trials(search_space, cli.num_samples, cli.search_seed, cli.max_trials, cli.shuffle)
+    trials = expand_trials(
+        search_space, cli.num_samples, cli.search_seed, cli.max_trials, cli.shuffle
+    )
 
     if cli.dry_run:
         print("Planned trials (dry-run):")
@@ -594,7 +605,11 @@ def run_tuning(preset: TuningPreset) -> None:
             for key in search_space.keys():
                 stage_space = {key: search_space[key]}
                 stage_trials = expand_trials(
-                    stage_space, cli.num_samples, cli.search_seed, cli.max_trials, cli.shuffle
+                    stage_space,
+                    cli.num_samples,
+                    cli.search_seed,
+                    cli.max_trials,
+                    cli.shuffle,
                 )
                 for trial in stage_trials:
                     merged = dict(stage_overrides)
@@ -604,9 +619,17 @@ def run_tuning(preset: TuningPreset) -> None:
                 total_trials += len(stage_trials)
             print(f"Total: {total_trials} trials")
         elif lr_first:
-            lr_trials = expand_trials(lr_space, cli.num_samples, cli.search_seed, cli.max_trials, cli.shuffle)
+            lr_trials = expand_trials(
+                lr_space, cli.num_samples, cli.search_seed, cli.max_trials, cli.shuffle
+            )
             rest_space = {k: v for k, v in search_space.items() if k not in lr_space}
-            rest_trials = expand_trials(rest_space, cli.num_samples, cli.search_seed, cli.max_trials, cli.shuffle)
+            rest_trials = expand_trials(
+                rest_space,
+                cli.num_samples,
+                cli.search_seed,
+                cli.max_trials,
+                cli.shuffle,
+            )
             total_trials = len(lr_trials) + len(rest_trials)
             for idx, tr in enumerate(lr_trials):
                 merged = dict(constant_overrides)
@@ -689,33 +712,59 @@ def run_tuning(preset: TuningPreset) -> None:
         for key in search_space.keys():
             stage_space = {key: search_space[key]}
             stage_trials = expand_trials(
-                stage_space, cli.num_samples, cli.search_seed, cli.max_trials, cli.shuffle
+                stage_space,
+                cli.num_samples,
+                cli.search_seed,
+                cli.max_trials,
+                cli.shuffle,
             )
             stage_results = run_trials(stage_trials, stage_overrides, key, trial_idx)
             results.extend(stage_results)
             trial_idx += len(stage_trials)
 
             stage_successes = [
-                r for r in stage_results if r.get("status") == "ok" and r.get("stage") == key
+                r
+                for r in stage_results
+                if r.get("status") == "ok" and r.get("stage") == key
             ]
-            stage_best = max(stage_successes, key=lambda r: r["score"]) if stage_successes else None
+            stage_best = (
+                max(stage_successes, key=lambda r: r["score"])
+                if stage_successes
+                else None
+            )
             if stage_best is None:
-                print(f"Hierarchical stage '{key}' recorded no successful trials; stopping.")
+                print(
+                    f"Hierarchical stage '{key}' recorded no successful trials; stopping."
+                )
                 break
             stage_overrides[key] = stage_best["trial_params"].get(key)
     elif lr_first:
-        lr_trials = expand_trials(lr_space, cli.num_samples, cli.search_seed, cli.max_trials, cli.shuffle)
+        lr_trials = expand_trials(
+            lr_space, cli.num_samples, cli.search_seed, cli.max_trials, cli.shuffle
+        )
         results.extend(run_trials(lr_trials, constant_overrides, "lr", 0))
-        lr_successes = [r for r in results if r.get("status") == "ok" and r.get("stage") == "lr"]
+        lr_successes = [
+            r for r in results if r.get("status") == "ok" and r.get("stage") == "lr"
+        ]
         lr_best = max(lr_successes, key=lambda r: r["score"]) if lr_successes else None
         if lr_best:
             lr_first_best = {key: lr_best["trial_params"].get(key) for key in lr_space}
             stage2_overrides = dict(constant_overrides, **lr_first_best)
             rest_space = {k: v for k, v in search_space.items() if k not in lr_space}
-            rest_trials = expand_trials(rest_space, cli.num_samples, cli.search_seed, cli.max_trials, cli.shuffle)
-            results.extend(run_trials(rest_trials, stage2_overrides, "rest", len(lr_trials)))
+            rest_trials = expand_trials(
+                rest_space,
+                cli.num_samples,
+                cli.search_seed,
+                cli.max_trials,
+                cli.shuffle,
+            )
+            results.extend(
+                run_trials(rest_trials, stage2_overrides, "rest", len(lr_trials))
+            )
         else:
-            print("LR-first stage recorded no successful trials; skipping remaining parameters.")
+            print(
+                "LR-first stage recorded no successful trials; skipping remaining parameters."
+            )
     else:
         results.extend(run_trials(trials, constant_overrides, None, 0))
 

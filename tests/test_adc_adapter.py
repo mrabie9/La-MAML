@@ -45,23 +45,24 @@ def test_prepare_input_ambiguous_flat():
 def test_adapter_known_mix():
     adapter = AdcIqAdapter()
     with torch.no_grad():
-        adapter.weight.copy_(torch.tensor([[1.0, 0.0, 0.0],
-                                           [0.0, 0.0, 1.0]]))
+        adapter.weight.copy_(torch.tensor([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]))
         adapter.bias.zero_()
     b, l = 2, 16
-    i = torch.randn(b, l) # [b, l]
-    q = torch.randn(b, l) # [b, l]
-    adc3 = torch.randn(b, l) # [b,l]
+    i = torch.randn(b, l)  # [b, l]
+    q = torch.randn(b, l)  # [b, l]
+    adc3 = torch.randn(b, l)  # [b,l]
     # print("Input I:", i)
     # print("Input Q:", q)
     # print("Stacked IQ", torch.stack([i, q], dim=1))
     x = torch.stack(
-        [torch.stack([i, q], dim=1),
-         torch.stack([q, i], dim=1),
-         torch.stack([adc3, adc3], dim=1)],
+        [
+            torch.stack([i, q], dim=1),
+            torch.stack([q, i], dim=1),
+            torch.stack([adc3, adc3], dim=1),
+        ],
         dim=1,
     )  # (B, 3, 2, L)
-    y = adapter(x) # (B, 2, L)
+    y = adapter(x)  # (B, 2, L)
     print(y.shape)
     # print(y[:,0,:],"\n", y[:,1,:])
     assert torch.allclose(y[:, 0], i, atol=1e-6)

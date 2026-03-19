@@ -52,7 +52,9 @@ class RWalkConfig:
 class Net(DetectionReplayMixin, nn.Module):
     """RWalk continual learner built on top of ``ResNet1D``."""
 
-    def __init__(self, n_inputs: int, n_outputs: int, n_tasks: int, args: object | None) -> None:
+    def __init__(
+        self, n_inputs: int, n_outputs: int, n_tasks: int, args: object | None
+    ) -> None:
         super().__init__()
         del n_inputs  # The ResNet1D front-end dictates its own receptive field
 
@@ -64,7 +66,8 @@ class Net(DetectionReplayMixin, nn.Module):
         self.classes_per_task = misc_utils.build_task_class_list(
             n_tasks,
             n_outputs,
-            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            nc_per_task=getattr(args, "nc_per_task_list", "")
+            or getattr(args, "nc_per_task", None),
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
@@ -99,7 +102,9 @@ class Net(DetectionReplayMixin, nn.Module):
         self._initialise_state()
 
     # ------------------------------------------------------------------
-    def forward(self, x: torch.Tensor, t: int, **kwargs) -> torch.Tensor:  # pragma: no cover - thin wrapper
+    def forward(
+        self, x: torch.Tensor, t: int, **kwargs
+    ) -> torch.Tensor:  # pragma: no cover - thin wrapper
         logits = self.net(x)
         if not self.is_task_incremental:
             return logits
@@ -163,9 +168,11 @@ class Net(DetectionReplayMixin, nn.Module):
         #     mem_loss = self.det_loss(mem_det_logits, mem_y.float())
         #     det_loss = 0.5 * (det_loss + mem_loss)
 
-        loss = (self.cls_lambda * loss_ce
-                # + self.det_lambda * det_loss
-                + self.lamb * self._regulariser())
+        loss = (
+            self.cls_lambda * loss_ce
+            # + self.det_lambda * det_loss
+            + self.lamb * self._regulariser()
+        )
         loss.backward()
 
         if self.clipgrad is not None:
@@ -246,7 +253,9 @@ class Net(DetectionReplayMixin, nn.Module):
 
             fisher_current = grad.detach().pow(2)
             prev_running = self.fisher_running[name]
-            self.fisher_running[name] = self.alpha * fisher_current + (1.0 - self.alpha) * prev_running
+            self.fisher_running[name] = (
+                self.alpha * fisher_current + (1.0 - self.alpha) * prev_running
+            )
 
             delta = param.detach() - self.p_old[name]
             fisher_distance = 0.5 * self.fisher_running[name] * delta.pow(2)
@@ -303,7 +312,6 @@ class Net(DetectionReplayMixin, nn.Module):
     # ------------------------------------------------------------------
     def _device(self) -> torch.device:
         return next(self.net.parameters()).device
-
 
 
 __all__ = ["Net"]

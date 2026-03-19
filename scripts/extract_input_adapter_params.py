@@ -39,6 +39,7 @@ def load_results_pt(path: Path) -> tuple:
     if add_safe_globals is not None:
         try:
             import argparse as _argparse
+
             add_safe_globals([_argparse.Namespace])
         except Exception:
             pass
@@ -57,7 +58,11 @@ def find_input_adapter_keys(state_dict: dict) -> list[str]:
     return [k for k in state_dict if "input_adapter" in k]
 
 
-def get_combined_weight_bias(state_dict: dict, adapter_keys: list[str]) -> tuple[torch.Tensor | None, torch.Tensor | None, torch.Tensor | None, torch.Tensor | None]:
+def get_combined_weight_bias(
+    state_dict: dict, adapter_keys: list[str]
+) -> tuple[
+    torch.Tensor | None, torch.Tensor | None, torch.Tensor | None, torch.Tensor | None
+]:
     """Extract (weight_2x3, bias_2) for 3D path and (weight_4d_2x3, bias_4d_2) for 4D path if present.
 
     AdcIqAdapter has:
@@ -79,7 +84,13 @@ def get_combined_weight_bias(state_dict: dict, adapter_keys: list[str]) -> tuple
             weight_3d = v.squeeze().clone()
         elif k.endswith("proj_3ch.bias"):
             bias_3d = v.clone()
-        elif k.endswith(".weight") and "proj_3ch" not in k and v.dim() == 2 and v.shape[0] == 2 and v.shape[1] == 3:
+        elif (
+            k.endswith(".weight")
+            and "proj_3ch" not in k
+            and v.dim() == 2
+            and v.shape[0] == 2
+            and v.shape[1] == 3
+        ):
             weight_4d = v.clone()
         elif k.endswith(".bias") and "proj_3ch" not in k and v.numel() == 2:
             bias_4d = v.clone()
@@ -87,13 +98,18 @@ def get_combined_weight_bias(state_dict: dict, adapter_keys: list[str]) -> tuple
     return weight_3d, bias_3d, weight_4d, bias_4d
 
 
-def format_linear_combination(weight: torch.Tensor, bias: torch.Tensor, channel_names: list[str]) -> list[str]:
+def format_linear_combination(
+    weight: torch.Tensor, bias: torch.Tensor, channel_names: list[str]
+) -> list[str]:
     """Describe each output channel as a linear combination of input channels."""
     weight = weight.detach().float()
     bias = bias.detach().float()
     lines = []
     for i in range(weight.shape[0]):
-        terms = [f"{weight[i, j].item():+.4f} * {channel_names[j]}" for j in range(weight.shape[1])]
+        terms = [
+            f"{weight[i, j].item():+.4f} * {channel_names[j]}"
+            for j in range(weight.shape[1])
+        ]
         expr = " ".join(terms) + f" {bias[i].item():+.4f}"
         lines.append(f"  out[{i}] (IQ[{i}]): {expr}")
     return lines
@@ -114,7 +130,9 @@ def print_adapter_params(
         print(f"No keys containing 'input_adapter' in {path}")
         return
 
-    weight_3d, bias_3d, weight_4d, bias_4d = get_combined_weight_bias(state_dict, adapter_keys)
+    weight_3d, bias_3d, weight_4d, bias_4d = get_combined_weight_bias(
+        state_dict, adapter_keys
+    )
 
     print(f"Input adapter parameters from: {path}")
     print("Keys found:", adapter_keys)
@@ -129,7 +147,10 @@ def print_adapter_params(
         for line in format_linear_combination(weight_3d, bias_3d, channel_names):
             print(line)
         if output_format == "csv":
-            print("csv_3d_weight:", ",".join(f"{x:.6f}" for x in weight_3d.flatten().tolist()))
+            print(
+                "csv_3d_weight:",
+                ",".join(f"{x:.6f}" for x in weight_3d.flatten().tolist()),
+            )
             print("csv_3d_bias:", ",".join(f"{x:.6f}" for x in bias_3d.tolist()))
         print()
 
@@ -142,7 +163,10 @@ def print_adapter_params(
         for line in format_linear_combination(weight_4d, bias_4d, channel_names):
             print(line)
         if output_format == "csv":
-            print("csv_4d_weight:", ",".join(f"{x:.6f}" for x in weight_4d.flatten().tolist()))
+            print(
+                "csv_4d_weight:",
+                ",".join(f"{x:.6f}" for x in weight_4d.flatten().tolist()),
+            )
             print("csv_4d_bias:", ",".join(f"{x:.6f}" for x in bias_4d.tolist()))
         print()
 
@@ -151,7 +175,9 @@ def print_adapter_params(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument(
         "results_pt",
         type=Path,

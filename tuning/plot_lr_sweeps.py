@@ -12,8 +12,10 @@ from typing import Any, Dict, Iterable, List, Tuple
 
 try:
     import matplotlib
+
     matplotlib.use("Agg")  # Allows running in headless environments.
     import matplotlib.pyplot as plt
+
     _HAS_MPL = True
 except Exception:  # pragma: no cover - matplotlib not always installed.
     plt = None
@@ -147,7 +149,9 @@ def plot_lr_sweeps(
 
     cols = min(3, len(models))
     n_rows = int(math.ceil(len(models) / cols))
-    fig, axes = plt.subplots(n_rows, cols, figsize=(5.0 * cols, 4.0 * n_rows), squeeze=False)
+    fig, axes = plt.subplots(
+        n_rows, cols, figsize=(5.0 * cols, 4.0 * n_rows), squeeze=False
+    )
     fig.suptitle(f"Learning-rate sweeps ({metric})")
 
     for idx, model in enumerate(models):
@@ -202,7 +206,9 @@ def plot_lr_heatmap(
     if not models:
         return
 
-    lr_values: List[float] = sorted({lr for rows in model_rows.values() for lr, _ in rows})
+    lr_values: List[float] = sorted(
+        {lr for rows in model_rows.values() for lr, _ in rows}
+    )
     if not lr_values:
         return
 
@@ -233,8 +239,12 @@ def plot_lr_heatmap(
     plt.close(fig)
 
 
-def filter_models(model_rows: Dict[str, List[MetricRow]], min_trials: int) -> Dict[str, List[MetricRow]]:
-    return {model: rows for model, rows in model_rows.items() if len(rows) >= min_trials}
+def filter_models(
+    model_rows: Dict[str, List[MetricRow]], min_trials: int
+) -> Dict[str, List[MetricRow]]:
+    return {
+        model: rows for model, rows in model_rows.items() if len(rows) >= min_trials
+    }
 
 
 def main() -> None:

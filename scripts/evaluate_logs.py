@@ -127,7 +127,9 @@ def iter_result_files(opts: argparse.Namespace) -> Iterable[Path]:
         yield results_file.resolve()
 
 
-def build_runtime_args(saved_args, run_dir: Path, device: torch.device, opts: argparse.Namespace):
+def build_runtime_args(
+    saved_args, run_dir: Path, device: torch.device, opts: argparse.Namespace
+):
     args = copy.deepcopy(saved_args)
     # Update paths/device flags for the current environment
     args.log_dir = str(run_dir)
@@ -138,7 +140,9 @@ def build_runtime_args(saved_args, run_dir: Path, device: torch.device, opts: ar
         args.eval_batch_size = opts.batch_size
     elif not hasattr(args, "eval_batch_size"):
         # Fall back to a reasonable default if it was never set during training
-        args.eval_batch_size = getattr(args, "test_batch_size", getattr(args, "batch_size", 64))
+        args.eval_batch_size = getattr(
+            args, "test_batch_size", getattr(args, "batch_size", 64)
+        )
     return args
 
 
@@ -163,9 +167,13 @@ def evaluate_run(results_path: Path, device: torch.device, opts: argparse.Namesp
     except TypeError:  # pragma: no cover - older torch without weights_only flag
         bundle = torch.load(results_path, map_location="cpu")
     try:
-        (result_val_t, result_val_a, state_dict, _val_stats, _one_liner, saved_args) = bundle
+        result_val_t, result_val_a, state_dict, _val_stats, _one_liner, saved_args = (
+            bundle
+        )
     except ValueError as exc:  # pragma: no cover - defensive unpack
-        raise RuntimeError(f"Unexpected checkpoint structure at {results_path}") from exc
+        raise RuntimeError(
+            f"Unexpected checkpoint structure at {results_path}"
+        ) from exc
 
     run_dir = results_path.parent
     args = build_runtime_args(saved_args, run_dir, device, opts)
@@ -173,13 +181,19 @@ def evaluate_run(results_path: Path, device: torch.device, opts: argparse.Namesp
 
     # print(model)
 
-    evaluator = eval_class_tasks if args.loader == "class_incremental_loader" else eval_tasks
+    evaluator = (
+        eval_class_tasks if args.loader == "class_incremental_loader" else eval_tasks
+    )
 
     with torch.no_grad():
         val_tasks = loader.get_tasks("val")
-        task_accuracies: Sequence[float] = evaluator(model, val_tasks, args, eval_epistemic=True)
+        task_accuracies: Sequence[float] = evaluator(
+            model, val_tasks, args, eval_epistemic=True
+        )
 
-    overall = sum(task_accuracies) / len(task_accuracies) if task_accuracies else float("nan")
+    overall = (
+        sum(task_accuracies) / len(task_accuracies) if task_accuracies else float("nan")
+    )
     metadata = {
         "run": str(run_dir),
         "tasks": list(task_accuracies),
@@ -205,7 +219,8 @@ def load_state_into_model(model: torch.nn.Module, raw_state_dict):
         if len(skipped_keys) > 3:
             sample += ", ..."
         print(
-            f"  Skipping {len(skipped_keys)} unexpected key(s) when loading checkpoint: {sample}")
+            f"  Skipping {len(skipped_keys)} unexpected key(s) when loading checkpoint: {sample}"
+        )
 
     incompat = model.load_state_dict(filtered_state, strict=False)
 
@@ -219,7 +234,9 @@ def load_state_into_model(model: torch.nn.Module, raw_state_dict):
         sample = ", ".join(incompat.unexpected_keys[:3])
         if len(incompat.unexpected_keys) > 3:
             sample += ", ..."
-        print(f"  Still found {len(incompat.unexpected_keys)} unexpected key(s): {sample}")
+        print(
+            f"  Still found {len(incompat.unexpected_keys)} unexpected key(s): {sample}"
+        )
 
 
 def main() -> int:

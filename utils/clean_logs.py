@@ -3,6 +3,7 @@ import argparse
 import shutil
 from pathlib import Path
 
+
 def main(base="logs", dry_run=True):
     base = Path(base)
     deleted = []
@@ -13,7 +14,11 @@ def main(base="logs", dry_run=True):
 
     # Assumes structure: logs/<method>/<run>/0/results.txt
     for method_dir in base.iterdir():
-        if not method_dir.is_dir() or method_dir.name.startswith("tuning") or method_dir.name.startswith("iq_experiments"): 
+        if (
+            not method_dir.is_dir()
+            or method_dir.name.startswith("tuning")
+            or method_dir.name.startswith("iq_experiments")
+        ):
             continue
         for run_dir in method_dir.iterdir():
             if not run_dir.is_dir():
@@ -34,9 +39,12 @@ def main(base="logs", dry_run=True):
     for p in deleted:
         print(f"  DELETE: {p}")
 
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="logs", help="Base logs directory")
-    ap.add_argument("--yes", action="store_true", help="Actually delete (disable dry-run)")
+    ap.add_argument(
+        "--yes", action="store_true", help="Actually delete (disable dry-run)"
+    )
     args = ap.parse_args()
     main(base=args.base, dry_run=not args.yes)

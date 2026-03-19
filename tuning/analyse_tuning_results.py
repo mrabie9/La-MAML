@@ -17,8 +17,10 @@ from typing import Any, Dict, Iterable, List, Sequence
 
 try:
     import matplotlib
+
     matplotlib.use("Agg")  # Allows running in headless environments.
     import matplotlib.pyplot as plt
+
     _HAS_MPL = True
 except Exception:  # pragma: no cover - matplotlib not always installed.
     plt = None
@@ -77,7 +79,9 @@ def flatten_results(results: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
     for item in results:
         params = item.get("params", {})
         raw_scores = item.get("val_per_task") or []
-        val_scores = [float(score) for score in raw_scores if isinstance(score, (int, float))]
+        val_scores = [
+            float(score) for score in raw_scores if isinstance(score, (int, float))
+        ]
         val_min = min(val_scores) if val_scores else float("nan")
         val_max = max(val_scores) if val_scores else float("nan")
         if len(val_scores) > 1:
@@ -112,7 +116,9 @@ def fmt_float(value: Any, precision: int = 4) -> str:
         return "nan"
     if isinstance(value, (int, float)):
         magnitude = abs(value)
-        if magnitude and (magnitude < 10 ** -precision or magnitude >= 10 ** (precision + 1)):
+        if magnitude and (
+            magnitude < 10**-precision or magnitude >= 10 ** (precision + 1)
+        ):
             return f"{value:.{precision}e}"
     return f"{value:.{precision}f}"
 
@@ -124,10 +130,16 @@ def fmt_value(value: Any, precision: int = 4) -> str:
 
 
 def is_finite_number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )
 
 
-def infer_param_names(summary: Dict[str, Any], rows: Sequence[Dict[str, Any]]) -> List[str]:
+def infer_param_names(
+    summary: Dict[str, Any], rows: Sequence[Dict[str, Any]]
+) -> List[str]:
     search_space = summary.get("search_space")
     if isinstance(search_space, dict) and search_space:
         return list(search_space.keys())
@@ -148,7 +160,9 @@ def infer_primary_metric(rows: Sequence[Dict[str, Any]]) -> str:
     return "val_mean"
 
 
-def print_header(summary: Dict[str, Any], rows: Sequence[Dict[str, Any]], param_names: Sequence[str]) -> None:
+def print_header(
+    summary: Dict[str, Any], rows: Sequence[Dict[str, Any]], param_names: Sequence[str]
+) -> None:
     print("\n=== Tuning summary ===")
     print(f"Config file      : {summary.get('config')}")
     print(f"Experiment name  : {summary.get('base_expt_name')}")
@@ -170,11 +184,12 @@ def print_header(summary: Dict[str, Any], rows: Sequence[Dict[str, Any]], param_
             )
         )
     else:
-        print(f"  trial #{best.get('trial')} | val_mean={fmt_float(best.get('val_mean'))}")
+        print(
+            f"  trial #{best.get('trial')} | val_mean={fmt_float(best.get('val_mean'))}"
+        )
     if param_names:
         param_text = ", ".join(
-            f"{name}={fmt_value(best_params.get(name), 5)}"
-            for name in param_names
+            f"{name}={fmt_value(best_params.get(name), 5)}" for name in param_names
         )
         print(f"  params: {param_text}")
     else:
@@ -209,8 +224,7 @@ def print_top_trials(
     for idx, row in enumerate(valid_rows[:k], start=1):
         params = row.get("params") or {}
         param_values = " ".join(
-            f"{fmt_value(params.get(name), 5):>{width}}"
-            for name, width in param_cols
+            f"{fmt_value(params.get(name), 5):>{width}}" for name, width in param_cols
         )
         print(
             f"{idx:>4} {row.get('trial', ''):>5} {fmt_float(row.get(metric_key)):>10} "
@@ -345,7 +359,9 @@ def build_score_tensor(
             and is_finite_number(metric_value)
         ):
             continue
-        tensor[slice_index[slice_val]][y_index[y_val]][x_index[x_val]] = float(metric_value)
+        tensor[slice_index[slice_val]][y_index[y_val]][x_index[x_val]] = float(
+            metric_value
+        )
 
     return tensor, x_values, y_values, slice_values
 
@@ -364,7 +380,9 @@ def plot_heatmap_2d(
         print("Matplotlib is not available; skipping plot generation.")
         return
 
-    finite_scores = [value for row in matrix for value in row if is_finite_number(value)]
+    finite_scores = [
+        value for row in matrix for value in row if is_finite_number(value)
+    ]
     if not finite_scores:
         print("No finite validation scores available for plotting.")
         return
@@ -374,7 +392,9 @@ def plot_heatmap_2d(
     fig, ax = plt.subplots(figsize=(6.0, 4.8))
     fig.suptitle(f"{metric_key} heatmap")
 
-    im = ax.imshow(matrix, origin="lower", aspect="auto", vmin=vmin, vmax=vmax, cmap="viridis")
+    im = ax.imshow(
+        matrix, origin="lower", aspect="auto", vmin=vmin, vmax=vmax, cmap="viridis"
+    )
     ax.set_xticks(range(len(x_values)))
     ax.set_xticklabels([f"{value:g}" for value in x_values], rotation=45, ha="right")
     ax.set_yticks(range(len(y_values)))
@@ -386,7 +406,15 @@ def plot_heatmap_2d(
         for x_idx, _ in enumerate(x_values):
             value = matrix[y_idx][x_idx]
             if is_finite_number(value):
-                ax.text(x_idx, y_idx, f"{value:.3f}", ha="center", va="center", color="white", fontsize=8)
+                ax.text(
+                    x_idx,
+                    y_idx,
+                    f"{value:.3f}",
+                    ha="center",
+                    va="center",
+                    color="white",
+                    fontsize=8,
+                )
 
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label=metric_key)
 
@@ -431,15 +459,21 @@ def plot_heatmaps_3d(
 
     cols = min(len(slice_values), 3)
     rows = int(math.ceil(len(slice_values) / cols))
-    fig, axes = plt.subplots(rows, cols, figsize=(4.8 * cols, 4.0 * rows), squeeze=False)
+    fig, axes = plt.subplots(
+        rows, cols, figsize=(4.8 * cols, 4.0 * rows), squeeze=False
+    )
     fig.suptitle(f"{metric_key} heatmaps by {slice_label}")
 
     for idx, slice_val in enumerate(slice_values):
         ax = axes[idx // cols][idx % cols]
         matrix = score_tensor[idx]
-        im = ax.imshow(matrix, origin="lower", aspect="auto", vmin=vmin, vmax=vmax, cmap="viridis")
+        im = ax.imshow(
+            matrix, origin="lower", aspect="auto", vmin=vmin, vmax=vmax, cmap="viridis"
+        )
         ax.set_xticks(range(len(x_values)))
-        ax.set_xticklabels([f"{value:g}" for value in x_values], rotation=45, ha="right")
+        ax.set_xticklabels(
+            [f"{value:g}" for value in x_values], rotation=45, ha="right"
+        )
         ax.set_yticks(range(len(y_values)))
         ax.set_yticklabels([f"{value:g}" for value in y_values])
         ax.set_xlabel(x_label)
@@ -450,7 +484,15 @@ def plot_heatmaps_3d(
             for x_idx, _ in enumerate(x_values):
                 value = matrix[y_idx][x_idx]
                 if is_finite_number(value):
-                    ax.text(x_idx, y_idx, f"{value:.3f}", ha="center", va="center", color="white", fontsize=8)
+                    ax.text(
+                        x_idx,
+                        y_idx,
+                        f"{value:.3f}",
+                        ha="center",
+                        va="center",
+                        color="white",
+                        fontsize=8,
+                    )
 
         fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label=metric_key)
 
@@ -470,7 +512,9 @@ def plot_heatmaps_3d(
 def main() -> None:
     args = parse_args()
     if args.summary is None:
-        raise SystemExit("Please provide --summary pointing to a tuning summary JSON file.")
+        raise SystemExit(
+            "Please provide --summary pointing to a tuning summary JSON file."
+        )
     summary = load_summary(args.summary)
     rows = flatten_results(summary.get("results", []))
     param_names = infer_param_names(summary, rows)
@@ -485,11 +529,15 @@ def main() -> None:
 
     plot_params = args.plot_params
     if plot_params is None:
-        candidates = [name for name in param_names if len(collect_param_values(rows, name)) > 1]
+        candidates = [
+            name for name in param_names if len(collect_param_values(rows, name)) > 1
+        ]
         plot_params = candidates[:3]
 
     if len(plot_params) == 2:
-        matrix_info = build_score_matrix(rows, plot_params[0], plot_params[1], metric_key)
+        matrix_info = build_score_matrix(
+            rows, plot_params[0], plot_params[1], metric_key
+        )
         if matrix_info is None:
             print("Insufficient hyper-parameter coverage to build a heatmap.")
             return
@@ -510,7 +558,9 @@ def main() -> None:
         return
 
     if len(plot_params) >= 3:
-        tensor_info = build_score_tensor(rows, plot_params[0], plot_params[1], plot_params[2], metric_key)
+        tensor_info = build_score_tensor(
+            rows, plot_params[0], plot_params[1], plot_params[2], metric_key
+        )
         if tensor_info is None:
             print("Insufficient hyper-parameter coverage to build a heatmap.")
             return
@@ -532,7 +582,9 @@ def main() -> None:
         )
         return
 
-    print("Not enough varying hyper-parameters to build a heatmap; use --plot-params to override.")
+    print(
+        "Not enough varying hyper-parameters to build a heatmap; use --plot-params to override."
+    )
 
 
 if __name__ == "__main__":

@@ -48,17 +48,17 @@ def confusion_matrix(result_t, result_a, log_dir, fname=None):
         fwt[t] = result[t - 1, t] - baseline[t]
 
     if fname is not None:
-        f = open(fname, 'w')
+        f = open(fname, "w")
 
-        print(' '.join(['%.4f' % r for r in baseline]), file=f)
-        print('|', file=f)
+        print(" ".join(["%.4f" % r for r in baseline]), file=f)
+        print("|", file=f)
         for row in range(result.size(0)):
-            print(' '.join(['%.4f' % r for r in result[row]]), file=f)
-        print('', file=f)
-        print('Diagonal Accuracy: %.4f' % acc.mean(), file=f)
-        print('Final Accuracy: %.4f' % fin.mean(), file=f)
-        print('Backward: %.4f' % bwt.mean(), file=f)
-        print('Forward:  %.4f' % fwt.mean(), file=f)
+            print(" ".join(["%.4f" % r for r in result[row]]), file=f)
+        print("", file=f)
+        print("Diagonal Accuracy: %.4f" % acc.mean(), file=f)
+        print("Final Accuracy: %.4f" % fin.mean(), file=f)
+        print("Backward: %.4f" % bwt.mean(), file=f)
+        print("Forward:  %.4f" % fwt.mean(), file=f)
         f.close()
 
     colors = cm.nipy_spectral(np.linspace(0, 1, len(result)))
@@ -68,9 +68,11 @@ def confusion_matrix(result_t, result_a, log_dir, fname=None):
     # ``copy=`` semantics in NumPy 2.x.
     data = np.asarray(result_a)
     for i in range(len(data[0])):
-        plt.plot(range(data.shape[0]), data[:,i], label=str(i), color=colors[i], linewidth=2)
-        
-    plt.savefig(log_dir + '/' + 'task_wise_accuracy.png')
+        plt.plot(
+            range(data.shape[0]), data[:, i], label=str(i), color=colors[i], linewidth=2
+        )
+
+    plt.savefig(log_dir + "/" + "task_wise_accuracy.png")
 
     stats = []
     stats.append(acc.mean())

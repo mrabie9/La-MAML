@@ -27,7 +27,7 @@ class SiConfig:
     lr: float = 0.001
     si_c: float = 0.1
     si_epsilon: float = 0.01
-    
+
     optimizer: str = "sgd"
     clipgrad: Optional[float] = 100.0
     det_lambda: float = 1.0
@@ -43,10 +43,13 @@ class SiConfig:
                 setattr(cfg, field, getattr(args, field))
         return cfg
 
+
 class Net(DetectionReplayMixin, nn.Module):
     """Synaptic Intelligence continual learner built on ``ResNet1D``."""
 
-    def __init__(self, n_inputs: int, n_outputs: int, n_tasks: int, args: object) -> None:
+    def __init__(
+        self, n_inputs: int, n_outputs: int, n_tasks: int, args: object
+    ) -> None:
         super().__init__()
         del n_inputs  # ResNet1D fixes its own receptive field
 
@@ -58,7 +61,8 @@ class Net(DetectionReplayMixin, nn.Module):
         self.classes_per_task = misc_utils.build_task_class_list(
             n_tasks,
             n_outputs,
-            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            nc_per_task=getattr(args, "nc_per_task_list", "")
+            or getattr(args, "nc_per_task", None),
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
@@ -122,7 +126,11 @@ class Net(DetectionReplayMixin, nn.Module):
         y_cls = y
         # det_logits, cls_logits = self.net.forward_heads(x)
         cls_logits = self.net.forward_heads(x)[1]
-        offset1, offset2 = self._compute_offsets(t) if self.is_task_incremental else (0, self.n_outputs)
+        offset1, offset2 = (
+            self._compute_offsets(t)
+            if self.is_task_incremental
+            else (0, self.n_outputs)
+        )
         # valid_mask = (y_det == 1) & (y_cls >= 0)
         # if valid_mask.any():
         if True:
@@ -147,9 +155,11 @@ class Net(DetectionReplayMixin, nn.Module):
         #     mem_loss = self.det_loss(mem_det_logits, mem_y.float())
         #     det_loss = 0.5 * (det_loss + mem_loss)
 
-        loss = (self.cls_lambda * loss_ce
-                # + self.det_lambda * det_loss
-                + self.si_c * self._surrogate_loss())
+        loss = (
+            self.cls_lambda * loss_ce
+            # + self.det_lambda * det_loss
+            + self.si_c * self._surrogate_loss()
+        )
 
         loss.backward()
         if self.clipgrad is not None:
@@ -186,7 +196,7 @@ class Net(DetectionReplayMixin, nn.Module):
                 continue
             if name.startswith("det_head"):
                 continue
-            key = name.replace('.', '__')
+            key = name.replace(".", "__")
             self._param_to_key[name] = key
             initial = param.detach().clone()
             self.register_buffer(f"{key}_si_prev", initial.clone())
@@ -252,7 +262,6 @@ class Net(DetectionReplayMixin, nn.Module):
     # ------------------------------------------------------------------
     def _device(self) -> torch.device:
         return next(self.net.parameters()).device
-
 
 
 __all__ = ["Net"]

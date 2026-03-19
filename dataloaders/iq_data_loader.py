@@ -178,12 +178,16 @@ def load_data_iq(base_path: str, batch_size: int, args=None):
 
     # Build PyTorch dataloaders
     training_set = IQDataGenerator(x_train, y_train)
-    train_loader = DataLoader(training_set, batch_size=batch_size, shuffle=True, num_workers=0)
+    train_loader = DataLoader(
+        training_set, batch_size=batch_size, shuffle=True, num_workers=0
+    )
 
     val_set = IQDataGenerator(x_val, y_val)
     val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=True, num_workers=0)
 
     test_set = IQDataGenerator(x_test, y_test)
-    test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=True, num_workers=0)
+    test_loader = DataLoader(
+        test_set, batch_size=batch_size, shuffle=True, num_workers=0
+    )
 
     return train_loader, val_loader, test_loader

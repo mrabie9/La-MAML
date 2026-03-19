@@ -6,9 +6,10 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+
 class Learner(nn.Module):
 
-    def __init__(self, config, args = None):
+    def __init__(self, config, args=None):
         """
 
         :param config: network config file, type:list of (string, list)
@@ -29,13 +30,13 @@ class Learner(nn.Module):
         self.names = []
 
         for i, (name, param, extra_name) in enumerate(self.config):
-            if name == 'conv2d':
-                # [ch_out, ch_in, kernelsz, kernelsz]                
-                if(self.args.xav_init):
+            if name == "conv2d":
+                # [ch_out, ch_in, kernelsz, kernelsz]
+                if self.args.xav_init:
                     w = nn.Parameter(torch.ones(*param[:4]))
                     b = nn.Parameter(torch.zeros(param[0]))
                     torch.nn.init.xavier_normal_(w.data)
-                    b.data.normal_(0, math.sqrt(2)/math.sqrt(1+9*b.data.shape[0]))
+                    b.data.normal_(0, math.sqrt(2) / math.sqrt(1 + 9 * b.data.shape[0]))
                     self.vars.append(w)
                     self.vars.append(b)
                 else:
@@ -46,7 +47,7 @@ class Learner(nn.Module):
                     # [ch_out]
                     self.vars.append(nn.Parameter(torch.zeros(param[0])))
 
-            elif name == 'convt2d':
+            elif name == "convt2d":
                 # [ch_in, ch_out, kernelsz, kernelsz, stride, padding]
                 w = nn.Parameter(torch.ones(*param[:4]))
                 # gain=1 according to cbfin's implementation
@@ -55,16 +56,16 @@ class Learner(nn.Module):
                 # [ch_in, ch_out]
                 self.vars.append(nn.Parameter(torch.zeros(param[1])))
 
-            elif name == 'linear':
+            elif name == "linear":
                 # layer += 1
-                if(self.args.xav_init):
+                if self.args.xav_init:
                     w = nn.Parameter(torch.ones(*param))
                     # b = nn.Parameter(torch.zeros(param[0]))
                     torch.nn.init.xavier_normal_(w.data)
                     # b.data.normal_(0, math.sqrt(2)/math.sqrt(1+9*b.data.shape[0]))
                     self.vars.append(w)
                     # self.vars.append(b)
-                else:     
+                else:
                     # [ch_out, ch_in]
                     w = nn.Parameter(torch.ones(*param))
                     # gain=1 according to cbfinn's implementation
@@ -73,15 +74,15 @@ class Learner(nn.Module):
                 # [ch_out]
                 self.vars.append(nn.Parameter(torch.zeros(param[0])))
 
-            elif name == 'cat':
+            elif name == "cat":
                 pass
-            elif name == 'cat_start':
+            elif name == "cat_start":
                 pass
             elif name == "rep":
                 pass
             elif name in ["residual3", "residual5", "in"]:
                 pass
-            elif name == 'bn':
+            elif name == "bn":
                 # [ch_out]
                 w = nn.Parameter(torch.ones(param[0]))
                 self.vars.append(w)
@@ -93,57 +94,96 @@ class Learner(nn.Module):
                 running_var = nn.Parameter(torch.ones(param[0]), requires_grad=False)
                 self.vars_bn.extend([running_mean, running_var])
 
-
-            elif name in ['tanh', 'relu', 'upsample', 'avg_pool2d', 'max_pool2d',
-                          'flatten', 'reshape', 'leakyrelu', 'sigmoid']:
+            elif name in [
+                "tanh",
+                "relu",
+                "upsample",
+                "avg_pool2d",
+                "max_pool2d",
+                "flatten",
+                "reshape",
+                "leakyrelu",
+                "sigmoid",
+            ]:
                 continue
             else:
                 raise NotImplementedError
 
     def extra_repr(self):
 
-        info = ''
+        info = ""
 
         for name, param, extra_name in self.config:
-            if name == 'conv2d':
-                tmp = 'conv2d:(ch_in:%d, ch_out:%d, k:%dx%d, stride:%d, padding:%d)' \
-                      % (param[1], param[0], param[2], param[3], param[4], param[5],)
-                info += tmp + '\n'
-
-            elif name == 'convt2d':
-                tmp = 'convTranspose2d:(ch_in:%d, ch_out:%d, k:%dx%d, stride:%d, padding:%d)' \
-                      % (param[0], param[1], param[2], param[3], param[4], param[5],)
-                info += tmp + '\n'
-
-            elif name == 'linear':
-                tmp = 'linear:(in:%d, out:%d)' % (param[1], param[0])
-                info += tmp + '\n'
-
-            elif name == 'leakyrelu':
-                tmp = 'leakyrelu:(slope:%f)' % (param[0])
-                info += tmp + '\n'
-
-            elif name == 'cat':
-                tmp = 'cat'
-                info += tmp + "\n"
-            elif name == 'cat_start':
-                tmp = 'cat_start'
+            if name == "conv2d":
+                tmp = "conv2d:(ch_in:%d, ch_out:%d, k:%dx%d, stride:%d, padding:%d)" % (
+                    param[1],
+                    param[0],
+                    param[2],
+                    param[3],
+                    param[4],
+                    param[5],
+                )
                 info += tmp + "\n"
 
-            elif name == 'rep':
-                tmp = 'rep'
+            elif name == "convt2d":
+                tmp = (
+                    "convTranspose2d:(ch_in:%d, ch_out:%d, k:%dx%d, stride:%d, padding:%d)"
+                    % (
+                        param[0],
+                        param[1],
+                        param[2],
+                        param[3],
+                        param[4],
+                        param[5],
+                    )
+                )
                 info += tmp + "\n"
 
+            elif name == "linear":
+                tmp = "linear:(in:%d, out:%d)" % (param[1], param[0])
+                info += tmp + "\n"
 
-            elif name == 'avg_pool2d':
-                tmp = 'avg_pool2d:(k:%d, stride:%d, padding:%d)' % (param[0], param[1], param[2])
-                info += tmp + '\n'
-            elif name == 'max_pool2d':
-                tmp = 'max_pool2d:(k:%d, stride:%d, padding:%d)' % (param[0], param[1], param[2])
-                info += tmp + '\n'
-            elif name in ['flatten', 'tanh', 'relu', 'upsample', 'reshape', 'sigmoid', 'use_logits', 'bn']:
-                tmp = name + ':' + str(tuple(param))
-                info += tmp + '\n'
+            elif name == "leakyrelu":
+                tmp = "leakyrelu:(slope:%f)" % (param[0])
+                info += tmp + "\n"
+
+            elif name == "cat":
+                tmp = "cat"
+                info += tmp + "\n"
+            elif name == "cat_start":
+                tmp = "cat_start"
+                info += tmp + "\n"
+
+            elif name == "rep":
+                tmp = "rep"
+                info += tmp + "\n"
+
+            elif name == "avg_pool2d":
+                tmp = "avg_pool2d:(k:%d, stride:%d, padding:%d)" % (
+                    param[0],
+                    param[1],
+                    param[2],
+                )
+                info += tmp + "\n"
+            elif name == "max_pool2d":
+                tmp = "max_pool2d:(k:%d, stride:%d, padding:%d)" % (
+                    param[0],
+                    param[1],
+                    param[2],
+                )
+                info += tmp + "\n"
+            elif name in [
+                "flatten",
+                "tanh",
+                "relu",
+                "upsample",
+                "reshape",
+                "sigmoid",
+                "use_logits",
+                "bn",
+            ]:
+                tmp = name + ":" + str(tuple(param))
+                info += tmp + "\n"
             else:
                 raise NotImplementedError
 
@@ -171,10 +211,10 @@ class Learner(nn.Module):
 
         try:
 
-            for (name, param, extra_name) in self.config:
+            for name, param, extra_name in self.config:
                 # assert(name == "conv2d")
                 # print(name, x.shape)
-                if name == 'conv2d':
+                if name == "conv2d":
                     # print(name)
                     w, b = vars[idx], vars[idx + 1]
                     # # --- debug + guardrails ---
@@ -234,16 +274,15 @@ class Learner(nn.Module):
                     idx += 2
                     # print(idx)
                     # print(name, param, '\tout:', x.shape)
-                elif name == 'convt2d':
+                elif name == "convt2d":
                     w, b = vars[idx], vars[idx + 1]
                     x = F.conv_transpose2d(x, w, b, stride=param[4], padding=param[5])
                     idx += 2
 
-
-                elif name == 'linear':
+                elif name == "linear":
 
                     # ipdb.set_trace()
-                    if extra_name == 'cosine':
+                    if extra_name == "cosine":
                         w = F.normalize(vars[idx])
                         x = F.normalize(x)
                         x = F.linear(x, w)
@@ -256,7 +295,7 @@ class Learner(nn.Module):
                     if cat_var:
                         cat_list.append(x)
 
-                elif name == 'rep':
+                elif name == "rep":
                     # print('rep')
                     # print(x.shape)
                     if feature:
@@ -270,34 +309,44 @@ class Learner(nn.Module):
                     cat_var = False
                     x = torch.cat(cat_list, dim=1)
 
-                elif name == 'bn':
+                elif name == "bn":
                     w, b = vars[idx], vars[idx + 1]
-                    running_mean, running_var = self.vars_bn[bn_idx], self.vars_bn[bn_idx + 1]
-                    x = F.batch_norm(x, running_mean, running_var, weight=w, bias=b, training=bn_training)
+                    running_mean, running_var = (
+                        self.vars_bn[bn_idx],
+                        self.vars_bn[bn_idx + 1],
+                    )
+                    x = F.batch_norm(
+                        x,
+                        running_mean,
+                        running_var,
+                        weight=w,
+                        bias=b,
+                        training=bn_training,
+                    )
                     idx += 2
                     bn_idx += 2
-                elif name == 'flatten':
+                elif name == "flatten":
                     # print('flatten')
                     # print(x.shape)
 
                     x = x.view(x.size(0), -1)
 
-                elif name == 'reshape':
+                elif name == "reshape":
                     # [b, 8] => [b, 2, 2, 2]
                     x = x.view(x.size(0), *param)
-                elif name == 'relu':
+                elif name == "relu":
                     x = F.relu(x, inplace=param[0])
-                elif name == 'leakyrelu':
+                elif name == "leakyrelu":
                     x = F.leaky_relu(x, negative_slope=param[0], inplace=param[1])
-                elif name == 'tanh':
+                elif name == "tanh":
                     x = F.tanh(x)
-                elif name == 'sigmoid':
+                elif name == "sigmoid":
                     x = torch.sigmoid(x)
-                elif name == 'upsample':
+                elif name == "upsample":
                     x = F.upsample_nearest(x, scale_factor=param[0])
-                elif name == 'max_pool2d':
+                elif name == "max_pool2d":
                     x = F.max_pool2d(x, param[0], param[1], param[2])
-                elif name == 'avg_pool2d':
+                elif name == "avg_pool2d":
                     x = F.avg_pool2d(x, param[0], param[1], param[2])
 
                 else:
@@ -312,7 +361,6 @@ class Learner(nn.Module):
         assert bn_idx == len(self.vars_bn)
 
         return x
-
 
     def zero_grad(self, vars=None):
         """
@@ -330,7 +378,7 @@ class Learner(nn.Module):
                     if p.grad is not None:
                         p.grad.zero_()
 
-    def define_task_lr_params(self, alpha_init=1e-3): 
+    def define_task_lr_params(self, alpha_init=1e-3):
         # Setup learning parameters
         self.alpha_lr = nn.ParameterList([])
 
@@ -339,7 +387,9 @@ class Learner(nn.Module):
             self.lr_name.append(n)
 
         for p in self.parameters():
-            self.alpha_lr.append(nn.Parameter(alpha_init * torch.ones(p.shape, requires_grad=True)))                                           
+            self.alpha_lr.append(
+                nn.Parameter(alpha_init * torch.ones(p.shape, requires_grad=True))
+            )
 
     def parameters(self):
         """
@@ -347,5 +397,3 @@ class Learner(nn.Module):
         :return:
         """
         return self.vars
-
-

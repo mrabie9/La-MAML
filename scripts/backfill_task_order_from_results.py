@@ -47,7 +47,6 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-import importlib
 
 import torch
 import numpy as np
@@ -111,7 +110,9 @@ def _iter_results_for_algo(algo: str, logs_root: Path) -> Iterable[Path]:
             yield results_file.resolve()
 
 
-def _find_latest_results_for_algo(algo: str, logs_root: Path, n_latest: int) -> List[Path]:
+def _find_latest_results_for_algo(
+    algo: str, logs_root: Path, n_latest: int
+) -> List[Path]:
     """Return paths to the latest results.pt files for an algorithm.
 
     Determined by the modification time of the parent run directory.
@@ -175,9 +176,13 @@ def _unpack_results_bundle(bundle):
         RuntimeError: If the bundle has an unexpected structure.
     """
     try:
-        (result_val_t, result_val_a, state_dict, val_stats, one_liner, saved_args) = bundle
+        result_val_t, result_val_a, state_dict, val_stats, one_liner, saved_args = (
+            bundle
+        )
     except ValueError as exc:
-        raise RuntimeError("Unexpected checkpoint structure; cannot unpack results.pt") from exc
+        raise RuntimeError(
+            "Unexpected checkpoint structure; cannot unpack results.pt"
+        ) from exc
     return result_val_t, result_val_a, state_dict, val_stats, one_liner, saved_args
 
 
@@ -281,7 +286,9 @@ def _derive_task_names_from_results(result_val_t, result_val_a) -> List[str]:
     return [f"task{idx}" for idx in range(n_tasks)]
 
 
-def _write_task_order(metrics_dir: Path, task_names: Sequence[str], overwrite: bool) -> None:
+def _write_task_order(
+    metrics_dir: Path, task_names: Sequence[str], overwrite: bool
+) -> None:
     """Write task_order.txt in a metrics directory.
 
     Args:
@@ -326,9 +333,14 @@ def process_algo(algo: str, logs_root: Path, overwrite: bool, n_latest: int) -> 
 
         try:
             bundle = _load_results_bundle(results_path)
-            result_val_t, result_val_a, _state_dict, _val_stats, _one_liner, saved_args = _unpack_results_bundle(
-                bundle
-            )
+            (
+                result_val_t,
+                result_val_a,
+                _state_dict,
+                _val_stats,
+                _one_liner,
+                saved_args,
+            ) = _unpack_results_bundle(bundle)
 
             # Prefer the serialized loader (via bound method on args) so that we
             # can recover original task/file names. Fall back to generic names
@@ -355,11 +367,15 @@ def main() -> int:
         return 1
 
     for algo in opts.algos:
-        process_algo(algo, logs_root, overwrite=opts.overwrite, n_latest=max(1, int(opts.n_latest)))
+        process_algo(
+            algo,
+            logs_root,
+            overwrite=opts.overwrite,
+            n_latest=max(1, int(opts.n_latest)),
+        )
 
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

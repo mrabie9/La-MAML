@@ -8,6 +8,7 @@ from typing import Final
 import numpy as np
 import torch
 
+
 def _parse_class_list(value):
     """Convert string/list/tuple values into a list of ints."""
     if value is None:
@@ -76,7 +77,9 @@ def max_task_class_count(nc_per_task):
 def compute_offsets(task, nc_per_task):
     if isinstance(nc_per_task, (list, tuple, np.ndarray)):
         if task >= len(nc_per_task):
-            raise ValueError(f"Task index {task} out of range for nc_per_task={nc_per_task}")
+            raise ValueError(
+                f"Task index {task} out of range for nc_per_task={nc_per_task}"
+            )
         offset1 = int(sum(nc_per_task[:task]))
         offset2 = int(offset1 + nc_per_task[task])
     else:
@@ -85,13 +88,16 @@ def compute_offsets(task, nc_per_task):
 
     return int(offset1), int(offset2)
 
+
 def to_onehot(targets, n_classes):
     onehot = torch.zeros(targets.shape[0], n_classes).to(targets.device)
-    onehot.scatter_(dim=1, index=targets.long().view(-1, 1), value=1.)
+    onehot.scatter_(dim=1, index=targets.long().view(-1, 1), value=1.0)
     return onehot
 
+
 def _check_loss(loss):
-    return not bool(torch.isnan(loss).item()) and bool((loss >= 0.).item())
+    return not bool(torch.isnan(loss).item()) and bool((loss >= 0.0).item())
+
 
 def compute_accuracy(ypred, ytrue, task_size=10):
     all_acc = {}
@@ -100,12 +106,11 @@ def compute_accuracy(ypred, ytrue, task_size=10):
 
     for class_id in range(0, np.max(ytrue), task_size):
         idxes = np.where(
-                np.logical_and(ytrue >= class_id, ytrue < class_id + task_size)
+            np.logical_and(ytrue >= class_id, ytrue < class_id + task_size)
         )[0]
 
         label = "{}-{}".format(
-                str(class_id).rjust(2, "0"),
-                str(class_id + task_size - 1).rjust(2, "0")
+            str(class_id).rjust(2, "0"), str(class_id + task_size - 1).rjust(2, "0")
         )
         all_acc[label] = round((ypred[idxes] == ytrue[idxes]).sum() / len(idxes), 3)
 
@@ -117,46 +122,59 @@ def get_date():
 
 
 def get_date_time():
-    return datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S-%f')[:-2]
+    return datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[:-2]
 
 
 def log_dir(opt, timestamp=None, config_name=None):
     if timestamp is None:
         timestamp = get_date_time()
 
-    rand_num = str(random.randint(1,1001))
+    rand_num = str(random.randint(1, 1001))
     dir_name = config_name if config_name else opt.model
-    logdir = opt.log_dir + '/%s/%s-%s/%s' % (dir_name, opt.expt_name, timestamp, opt.seed)
-    tfdir = opt.log_dir +  '/%s/%s-%s/%s/%s' % (dir_name, opt.expt_name, timestamp, opt.seed, "tfdir")
+    logdir = opt.log_dir + "/%s/%s-%s/%s" % (
+        dir_name,
+        opt.expt_name,
+        timestamp,
+        opt.seed,
+    )
+    tfdir = opt.log_dir + "/%s/%s-%s/%s/%s" % (
+        dir_name,
+        opt.expt_name,
+        timestamp,
+        opt.seed,
+        "tfdir",
+    )
 
     mkdir(logdir)
     mkdir(tfdir)
-    
-    with open(logdir + '/training_parameters.json', 'w') as f:
+
+    with open(logdir + "/training_parameters.json", "w") as f:
         params = {k: v for k, v in vars(opt).items() if not callable(v)}
         json.dump(params, f, indent=4)
-    
+
     return logdir, tfdir
 
 
 def save_list_to_file(path, thelist):
-    with open(path, 'w') as f:
+    with open(path, "w") as f:
         for item in thelist:
             f.write("%s\n" % item)
 
 
 def find_latest_checkpoint(folder_path):
-    print('searching for checkpoint in : '+folder_path)
-    files = sorted(glob.iglob(folder_path+'/*.pth'), key=os.path.getmtime, reverse=True)
-    print('latest checkpoint is:')
+    print("searching for checkpoint in : " + folder_path)
+    files = sorted(
+        glob.iglob(folder_path + "/*.pth"), key=os.path.getmtime, reverse=True
+    )
+    print("latest checkpoint is:")
     print(files[0])
     return files[0]
 
 
 def init_seed(seed):
-    '''
+    """
     Disable cudnn to maximize reproducibility
-    '''
+    """
     print("Set seed", seed)
     random.seed(seed)
     torch.cuda.cudnn_enabled = False
@@ -168,17 +186,17 @@ def init_seed(seed):
 
 
 def find_latest_checkpoint_name(folder_path):
-    print('searching for checkpoint in : '+folder_path)
-    files = glob.glob(folder_path+'/*.pth')
+    print("searching for checkpoint in : " + folder_path)
+    files = glob.glob(folder_path + "/*.pth")
     min_num = 0
-    filename = ''
+    filename = ""
     for i, filei in enumerate(files):
-        ckpt_name = os.path.splitext(filei) 
-        ckpt_num = int(ckpt_name.split('_')[-1])
-        if(ckpt_num>min_num):
+        ckpt_name = os.path.splitext(filei)
+        ckpt_num = int(ckpt_name.split("_")[-1])
+        if ckpt_num > min_num:
             min_num = ckpt_num
             filename = filei
-    print('latest checkpoint is:')
+    print("latest checkpoint is:")
     print(filename)
     return filename
 
@@ -187,6 +205,7 @@ def mkdir(path):
     if not os.path.exists(path):
         os.makedirs(path)
 
+
 def mkdirs(paths):
     if isinstance(paths, list) and not isinstance(paths, str):
         for path in paths:
@@ -194,14 +213,17 @@ def mkdirs(paths):
     else:
         mkdir(paths)
 
+
 def to_numpy(input):
     if isinstance(input, torch.Tensor):
         return input.cpu().numpy()
     elif isinstance(input, np.ndarray):
         return input
     else:
-        raise TypeError('Unknown type of input, expected torch.Tensor or '\
-            'np.ndarray, but got {}'.format(type(input)))
+        raise TypeError(
+            "Unknown type of input, expected torch.Tensor or "
+            "np.ndarray, but got {}".format(type(input))
+        )
 
 
 def log_sum_exp(input, dim=None, keepdim=False):

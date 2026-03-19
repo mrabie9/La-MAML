@@ -31,7 +31,6 @@ from typing import Dict, Iterable, Iterator, Mapping
 
 import numpy as np
 
-
 # Match directories such as ``task0`` or ``Task12``.
 TASK_DIR_PATTERN = re.compile(r"task\d+", re.IGNORECASE)
 

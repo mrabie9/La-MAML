@@ -41,7 +41,7 @@ class HatConfig:
     gamma: float = 0.75
     smax: float = 50
     grad_clip_norm: float = 10.0
-    
+
     cuda: bool = True
     optimizer: str = "sgd"
     arch: str = "resnet1d"
@@ -85,9 +85,13 @@ class HatBasicBlock1D(nn.Module):
         param_register,
     ) -> None:
         super().__init__()
-        self.conv1 = nn.Conv1d(inplanes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
+        self.conv1 = nn.Conv1d(
+            inplanes, planes, kernel_size=3, stride=stride, padding=1, bias=False
+        )
         self.bn1 = nn.BatchNorm1d(planes)
-        self.conv2 = nn.Conv1d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
+        self.conv2 = nn.Conv1d(
+            planes, planes, kernel_size=3, stride=1, padding=1, bias=False
+        )
         self.bn2 = nn.BatchNorm1d(planes)
 
         if stride != 1 or inplanes != planes:
@@ -99,11 +103,18 @@ class HatBasicBlock1D(nn.Module):
             self.downsample = None
 
         self.gate_conv1 = registry.register(f"{prefix}.conv1", planes, prev_gate)
-        param_register(f"{prefix}.conv1", self.conv1, post_gate=self.gate_conv1, pre_gate=prev_gate)
+        param_register(
+            f"{prefix}.conv1", self.conv1, post_gate=self.gate_conv1, pre_gate=prev_gate
+        )
         param_register(f"{prefix}.bn1", self.bn1, post_gate=self.gate_conv1)
 
         self.gate_conv2 = registry.register(f"{prefix}.conv2", planes, self.gate_conv1)
-        param_register(f"{prefix}.conv2", self.conv2, post_gate=self.gate_conv2, pre_gate=self.gate_conv1)
+        param_register(
+            f"{prefix}.conv2",
+            self.conv2,
+            post_gate=self.gate_conv2,
+            pre_gate=self.gate_conv1,
+        )
         param_register(f"{prefix}.bn2", self.bn2, post_gate=self.gate_conv2)
 
         if self.downsample is not None:
@@ -113,11 +124,15 @@ class HatBasicBlock1D(nn.Module):
                 post_gate=self.gate_conv2,
                 pre_gate=prev_gate,
             )
-            param_register(f"{prefix}.downsample.1", self.downsample[1], post_gate=self.gate_conv2)
+            param_register(
+                f"{prefix}.downsample.1", self.downsample[1], post_gate=self.gate_conv2
+            )
 
         self.relu = nn.ReLU(inplace=True)
 
-    def forward(self, x: torch.Tensor, mask_dict: Dict[str, torch.Tensor]) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, mask_dict: Dict[str, torch.Tensor]
+    ) -> torch.Tensor:
         identity = x
 
         out = self.conv1(x)
@@ -142,13 +157,17 @@ class HatBasicBlock1D(nn.Module):
 class HatResNet1D(nn.Module):
     """ResNet-18 backbone instrumented with per-layer HAT gates."""
 
-    def __init__(self, in_channels: int, num_classes: int, registry: GateRegistry, param_register) -> None:
+    def __init__(
+        self, in_channels: int, num_classes: int, registry: GateRegistry, param_register
+    ) -> None:
         super().__init__()
         self.registry = registry
         self.param_register = param_register
 
         self.inplanes = 64
-        self.conv1 = nn.Conv1d(in_channels, 64, kernel_size=7, stride=2, padding=1, bias=False)
+        self.conv1 = nn.Conv1d(
+            in_channels, 64, kernel_size=7, stride=2, padding=1, bias=False
+        )
         self.bn1 = nn.BatchNorm1d(64)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
@@ -168,10 +187,18 @@ class HatResNet1D(nn.Module):
         self.param_register("bn1", self.bn1, post_gate=conv1_gate)
 
         prev_gate = conv1_gate
-        self.layer1, prev_gate = self._make_layer(64, 2, stride=1, layer_id=1, prev_gate=prev_gate)
-        self.layer2, prev_gate = self._make_layer(128, 2, stride=2, layer_id=2, prev_gate=prev_gate)
-        self.layer3, prev_gate = self._make_layer(256, 2, stride=2, layer_id=3, prev_gate=prev_gate)
-        self.layer4, prev_gate = self._make_layer(512, 2, stride=2, layer_id=4, prev_gate=prev_gate)
+        self.layer1, prev_gate = self._make_layer(
+            64, 2, stride=1, layer_id=1, prev_gate=prev_gate
+        )
+        self.layer2, prev_gate = self._make_layer(
+            128, 2, stride=2, layer_id=2, prev_gate=prev_gate
+        )
+        self.layer3, prev_gate = self._make_layer(
+            256, 2, stride=2, layer_id=3, prev_gate=prev_gate
+        )
+        self.layer4, prev_gate = self._make_layer(
+            512, 2, stride=2, layer_id=4, prev_gate=prev_gate
+        )
 
         fc_gate = self.registry.register("fc", 512, prev_gate)
         self.param_register("fc", self.fc, post_gate=fc_gate, pre_gate=prev_gate)
@@ -208,7 +235,9 @@ class HatResNet1D(nn.Module):
         return layers, prev_gate
 
     # ------------------------------------------------------------------
-    def forward(self, x: torch.Tensor, mask_dict: Dict[str, torch.Tensor]) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, mask_dict: Dict[str, torch.Tensor]
+    ) -> torch.Tensor:
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
@@ -236,10 +265,14 @@ class HatResNet1D(nn.Module):
 class HatBackbone(nn.Module):
     """Wraps the gated ResNet1D and exposes mask utilities."""
 
-    def __init__(self, n_inputs: int, n_tasks: int, n_outputs: int, cfg: HatConfig, args: object) -> None:
+    def __init__(
+        self, n_inputs: int, n_tasks: int, n_outputs: int, cfg: HatConfig, args: object
+    ) -> None:
         super().__init__()
         if cfg.arch.lower() != "resnet1d":
-            raise NotImplementedError("HAT is currently implemented only for ResNet1D in this repository")
+            raise NotImplementedError(
+                "HAT is currently implemented only for ResNet1D in this repository"
+            )
 
         self.cfg = cfg
         self.n_tasks = n_tasks
@@ -258,7 +291,12 @@ class HatBackbone(nn.Module):
 
         registry = GateRegistry()
 
-        def param_register(module_path: str, module: nn.Module, post_gate: str, pre_gate: Optional[str] = None) -> None:
+        def param_register(
+            module_path: str,
+            module: nn.Module,
+            post_gate: str,
+            pre_gate: Optional[str] = None,
+        ) -> None:
             key_prefix = module_path
             if isinstance(module, nn.Conv1d):
                 self.param_gate_map[f"{key_prefix}.weight"] = {
@@ -292,16 +330,20 @@ class HatBackbone(nn.Module):
         self.model = HatResNet1D(2, n_outputs, registry, param_register)
 
         self.gate_specs = registry.specs
-        self.gate_to_idx = {spec["name"]: idx for idx, spec in enumerate(self.gate_specs)}
+        self.gate_to_idx = {
+            spec["name"]: idx for idx, spec in enumerate(self.gate_specs)
+        }
         self.embeddings = nn.ModuleList(
             [nn.Embedding(n_tasks, spec["size"]) for spec in self.gate_specs]
         )
 
         for emb in self.embeddings:
             nn.init.uniform_(emb.weight, -0.1, 0.1)
-            
+
         # Cache shapes to simplify masking logic
-        self.param_shapes = {name: tuple(param.size()) for name, param in self.model.named_parameters()}
+        self.param_shapes = {
+            name: tuple(param.size()) for name, param in self.model.named_parameters()
+        }
 
         self.freeze_bn_stats = True
 
@@ -311,9 +353,9 @@ class HatBackbone(nn.Module):
                 # keep BN affine params trainable, just freeze running stats
                 m.track_running_stats = True
                 m.running_mean = m.running_mean  # no-op, clarifies intent
-                m.running_var  = m.running_var
+                m.running_var = m.running_var
                 if flag:
-                    m.eval()   # freezes running stats updates
+                    m.eval()  # freezes running stats updates
                 else:
                     m.train()  # re-enables running stats updates
 
@@ -340,9 +382,10 @@ class HatBackbone(nn.Module):
     ) -> Tuple[torch.Tensor, List[torch.Tensor]] | torch.Tensor:
         x = self._ensure_iq_shape(x)
         x = self.input_adapter(x)
-        masks = self.mask(task, s) # mask for each stage
-        mask_dict = { # dict of masks per layer
-            spec["name"]: masks[idx].view(-1) for idx, spec in enumerate(self.gate_specs)
+        masks = self.mask(task, s)  # mask for each stage
+        mask_dict = {  # dict of masks per layer
+            spec["name"]: masks[idx].view(-1)
+            for idx, spec in enumerate(self.gate_specs)
         }
         logits = self.model(x, mask_dict)
         if return_masks:
@@ -350,7 +393,9 @@ class HatBackbone(nn.Module):
         return logits
 
     # ------------------------------------------------------------------
-    def compensate_embedding_grads(self, s: float, smax: float, thres_cosh: float = 50.0) -> None:
+    def compensate_embedding_grads(
+        self, s: float, smax: float, thres_cosh: float = 50.0
+    ) -> None:
         # if s <= 0:
         #     return
         s_eff = max(float(s), 1.0)
@@ -361,17 +406,19 @@ class HatBackbone(nn.Module):
                 continue
             num = torch.cosh(torch.clamp(s * weight.data, -thres_cosh, thres_cosh)) + 1
             den = torch.cosh(weight.data) + 1
-            weight.grad.data *= smax/s * (num / den)
+            weight.grad.data *= smax / s * (num / den)
 
     def clamp_embeddings(self, thres_emb: float = 6.0) -> None:
         for emb in self.embeddings:
             emb.weight.data.clamp_(-thres_emb, thres_emb)
 
     # ------------------------------------------------------------------
-    def get_view_for(self, name: str, masks: List[torch.Tensor]) -> Optional[torch.Tensor]:
+    def get_view_for(
+        self, name: str, masks: List[torch.Tensor]
+    ) -> Optional[torch.Tensor]:
         key = name
         if key.startswith("model."):
-            key = key[len("model."):]
+            key = key[len("model.") :]
 
         info = self.param_gate_map.get(key)
         if info is None:
@@ -423,7 +470,9 @@ class HatBackbone(nn.Module):
 class Net(nn.Module):
     """HAT learner compatible with the repository training harness."""
 
-    def __init__(self, n_inputs: int, n_outputs: int, n_tasks: int, args: object) -> None:
+    def __init__(
+        self, n_inputs: int, n_outputs: int, n_tasks: int, args: object
+    ) -> None:
         super().__init__()
 
         self.cfg = HatConfig.from_args(args)
@@ -432,7 +481,8 @@ class Net(nn.Module):
         self.classes_per_task = misc_utils.build_task_class_list(
             n_tasks,
             n_outputs,
-            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            nc_per_task=getattr(args, "nc_per_task_list", "")
+            or getattr(args, "nc_per_task", None),
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
@@ -449,7 +499,9 @@ class Net(nn.Module):
         self.ce = nn.CrossEntropyLoss()
         self.smax = float(self.cfg.smax)
         self.lamb = float(self.cfg.gamma)
-        self.grad_clip = float(self.cfg.grad_clip_norm) if self.cfg.grad_clip_norm > 0 else None
+        self.grad_clip = (
+            float(self.cfg.grad_clip_norm) if self.cfg.grad_clip_norm > 0 else None
+        )
 
         self.current_task: Optional[int] = None
         self.mask_pre: Optional[List[torch.Tensor]] = None
@@ -541,7 +593,9 @@ class Net(nn.Module):
                 self.mask_back[name] = (1 - view).to(param.device)
 
     # ------------------------------------------------------------------
-    def forward(self, x: torch.Tensor, t: int, s: Optional[float] = None) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, t: int, s: Optional[float] = None
+    ) -> torch.Tensor:
         device = x.device if x.is_cuda else self._device()
         logits = self.bridge.forward(
             self._task_tensor(t, device), x, s or self.smax, return_masks=False
@@ -584,10 +638,14 @@ class Net(nn.Module):
         s = self._schedule_s(batch_idx, effective_total)
         # print(s, self.num_batches)
 
-        self.bridge.set_bn_eval(self.bridge.freeze_bn_stats and self.mask_pre is not None)
+        self.bridge.set_bn_eval(
+            self.bridge.freeze_bn_stats and self.mask_pre is not None
+        )
 
         self.opt.zero_grad(set_to_none=True)
-        logits, masks = self.bridge.forward(self._task_tensor(t, device), x, s, return_masks=True)
+        logits, masks = self.bridge.forward(
+            self._task_tensor(t, device), x, s, return_masks=True
+        )
         # with torch.no_grad():
         #     self.log_gate_stats(t, self.real_epoch, batch_idx, masks)
 
@@ -623,8 +681,9 @@ class Net(nn.Module):
         pass
 
     # ------------------------------------------------------------------
-    def _criterion(self, outputs: torch.Tensor, targets: torch.Tensor,
-                   masks: List[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _criterion(
+        self, outputs: torch.Tensor, targets: torch.Tensor, masks: List[torch.Tensor]
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         if not masks:
             return self.ce(outputs, targets), torch.tensor(0.0, device=outputs.device)
 

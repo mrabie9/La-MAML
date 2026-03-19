@@ -77,7 +77,9 @@ def test_lamaml_3adc_replay_single_task():
     # Memory should contain canonical (2, 512) representations from _input_for_replay
     assert len(model.M_new) > 0
     mem_x0, mem_y0, mem_t0 = model.M_new[0]
-    assert isinstance(mem_t0.item(), (int, torch.Tensor)) or isinstance(mem_t0, torch.Tensor)
+    assert isinstance(mem_t0.item(), (int, torch.Tensor)) or isinstance(
+        mem_t0, torch.Tensor
+    )
     assert mem_x0.shape[-2:] == (2, 512) or mem_x0.view(2, 512).shape == (2, 512)
 
 
@@ -106,7 +108,9 @@ def test_lamaml_3adc_replay_across_tasks():
 
     # Explicitly build a replay batch to ensure shapes are homogeneous
     x1_replay = model._input_for_replay(x1)
-    bx, by, bt = model.getBatch(x1_replay.cpu().numpy(), y1.cpu().numpy(), t=1, batch_size=4)
+    bx, by, bt = model.getBatch(
+        x1_replay.cpu().numpy(), y1.cpu().numpy(), t=1, batch_size=4
+    )
     assert bx.shape[1:] == torch.from_numpy(x1_replay.cpu().numpy()).shape[1:]
     assert by.shape[0] == bt.shape[0] == bx.shape[0]
 
@@ -115,4 +119,3 @@ if __name__ == "__main__":
     test_lamaml_3adc_replay_single_task()
     test_lamaml_3adc_replay_across_tasks()
     print("All La-MAML 3-ADC replay tests passed.")
-

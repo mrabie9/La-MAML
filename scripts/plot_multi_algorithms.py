@@ -45,7 +45,7 @@ if _pre_args.output_dir is not None:
 
 import matplotlib.pyplot as plt
 import numpy as np
-
+from matplotlib.ticker import MultipleLocator
 
 TaskMetrics = Dict[str, Any]
 
@@ -298,7 +298,9 @@ def find_metrics_dir_for_algo(
     """
     algo_root = logs_root / algo
     if not algo_root.exists():
-        raise FileNotFoundError(f"No logs found for algorithm '{algo}' under {logs_root}")
+        raise FileNotFoundError(
+            f"No logs found for algorithm '{algo}' under {logs_root}"
+        )
 
     candidate_dirs: List[Tuple[float, Path]] = []
     for metrics_dir in algo_root.rglob("metrics"):
@@ -312,7 +314,9 @@ def find_metrics_dir_for_algo(
         candidate_dirs.append((mtime, metrics_dir))
 
     if not candidate_dirs:
-        raise FileNotFoundError(f"No metrics directories with task*.npz for '{algo}' under {algo_root}")
+        raise FileNotFoundError(
+            f"No metrics directories with task*.npz for '{algo}' under {algo_root}"
+        )
 
     candidate_dirs.sort(key=lambda x: x[0], reverse=True)
     if run_index < 0 or run_index >= len(candidate_dirs):
@@ -377,7 +381,9 @@ def _prepare_algo_runs(
         if metrics_dirs and len(metrics_dirs) == len(algos):
             metrics_dir = metrics_dirs[idx]
         else:
-            metrics_dir = find_metrics_dir_for_algo(algo, logs_root, run_index=run_index)
+            metrics_dir = find_metrics_dir_for_algo(
+                algo, logs_root, run_index=run_index
+            )
 
         metrics_dir = metrics_dir.resolve()
         if not metrics_dir.is_dir():
@@ -526,10 +532,10 @@ def _plot_final_validation_metrics(
     tasks: Sequence[TaskMetrics],
     task_names: Sequence[str] | None,
 ) -> None:
-    """Plot final validation metrics (pfa, detection recall, cls rec) from last task.
+    """Plot final validation metrics from last task.
 
     Bars are ordered with false alarm (pfa) first, followed by detection
-    recall and classification recall.
+    recall and the selected classification validation metric.
     """
     if not tasks:
         return
@@ -544,11 +550,7 @@ def _plot_final_validation_metrics(
 
     # Determine number of tasks from metrics that are present, using the
     # minimum length so that all plotted series align.
-    lengths = [
-        len(v)
-        for v in (val_det_fa, val_det_acc, val_acc)
-        if v is not None
-    ]
+    lengths = [len(v) for v in (val_det_fa, val_det_acc, val_acc) if v is not None]
     if not lengths:
         return
     n_tasks = min(lengths)
@@ -594,7 +596,72 @@ def _plot_final_validation_metrics(
     ax.set_xlabel("Task")
     ax.set_ylabel("Metric value")
     ax.set_xticks(task_indices)
+    ax.yaxis.set_major_locator(MultipleLocator(0.1))
     ax.grid(True, alpha=0.3, axis="y")
+
+
+def _mean_final_metric_for_run(
+    metrics: TaskMetrics,
+    metric_key: str,
+    fallback_num_tasks: int,
+) -> float | None:
+    """Return a run-level final metric aligned with SUMMARY_TE semantics.
+
+    For metrics stored as per-task final vectors (e.g. ``val_det_acc``), this
+    returns the mean over that vector. For flattened per-eval arrays (e.g.
+    ``val_acc``/``val_f1`` in some logs), this uses the last ``n_tasks``
+    entries where ``n_tasks`` is inferred from detection vectors when possible.
+    """
+    values = metrics.get(metric_key)
+    if values is None:
+        return None
+    arr = np.asarray(values, dtype=float).reshape(-1)
+    if arr.size == 0:
+        return None
+
+    # Infer final number of tasks from per-task detection vectors when present.
+    det_acc = metrics.get("val_det_acc")
+    det_fa = metrics.get("val_det_fa")
+    inferred_num_tasks = 0
+    if det_acc is not None:
+        inferred_num_tasks = max(inferred_num_tasks, int(np.asarray(det_acc).size))
+    if det_fa is not None:
+        inferred_num_tasks = max(inferred_num_tasks, int(np.asarray(det_fa).size))
+    if inferred_num_tasks <= 0:
+        inferred_num_tasks = max(int(fallback_num_tasks), 1)
+
+    if metric_key in {"val_acc", "val_f1"} and arr.size >= inferred_num_tasks:
+        final_slice = arr[-inferred_num_tasks:]
+        return float(np.mean(final_slice))
+
+    return float(np.mean(arr))
+
+
+def _concat_train_recall_for_run(tasks: Sequence[TaskMetrics]) -> np.ndarray | None:
+    """Concatenate per-task train recall series into one run-level sequence.
+
+    If there is only one task, this returns that task's train recall unchanged.
+    If multiple tasks exist, task series are concatenated in task order.
+    """
+    if not tasks:
+        return None
+
+    per_task_series: list[np.ndarray] = []
+    for task in tasks:
+        acc_values = task.get("cls_tr_rec")
+        if acc_values is None:
+            acc_values = task.get("tr_acc")
+        if acc_values is None:
+            continue
+        arr = np.asarray(acc_values, dtype=float).reshape(-1)
+        if arr.size > 0:
+            per_task_series.append(arr)
+
+    if not per_task_series:
+        return None
+    if len(per_task_series) == 1:
+        return per_task_series[0]
+    return np.concatenate(per_task_series, axis=0)
 
 
 def plot_multi_algorithms(
@@ -690,18 +757,15 @@ def plot_multi_algorithms(
 
         row_axes = axes[0]
 
-        # Train recall vs step: one line per IID2 run (single task each).
+        # Train recall vs step: one line per run. If multiple tasks are present,
+        # concatenate task series so x-axis reflects total iterations.
         for run_idx, run in enumerate(runs):
             run_label = label_list[run_idx]
             if not run.tasks:
                 continue
-            task = run.tasks[0]
-            acc_values = task.get("cls_tr_rec")
-            if acc_values is None:
-                acc_values = task.get("tr_acc")
-            if acc_values is None:
+            acc = _concat_train_recall_for_run(run.tasks)
+            if acc is None:
                 continue
-            acc = np.asarray(acc_values, dtype=float)
             steps = np.arange(len(acc))
             row_axes[0].plot(
                 steps,
@@ -723,33 +787,37 @@ def plot_multi_algorithms(
             val_det_fa = last.get("val_det_fa")
             if val_acc is None and val_det_acc is None and val_det_fa is None:
                 continue
-            # Use the first element of each series; IID2 runs only have one task.
+            # Match SUMMARY_TE aggregation (mean over final per-task values).
             x_center = run_idx
             width = 0.2
-            if val_det_fa is not None and len(val_det_fa) > 0:
+            mean_pfa = _mean_final_metric_for_run(last, "val_det_fa", len(run.tasks))
+            mean_det = _mean_final_metric_for_run(last, "val_det_acc", len(run.tasks))
+            mean_cls = _mean_final_metric_for_run(last, "val_acc", len(run.tasks))
+
+            if mean_pfa is not None:
                 row_axes[1].bar(
                     x_center - width,
-                    float(val_det_fa[0]),
+                    mean_pfa,
                     width=width,
                     label="Pfa" if run_idx == 0 else None,
                     color=f"C{run_idx % 10}",
                     hatch="//",
                     alpha=0.8,
                 )
-            if val_det_acc is not None and len(val_det_acc) > 0:
+            if mean_det is not None:
                 row_axes[1].bar(
                     x_center,
-                    float(val_det_acc[0]),
+                    mean_det,
                     width=width,
                     label="Det recall" if run_idx == 0 else None,
                     color=f"C{run_idx % 10}",
                     hatch="..",
                     alpha=0.8,
                 )
-            if val_acc is not None and len(val_acc) > 0:
+            if mean_cls is not None:
                 row_axes[1].bar(
                     x_center + width,
-                    float(val_acc[0]),
+                    mean_cls,
                     width=width,
                     label="Cls recall" if run_idx == 0 else None,
                     color=f"C{run_idx % 10}",
@@ -758,6 +826,7 @@ def plot_multi_algorithms(
         row_axes[1].set_ylabel("Metric value")
         row_axes[1].set_xticks(np.arange(len(runs)))
         row_axes[1].set_xticklabels(label_list, rotation=45, ha="right")
+        row_axes[1].yaxis.set_major_locator(MultipleLocator(0.1))
         row_axes[1].grid(True, alpha=0.3, axis="y")
 
         # Validation metric over runs: for IID2, there is a single task per
@@ -765,11 +834,10 @@ def plot_multi_algorithms(
         for run_idx, run in enumerate(runs):
             if not run.tasks:
                 continue
-            metrics = run.tasks[0]
-            metric_vals = metrics.get(first_key)
-            if metric_vals is None or len(metric_vals) == 0:
+            metrics = run.tasks[-1]
+            y_val = _mean_final_metric_for_run(metrics, first_key, len(run.tasks))
+            if y_val is None:
                 continue
-            y_val = float(metric_vals[0])
             row_axes[2].scatter(
                 0.0,
                 y_val,
@@ -811,7 +879,9 @@ def plot_multi_algorithms(
 
     else:
         for row_idx, run in enumerate(runs):
-            val_metric_key, val_metric_label = _resolve_val_metric_for_run(val_metric_choice, run)
+            val_metric_key, val_metric_label = _resolve_val_metric_for_run(
+                val_metric_choice, run
+            )
             row_axes = axes[row_idx]
             _plot_train_acc_vs_steps(row_axes[0], run.tasks, run.task_names)
             _plot_final_validation_metrics(row_axes[1], run.tasks, run.task_names)
@@ -1016,4 +1086,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

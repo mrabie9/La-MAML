@@ -89,13 +89,15 @@ class BayesianLinear(BayesianLayer):
         noise_var = total_var * ratio
         mu_var = total_var - noise_var
 
-        noise_std = noise_var ** 0.5
-        mu_std = mu_var ** 0.5
-        bound = (3.0 ** 0.5) * mu_std
+        noise_std = noise_var**0.5
+        mu_std = mu_var**0.5
+        bound = (3.0**0.5) * mu_std
         nn.init.uniform_(self.weight_mu, -bound, bound)
 
         rho_init = float(math.log(math.expm1(noise_std)))
-        self.weight_rho = nn.Parameter(torch.full((out_features, in_features), rho_init))
+        self.weight_rho = nn.Parameter(
+            torch.full((out_features, in_features), rho_init)
+        )
 
         self.bias = nn.Parameter(torch.zeros(out_features))
         self.weight = Gaussian(self.weight_mu, self.weight_rho)
@@ -137,9 +139,9 @@ class BayesianConv1d(BayesianLayer):
         noise_var = total_var * ratio
         mu_var = total_var - noise_var
 
-        noise_std = noise_var ** 0.5
-        mu_std = mu_var ** 0.5
-        bound = (3.0 ** 0.5) * mu_std
+        noise_std = noise_var**0.5
+        mu_std = mu_var**0.5
+        bound = (3.0**0.5) * mu_std
         nn.init.uniform_(self.weight_mu, -bound, bound)
 
         rho_init = float(math.log(math.expm1(noise_std)))
@@ -302,12 +304,16 @@ class BayesianResNet1D(nn.Module):
             )
         return layers
 
-    def _forward_layer(self, layer: nn.ModuleList, x: torch.Tensor, sample: bool) -> torch.Tensor:
+    def _forward_layer(
+        self, layer: nn.ModuleList, x: torch.Tensor, sample: bool
+    ) -> torch.Tensor:
         for block in layer:
             x = block(x, sample=sample)
         return x
 
-    def forward(self, x: torch.Tensor, sample: bool = False, ret_feats: bool = False) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, sample: bool = False, ret_feats: bool = False
+    ) -> torch.Tensor:
         x = self.conv1(x, sample=sample)
         x = self.bn1(x)
         x = self.relu(x)
@@ -334,7 +340,7 @@ class UCLConfig:
     alpha: float = 0.3
     ratio: float = 0.125
     det_lambda: float = 1.0
-    
+
     split: bool = True
     eval_samples: int = 1
     clipgrad: float = 10.0
@@ -351,7 +357,14 @@ class UCLConfig:
 class BayesianClassifier(nn.Module):
     """Bayesian ResNet feature extractor followed by per-task Bayesian heads."""
 
-    def __init__(self, n_outputs: int, n_tasks: int, cfg: UCLConfig, args: object | None, classes_per_task=None) -> None:
+    def __init__(
+        self,
+        n_outputs: int,
+        n_tasks: int,
+        cfg: UCLConfig,
+        args: object | None,
+        classes_per_task=None,
+    ) -> None:
         super().__init__()
         self.cfg = cfg
         self.n_tasks = n_tasks
@@ -369,12 +382,17 @@ class BayesianClassifier(nn.Module):
         self.feature_dim = self.feature_net.feature_dim
 
         self.heads = nn.ModuleList(
-            [BayesianLinear(self.feature_dim, c, ratio=cfg.ratio) for c in classes_per_task]
+            [
+                BayesianLinear(self.feature_dim, c, ratio=cfg.ratio)
+                for c in classes_per_task
+            ]
         )
 
         self.split = cfg.split
 
-    def forward(self, x: torch.Tensor, sample: bool = False) -> List[torch.Tensor] | torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, sample: bool = False
+    ) -> List[torch.Tensor] | torch.Tensor:
         if x.dim() == 3 and x.size(1) == 3:
             x = self.input_adapter(x)
         elif x.dim() == 4 and x.size(1) == 3 and x.size(2) == 2:
@@ -389,7 +407,9 @@ class BayesianClassifier(nn.Module):
 class Net(nn.Module):
     """UCL learner powered by a Bayesian ResNet-18 backbone."""
 
-    def __init__(self, n_inputs: int, n_outputs: int, n_tasks: int, args: object) -> None:
+    def __init__(
+        self, n_inputs: int, n_outputs: int, n_tasks: int, args: object
+    ) -> None:
         super().__init__()
 
         self.cfg = UCLConfig.from_args(args)
@@ -402,18 +422,23 @@ class Net(nn.Module):
         self.classes_per_task = misc_utils.build_task_class_list(
             n_tasks,
             n_outputs,
-            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            nc_per_task=getattr(args, "nc_per_task_list", "")
+            or getattr(args, "nc_per_task", None),
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
 
-        self.model = BayesianClassifier(n_outputs, n_tasks, self.cfg, args, self.classes_per_task)
+        self.model = BayesianClassifier(
+            n_outputs, n_tasks, self.cfg, args, self.classes_per_task
+        )
         self.split = self.cfg.split
         in_channels = getattr(args, "in_channels", 2)
         self.detector = ResNet1D(num_classes=1, args=args, in_channels=in_channels)
         self.det_loss = nn.BCEWithLogitsLoss()
         self.det_lambda = float(self.cfg.det_lambda)
-        self.det_optimizer = torch.optim.Adam(self.detector.parameters(), lr=self.cfg.lr)
+        self.det_optimizer = torch.optim.Adam(
+            self.detector.parameters(), lr=self.cfg.lr
+        )
 
         mu_params: List[nn.Parameter] = []
         rho_params: List[nn.Parameter] = []
@@ -461,7 +486,9 @@ class Net(nn.Module):
     def _device(self) -> torch.device:
         return next(self.parameters()).device
 
-    def forward(self, x: torch.Tensor, t: int, s: Optional[float] = None) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, t: int, s: Optional[float] = None
+    ) -> torch.Tensor:
         if not self.training:
             num_samples = max(1, self.cfg.eval_samples)
             if num_samples == 1:
@@ -475,7 +502,9 @@ class Net(nn.Module):
                         sampled = self.model(x, sample=True)
                         head_logits = sampled[t] if self.split else sampled
                         head_probs = F.softmax(head_logits, dim=-1)
-                        probs_acc = head_probs if probs_acc is None else probs_acc + head_probs
+                        probs_acc = (
+                            head_probs if probs_acc is None else probs_acc + head_probs
+                        )
 
             assert probs_acc is not None
             probs_mean = probs_acc / float(num_samples)
@@ -484,7 +513,9 @@ class Net(nn.Module):
         outputs = self.model(x, sample=False)
         return outputs[t] if self.split else outputs
 
-    def forward_heads(self, x: torch.Tensor, sample: bool = False) -> Tuple[torch.Tensor, List[torch.Tensor] | torch.Tensor]:
+    def forward_heads(
+        self, x: torch.Tensor, sample: bool = False
+    ) -> Tuple[torch.Tensor, List[torch.Tensor] | torch.Tensor]:
         det_logits = self.detector.forward_detection(self.detector.forward_features(x))
         cls_logits = self.model(x, sample=sample)
         return det_logits, cls_logits
@@ -577,7 +608,9 @@ class Net(nn.Module):
 
     # ------------------------------------------------------------------
     def _snapshot_model(self) -> BayesianClassifier:
-        clone = BayesianClassifier(self.n_outputs, self.n_tasks, self.cfg, self.args, self.classes_per_task)
+        clone = BayesianClassifier(
+            self.n_outputs, self.n_tasks, self.cfg, self.args, self.classes_per_task
+        )
         clone.load_state_dict(self.model.state_dict())
         clone.to(self._device())
         clone.eval()
@@ -587,7 +620,15 @@ class Net(nn.Module):
 
     def _compute_layer_regularisation_terms(
         self, old_layer: BayesianLayer, new_layer: BayesianLayer, eps: float
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, int]:
+    ) -> Tuple[
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        int,
+    ]:
         """Compute UCL regularisation terms for a Bayesian layer pair.
 
         Args:
@@ -612,7 +653,9 @@ class Net(nn.Module):
         saver_strength_flat = saver_strength.view(saver_strength.size(0), -1)
         bias_strength = saver_strength_flat.mean(dim=1)
 
-        mu_weight_reg = ((saver_strength * (trainer_weight_mu - saver_weight_mu)) ** 2).sum()
+        mu_weight_reg = (
+            (saver_strength * (trainer_weight_mu - saver_weight_mu)) ** 2
+        ).sum()
         l1_mu_weight_reg = (
             (saver_weight_mu.pow(2) / safe_saver_weight_sigma.pow(2))
             * (trainer_weight_mu - saver_weight_mu).abs()
@@ -620,23 +663,26 @@ class Net(nn.Module):
 
         mu_bias_reg = torch.zeros_like(mu_weight_reg)
         l1_mu_bias_reg = torch.zeros_like(mu_weight_reg)
-        regularized_parameter_count = trainer_weight_mu.numel() + trainer_weight_sigma.numel()
+        regularized_parameter_count = (
+            trainer_weight_mu.numel() + trainer_weight_sigma.numel()
+        )
         trainer_bias = getattr(new_layer, "bias", None)
         saver_bias = getattr(old_layer, "bias", None)
         if trainer_bias is not None and saver_bias is not None:
             mu_bias_reg = ((bias_strength * (trainer_bias - saver_bias)) ** 2).sum()
             saver_sigma_flat = saver_weight_sigma.view(saver_weight_sigma.size(0), -1)
             l1_mu_bias_reg = (
-                (
-                    saver_bias.pow(2)
-                    / saver_sigma_flat.mean(dim=1).clamp_min(eps).pow(2)
-                )
+                (saver_bias.pow(2) / saver_sigma_flat.mean(dim=1).clamp_min(eps).pow(2))
                 * (trainer_bias - saver_bias).abs()
             ).sum()
             regularized_parameter_count += trainer_bias.numel()
 
-        weight_sigma_ratio = trainer_weight_sigma.pow(2) / (safe_saver_weight_sigma.pow(2))
-        sigma_weight_reg = (weight_sigma_ratio - torch.log(weight_sigma_ratio + eps)).sum()
+        weight_sigma_ratio = trainer_weight_sigma.pow(2) / (
+            safe_saver_weight_sigma.pow(2)
+        )
+        sigma_weight_reg = (
+            weight_sigma_ratio - torch.log(weight_sigma_ratio + eps)
+        ).sum()
         sigma_weight_normal_reg = (
             trainer_weight_sigma.pow(2) - torch.log(trainer_weight_sigma.pow(2) + eps)
         ).sum()
@@ -650,7 +696,9 @@ class Net(nn.Module):
             regularized_parameter_count,
         )
 
-    def _apply_regularisation(self, base_loss: torch.Tensor, batch_size: int) -> torch.Tensor:
+    def _apply_regularisation(
+        self, base_loss: torch.Tensor, batch_size: int
+    ) -> torch.Tensor:
         """Apply UCL regularisation against the previous-task posterior snapshot.
 
         Args:
@@ -693,7 +741,9 @@ class Net(nn.Module):
             l1_mu_bias_reg = l1_mu_bias_reg + l1_bias_term
             regularized_parameter_count += param_count
 
-        current_task_index = int(self.current_task) if self.current_task is not None else 0
+        current_task_index = (
+            int(self.current_task) if self.current_task is not None else 0
+        )
         for head_index in range(min(current_task_index, len(self.model.heads))):
             old_head = self.model_old.heads[head_index]
             new_head = self.model.heads[head_index]
@@ -725,7 +775,9 @@ class Net(nn.Module):
         loss = base_loss
         loss = loss + self.cfg.alpha * (mu_weight_reg + mu_bias_reg) / (2 * batch_size)
         loss = loss + self.saved * (l1_mu_weight_reg + l1_mu_bias_reg) / batch_size
-        loss = loss + self.cfg.beta * (sigma_weight_reg + sigma_weight_normal_reg) / (2 * batch_size)
+        loss = loss + self.cfg.beta * (sigma_weight_reg + sigma_weight_normal_reg) / (
+            2 * batch_size
+        )
         return loss
 
     def _iter_bayesian_modules(self, module: nn.Module) -> Iterable[BayesianLayer]:

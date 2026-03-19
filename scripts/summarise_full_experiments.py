@@ -54,7 +54,9 @@ class AlgoSummary:
 
 RUN_RE = re.compile(r"--- Running: base \+ (?P<algo>[\w\-]+) ---")
 COMPLETED_RE = re.compile(r"Completed:\s+(?P<algo>[\w\-]+)\s+\(exit\s+(?P<code>\d+)\)")
-ERROR_RE = re.compile(r"ERROR:\s+(?P<algo>[\w\-]+)\s+failed with exit code\s+(?P<code>\d+)")
+ERROR_RE = re.compile(
+    r"ERROR:\s+(?P<algo>[\w\-]+)\s+failed with exit code\s+(?P<code>\d+)"
+)
 TOTAL_ACC_RE = re.compile(r"Total Accuracy:\s+(?P<val>[0-9.]+)")
 TOTAL_DET_RE = re.compile(r"Total Detection:\s+(?P<val>[0-9.]+)")
 TOTAL_FA_RE = re.compile(r"Total False Alarm:\s+(?P<val>[0-9.]+)")
@@ -278,4 +280,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

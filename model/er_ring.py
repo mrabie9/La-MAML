@@ -22,7 +22,7 @@ class ErRingConfig:
     n_memories: int = 2000
     replay_batch_size: int = 20
     inner_steps: int = 5
-    
+
     batch_size: int = 128
     cuda: bool = True
     # temperature: float = 2.0
@@ -39,13 +39,10 @@ class ErRingConfig:
                 setattr(cfg, field, getattr(args, field))
         return cfg
 
+
 class Net(DetectionReplayMixin, torch.nn.Module):
 
-    def __init__(self,
-                 n_inputs,
-                 n_outputs,
-                 n_tasks,
-                 args):
+    def __init__(self, n_inputs, n_outputs, n_tasks, args):
         super(Net, self).__init__()
         self.cfg = ErRingConfig.from_args(args)
         self.reg = self.cfg.memory_strength
@@ -55,12 +52,14 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.net = ResNet1D(n_outputs, args)
         # setup optimizer
         self.lr = self.cfg.lr
-        #if self.is_task_incremental:
+        # if self.is_task_incremental:
         #    self.opt = torch.optim.Adam(self.net.parameters(), lr='self.lr)
-        #else:
+        # else:
         self.opt = torch.optim.SGD(self._ll_params(), lr=self.lr, momentum=0.9)
-        self.det_opt = torch.optim.SGD(self.net.det_head.parameters(), lr=self.lr, momentum=0.9)
-        
+        self.det_opt = torch.optim.SGD(
+            self.net.det_head.parameters(), lr=self.lr, momentum=0.9
+        )
+
         # setup losses
         self.bce = torch.nn.CrossEntropyLoss()
         self.det_lambda = float(self.cfg.det_lambda)
@@ -74,7 +73,8 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.classes_per_task = misc_utils.build_task_class_list(
             n_tasks,
             n_outputs,
-            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            nc_per_task=getattr(args, "nc_per_task_list", "")
+            or getattr(args, "nc_per_task", None),
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         if self.is_task_incremental:
@@ -94,9 +94,13 @@ class Net(DetectionReplayMixin, torch.nn.Module):
 
         # Replay buffer stores canonical shape (2, 512) from _input_for_replay (2-channel or adapter output).
         seq_len = n_inputs // 2
-        self.memx = torch.FloatTensor(n_tasks, self.max_task_memories, 2, seq_len).fill_(0)
+        self.memx = torch.FloatTensor(
+            n_tasks, self.max_task_memories, 2, seq_len
+        ).fill_(0)
         self.memy = torch.LongTensor(n_tasks, self.max_task_memories).fill_(-1)
-        self.mem_feat = torch.FloatTensor(n_tasks, self.max_task_memories, self.nc_per_task).fill_(0)
+        self.mem_feat = torch.FloatTensor(
+            n_tasks, self.max_task_memories, self.nc_per_task
+        ).fill_(0)
         self.mem = {}
         if self.cfg.cuda:
             self.memx = self.memx.cuda()
@@ -108,7 +112,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         if self.cfg.cuda:
             self.task_mem_filled = self.task_mem_filled.cuda()
             self.task_mem_ptr = self.task_mem_ptr.cuda()
-        
+
         self.n_outputs = n_outputs
 
         self.mse = nn.MSELoss()
@@ -117,10 +121,13 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.samples_seen = 0
         self.sz = int(self.cfg.replay_batch_size)
         self.inner_steps = self.cfg.inner_steps
-    def on_epoch_end(self):  
+
+    def on_epoch_end(self):
         pass
 
-    def _build_task_memory_capacities(self, total_memories: int, n_tasks: int) -> list[int]:
+    def _build_task_memory_capacities(
+        self, total_memories: int, n_tasks: int
+    ) -> list[int]:
         """Split a total replay budget across tasks.
 
         Args:
@@ -151,9 +158,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 continue
             yield param
 
-    def forward(self, x, t, return_feat= False):
+    def forward(self, x, t, return_feat=False):
         output = self.net(x)
-        
+
         if self.is_task_incremental:
             # make sure we predict classes within the current task
             offset1, offset2 = self.compute_offsets(t)
@@ -161,10 +168,10 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             if offset1 > 0:
                 output[:, :offset1].data.fill_(-10e10)
             if offset2 < self.n_outputs:
-                output[:, int(offset2):self.n_outputs].data.fill_(-10e10)
+                output[:, int(offset2) : self.n_outputs].data.fill_(-10e10)
         return output
-    
-    def memory_sampling(self,t):
+
+    def memory_sampling(self, t):
         filled_counts = [int(self.task_mem_filled[i].item()) for i in range(t)]
         total = sum(filled_counts)
         if total == 0:
@@ -177,7 +184,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         s_idx_list = []
         cum = np.cumsum([0] + filled_counts)
         for fi in flat_indices:
-            task_idx = max(i for i in range(len(cum)-1) if cum[i] <= fi)
+            task_idx = max(i for i in range(len(cum) - 1) if cum[i] <= fi)
             sample_idx = fi - cum[task_idx]
             t_idx_list.append(task_idx)
             s_idx_list.append(sample_idx)
@@ -185,19 +192,25 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         t_idx = torch.tensor(t_idx_list, dtype=torch.long, device=self.memx.device)
         s_idx = torch.tensor(s_idx_list, dtype=torch.long, device=self.memx.device)
 
-        offsets = torch.tensor([self.compute_offsets(int(i)) for i in t_idx.tolist()], device=self.memx.device)
+        offsets = torch.tensor(
+            [self.compute_offsets(int(i)) for i in t_idx.tolist()],
+            device=self.memx.device,
+        )
         xx = self.memx[t_idx, s_idx]
-        yy = self.memy[t_idx, s_idx] - offsets[:,0]
+        yy = self.memy[t_idx, s_idx] - offsets[:, 0]
         feat = self.mem_feat[t_idx, s_idx]
         mask = torch.zeros(xx.size(0), self.nc_per_task, device=self.memx.device)
         for j in range(mask.size(0)):
             cls_size = offsets[j][1] - offsets[j][0]
-            mask[j, :cls_size] = torch.arange(offsets[j][0], offsets[j][1], device=self.memx.device)
+            mask[j, :cls_size] = torch.arange(
+                offsets[j][0], offsets[j][1], device=self.memx.device
+            )
         sizes = (offsets[:, 1] - offsets[:, 0]).long()
-        return xx,yy, feat , mask.long(), sizes
+        return xx, yy, feat, mask.long(), sizes
+
     def observe(self, x, y, t):
-        #t = info[0]
-        #idx = info[1]
+        # t = info[0]
+        # idx = info[1]
         self.net.train()
         # class_counts = getattr(self, "classes_per_task", None)
         # noise_label = None
@@ -243,26 +256,28 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 self.memx[t, write_pointer:endcnt].copy_(x_for_storage.data[:effbsz])
                 self.memy[t, write_pointer:endcnt].copy_(y.data[:effbsz])
                 filled_before_update = int(self.task_mem_filled[t].item())
-                self.task_mem_filled[t] = min(task_capacity, filled_before_update + effbsz)
+                self.task_mem_filled[t] = min(
+                    task_capacity, filled_before_update + effbsz
+                )
             self.task_mem_ptr[t] = 0 if endcnt == task_capacity else endcnt
 
         if t != self.current_task:
             tt = self.current_task
             offset1, offset2 = self.compute_offsets(tt)
             # out = self.forward(self.memx[tt],tt, True)
-            #self.mem_feat[tt] = F.softmax(out[:, offset1:offset2] / self.temp, dim=1 ).data.clone()
+            # self.mem_feat[tt] = F.softmax(out[:, offset1:offset2] / self.temp, dim=1 ).data.clone()
             self.current_task = t
-            
+
         cls_tr_rec = []
 
         for _ in range(self.inner_steps):
             self.net.zero_grad()
-            loss1 = torch.tensor(0.).cuda()
-            loss2 = torch.tensor(0.).cuda()
-            loss3 = torch.tensor(0.).cuda()
- 
+            loss1 = torch.tensor(0.0).cuda()
+            loss2 = torch.tensor(0.0).cuda()
+            loss3 = torch.tensor(0.0).cuda()
+
             offset1, offset2 = self.compute_offsets(t)
-            pred = self.forward(x,t, True)
+            pred = self.forward(x, t, True)
             logits = pred[:, offset1:offset2]
             targets = y - offset1
             if targets.min() < 0 or targets.max() >= logits.size(1):
@@ -289,7 +304,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                             f"class_count={pred.size(1)}, sizes={class_sizes.tolist()}"
                         )
                     loss2 += self.bce(pred, yy)
-                
+
             loss = loss1 + loss2
             loss.backward()
             self.opt.step()

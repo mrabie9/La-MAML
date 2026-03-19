@@ -7,6 +7,7 @@
 from dataclasses import dataclass
 
 import torch
+
 # from .common import ContextMLP, ContextNet18
 # from .resnet import ResNet18 as ResNet18Full
 from model.ctn_base import ContextNet18
@@ -46,29 +47,32 @@ class CtnConfig:
                 setattr(cfg, field, getattr(args, field))
         return cfg
 
+
 class Net(DetectionReplayMixin, torch.nn.Module):
 
-    def __init__(self,
-                 n_inputs,
-                 n_outputs,
-                 n_tasks,
-                 args):
+    def __init__(self, n_inputs, n_outputs, n_tasks, args):
         super(Net, self).__init__()
         self.cfg = CtnConfig.from_args(args)
         self.reg = self.cfg.memory_strength
         self.temp = self.cfg.temperature
         # setup network
-        if  self.cfg.arch == 'resnet1d':
+        if self.cfg.arch == "resnet1d":
             # self.net = ResNet1D(n_outputs, args)
-            self.net = ContextNet18(n_outputs, n_tasks=n_tasks, task_emb=self.cfg.task_emb)
+            self.net = ContextNet18(
+                n_outputs, n_tasks=n_tasks, task_emb=self.cfg.task_emb
+            )
         # self.net.define_task_lr_params(alpha_init=args.alpha_init)
         else:
-            raise NotImplementedError(f"Unsupported arch {self.cfg.arch}; only resnet1d is available now.")
+            raise NotImplementedError(
+                f"Unsupported arch {self.cfg.arch}; only resnet1d is available now."
+            )
 
-        self.is_task_incremental = True 
+        self.is_task_incremental = True
         self.inner_lr = self.cfg.lr
         self.outer_lr = self.cfg.ctx_lr
-        self.opt = torch.optim.SGD(self.net.parameters(), lr=self.outer_lr, momentum=0.9)
+        self.opt = torch.optim.SGD(
+            self.net.parameters(), lr=self.outer_lr, momentum=0.9
+        )
         # setup losses
         self.bce = torch.nn.CrossEntropyLoss()
         self.det_lambda = float(self.cfg.det_lambda)
@@ -81,7 +85,8 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.classes_per_task = misc_utils.build_task_class_list(
             n_tasks,
             n_outputs,
-            nc_per_task=getattr(args, "nc_per_task_list", "") or getattr(args, "nc_per_task", None),
+            nc_per_task=getattr(args, "nc_per_task_list", "")
+            or getattr(args, "nc_per_task", None),
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         if self.is_task_incremental:
@@ -103,13 +108,15 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         ]
         self.task_replay_capacities = [
             task_capacity - task_val
-            for task_capacity, task_val in zip(self.task_total_capacities, self.task_val_capacities)
+            for task_capacity, task_val in zip(
+                self.task_total_capacities, self.task_val_capacities
+            )
         ]
         self.max_task_replay_capacity = max(self.task_replay_capacities, default=0)
         self.max_task_val_capacity = max(self.task_val_capacities, default=0)
 
         # set up the semantic memory
-        self.full_val = True # avoid OOM when using too large memory
+        self.full_val = True  # avoid OOM when using too large memory
 
         # if 'cub' in args.data_file:
         #     self.memx = torch.FloatTensor(n_tasks, self.n_memories, 3, 224, 224)
@@ -120,12 +127,18 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         #     if self.n_memories > 75:
         #         self.full_val = False
         # else:
-        self.memx = torch.FloatTensor(n_tasks, self.max_task_replay_capacity, 2, n_inputs//2)
-        self.valx = torch.FloatTensor(n_tasks, self.max_task_val_capacity, 2, n_inputs//2)
+        self.memx = torch.FloatTensor(
+            n_tasks, self.max_task_replay_capacity, 2, n_inputs // 2
+        )
+        self.valx = torch.FloatTensor(
+            n_tasks, self.max_task_val_capacity, 2, n_inputs // 2
+        )
 
         self.memy = torch.LongTensor(n_tasks, self.max_task_replay_capacity)
         self.valy = torch.LongTensor(n_tasks, self.max_task_val_capacity)
-        self.mem_feat = torch.FloatTensor(n_tasks, self.max_task_replay_capacity, self.nc_per_task)
+        self.mem_feat = torch.FloatTensor(
+            n_tasks, self.max_task_replay_capacity, self.nc_per_task
+        )
         self.mem = {}
         if self.cfg.cuda:
             self.valx = self.valx.cuda().fill_(0)
@@ -133,14 +146,22 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             self.memy = self.memy.cuda().fill_(0)
             self.mem_feat = self.mem_feat.cuda().fill_(0)
             self.valy = self.valy.cuda().fill_(0)
-            #self.valy.data.fill_(0)
+            # self.valy.data.fill_(0)
 
-        self.task_mem_ptr = torch.zeros(n_tasks, dtype=torch.long, device=self.memx.device)
-        self.task_mem_filled = torch.zeros(n_tasks, dtype=torch.long, device=self.memx.device)
-        self.task_val_ptr = torch.zeros(n_tasks, dtype=torch.long, device=self.memx.device)
-        self.task_val_filled = torch.zeros(n_tasks, dtype=torch.long, device=self.memx.device)
+        self.task_mem_ptr = torch.zeros(
+            n_tasks, dtype=torch.long, device=self.memx.device
+        )
+        self.task_mem_filled = torch.zeros(
+            n_tasks, dtype=torch.long, device=self.memx.device
+        )
+        self.task_val_ptr = torch.zeros(
+            n_tasks, dtype=torch.long, device=self.memx.device
+        )
+        self.task_val_filled = torch.zeros(
+            n_tasks, dtype=torch.long, device=self.memx.device
+        )
         self.bsz = self.cfg.batch_size
-        
+
         self.n_outputs = n_outputs
 
         self.mse = nn.MSELoss()
@@ -151,11 +172,14 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.inner_steps = self.cfg.inner_steps
         self.n_meta = self.cfg.n_meta
         self.counter = 0
-    def on_epoch_end(self):  
+
+    def on_epoch_end(self):
         self.counter += 1
         pass
 
-    def _build_task_memory_capacities(self, total_memories: int, n_tasks: int) -> list[int]:
+    def _build_task_memory_capacities(
+        self, total_memories: int, n_tasks: int
+    ) -> list[int]:
         """Split a total replay budget across tasks.
 
         Args:
@@ -180,9 +204,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         else:
             return 0, self.n_outputs
 
-    def forward(self, x, t, return_feat= False):
+    def forward(self, x, t, return_feat=False):
         output = self.net(x, t)
-        
+
         if self.is_task_incremental:
             # make sure we predict classes within the current task
             offset1, offset2 = self.compute_offsets(t)
@@ -190,9 +214,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             if offset1 > 0:
                 output[:, :offset1].data.fill_(-10e10)
             if offset2 < self.n_outputs:
-                output[:, int(offset2):self.n_outputs].data.fill_(-10e10)
+                output[:, int(offset2) : self.n_outputs].data.fill_(-10e10)
         return output
-    
+
     def memory_sampling(self, t: int, valid: bool = False):
         """Sample replay or validation examples from buffered tasks.
 
@@ -215,16 +239,26 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         if valid and self.full_val:
             flat_sample_indices = np.arange(total_samples)
         else:
-            sample_size = min(total_samples, 64) if valid else int(min(total_samples, self.sz))
+            sample_size = (
+                min(total_samples, 64) if valid else int(min(total_samples, self.sz))
+            )
             if sample_size <= 0:
                 return None
-            flat_sample_indices = np.random.choice(total_samples, sample_size, replace=False)
+            flat_sample_indices = np.random.choice(
+                total_samples, sample_size, replace=False
+            )
 
         cumulative_counts = np.cumsum([0] + filled_counts)
-        task_indices_np = np.searchsorted(cumulative_counts, flat_sample_indices, side="right") - 1
+        task_indices_np = (
+            np.searchsorted(cumulative_counts, flat_sample_indices, side="right") - 1
+        )
         sample_indices_np = flat_sample_indices - cumulative_counts[task_indices_np]
-        t_idx = torch.from_numpy(task_indices_np).to(device=self.memx.device, dtype=torch.long)
-        s_idx = torch.from_numpy(sample_indices_np).to(device=self.memx.device, dtype=torch.long)
+        t_idx = torch.from_numpy(task_indices_np).to(
+            device=self.memx.device, dtype=torch.long
+        )
+        s_idx = torch.from_numpy(sample_indices_np).to(
+            device=self.memx.device, dtype=torch.long
+        )
 
         offsets = torch.tensor(
             [self.compute_offsets(int(task_index)) for task_index in t_idx.tolist()],
@@ -249,7 +283,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             )
         sizes = (offsets[:, 1] - offsets[:, 0]).long()
         return xx, yy, feat, mask.long(), t_idx.tolist(), sizes
-        
+
     def observe(self, x, y, t):
         class_counts = getattr(self, "classes_per_task", None)
         noise_label = None
@@ -293,7 +327,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         # y = y_cls[signal_mask]
         x_for_storage = self._input_for_replay(x)
 
-        # if task has changed, run model on val set of previous task to get soft targets 
+        # if task has changed, run model on val set of previous task to get soft targets
         if t != self.current_task:
             tt = self.current_task
             previous_task_filled = int(self.task_mem_filled[tt].item())
@@ -303,7 +337,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 cls_size = int(offset2 - offset1)
                 feat = self.mem_feat[tt, :previous_task_filled]
                 feat.zero_()
-                feat[:, :cls_size] = F.softmax(out[:, offset1:offset2] / self.temp, dim=1).data.clone() # store soft targets
+                feat[:, :cls_size] = F.softmax(
+                    out[:, offset1:offset2] / self.temp, dim=1
+                ).data.clone()  # store soft targets
             self.current_task = t
             self.memy[t] = 0
 
@@ -329,8 +365,14 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             self.valx[t, val_write_pointer].copy_(x_for_storage[0])
             self.valy[t, val_write_pointer].copy_(incoming_val_y)
             filled_val_before_update = int(self.task_val_filled[t].item())
-            self.task_val_filled[t] = min(task_val_capacity, filled_val_before_update + 1)
-            self.task_val_ptr[t] = 0 if (val_write_pointer + 1) == task_val_capacity else (val_write_pointer + 1)
+            self.task_val_filled[t] = min(
+                task_val_capacity, filled_val_before_update + 1
+            )
+            self.task_val_ptr[t] = (
+                0
+                if (val_write_pointer + 1) == task_val_capacity
+                else (val_write_pointer + 1)
+            )
             if x.size(0) == 0:
                 x = x_for_storage[0].unsqueeze(0)
                 y = incoming_val_y.unsqueeze(0)
@@ -350,7 +392,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 )
                 self.memy[t, replay_write_pointer:endcnt].copy_(y.data[:effbsz])
                 filled_mem_before_update = int(self.task_mem_filled[t].item())
-                self.task_mem_filled[t] = min(task_replay_capacity, filled_mem_before_update + effbsz)
+                self.task_mem_filled[t] = min(
+                    task_replay_capacity, filled_mem_before_update + effbsz
+                )
             self.task_mem_ptr[t] = 0 if endcnt == task_replay_capacity else endcnt
 
         # if getattr(self, "det_enabled", True):
@@ -384,9 +428,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         context_parameters = list(self.net.context_param())
         for _ in range(self.n_meta):
             loss1 = torch.tensor(0.0, device=x.device)
- 
+
             offset1, offset2 = self.compute_offsets(t)
-            pred = self.forward(x,t)
+            pred = self.forward(x, t)
             logits = pred[:, offset1:offset2]
             targets = y - offset1
             preds = torch.argmax(logits, dim=1)
@@ -398,12 +442,16 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             else:
                 signal_mask_for_metric = targets != local_noise_label
             if signal_mask_for_metric.any():
-                cls_tr_rec.append(macro_recall(preds[signal_mask_for_metric], targets[signal_mask_for_metric]))
+                cls_tr_rec.append(
+                    macro_recall(
+                        preds[signal_mask_for_metric], targets[signal_mask_for_metric]
+                    )
+                )
             else:
                 cls_tr_rec.append(0.0)
 
             loss1 = self.bce(logits, targets)
-            #tt = t + 1
+            # tt = t + 1
             for i in range(self.inner_steps):
                 loss2 = torch.tensor(0.0, device=x.device)
                 loss3 = torch.tensor(0.0, device=x.device)
@@ -417,20 +465,25 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                             if size < pred.size(1):
                                 pred[row, size:] = -1e9
                         loss2 = self.bce(pred, yy)
-                        loss3 = self.reg * self.kl(F.log_softmax(pred / self.temp, dim = 1), feat)
-                    loss = (self.cls_lambda * loss1
-                            + self.det_lambda * det_loss_value
-                            + loss2 + loss3)
+                        loss3 = self.reg * self.kl(
+                            F.log_softmax(pred / self.temp, dim=1), feat
+                        )
+                    loss = (
+                        self.cls_lambda * loss1
+                        + self.det_lambda * det_loss_value
+                        + loss2
+                        + loss3
+                    )
                 else:
                     loss = self.cls_lambda * loss1 + self.det_lambda * det_loss_value
-             
+
                 grads = torch.autograd.grad(
                     loss,
                     self.net.base_param(),
                     create_graph=False,
                     allow_unused=True,
                 )
-                
+
                 # SGD update only the BASE NETWORK
                 for param, grad in zip(self.net.base_param(), grads):
                     if grad is None:
@@ -462,8 +515,8 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                     continue
                 param.grad = grad.detach().clamp(-1, 1)
             self.opt.step()
-            #SGD update the CONTROLLER 
-            self.zero_grad() 
-               
+            # SGD update the CONTROLLER
+            self.zero_grad()
+
         avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
         return loss.item(), avg_cls_tr_rec
