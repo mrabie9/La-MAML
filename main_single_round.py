@@ -1,5 +1,5 @@
 import argparse
-import datetime
+import time
 import importlib
 import os
 from pathlib import Path
@@ -212,7 +212,7 @@ def run_single_round_training(
     per_epoch_train_f1: List[float] = []
     per_epoch_val_f1: List[float] = []
 
-    time_start = misc_utils.time.time() if hasattr(misc_utils, "time") else None
+    time_start = time.time()
 
     current_task_index = 0
     evaluator = eval_tasks
@@ -384,12 +384,8 @@ def run_single_round_training(
     for row_idx, row in enumerate(result_val_a):
         padded_val[row_idx, : len(row)] = torch.as_tensor(row, dtype=torch.float)
 
-    if time_start is not None:
-        import time as _time
+    time_spent = time.time() - time_start
 
-        time_spent = _time.time() - time_start
-    else:
-        time_spent = 0.0
 
     metrics_payload: Dict[str, np.ndarray] = {
         "losses": np.asarray(per_epoch_losses, dtype=float),

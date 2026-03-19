@@ -602,6 +602,7 @@ def plot_multi_algorithms(
     output_dir: Path | None,
     same_y_limits: bool = False,
     val_metric_choice: str = "total_f1",
+    labels: Sequence[str] | None = None,
 ) -> None:
     """Create the multi-row, multi-column figure for all algorithms.
 
@@ -615,8 +616,17 @@ def plot_multi_algorithms(
     if not runs:
         raise ValueError("No algorithms provided for plotting.")
 
+    # Special-case: IID oracle baseline. These runs each contain a single task
+    # and it is more natural to compare multiple IID runs within a single row.
+    iid2_mode = all(run.name.lower() == "iid2" for run in runs)
+
     n_algos = len(runs)
-    n_cols = 4
+    if iid2_mode:
+        n_rows = 1
+        n_cols = 3  # train recall, final val metrics, val over tasks
+    else:
+        n_rows = n_algos
+        n_cols = 4
 
     # Use a larger figure when saving to file to allow detailed zooming.
     if output_dir is not None:
@@ -626,14 +636,31 @@ def plot_multi_algorithms(
         col_width, row_height = 4.0, 3.0
         dpi = 200
 
-    fig, axes = plt.subplots(
-        n_algos,
-        n_cols,
-        figsize=(col_width * n_cols, row_height * n_algos),
-        squeeze=False,
-        sharex="col",
-        dpi=dpi,
-    )
+    if iid2_mode:
+        # For IID2, the third column (val over runs) is much narrower and the
+        # overall figure width is reduced since there is only a single row.
+        if output_dir is not None:
+            fig_width = col_width * 2.0  # slightly narrower than 3 full columns
+        else:
+            fig_width = col_width * 2.8
+        fig, axes = plt.subplots(
+            n_rows,
+            n_cols,
+            figsize=(fig_width, row_height * n_rows),
+            squeeze=False,
+            dpi=dpi,
+            # Make the first subplot slightly less wide while keeping the third
+            # one narrow for the val-over-runs summary.
+            gridspec_kw={"width_ratios": [0.5, 0.5, 0.2]},
+        )
+    else:
+        fig, axes = plt.subplots(
+            n_rows,
+            n_cols,
+            figsize=(col_width * n_cols, row_height * n_rows),
+            squeeze=False,
+            dpi=dpi,
+        )
 
     def _resolve_val_metric_for_run(choice: str, run: AlgoRun) -> tuple[str, str]:
         """Resolve validation metric key and label for a single run."""
@@ -652,50 +679,181 @@ def plot_multi_algorithms(
     # Resolve label for column titles from the first run.
     first_key, first_label = _resolve_val_metric_for_run(val_metric_choice, runs[0])
 
-    for row_idx, run in enumerate(runs):
-        val_metric_key, val_metric_label = _resolve_val_metric_for_run(val_metric_choice, run)
-        row_axes = axes[row_idx]
-        _plot_train_acc_vs_steps(row_axes[0], run.tasks, run.task_names)
-        _plot_final_validation_metrics(row_axes[1], run.tasks, run.task_names)
-        _plot_val_acc_over_tasks(
-            row_axes[2],
-            run.tasks,
-            run.task_names,
-            val_metric_key=val_metric_key,
-            val_metric_label=val_metric_label,
-        )
-        _plot_average_forgetting(
-            row_axes[3],
-            run.tasks,
-            val_metric_key=val_metric_key,
-            val_metric_label=val_metric_label,
-        )
+    if iid2_mode:
+        # Optional custom labels for IID2 runs; fall back to run names.
+        label_list: list[str] = []
+        for idx, run in enumerate(runs):
+            if labels is not None and idx < len(labels):
+                label_list.append(str(labels[idx]))
+            else:
+                label_list.append(run.name)
 
-        row_axes[0].set_ylabel(f"{run.name}\nTrain recall")
+        row_axes = axes[0]
 
-    # Column titles on the top row
-    axes[0][0].set_title("Train recall vs step")
-    axes[0][1].set_title("Final validation metrics")
-    axes[0][2].set_title(f"Val {first_label} over tasks")
-    axes[0][3].set_title(f"Average forgetting ({first_label})")
+        # Train recall vs step: one line per IID2 run (single task each).
+        for run_idx, run in enumerate(runs):
+            run_label = label_list[run_idx]
+            if not run.tasks:
+                continue
+            task = run.tasks[0]
+            acc_values = task.get("cls_tr_rec")
+            if acc_values is None:
+                acc_values = task.get("tr_acc")
+            if acc_values is None:
+                continue
+            acc = np.asarray(acc_values, dtype=float)
+            steps = np.arange(len(acc))
+            row_axes[0].plot(
+                steps,
+                acc,
+                label=run_label,
+                color=f"C{run_idx % 10}",
+                alpha=0.9,
+            )
+        row_axes[0].set_ylabel("Train recall")
+        row_axes[0].grid(True, alpha=0.3)
 
-    # Legends on first row only: train recall vs step, final validation metrics.
-    handles_train, _ = axes[0][0].get_legend_handles_labels()
-    if handles_train:
-        axes[0][0].legend(ncol=min(len(handles_train), 5), fontsize=8)
+        # Final validation metrics: bars grouped by run, using the last task.
+        for run_idx, run in enumerate(runs):
+            if not run.tasks:
+                continue
+            last = run.tasks[-1]
+            val_acc = last.get("val_acc")
+            val_det_acc = last.get("val_det_acc")
+            val_det_fa = last.get("val_det_fa")
+            if val_acc is None and val_det_acc is None and val_det_fa is None:
+                continue
+            # Use the first element of each series; IID2 runs only have one task.
+            x_center = run_idx
+            width = 0.2
+            if val_det_fa is not None and len(val_det_fa) > 0:
+                row_axes[1].bar(
+                    x_center - width,
+                    float(val_det_fa[0]),
+                    width=width,
+                    label="Pfa" if run_idx == 0 else None,
+                    color=f"C{run_idx % 10}",
+                    hatch="//",
+                    alpha=0.8,
+                )
+            if val_det_acc is not None and len(val_det_acc) > 0:
+                row_axes[1].bar(
+                    x_center,
+                    float(val_det_acc[0]),
+                    width=width,
+                    label="Det recall" if run_idx == 0 else None,
+                    color=f"C{run_idx % 10}",
+                    hatch="..",
+                    alpha=0.8,
+                )
+            if val_acc is not None and len(val_acc) > 0:
+                row_axes[1].bar(
+                    x_center + width,
+                    float(val_acc[0]),
+                    width=width,
+                    label="Cls recall" if run_idx == 0 else None,
+                    color=f"C{run_idx % 10}",
+                    alpha=0.8,
+                )
+        row_axes[1].set_ylabel("Metric value")
+        row_axes[1].set_xticks(np.arange(len(runs)))
+        row_axes[1].set_xticklabels(label_list, rotation=45, ha="right")
+        row_axes[1].grid(True, alpha=0.3, axis="y")
 
-    handles_fv, _ = axes[0][1].get_legend_handles_labels()
-    if handles_fv:
-        axes[0][1].legend(ncol=len(handles_fv), fontsize=8)
+        # Validation metric over runs: for IID2, there is a single task per
+        # run. Plot all points at the same x-position and hide the x axis.
+        for run_idx, run in enumerate(runs):
+            if not run.tasks:
+                continue
+            metrics = run.tasks[0]
+            metric_vals = metrics.get(first_key)
+            if metric_vals is None or len(metric_vals) == 0:
+                continue
+            y_val = float(metric_vals[0])
+            row_axes[2].scatter(
+                0.0,
+                y_val,
+                label=label_list[run_idx],
+                color=f"C{run_idx % 10}",
+                alpha=0.9,
+            )
+        row_axes[2].set_xlim(-0.5, 0.5)
+        row_axes[2].set_xticks([])
+        row_axes[2].set_xlabel("")
+        row_axes[2].set_ylabel(f"Val {first_label}")
+        row_axes[2].grid(True, alpha=0.3)
 
-    # Legend for val recall over tasks (first row only).
-    handles_val, _ = axes[0][2].get_legend_handles_labels()
-    if handles_val:
-        axes[0][2].legend(ncol=min(len(handles_val), 4), fontsize=8)
+        # Column titles on the single IID2 row.
+        axes[0][0].set_title("Train recall vs step")
+        axes[0][1].set_title("Final validation metrics")
+        axes[0][2].set_title(f"Val {first_label} over runs")
+
+        # Legends for IID2 mode.
+        handles_train, labels_train = axes[0][0].get_legend_handles_labels()
+        if handles_train:
+            axes[0][0].legend(ncol=min(len(handles_train), 5), fontsize=8)
+
+        handles_fv, labels_fv = axes[0][1].get_legend_handles_labels()
+        if handles_fv:
+            axes[0][1].legend(fontsize=8)
+
+        handles_val, labels_val = axes[0][2].get_legend_handles_labels()
+        if handles_val:
+            # Use an adaptive legend layout for the val-over-runs panel.
+            n_labels = len(labels_val)
+            if n_labels <= 3:
+                ncol = 1
+            elif n_labels <= 8:
+                ncol = 2
+            else:
+                ncol = 3
+            axes[0][2].legend(ncol=ncol, fontsize=8)
+
+    else:
+        for row_idx, run in enumerate(runs):
+            val_metric_key, val_metric_label = _resolve_val_metric_for_run(val_metric_choice, run)
+            row_axes = axes[row_idx]
+            _plot_train_acc_vs_steps(row_axes[0], run.tasks, run.task_names)
+            _plot_final_validation_metrics(row_axes[1], run.tasks, run.task_names)
+            _plot_val_acc_over_tasks(
+                row_axes[2],
+                run.tasks,
+                run.task_names,
+                val_metric_key=val_metric_key,
+                val_metric_label=val_metric_label,
+            )
+            _plot_average_forgetting(
+                row_axes[3],
+                run.tasks,
+                val_metric_key=val_metric_key,
+                val_metric_label=val_metric_label,
+            )
+
+            row_axes[0].set_ylabel(f"{run.name}\nTrain recall")
+
+        # Column titles on the top row (non-IID2 mode).
+        axes[0][0].set_title("Train recall vs step")
+        axes[0][1].set_title("Final validation metrics")
+        axes[0][2].set_title(f"Val {first_label} over tasks")
+        axes[0][3].set_title(f"Average forgetting ({first_label})")
+
+        # Legends on first row only: train recall vs step, final validation metrics.
+        handles_train, _ = axes[0][0].get_legend_handles_labels()
+        if handles_train:
+            axes[0][0].legend(ncol=min(len(handles_train), 5), fontsize=8)
+
+        handles_fv, _ = axes[0][1].get_legend_handles_labels()
+        if handles_fv:
+            axes[0][1].legend(ncol=len(handles_fv), fontsize=8)
+
+        # Legend for val recall over tasks (first row only).
+        handles_val, _ = axes[0][2].get_legend_handles_labels()
+        if handles_val:
+            axes[0][2].legend(ncol=min(len(handles_val), 4), fontsize=8)
 
     # Optionally enforce the same y-axis limits across rows for each column so
     # that comparisons between algorithms are visually consistent.
-    if same_y_limits:
+    if same_y_limits and not iid2_mode:
         for col_idx in range(n_cols):
             y_mins: List[float] = []
             y_maxs: List[float] = []
@@ -810,6 +968,15 @@ def _parse_args() -> argparse.Namespace:
             "not available for a run."
         ),
     )
+    parser.add_argument(
+        "--labels",
+        type=str,
+        default=None,
+        help=(
+            "Optional comma-separated labels for IID2 runs when they are "
+            "combined into a single row (e.g. '0,1,2,3')."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -833,11 +1000,17 @@ def main() -> None:
     for run in runs:
         print(f"  {run.name}: {run.metrics_dir}")
 
+    if args.labels is not None:
+        label_list = [part.strip() for part in args.labels.split(",") if part.strip()]
+    else:
+        label_list = None
+
     plot_multi_algorithms(
         runs=runs,
         output_dir=args.output_dir,
         same_y_limits=args.same_y_limits,
         val_metric_choice=args.val_metric,
+        labels=label_list,
     )
 
 

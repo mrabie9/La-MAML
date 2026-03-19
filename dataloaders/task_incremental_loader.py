@@ -433,6 +433,8 @@ class IncrementalLoader:
             raw_datasets = []
             all_labels = []
             labels_offset = 0
+            collapse_noise_across_tasks = str(getattr(self._args, "model", "")).lower() == "iid2"
+            global_noise_label: int | None = None
 
             # Track human-readable task names based on file names.
             self.task_names = [os.path.splitext(f)[0] for f in data_files]
@@ -557,10 +559,17 @@ class IncrementalLoader:
                         y_test_cls_remap[mask_test] = y_test_cls[mask_test] + labels_offset
                     extra_class = 0
                     if (not use_detector_arch) and has_negatives:
-                        extra_class = 1
-                        neg_label = labels_offset + unique_labels.size
-                        y_train_cls_remap[~mask_train] = neg_label
-                        y_test_cls_remap[~mask_test] = neg_label
+                        if collapse_noise_across_tasks:
+                            # Keep "noise-only" samples as -1 for now; we assign a single
+                            # shared label across all tasks after loading all datasets.
+                            y_train_cls_remap[~mask_train] = -1
+                            y_test_cls_remap[~mask_test] = -1
+                        else:
+                            # Legacy behaviour: per-task noise label at the end of this task's range.
+                            extra_class = 1
+                            neg_label = labels_offset + unique_labels.size
+                            y_train_cls_remap[~mask_train] = neg_label
+                            y_test_cls_remap[~mask_test] = neg_label
                     if use_detector_arch:
                         y_train = np.stack([y_train_cls_remap, y_train_det], axis=1)
                         y_test = np.stack([y_test_cls_remap, y_test_det], axis=1)
@@ -591,13 +600,24 @@ class IncrementalLoader:
                         y_test_remap[mask_test] = y_test[mask_test] + labels_offset
                     extra_class = 0
                     if (not use_detector_arch) and has_negatives:
-                        extra_class = 1
-                        neg_label = labels_offset + unique_labels.size
-                        y_train_remap[~mask_train] = neg_label
-                        y_test_remap[~mask_test] = neg_label
+                        if collapse_noise_across_tasks:
+                            # Keep "noise-only" samples as -1 for now; we assign a single
+                            # shared label across all tasks after loading all datasets.
+                            y_train_remap[~mask_train] = -1
+                            y_test_remap[~mask_test] = -1
+                        else:
+                            # Legacy behaviour: per-task noise label at the end of this task's range.
+                            extra_class = 1
+                            neg_label = labels_offset + unique_labels.size
+                            y_train_remap[~mask_train] = neg_label
+                            y_test_remap[~mask_test] = neg_label
                     y_train = y_train_remap
                     y_test = y_test_remap
-                labels_offset += unique_labels.size + extra_class
+                if collapse_noise_across_tasks:
+                    # Only advance by non-noise classes. Noise label is global.
+                    labels_offset += unique_labels.size
+                else:
+                    labels_offset += unique_labels.size + extra_class
                 if y_train.ndim == 2 and y_train.shape[1] == 2:
                     remapped = np.unique(y_train[:, 0])
                 else:
@@ -621,6 +641,35 @@ class IncrementalLoader:
                 self.train_dataset.append((None, x_train, y_train.astype(np.int64)))
                 self.test_dataset.append((None, x_test, y_test.astype(np.int64)))
 
+            if collapse_noise_across_tasks:
+                # Assign the single shared noise label across all tasks.
+                global_noise_label = int(labels_offset)
+                self.noise_label = global_noise_label
+                self._args.noise_label = global_noise_label
+                for dataset in (self.train_dataset, self.test_dataset):
+                    for task_index in range(len(dataset)):
+                        labels = dataset[task_index][2]
+                        if labels.ndim == 2 and labels.shape[1] == 2:
+                            labels = labels.copy()
+                            noise_mask = labels[:, 0] < 0
+                            if noise_mask.any():
+                                labels[noise_mask, 0] = global_noise_label
+                            dataset[task_index] = (
+                                dataset[task_index][0],
+                                dataset[task_index][1],
+                                labels.astype(np.int64),
+                            )
+                        else:
+                            labels = labels.copy()
+                            noise_mask = labels < 0
+                            if noise_mask.any():
+                                labels[noise_mask] = global_noise_label
+                            dataset[task_index] = (
+                                dataset[task_index][0],
+                                dataset[task_index][1],
+                                labels.astype(np.int64),
+                            )
+
             self.sample_permutations = []
             for t in range(len(self.train_dataset)):
                 N = self.train_dataset[t][1].shape[0] # number of samples in task t
@@ -640,7 +689,11 @@ class IncrementalLoader:
                 labels = task[2]
                 if labels.ndim == 2 and labels.shape[1] == 2:
                     labels = labels[:, 0]
-                labels = labels[labels >= 0]
+                if collapse_noise_across_tasks:
+                    # Exclude shared noise label from per-task class count.
+                    labels = labels[(labels >= 0) & (labels != self.noise_label)]
+                else:
+                    labels = labels[labels >= 0]
                 return int(np.unique(labels).size)
             self.classes_per_task = [_task_class_count(task) for task in self.train_dataset]
             print("Built classes_per_task:", self.classes_per_task)
