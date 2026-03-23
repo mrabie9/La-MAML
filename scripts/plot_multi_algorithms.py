@@ -43,9 +43,9 @@ if _pre_args.output_dir is not None:
 
     matplotlib.use("Agg")
 
-import matplotlib.pyplot as plt
-import numpy as np
-from matplotlib.ticker import MultipleLocator
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+from matplotlib.ticker import MultipleLocator  # noqa: E402
 
 TaskMetrics = Dict[str, Any]
 
@@ -683,6 +683,8 @@ def plot_multi_algorithms(
     if not runs:
         raise ValueError("No algorithms provided for plotting.")
 
+    shared_legend_axes_per_row: list[plt.Axes] = []
+
     # Special-case: IID oracle baseline. These runs each contain a single task
     # and it is more natural to compare multiple IID runs within a single row.
     iid2_mode = all(run.name.lower() == "iid2" for run in runs)
@@ -756,6 +758,7 @@ def plot_multi_algorithms(
                 label_list.append(run.name)
 
         row_axes = axes[0]
+        shared_legend_axes_per_row = [row_axes[0]]
 
         # Train recall vs step: one line per run. If multiple tasks are present,
         # concatenate task series so x-axis reflects total iterations.
@@ -825,7 +828,10 @@ def plot_multi_algorithms(
                 )
         row_axes[1].set_ylabel("Metric value")
         row_axes[1].set_xticks(np.arange(len(runs)))
-        row_axes[1].set_xticklabels(label_list, rotation=45, ha="right")
+        # The run names are already shown via the shared legend; avoid duplicating
+        # them as x tick labels.
+        row_axes[1].set_xticklabels([])
+        row_axes[1].set_xlabel("")
         row_axes[1].yaxis.set_major_locator(MultipleLocator(0.1))
         row_axes[1].grid(True, alpha=0.3, axis="y")
 
@@ -856,26 +862,11 @@ def plot_multi_algorithms(
         axes[0][1].set_title("Final validation metrics")
         axes[0][2].set_title(f"Val {first_label} over runs")
 
-        # Legends for IID2 mode.
-        handles_train, labels_train = axes[0][0].get_legend_handles_labels()
-        if handles_train:
-            axes[0][0].legend(ncol=min(len(handles_train), 5), fontsize=8)
-
-        handles_fv, labels_fv = axes[0][1].get_legend_handles_labels()
+        # Legend for IID2 mode: keep only the "Final validation metrics"
+        # legend in its panel. All other panels use the shared row legend.
+        handles_fv, _ = axes[0][1].get_legend_handles_labels()
         if handles_fv:
             axes[0][1].legend(fontsize=8)
-
-        handles_val, labels_val = axes[0][2].get_legend_handles_labels()
-        if handles_val:
-            # Use an adaptive legend layout for the val-over-runs panel.
-            n_labels = len(labels_val)
-            if n_labels <= 3:
-                ncol = 1
-            elif n_labels <= 8:
-                ncol = 2
-            else:
-                ncol = 3
-            axes[0][2].legend(ncol=ncol, fontsize=8)
 
     else:
         for row_idx, run in enumerate(runs):
@@ -885,6 +876,10 @@ def plot_multi_algorithms(
             row_axes = axes[row_idx]
             _plot_train_acc_vs_steps(row_axes[0], run.tasks, run.task_names)
             _plot_final_validation_metrics(row_axes[1], run.tasks, run.task_names)
+            # Avoid duplicating the same "task index" information as x tick
+            # labels; keep the panel focused on the metric bars.
+            row_axes[1].set_xticklabels([])
+            row_axes[1].set_xlabel("")
             _plot_val_acc_over_tasks(
                 row_axes[2],
                 run.tasks,
@@ -901,25 +896,19 @@ def plot_multi_algorithms(
 
             row_axes[0].set_ylabel(f"{run.name}\nTrain recall")
 
+            # Shared legend source: use the train-recall panel's task labels.
+            shared_legend_axes_per_row.append(row_axes[0])
+
         # Column titles on the top row (non-IID2 mode).
         axes[0][0].set_title("Train recall vs step")
         axes[0][1].set_title("Final validation metrics")
         axes[0][2].set_title(f"Val {first_label} over tasks")
         axes[0][3].set_title(f"Average forgetting ({first_label})")
 
-        # Legends on first row only: train recall vs step, final validation metrics.
-        handles_train, _ = axes[0][0].get_legend_handles_labels()
-        if handles_train:
-            axes[0][0].legend(ncol=min(len(handles_train), 5), fontsize=8)
-
+        # Keep the "Final validation metrics" panel legend (Pfa/Det recall/etc.).
         handles_fv, _ = axes[0][1].get_legend_handles_labels()
         if handles_fv:
             axes[0][1].legend(ncol=len(handles_fv), fontsize=8)
-
-        # Legend for val recall over tasks (first row only).
-        handles_val, _ = axes[0][2].get_legend_handles_labels()
-        if handles_val:
-            axes[0][2].legend(ncol=min(len(handles_val), 4), fontsize=8)
 
     # Optionally enforce the same y-axis limits across rows for each column so
     # that comparisons between algorithms are visually consistent.
@@ -938,7 +927,74 @@ def plot_multi_algorithms(
             for row_idx in range(n_algos):
                 axes[row_idx][col_idx].set_ylim(col_min, col_max)
 
-    plt.tight_layout()
+    # Leave extra bottom space so the shared legends can sit below each row.
+    # (bbox_inches="tight" in savefig can otherwise neutralize small shifts.)
+    # Reserve more bottom space so the row legend doesn't collide with
+    # subplot x-tick labels.
+    tight_bottom_rect = 0.4 if shared_legend_axes_per_row else 0.0
+    plt.tight_layout(rect=[0.0, tight_bottom_rect, 1.0, 1.0])
+
+    # Shared legend(s): centered below each row.
+    if shared_legend_axes_per_row:
+        # Legend box size/spacing estimate (in figure coordinates).
+        # Because the figure is later saved with bbox_inches="tight", small
+        # coordinate adjustments can be neutralized; slightly larger numbers
+        # keep the legend comfortably clear of tick labels.
+        legend_height_est = 0.085
+        legend_gap = 0.05
+        for row_idx, legend_source_ax in enumerate(shared_legend_axes_per_row):
+            handles, labels = legend_source_ax.get_legend_handles_labels()
+            if not handles or not labels:
+                continue
+
+            # De-duplicate by label so repeated artists don't create clutter.
+            seen_labels: set[str] = set()
+            unique_handles: list[object] = []
+            unique_labels: list[str] = []
+            for handle, label in zip(handles, labels):
+                if not label or label.startswith("_"):
+                    continue
+                if label in seen_labels:
+                    continue
+                seen_labels.add(label)
+                unique_handles.append(handle)
+                unique_labels.append(str(label))
+
+            if not unique_labels:
+                continue
+
+            legend_ncol = min(len(unique_labels), 5)
+            ax_bbox = legend_source_ax.get_position()
+            # With loc="lower center", bbox_to_anchor y is the legend lower edge.
+            # Keep the legend's top below the current axes bottom (y0).
+            target_y = ax_bbox.y0 - legend_gap - legend_height_est
+
+            # For intermediate rows, also ensure the legend doesn't overlap the
+            # next row's axes (clamp by next axes bottom).
+            if row_idx < len(shared_legend_axes_per_row) - 1:
+                next_ax_bbox = shared_legend_axes_per_row[row_idx + 1].get_position()
+                y_anchor_max = next_ax_bbox.y0 - legend_gap - legend_height_est
+                y_anchor = min(target_y, y_anchor_max)
+            else:
+                y_anchor = target_y
+
+            # Clamp to remain inside the reserved bottom margin.
+            # Since `loc="lower center"`, `bbox_to_anchor y` is the legend lower
+            # edge. Keep it below the axes area by ensuring it doesn't cross
+            # the `tight_bottom_rect` boundary.
+            y_anchor = min(y_anchor, tight_bottom_rect - 0.01)
+            y_anchor = max(y_anchor, 0.005)
+
+            fig.legend(
+                unique_handles,
+                unique_labels,
+                loc="lower center",
+                bbox_to_anchor=(0.5, y_anchor),
+                bbox_transform=fig.transFigure,
+                ncol=legend_ncol,
+                fontsize=11,
+                frameon=False,
+            )
 
     if output_dir is not None:
         output_dir.mkdir(parents=True, exist_ok=True)

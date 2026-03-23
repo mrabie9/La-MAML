@@ -1,3 +1,5 @@
+#! /usr/bin/env python3
+# ruff: noqa: E402
 import os
 import sys
 
@@ -27,13 +29,13 @@ def test_adc_iq_adapter_linear_mixing():
     adapter = AdcIqAdapter()
 
     # Make mixing easy to reason about:
-    # first IQ channel = adc0 + adc1 + adc2
-    # second IQ channel = adc0 - adc1 (ignore adc2)
+    # first IQ channel = (adc0 + adc1 + adc2) / 3
+    # second IQ channel = (adc0 + adc1) / 2 (ignore adc2)
     with torch.no_grad():
         adapter.weight.zero_()
         adapter.bias.zero_()
-        adapter.weight[0] = torch.tensor([1.0, 1.0, 1.0])  # sum of all 3
-        adapter.weight[1] = torch.tensor([1.0, -1.0, 0.0])  # adc0 - adc1
+        adapter.weight[0] = torch.tensor([1 / 3, 1 / 3, 1 / 3])  # sum = 1
+        adapter.weight[1] = torch.tensor([0.5, 0.5, 0.0])  # sum = 1
 
     # Build an input with simple structure so we can predict the output
     x = torch.zeros(B, 3, 2, L)
@@ -45,10 +47,10 @@ def test_adc_iq_adapter_linear_mixing():
     print(x.shape)
     y = adapter(x)  # (B, 2, L)
     # For both IQ channels and all L:
-    # channel 0: 1 + 2 + 3 = 6
-    # channel 1: 1 - 2 = -1
-    assert torch.allclose(y[:, 0, :], torch.full((B, L), 6.0))
-    assert torch.allclose(y[:, 1, :], torch.full((B, L), -1.0))
+    # channel 0: (1 + 2 + 3) / 3 = 2
+    # channel 1: (1 + 2) / 2 = 1.5
+    assert torch.allclose(y[:, 0, :], torch.full((B, L), 2.0))
+    assert torch.allclose(y[:, 1, :], torch.full((B, L), 1.5))
 
 
 def test_adc_iq_adapter_raises_on_invalid_shape():

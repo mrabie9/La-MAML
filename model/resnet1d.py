@@ -68,13 +68,12 @@ class AdcIqAdapter(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.weight = nn.Parameter(torch.ones(2, 3))
-        self.bias = nn.Parameter(torch.zeros(2))
-        # nn.init.xavier_uniform_(self.weight)
-        self.proj_3ch = nn.Conv1d(3, 2, kernel_size=1)
-        # weight_4d = torch.tensor([[1,  1,  1 ],
-        #                             [1,  1, 1 ]])
-        # bias_4d = torch.tensor([0.0,  0.0])
-        # self.set_initial_parameters(weight_4d=weight_4d, bias_4d=bias_4d)
+        # The adapter's effective bias is always forced to 0 in `forward`.
+        self.bias = nn.Parameter(torch.zeros(2), requires_grad=False)
+        # Kept for completeness of the (B, 3, L) path, but bias is disabled.
+        self.proj_3ch = nn.Conv1d(3, 2, kernel_size=1, bias=False)
+        for param in (self.weight, self.bias, *self.proj_3ch.parameters()):
+                param.requires_grad = False
 
     def set_initial_parameters(
         self,
@@ -158,10 +157,39 @@ class AdcIqAdapter(nn.Module):
                 param.requires_grad = False
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Enforce row-stochastic mixing: each output row sums to 1.
+        row_sums = self.weight.sum(dim=1, keepdim=True)  # (2, 1)
+        zero_row_mask = row_sums.abs() <= 1e-12
+        denom = torch.where(zero_row_mask, torch.ones_like(row_sums), row_sums)
+        normalized_weight = self.weight / denom  # (2, 3)
+        uniform = torch.full_like(self.weight, 1.0 / self.weight.size(1))
+        normalized_weight = torch.where(
+            zero_row_mask.expand_as(normalized_weight), uniform, normalized_weight
+        )
+
+        # Bias is always 0 (and does not receive gradients).
+        self.bias.data.zero_()
+
         if x.dim() == 3 and x.size(1) == 3:
-            return self.proj_3ch(x)
-        if x.dim() == 3 and x.size(1) == 2:
-            return x
+            # Use proj_3ch parameters for the 3D path so gradients flow there.
+            # Enforce row-stochastic mixing for the effective conv weights.
+            conv_weight = self.proj_3ch.weight.squeeze(-1)  # (2, 3)
+            conv_row_sums = conv_weight.sum(dim=1, keepdim=True)
+            conv_zero_row_mask = conv_row_sums.abs() <= 1e-12
+            conv_denom = torch.where(
+                conv_zero_row_mask, torch.ones_like(conv_row_sums), conv_row_sums
+            )
+            normalized_conv_weight = conv_weight / conv_denom
+            conv_uniform = torch.full_like(
+                conv_weight, 1.0 / conv_weight.size(1)  # 1/3
+            )
+            normalized_conv_weight = torch.where(
+                conv_zero_row_mask.expand_as(normalized_conv_weight),
+                conv_uniform,
+                normalized_conv_weight,
+            )
+            y = torch.einsum("bcl,oc->bol", x, normalized_conv_weight)
+            return y + self.bias.view(1, 2, 1)
         if x.dim() != 4 or x.size(1) != 3 or x.size(2) != 2:
             raise ValueError(
                 f"ADC adapter expects (B, 3, 2, L) or (B, 3, L); got shape {tuple(x.shape)}."
@@ -174,9 +202,8 @@ class AdcIqAdapter(nn.Module):
         # (B, 3, 2, L) -> (B, 2, 3, L)
         x = x.permute(0, 2, 1, 3)
         # Mix ADCs per IQ channel: (B, 2, 3, L) x (2, 3) -> (B, 2, L)
-        y = torch.einsum("bial,ia->bil", x, self.weight)
-        y = y + self.bias.view(1, 2, 1)
-        return y
+        y = torch.einsum("bial,ia->bil", x, normalized_weight)
+        return y + self.bias.view(1, 2, 1)
 
 
 class _ResNet1D(nn.Module):
@@ -441,6 +468,10 @@ class ResNet1D(nn.Module):
         """
         if x.dim() == 2:
             batch, features = x.shape
+            if features % 2 == 0 and features % 3 == 0:
+                raise ValueError(
+                    f"Ambiguous flat input shape: features={features} divisible by both 2 and 3."
+                )
             if features % 2 == 0 and features % 3 != 0:
                 seq_len = features // 2
                 x = x.view(batch, 2, seq_len)
