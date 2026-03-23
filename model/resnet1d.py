@@ -70,10 +70,16 @@ class AdcIqAdapter(nn.Module):
         self.weight = nn.Parameter(torch.ones(2, 3))
         # The adapter's effective bias is always forced to 0 in `forward`.
         self.bias = nn.Parameter(torch.zeros(2), requires_grad=False)
-        # Kept for completeness of the (B, 3, L) path, but bias is disabled.
+        # Used by the 3D path: (B, 3, L) -> (B, 2, L). The 4D path uses
+        # `self.weight` with einsum instead.
         self.proj_3ch = nn.Conv1d(3, 2, kernel_size=1, bias=False)
-        for param in (self.weight, self.bias, *self.proj_3ch.parameters()):
-                param.requires_grad = False
+        # Keep adapter parameters trainable by default:
+        # - `self.weight` controls the 4D path (B, 3, 2, L), which is the main
+        #   path for 3-ADC IQ tensors.
+        # - `proj_3ch` controls the 3D fallback path (B, 3, L).
+        self.weight.requires_grad = True
+        for param in self.proj_3ch.parameters():
+            param.requires_grad = True
 
     def set_initial_parameters(
         self,

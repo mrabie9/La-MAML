@@ -117,7 +117,8 @@ class ContextNet(nn.Module):
             self.det_head.parameters(),
         )
         for param in base_iter:
-            yield param
+            if param.requires_grad:
+                yield param
 
     def context_param(self):
         film_iter = chain(self.emb.parameters(), self.film4.parameters())
@@ -187,6 +188,7 @@ class ContextNet(nn.Module):
         feat = self._pool_features(h4)
         y = self.model.fc(feat)
         return y
+
 
 def ContextNet18(
     num_classes,
