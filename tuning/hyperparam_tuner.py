@@ -20,7 +20,7 @@ import sys
 
 sys.path.append("/home/lunet/wsmr11/repos/La-MAML")  # to import from parent directory
 import parser as file_parser
-from main import life_experience, life_experience_iid
+from main import life_experience
 from utils import misc_utils
 
 Grid = Dict[str, List[Any]]
@@ -418,17 +418,36 @@ def run_single_trial(
 
     try:
         if args.model == "iid2":
+            # IID2 is a non-lifelong (single-round) experiment. We run the
+            # single-round training pipeline and map its metrics into the
+            # same result-tuple shape the tuner expects.
+            from main_single_round import (
+                build_single_round_loaders,
+                run_single_round_training,
+            )
+
+            train_loader, test_loader, _selected_indices = build_single_round_loaders(
+                args, loader
+            )
             (
                 result_val_t,
                 result_val_a,
-                result_test_t,
-                result_test_a,
-                result_val_det_a,
-                result_val_det_fa,
-                result_test_det_a,
-                result_test_det_fa,
                 spent,
-            ) = life_experience_iid(model, loader, args)
+                metrics_payload,
+            ) = run_single_round_training(model, train_loader, test_loader, args)
+
+            # main_single_round does not compute separate test metrics.
+            result_test_t = torch.empty((0,), dtype=torch.long)
+            result_test_a = torch.empty((0, 0), dtype=torch.float)
+            result_test_det_a = torch.empty((0,), dtype=torch.float)
+            result_test_det_fa = torch.empty((0,), dtype=torch.float)
+
+            result_val_det_a = torch.as_tensor(
+                metrics_payload.get("val_det_acc", []), dtype=torch.float
+            )
+            result_val_det_fa = torch.as_tensor(
+                metrics_payload.get("val_det_fa", []), dtype=torch.float
+            )
         else:
             (
                 result_val_t,
