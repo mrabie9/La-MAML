@@ -194,8 +194,8 @@ def get_parser():
         default=False,
         action="store_true",
         help=(
-            "When enabled, derive two extra IQ channels at model input time: "
-            "I**2 + Q**2 and I*Q."
+            "When enabled, append exactly one derived IQ channel at model input "
+            "time: I**2 + Q**2 (power) or I*Q (cross)."
         ),
     )
     parser.add_argument(

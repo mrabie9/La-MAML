@@ -70,6 +70,7 @@ class ContextNet(nn.Module):
         n_tasks=17,
         use_iq_aug_features: bool = False,
         iq_aug_scaling_mode: str = "none",
+        iq_aug_feature_type: str = "power",
     ):
         super(ContextNet, self).__init__()
         self.in_planes = nf = 64
@@ -90,6 +91,7 @@ class ContextNet(nn.Module):
             input_adapter=AdcIqAdapter(),
             use_iq_aug_features=use_iq_aug_features,
             iq_aug_scaling_mode=iq_aug_scaling_mode,
+            iq_aug_feature_type=iq_aug_feature_type,
         )
         self.feature_dim = self.model.fc.in_features
         self.det_head = nn.Linear(self.feature_dim, 1)
@@ -193,6 +195,7 @@ def ContextNet18(
     task_emb=64,
     use_iq_aug_features: bool = False,
     iq_aug_scaling_mode: str = "none",
+    iq_aug_feature_type: str = "power",
 ):
     return ContextNet(
         num_classes,
@@ -201,4 +204,5 @@ def ContextNet18(
         task_emb=task_emb,
         use_iq_aug_features=use_iq_aug_features,
         iq_aug_scaling_mode=iq_aug_scaling_mode,
+        iq_aug_feature_type=iq_aug_feature_type,
     )

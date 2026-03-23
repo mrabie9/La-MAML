@@ -381,7 +381,10 @@ class BayesianClassifier(nn.Module):
         self.input_adapter = AdcIqAdapter()
         self.use_iq_aug_features = bool(getattr(args, "use_iq_aug_features", False))
         self.iq_aug_scaling_mode = str(getattr(args, "data_scaling", "none"))
-        feature_in_channels = 4 if self.use_iq_aug_features else 2
+        self.iq_aug_feature_type = str(
+            getattr(args, "iq_aug_feature_type", getattr(args, "iq_aug_feature", "power"))
+        )
+        feature_in_channels = 3 if self.use_iq_aug_features else 2
         self.feature_net = BayesianResNet1D(in_channels=feature_in_channels, ratio=cfg.ratio)
         self.feature_dim = self.feature_net.feature_dim
 
@@ -406,6 +409,7 @@ class BayesianClassifier(nn.Module):
                 x,
                 enabled=self.use_iq_aug_features,
                 scaling_mode=self.iq_aug_scaling_mode,
+                feature_type=self.iq_aug_feature_type,
             )
         feats = self.feature_net(x, sample=sample, ret_feats=True)
         outputs = [head(feats, sample=sample) for head in self.heads]

@@ -284,7 +284,10 @@ class HatBackbone(nn.Module):
                 raise ValueError("IQ inputs must have an even number of features")
             self.use_iq_aug_features = bool(getattr(args, "use_iq_aug_features", False))
             self.iq_aug_scaling_mode = str(getattr(args, "data_scaling", "none"))
-            self.in_channels = 4 if self.use_iq_aug_features else 2
+            self.iq_aug_feature_type = str(
+                getattr(args, "iq_aug_feature_type", getattr(args, "iq_aug_feature", "power"))
+            )
+            self.in_channels = 3 if self.use_iq_aug_features else 2
             self.seq_len = n_inputs // 2
         else:
             raise NotImplementedError
@@ -390,6 +393,7 @@ class HatBackbone(nn.Module):
                 x,
                 enabled=self.use_iq_aug_features,
                 scaling_mode=self.iq_aug_scaling_mode,
+                feature_type=self.iq_aug_feature_type,
             )
         masks = self.mask(task, s) # mask for each stage
         mask_dict = { # dict of masks per layer

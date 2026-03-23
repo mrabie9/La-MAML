@@ -79,11 +79,13 @@ class IQDataGenerator(Dataset):
         y: np.ndarray,
         transform: Optional[callable] = None,
         convert_to_spectrogram: bool = False,
+        target_adc_channels: int | None = None,
     ) -> None:
         self.x = x
         self.y = y
         self.transform = transform
         self.convert_to_spectrogram = convert_to_spectrogram
+        self.target_adc_channels = target_adc_channels
 
     def __len__(self) -> int:  # pragma: no cover - simple wrapper
         return self.x.shape[0]
@@ -111,6 +113,26 @@ class IQDataGenerator(Dataset):
                 q = iq_sample[1::2]
 
             iq_sample = np.stack([i, q], axis=0).astype(np.float32)
+
+        if self.target_adc_channels == 3:
+            # Standardize to a 3-ADC interleaved representation expected by the
+            # 3-channel input path in `ResNet1D._prepare_input`, i.e. `(3, 2*L)`
+            # with ADC0 holding the original I/Q and ADC1/ADC2 set to zeros.
+            if iq_sample.shape[0] == 2:
+                l_iq = iq_sample.shape[1]
+                interleaved = np.empty((2 * l_iq,), dtype=np.float32)
+                interleaved[0::2] = iq_sample[0]
+                interleaved[1::2] = iq_sample[1]
+                padded = np.zeros((3, interleaved.shape[0]), dtype=np.float32)
+                padded[0, :] = interleaved
+                iq_sample = padded
+            elif iq_sample.shape[0] == 3:
+                iq_sample = iq_sample.astype(np.float32, copy=False)
+            else:
+                raise ValueError(
+                    f"Expected I/Q channels (2) or ADC channels (3) for target_adc_channels=3; "
+                    f"got shape {tuple(iq_sample.shape)}."
+                )
 
         label = self.y[index]
 

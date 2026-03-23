@@ -442,7 +442,13 @@ class IncrementalLoader:
             raise NotImplementedError("Unknown mode {}.".format(mode))
 
         if isinstance(x, np.ndarray):
-            dataset = IQDataGenerator(x, y)
+            target_adc_channels = None
+            if (
+                str(getattr(self._args, "model", "")).lower() == "iid2"
+                and str(getattr(self._args, "dataset", "")).lower() == "iq"
+            ):
+                target_adc_channels = 3
+            dataset = IQDataGenerator(x, y, target_adc_channels=target_adc_channels)
         else:
             dataset = DummyArrayDataset(x, y)
         return DataLoader(

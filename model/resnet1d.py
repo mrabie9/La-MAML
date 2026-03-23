@@ -166,6 +166,11 @@ class AdcIqAdapter(nn.Module):
             raise ValueError(
                 f"ADC adapter expects (B, 3, 2, L) or (B, 3, L); got shape {tuple(x.shape)}."
             )
+        # If ADC1/ADC2 are padded with exact zeros (e.g. IID2 mixing 2-channel
+        # and 3-channel datasets), short-circuit and return ADC0's I/Q
+        # channels without applying the learned 3->2 mixing weights.
+        if torch.all(x[:, 1:, :, :] == 0).item():
+            return x[:, 0, :, :]
         # (B, 3, 2, L) -> (B, 2, 3, L)
         x = x.permute(0, 2, 1, 3)
         # Mix ADCs per IQ channel: (B, 2, 3, L) x (2, 3) -> (B, 2, L)
@@ -177,9 +182,18 @@ class AdcIqAdapter(nn.Module):
 class _ResNet1D(nn.Module):
     """Internal utility that mirrors ``torchvision``'s ``ResNet`` logic."""
 
-    def __init__(self, block: type[nn.Module], layers: list[int], num_classes: int,
-                 in_channels: int = 2, norm_layer=None, input_adapter: nn.Module | None = None,
-                 use_iq_aug_features: bool = False, iq_aug_scaling_mode: str = "none") -> None:
+    def __init__(
+        self,
+        block: type[nn.Module],
+        layers: list[int],
+        num_classes: int,
+        in_channels: int = 2,
+        norm_layer=None,
+        input_adapter: nn.Module | None = None,
+        use_iq_aug_features: bool = False,
+        iq_aug_scaling_mode: str = "none",
+        iq_aug_feature_type: str = "power",
+    ) -> None:
         super().__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm1d
@@ -188,8 +202,11 @@ class _ResNet1D(nn.Module):
         self.input_adapter = input_adapter or nn.Identity()
         self.use_iq_aug_features = bool(use_iq_aug_features)
         self.iq_aug_scaling_mode = iq_aug_scaling_mode
+        self.iq_aug_feature_type = str(iq_aug_feature_type)
 
-        self.conv1 = nn.Conv1d(in_channels, 64, kernel_size=7, stride=2, padding=1, bias=False)
+        self.conv1 = nn.Conv1d(
+            in_channels, 64, kernel_size=7, stride=2, padding=1, bias=False
+        )
         self.bn1 = norm_layer(64)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
@@ -249,15 +266,23 @@ class _ResNet1D(nn.Module):
                     x = self.input_adapter(x)
                 else:
                     raise ValueError("Received 4D input but no adapter is configured.")
-            elif x.dim() == 3 and x.size(1) != 2 and not isinstance(
-                self.input_adapter, nn.Identity
+            elif (
+                x.dim() == 3
+                and x.size(1) != 2
+                and not isinstance(self.input_adapter, nn.Identity)
             ):
-                x = self.input_adapter(x)
+                # When augmentation is enabled, we may already have augmented
+                # 3-channel input. Don't run the 3->2 adapter in that case.
+                if self.use_iq_aug_features and x.size(1) == 3:
+                    pass
+                else:
+                    x = self.input_adapter(x)
             if x.dim() == 3 and x.size(1) == 2:
                 x = append_iq_augmented_features(
                     x,
                     enabled=self.use_iq_aug_features,
                     scaling_mode=self.iq_aug_scaling_mode,
+                    feature_type=self.iq_aug_feature_type,
                 )
 
             x = self.bn1(self.conv1(x))
@@ -292,7 +317,12 @@ class ResNet1D(nn.Module):
         self.args = args
         self.use_iq_aug_features = bool(getattr(args, "use_iq_aug_features", False))
         self.iq_aug_scaling_mode = str(getattr(args, "data_scaling", "none"))
-        effective_in_channels = 4 if self.use_iq_aug_features else in_channels
+        self.iq_aug_feature_type = str(
+            getattr(
+                args, "iq_aug_feature_type", getattr(args, "iq_aug_feature", "power")
+            )
+        )
+        effective_in_channels = 3 if self.use_iq_aug_features else in_channels
         norm_layer = self._build_norm_factory(args)
         self.input_adapter = AdcIqAdapter()
         self.model = _ResNet1D(
@@ -304,6 +334,7 @@ class ResNet1D(nn.Module):
             input_adapter=self.input_adapter,
             use_iq_aug_features=self.use_iq_aug_features,
             iq_aug_scaling_mode=self.iq_aug_scaling_mode,
+            iq_aug_feature_type=self.iq_aug_feature_type,
         )
         self.feature_dim = self.model.fc.in_features
         self.det_head = nn.Linear(self.feature_dim, 1)
