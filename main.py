@@ -19,7 +19,6 @@ from torch.autograd import Variable
 import parser as file_parser
 from metrics.metrics import confusion_matrix
 from utils import misc_utils
-from main_multi_task import life_experience_iid
 from utils.training_metrics import (
     macro_f1_including_noise,
     macro_precision_signal_only,
@@ -1321,19 +1320,60 @@ def main():
     )
     # run model on loader
     if args.model == "iid2":
-        # oracle baseline with all task data shown at same time
+        # IID2 is a non-lifelong (single-round) experiment: train on a
+        # combined task built from the task order selection.
         log_state(args.state_logging, "Invoking iid life experience flow")
-        (
+
+        # Local import to avoid circular dependencies:
+        # main_single_round imports helpers from this module.
+        from main_single_round import (
+            build_single_round_loaders,
+            run_single_round_training,
+        )
+
+        train_loader, test_loader, _selected_indices = build_single_round_loaders(
+            args, loader
+        )
+        result_val_t, result_val_a, spent_time, _metrics_payload = (
+            run_single_round_training(model, train_loader, test_loader, args)
+        )
+
+        # main_single_round does not compute a separate test loop; keep
+        # test tensors empty unless calc_test_accuracy is enabled.
+        dummy_test_t = torch.empty((0,), dtype=torch.long)
+        dummy_test_a = torch.empty((0, 0), dtype=torch.float)
+        save_results(
+            args,
             result_val_t,
             result_val_a,
-            result_test_t,
-            result_test_a,
-            _,
-            _,
-            _,
-            _,
+            dummy_test_t,
+            dummy_test_a,
+            model,
             spent_time,
-        ) = life_experience_iid(model, loader, args)
+        )
+
+        # Save per-epoch metrics under the same /metrics layout used in
+        # `life_experience()`.
+        logs_dir = os.path.join(args.log_dir, "metrics")
+        os.makedirs(logs_dir, exist_ok=True)
+        np.savez(os.path.join(logs_dir, "task0.npz"), **_metrics_payload)
+
+        # Record a human-readable task order entry for this combined run.
+        task_order_path = os.path.join(logs_dir, "task_order.txt")
+        task_names = getattr(loader, "task_names", None)
+        if task_names and _selected_indices:
+            combined_name = "+".join(
+                task_names[i] for i in _selected_indices if 0 <= i < len(task_names)
+            )
+        else:
+            combined_name = "task0"
+        with open(task_order_path, "a", encoding="utf-8") as f_task_order:
+            f_task_order.write(str(combined_name) + "\n")
+
+        log_state(
+            args.state_logging,
+            "Results saved; total runtime {:.2f}s".format(spent_time),
+        )
     else:
         # for all the CL baselines
         log_state(args.state_logging, "Invoking continual life experience flow")
