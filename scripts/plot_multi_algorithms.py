@@ -683,8 +683,6 @@ def plot_multi_algorithms(
     if not runs:
         raise ValueError("No algorithms provided for plotting.")
 
-    shared_legend_axes_per_row: list[plt.Axes] = []
-
     # Special-case: IID oracle baseline. These runs each contain a single task
     # and it is more natural to compare multiple IID runs within a single row.
     iid2_mode = all(run.name.lower() == "iid2" for run in runs)
@@ -758,7 +756,6 @@ def plot_multi_algorithms(
                 label_list.append(run.name)
 
         row_axes = axes[0]
-        shared_legend_axes_per_row = [row_axes[0]]
 
         # Train recall vs step: one line per run. If multiple tasks are present,
         # concatenate task series so x-axis reflects total iterations.
@@ -868,6 +865,19 @@ def plot_multi_algorithms(
         if handles_fv:
             axes[0][1].legend(fontsize=8)
 
+        # Put the run legend back onto the first column subplot.
+        handles_train, labels_train = axes[0][0].get_legend_handles_labels()
+        if handles_train and labels_train:
+            legend_ncol = len(labels_train) if len(labels_train) <= 4 else 2
+            axes[0][0].legend(
+                ncol=legend_ncol,
+                fontsize=8,
+                loc="lower center",
+                bbox_to_anchor=(0.5, 0.02),
+                frameon=True,
+                borderaxespad=0.2,
+            )
+
     else:
         for row_idx, run in enumerate(runs):
             val_metric_key, val_metric_label = _resolve_val_metric_for_run(
@@ -895,9 +905,33 @@ def plot_multi_algorithms(
             )
 
             row_axes[0].set_ylabel(f"{run.name}\nTrain recall")
-
-            # Shared legend source: use the train-recall panel's task labels.
-            shared_legend_axes_per_row.append(row_axes[0])
+            for subplot_ax in row_axes:
+                subplot_ax.text(
+                    0.99,
+                    0.99,
+                    run.name,
+                    transform=subplot_ax.transAxes,
+                    ha="right",
+                    va="top",
+                    fontsize=12,
+                    bbox={
+                        "boxstyle": "round,pad=0.15",
+                        "facecolor": "white",
+                        "alpha": 0.2,
+                        "edgecolor": "none",
+                    },
+                )
+            handles_train, labels_train = row_axes[0].get_legend_handles_labels()
+            if handles_train and labels_train:
+                legend_ncol = min(len(labels_train), 5)
+                row_axes[0].legend(
+                    ncol=legend_ncol,
+                    fontsize=8,
+                    loc="lower center",
+                    bbox_to_anchor=(0.5, 0.02),
+                    frameon=True,
+                    borderaxespad=0.2,
+                )
 
         # Column titles on the top row (non-IID2 mode).
         axes[0][0].set_title("Train recall vs step")
@@ -927,79 +961,12 @@ def plot_multi_algorithms(
             for row_idx in range(n_algos):
                 axes[row_idx][col_idx].set_ylim(col_min, col_max)
 
-    # Leave extra bottom space so the shared legends can sit below each row.
-    # (bbox_inches="tight" in savefig can otherwise neutralize small shifts.)
-    # Reserve more bottom space so the row legend doesn't collide with
-    # subplot x-tick labels.
-    tight_bottom_rect = 0.4 if shared_legend_axes_per_row else 0.0
-    plt.tight_layout(rect=[0.0, tight_bottom_rect, 1.0, 1.0])
-
-    # Shared legend(s): centered below each row.
-    if shared_legend_axes_per_row:
-        # Legend box size/spacing estimate (in figure coordinates).
-        # Because the figure is later saved with bbox_inches="tight", small
-        # coordinate adjustments can be neutralized; slightly larger numbers
-        # keep the legend comfortably clear of tick labels.
-        legend_height_est = 0.085
-        legend_gap = 0.05
-        for row_idx, legend_source_ax in enumerate(shared_legend_axes_per_row):
-            handles, labels = legend_source_ax.get_legend_handles_labels()
-            if not handles or not labels:
-                continue
-
-            # De-duplicate by label so repeated artists don't create clutter.
-            seen_labels: set[str] = set()
-            unique_handles: list[object] = []
-            unique_labels: list[str] = []
-            for handle, label in zip(handles, labels):
-                if not label or label.startswith("_"):
-                    continue
-                if label in seen_labels:
-                    continue
-                seen_labels.add(label)
-                unique_handles.append(handle)
-                unique_labels.append(str(label))
-
-            if not unique_labels:
-                continue
-
-            legend_ncol = min(len(unique_labels), 5)
-            ax_bbox = legend_source_ax.get_position()
-            # With loc="lower center", bbox_to_anchor y is the legend lower edge.
-            # Keep the legend's top below the current axes bottom (y0).
-            target_y = ax_bbox.y0 - legend_gap - legend_height_est
-
-            # For intermediate rows, also ensure the legend doesn't overlap the
-            # next row's axes (clamp by next axes bottom).
-            if row_idx < len(shared_legend_axes_per_row) - 1:
-                next_ax_bbox = shared_legend_axes_per_row[row_idx + 1].get_position()
-                y_anchor_max = next_ax_bbox.y0 - legend_gap - legend_height_est
-                y_anchor = min(target_y, y_anchor_max)
-            else:
-                y_anchor = target_y
-
-            # Clamp to remain inside the reserved bottom margin.
-            # Since `loc="lower center"`, `bbox_to_anchor y` is the legend lower
-            # edge. Keep it below the axes area by ensuring it doesn't cross
-            # the `tight_bottom_rect` boundary.
-            y_anchor = min(y_anchor, tight_bottom_rect - 0.01)
-            y_anchor = max(y_anchor, 0.005)
-
-            fig.legend(
-                unique_handles,
-                unique_labels,
-                loc="lower center",
-                bbox_to_anchor=(0.5, y_anchor),
-                bbox_transform=fig.transFigure,
-                ncol=legend_ncol,
-                fontsize=11,
-                frameon=False,
-            )
+    plt.tight_layout()
 
     if output_dir is not None:
         output_dir.mkdir(parents=True, exist_ok=True)
         out_path = output_dir / "multi_algorithms_metrics.png"
-        fig.savefig(out_path, dpi=300, bbox_inches="tight")
+        fig.savefig(out_path, dpi=200, bbox_inches="tight")
         print(f"Saved figure to {out_path}")
     else:
         plt.show()

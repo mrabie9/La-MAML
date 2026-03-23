@@ -226,12 +226,12 @@ def print_summary(summaries: Dict[str, AlgoSummary]) -> None:
         print("No algorithm runs found in log.")
         return
 
-    w_algo, w_status, w_exit = 8, 10, 5
+    w_algo, w_exit = 8, 5
     w_num = 7
     w_time = 8
     # tr: rec prec f1 det fa | te: rec prec f1 det fa | Size_GB Time
     header = (
-        f"{'Algo':<{w_algo}} {'Status':<{w_status}} {'Exit':<{w_exit}} "
+        f"{'Algo':<{w_algo}} {'Exit':<{w_exit}} "
         f"{'rec':>{w_num}} {'prec':>{w_num}}  {'det':>{w_num}} {'fa':>{w_num}} {'f1':>{w_num}} "
         f"| "
         f"{'rec':>{w_num}} {'prec':>{w_num}}  {'det':>{w_num}} {'fa':>{w_num}} {'f1':>{w_num}} "
@@ -245,7 +245,7 @@ def print_summary(summaries: Dict[str, AlgoSummary]) -> None:
         time_str = _format_time(s.time_sec)
         exit_str = str(s.exit_code) if s.exit_code is not None else ""
         print(
-            f"{s.name:<{w_algo}} {s.status:<{w_status}} {exit_str:<{w_exit}} "
+            f"{s.name:<{w_algo}} {exit_str:<{w_exit}} "
             f"{_fmt(s.cls_rec_tr):>{w_num}} {_fmt(s.cls_prec_tr):>{w_num}}  "
             f"{_fmt(s.det_tr):>{w_num}} {_fmt(s.fa_tr):>{w_num}} {_fmt(s.cls_f1_tr):>{w_num}} "
             f"| "
