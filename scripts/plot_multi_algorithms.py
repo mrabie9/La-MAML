@@ -204,7 +204,7 @@ def _build_label_colors(
     def _shade(index_in_group: int, group_size: int) -> float:
         if group_size <= 1:
             return 0.7
-        return 0.35 + 0.6 * (index_in_group / float(max(group_size, 1)))
+        return 0.35 + 0.6 * (index_in_group / float(max(group_size - 1, 1)))
 
     label_colors: Dict[str, Any] = {}
 
