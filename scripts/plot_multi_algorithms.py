@@ -145,6 +145,84 @@ def get_task_color(task_idx: int, task_names: Sequence[str] | None = None):
     return cmap(_shade(position_in_group, group_size))
 
 
+def _build_label_colors(
+    labels: Sequence[str],
+    grouping_keywords: Sequence[str] | None,
+) -> Dict[str, Any]:
+    """Build consistent colors for run labels with optional grouping.
+
+    When grouping keywords are provided, labels containing the same keyword
+    receive shades from the same colormap family.
+
+    Args:
+        labels: Display labels, one per run.
+        grouping_keywords: Optional keyword list used to group labels by
+            substring match.
+
+    Returns:
+        A mapping from label text to a matplotlib color value.
+
+    Usage:
+        >>> _build_label_colors(["iid2-a", "iid2-b"], ["a", "b"])
+        {'iid2-a': (...), 'iid2-b': (...)}
+    """
+    if not labels:
+        return {}
+
+    if grouping_keywords is None or len(grouping_keywords) == 0:
+        return {label: f"C{idx % 10}" for idx, label in enumerate(labels)}
+
+    normalized_keywords = [keyword.strip().lower() for keyword in grouping_keywords]
+    grouped_label_positions: Dict[int, List[int]] = {
+        group_index: [] for group_index in range(len(normalized_keywords))
+    }
+    unmatched_label_positions: List[int] = []
+
+    for label_position, label_text in enumerate(labels):
+        lowered_label = label_text.lower()
+        matched_group_index = None
+        for group_index, group_keyword in enumerate(normalized_keywords):
+            if group_keyword and group_keyword in lowered_label:
+                matched_group_index = group_index
+                break
+        if matched_group_index is None:
+            unmatched_label_positions.append(label_position)
+        else:
+            grouped_label_positions[matched_group_index].append(label_position)
+
+    colormap_cycle = [
+        "Blues",
+        "Oranges",
+        "Greens",
+        "Purples",
+        "Reds",
+        "Greys",
+        "YlOrBr",
+        "PuBuGn",
+    ]
+
+    def _shade(index_in_group: int, group_size: int) -> float:
+        if group_size <= 1:
+            return 0.7
+        return 0.35 + 0.6 * (index_in_group / float(max(group_size, 1)))
+
+    label_colors: Dict[str, Any] = {}
+
+    for group_index, positions in grouped_label_positions.items():
+        if not positions:
+            continue
+        cmap = plt.get_cmap(colormap_cycle[group_index % len(colormap_cycle)])
+        for position_in_group, label_position in enumerate(positions):
+            label_colors[labels[label_position]] = cmap(
+                _shade(position_in_group, len(positions))
+            )
+
+    for unmatched_order, label_position in enumerate(unmatched_label_positions):
+        label_colors[labels[label_position]] = f"C{unmatched_order % 10}"
+
+    return label_colors
+
+
 def _task_index(filename: str) -> int:
     """Extract task number from filename like task0.npz or task12.npz.
 
@@ -670,6 +748,7 @@ def plot_multi_algorithms(
     same_y_limits: bool = False,
     val_metric_choice: str = "total_f1",
     labels: Sequence[str] | None = None,
+    labels_grouping: Sequence[str] | None = None,
 ) -> None:
     """Create the multi-row, multi-column figure for all algorithms.
 
@@ -754,6 +833,7 @@ def plot_multi_algorithms(
                 label_list.append(str(labels[idx]))
             else:
                 label_list.append(run.name)
+        label_colors = _build_label_colors(label_list, labels_grouping)
 
         row_axes = axes[0]
 
@@ -771,7 +851,7 @@ def plot_multi_algorithms(
                 steps,
                 acc,
                 label=run_label,
-                color=f"C{run_idx % 10}",
+                color=label_colors.get(run_label, f"C{run_idx % 10}"),
                 alpha=0.9,
             )
         row_axes[0].set_ylabel("Train recall")
@@ -800,7 +880,7 @@ def plot_multi_algorithms(
                     mean_pfa,
                     width=width,
                     label="Pfa" if run_idx == 0 else None,
-                    color=f"C{run_idx % 10}",
+                    color=label_colors.get(label_list[run_idx], f"C{run_idx % 10}"),
                     hatch="//",
                     alpha=0.8,
                 )
@@ -810,7 +890,7 @@ def plot_multi_algorithms(
                     mean_det,
                     width=width,
                     label="Det recall" if run_idx == 0 else None,
-                    color=f"C{run_idx % 10}",
+                    color=label_colors.get(label_list[run_idx], f"C{run_idx % 10}"),
                     hatch="..",
                     alpha=0.8,
                 )
@@ -820,7 +900,7 @@ def plot_multi_algorithms(
                     mean_cls,
                     width=width,
                     label="Cls recall" if run_idx == 0 else None,
-                    color=f"C{run_idx % 10}",
+                    color=label_colors.get(label_list[run_idx], f"C{run_idx % 10}"),
                     alpha=0.8,
                 )
         row_axes[1].set_ylabel("Metric value")
@@ -845,7 +925,7 @@ def plot_multi_algorithms(
                 0.0,
                 y_val,
                 label=label_list[run_idx],
-                color=f"C{run_idx % 10}",
+                color=label_colors.get(label_list[run_idx], f"C{run_idx % 10}"),
                 alpha=0.9,
             )
         row_axes[2].set_xlim(-0.5, 0.5)
@@ -1070,6 +1150,16 @@ def _parse_args() -> argparse.Namespace:
             "combined into a single row (e.g. '0,1,2,3')."
         ),
     )
+    parser.add_argument(
+        "--labels-grouping",
+        type=str,
+        default=None,
+        help=(
+            "Optional comma-separated grouping keywords for labels. Labels "
+            "containing the same keyword are colored with shades from the same "
+            "color family (e.g. 'baseline,cross,pwr')."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -1097,6 +1187,12 @@ def main() -> None:
         label_list = [part.strip() for part in args.labels.split(",") if part.strip()]
     else:
         label_list = None
+    if args.labels_grouping is not None:
+        labels_grouping_list = [
+            part.strip() for part in args.labels_grouping.split(",") if part.strip()
+        ]
+    else:
+        labels_grouping_list = None
 
     plot_multi_algorithms(
         runs=runs,
@@ -1104,6 +1200,7 @@ def main() -> None:
         same_y_limits=args.same_y_limits,
         val_metric_choice=args.val_metric,
         labels=label_list,
+        labels_grouping=labels_grouping_list,
     )
 
 
