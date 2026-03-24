@@ -24,7 +24,13 @@ from utils.iq_features import append_iq_augmented_features
 
 
 class HatInputAdapter(nn.Module):
-    """Maps 3-channel input to 2 IQ channels via AdcIqAdapter; leaves 2-channel unchanged."""
+    """Map 3-ADC input into 2 IQ channels via ``AdcIqAdapter``.
+
+    For 3D tensors with shape ``(B, 3, L)``, this adapter first deinterleaves
+    the last axis into explicit IQ channels and reshapes to ``(B, 3, 2, L/2)``.
+    The ADC adapter then reduces ADC channels to a canonical ``(B, 2, L/2)``
+    tensor expected by the HAT backbone.
+    """
 
     def __init__(self) -> None:
         super().__init__()
@@ -32,6 +38,15 @@ class HatInputAdapter(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if x.dim() == 3 and x.size(1) == 3:
+            if x.size(2) % 2 != 0:
+                raise ValueError(
+                    "Expected even sequence length for 3-channel interleaved IQ "
+                    f"input; got shape {tuple(x.shape)}."
+                )
+            sequence_length = x.size(2) // 2
+            x = x.view(x.size(0), 3, 2, sequence_length)
+            return self._adapter(x)
+        if x.dim() == 4 and x.size(1) == 3 and x.size(2) == 2:
             return self._adapter(x)
         return x
 

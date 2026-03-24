@@ -382,10 +382,14 @@ class BayesianClassifier(nn.Module):
         self.use_iq_aug_features = bool(getattr(args, "use_iq_aug_features", False))
         self.iq_aug_scaling_mode = str(getattr(args, "data_scaling", "none"))
         self.iq_aug_feature_type = str(
-            getattr(args, "iq_aug_feature_type", getattr(args, "iq_aug_feature", "power"))
+            getattr(
+                args, "iq_aug_feature_type", getattr(args, "iq_aug_feature", "power")
+            )
         )
         feature_in_channels = 3 if self.use_iq_aug_features else 2
-        self.feature_net = BayesianResNet1D(in_channels=feature_in_channels, ratio=cfg.ratio)
+        self.feature_net = BayesianResNet1D(
+            in_channels=feature_in_channels, ratio=cfg.ratio
+        )
         self.feature_dim = self.feature_net.feature_dim
 
         self.heads = nn.ModuleList(
@@ -401,6 +405,13 @@ class BayesianClassifier(nn.Module):
         self, x: torch.Tensor, sample: bool = False
     ) -> List[torch.Tensor] | torch.Tensor:
         if x.dim() == 3 and x.size(1) == 3:
+            if x.size(2) % 2 != 0:
+                raise ValueError(
+                    "Expected even sequence length for 3-channel interleaved IQ "
+                    f"input; got shape {tuple(x.shape)}."
+                )
+            sequence_length = x.size(2) // 2
+            x = x.view(x.size(0), 3, 2, sequence_length)
             x = self.input_adapter(x)
         elif x.dim() == 4 and x.size(1) == 3 and x.size(2) == 2:
             x = self.input_adapter(x)
