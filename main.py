@@ -279,6 +279,225 @@ def _infer_class_counts_from_tasks(tasks: List[object]) -> List[int] | None:
     return inferred_counts
 
 
+def _maybe_print_eval_prediction_debug(
+    task_index: int,
+    all_predictions: List[torch.Tensor],
+    all_targets: List[torch.Tensor],
+    noise_label: int | None,
+) -> None:
+    """Print a compact eval prediction summary when debug mode is enabled.
+
+    Args:
+        task_index: Zero-based task id used in logging.
+        all_predictions: Predicted class-id tensors accumulated across batches.
+        all_targets: Ground-truth class-id tensors accumulated across batches.
+        noise_label: Optional class id reserved for noise in the current task.
+
+    Usage:
+        _maybe_print_eval_prediction_debug(task_index, preds, targets, noise_label)
+    """
+    debug_enabled = os.getenv("LA_MAML_EVAL_DEBUG", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if not debug_enabled or not all_predictions or not all_targets:
+        return
+
+    predictions = torch.cat(all_predictions).detach().cpu().long()
+    targets = torch.cat(all_targets).detach().cpu().long()
+    if predictions.numel() == 0 or targets.numel() == 0:
+        return
+
+    class_ids = torch.unique(targets).tolist()
+    max_class_id = int(max(class_ids)) if class_ids else 0
+    prediction_histogram = torch.bincount(predictions, minlength=max_class_id + 1)
+    target_histogram = torch.bincount(targets, minlength=max_class_id + 1)
+
+    per_class_recall_parts: List[str] = []
+    for class_id in class_ids:
+        class_mask = targets == int(class_id)
+        class_total = int(class_mask.sum().item())
+        class_correct = int((predictions[class_mask] == int(class_id)).sum().item())
+        class_recall = (
+            float(class_correct / class_total) if class_total > 0 else float("nan")
+        )
+        per_class_recall_parts.append(f"{int(class_id)}:{class_recall:.3f}")
+
+    noise_prediction_rate = float("nan")
+    if noise_label is not None:
+        noise_prediction_rate = float(
+            (predictions == int(noise_label)).float().mean().item()
+        )
+
+    print(
+        "[eval-debug] task={} noise_label={} noise_pred_rate={:.4f} pred_hist={} target_hist={} per_class_recall={}".format(
+            task_index,
+            noise_label,
+            noise_prediction_rate,
+            prediction_histogram.tolist(),
+            target_histogram.tolist(),
+            ",".join(per_class_recall_parts),
+        )
+    )
+
+
+def _maybe_print_train_metric_debug(
+    task_index: int,
+    epoch_index: int,
+    batch_index: int,
+    observe_cls_recall: float,
+    metric_cls_recall: float,
+    metric_precision: float,
+    metric_f1: float,
+    metric_det_recall: float,
+    metric_det_false_alarm: float,
+    predictions: torch.Tensor,
+    labels_for_metrics: torch.Tensor,
+    noise_label_for_metrics: int | None,
+) -> None:
+    """Print per-batch train metric tensors when debug mode is enabled.
+
+    Args:
+        task_index: Zero-based task id.
+        epoch_index: Zero-based epoch index.
+        batch_index: Zero-based batch index.
+        observe_cls_recall: Recall returned by ``model.observe``.
+        metric_cls_recall: Recall recomputed in training loop.
+        metric_precision: Signal-only precision in training loop.
+        metric_f1: Macro F1 including noise class.
+        metric_det_recall: Detection recall computed in training loop.
+        metric_det_false_alarm: Detection false-alarm rate computed in training loop.
+        predictions: Argmax class predictions used for train metrics.
+        labels_for_metrics: Class labels used for train metrics (already task-local).
+        noise_label_for_metrics: Optional task-local noise label.
+
+    Usage:
+        _maybe_print_train_metric_debug(..., pb, y_cls_for_metric, noise_label)
+    """
+    debug_enabled = os.getenv("LA_MAML_TRAIN_DEBUG", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if not debug_enabled:
+        return
+
+    debug_every = max(int(os.getenv("LA_MAML_TRAIN_DEBUG_EVERY", "50")), 1)
+    if (batch_index + 1) % debug_every != 0:
+        return
+
+    predictions_cpu = predictions.detach().cpu().long()
+    labels_cpu = labels_for_metrics.detach().cpu().long()
+    if predictions_cpu.numel() == 0 or labels_cpu.numel() == 0:
+        return
+
+    max_class_id = int(
+        max(
+            int(predictions_cpu.max().item()),
+            int(labels_cpu.max().item()),
+        )
+    )
+    prediction_histogram = torch.bincount(predictions_cpu, minlength=max_class_id + 1)
+    label_histogram = torch.bincount(labels_cpu, minlength=max_class_id + 1)
+
+    if noise_label_for_metrics is None:
+        signal_mask = torch.ones_like(labels_cpu, dtype=torch.bool)
+    else:
+        signal_mask = labels_cpu != int(noise_label_for_metrics)
+    signal_count = int(signal_mask.sum().item())
+    signal_prediction_unique = predictions_cpu[signal_mask].unique(sorted=True).tolist()
+    signal_label_unique = labels_cpu[signal_mask].unique(sorted=True).tolist()
+    noise_prediction_rate = (
+        float((predictions_cpu == int(noise_label_for_metrics)).float().mean().item())
+        if noise_label_for_metrics is not None
+        else float("nan")
+    )
+
+    print(
+        "[train-debug] task={} ep={} batch={} observe_rec={:.4f} metric_rec={:.4f} prec={:.4f} f1={:.4f} det_rec={:.4f} det_fa={:.4f} noise_label={} noise_pred_rate={:.4f} signal_n={} uniq_pred_signal={} uniq_y_signal={} pred_hist={} y_hist={}".format(
+            task_index,
+            epoch_index + 1,
+            batch_index + 1,
+            float(observe_cls_recall),
+            float(metric_cls_recall),
+            float(metric_precision),
+            float(metric_f1),
+            float(metric_det_recall),
+            float(metric_det_false_alarm),
+            noise_label_for_metrics,
+            noise_prediction_rate,
+            signal_count,
+            signal_prediction_unique,
+            signal_label_unique,
+            prediction_histogram.tolist(),
+            label_histogram.tolist(),
+        )
+    )
+
+
+def _maybe_print_eval_detection_alignment_debug(
+    task_index: int,
+    batch_index: int,
+    yb_cls_for_metrics: torch.Tensor,
+    predictions: torch.Tensor,
+    noise_label_for_metrics: int | None,
+) -> None:
+    """Print one-line eval detection alignment diagnostics when enabled.
+
+    Args:
+        task_index: Zero-based task id for the current eval loop.
+        batch_index: Zero-based batch index inside the eval task loader.
+        yb_cls_for_metrics: Task-local labels used by eval metrics.
+        predictions: Class predictions used to derive detection decisions.
+        noise_label_for_metrics: Task-local noise label or ``None``.
+
+    Usage:
+        _maybe_print_eval_detection_alignment_debug(t, i, y, pb, noise_label)
+    """
+    debug_enabled = os.getenv("LA_MAML_EVAL_DET_DEBUG", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if not debug_enabled:
+        return
+    if batch_index != 0:
+        return
+
+    labels_cpu = yb_cls_for_metrics.detach().cpu().long()
+    predictions_cpu = predictions.detach().cpu().long()
+    if labels_cpu.numel() == 0 or predictions_cpu.numel() == 0:
+        return
+
+    if noise_label_for_metrics is None:
+        det_targets = torch.ones_like(labels_cpu, dtype=torch.long)
+        det_predictions = torch.ones_like(predictions_cpu, dtype=torch.long)
+        noise_prediction_rate = float("nan")
+    else:
+        det_targets = (labels_cpu != int(noise_label_for_metrics)).long()
+        det_predictions = (predictions_cpu != int(noise_label_for_metrics)).long()
+        noise_prediction_rate = float(
+            (predictions_cpu == int(noise_label_for_metrics)).float().mean().item()
+        )
+
+    print(
+        "[eval-det-debug] task={} batch={} noise_label={} uniq_y={} uniq_pred={} noise_pred_rate={:.4f} det_target_signal_rate={:.4f} det_pred_signal_rate={:.4f}".format(
+            task_index,
+            batch_index + 1,
+            noise_label_for_metrics,
+            labels_cpu.unique(sorted=True).tolist(),
+            predictions_cpu.unique(sorted=True).tolist(),
+            noise_prediction_rate,
+            float(det_targets.float().mean().item()),
+            float(det_predictions.float().mean().item()),
+        )
+    )
+
+
 def eval_class_tasks(model, tasks, args):
 
     model.eval()
@@ -326,15 +545,18 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
     det_results = []
     det_fa_results = []
     det_metrics_active = False
-    for i, task in enumerate(tasks):
-        t = i
+    for task_position, task in enumerate(tasks):
+        t = task_position
         recalls = []
         precisions = []
         f1s = []
         det_recalls = []
         det_false_alarms = []
+        eval_debug_predictions: List[torch.Tensor] = []
+        eval_debug_targets: List[torch.Tensor] = []
         noise_label = _noise_label_max_for_task(task)
-        for batch in task:
+        task_noise_label_for_metrics = noise_label
+        for batch_index, batch in enumerate(task):
             if isinstance(batch, (list, tuple)) and len(batch) == 3:
                 xb, yb, _ = batch
             else:
@@ -369,6 +591,17 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
                     yb_cls_for_metrics = yb_cls_cpu - offset1
                     if noise_label_for_metrics is not None:
                         noise_label_for_metrics = noise_label_for_metrics - offset1
+            task_noise_label_for_metrics = noise_label_for_metrics
+
+            eval_debug_predictions.append(pb)
+            eval_debug_targets.append(yb_cls_for_metrics)
+            _maybe_print_eval_detection_alignment_debug(
+                task_index=t,
+                batch_index=batch_index,
+                yb_cls_for_metrics=yb_cls_for_metrics,
+                predictions=pb,
+                noise_label_for_metrics=noise_label_for_metrics,
+            )
             # Record total F1 score for all classes including noise
             if not getattr(args, "use_detector_arch", False):
                 f1s.append(macro_f1_including_noise(pb, yb_cls_for_metrics))
@@ -399,7 +632,7 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
 
             if noise_label_for_metrics is not None:
                 det_targets = (yb_cls_for_metrics != noise_label_for_metrics).long()
-                det_logits = _get_det_logits(model, xb, t)
+                det_logits = None
                 if det_logits is not None:
                     det_pred = (det_logits >= 0).long().cpu()
                 else:
@@ -417,6 +650,13 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
         else:
             det_results.append(0.0)
             det_fa_results.append(0.0)
+
+        _maybe_print_eval_prediction_debug(
+            task_index=t,
+            all_predictions=eval_debug_predictions,
+            all_targets=eval_debug_targets,
+            noise_label=task_noise_label_for_metrics,
+        )
 
     if det_metrics_active:
         return results, prec_results, f1_results, det_results, det_fa_results
@@ -536,6 +776,7 @@ def life_experience(model, inc_loader, args):
                 model.train()
 
                 loss, cls_tr_rec = model.observe(Variable(v_x), v_y, task_info["task"])
+                observe_cls_tr_rec = float(cls_tr_rec)
                 # debug_noise_label = _noise_label_max_for_task(train_loader)
                 # model.eval()
                 # with torch.no_grad():
@@ -571,19 +812,9 @@ def life_experience(model, inc_loader, args):
                 epoch_losses.append(loss)
                 epoch_train_accs.append(cls_tr_rec)
 
-                # Batch-level precision (signal only) and F1 (all classes incl. noise) for progress bar
+                # Batch-level precision (signal only) and F1 (all classes incl. noise) for progress bar.
+                # Prefer observe() predictions when available to avoid a second stochastic forward.
                 noise_label = noise_label_for_task
-                model.eval()
-                with torch.no_grad():
-                    logits = (
-                        model(v_x, task_info["task"])
-                        if args.model != "anml"
-                        else model(v_x, fast_weights=None)
-                    )
-                    pb = torch.argmax(logits, dim=1).cpu()
-                    det_logits = None  # _get_det_logits(model, v_x, task_info["task"])
-                model.train()
-
                 y_cls_for_metric = (
                     y_cls.cpu() if torch.is_tensor(y_cls) else torch.as_tensor(y_cls)
                 )
@@ -596,6 +827,30 @@ def life_experience(model, inc_loader, args):
                     y_cls_for_metric = y_cls_for_metric - offset1
                     if noise_label_for_metric is not None:
                         noise_label_for_metric = noise_label_for_metric - offset1
+
+                cached_observe_task = getattr(model, "_last_observe_task_index", None)
+                cached_observe_predictions = getattr(
+                    model, "_last_observe_predictions_cpu", None
+                )
+                use_cached_observe_predictions = (
+                    cached_observe_task == task_info["task"]
+                    and torch.is_tensor(cached_observe_predictions)
+                    and int(cached_observe_predictions.numel())
+                    == int(y_cls_for_metric.numel())
+                )
+                if use_cached_observe_predictions:
+                    pb = cached_observe_predictions.detach().cpu().long()
+                else:
+                    model.eval()
+                    with torch.no_grad():
+                        logits = (
+                            model(v_x, task_info["task"])
+                            if args.model != "anml"
+                            else model(v_x, fast_weights=None)
+                        )
+                        pb = torch.argmax(logits, dim=1).cpu()
+                    model.train()
+                det_logits = None
 
                 prec = macro_precision_signal_only(
                     pb, y_cls_for_metric, noise_label_for_metric
@@ -631,6 +886,20 @@ def life_experience(model, inc_loader, args):
                 epoch_f1s.append(f1)
                 epoch_det_recalls.append(det_rec)
                 epoch_det_fas.append(det_fa)
+                _maybe_print_train_metric_debug(
+                    task_index=task_info["task"],
+                    epoch_index=ep,
+                    batch_index=i,
+                    observe_cls_recall=observe_cls_tr_rec,
+                    metric_cls_recall=cls_tr_rec,
+                    metric_precision=prec,
+                    metric_f1=f1,
+                    metric_det_recall=det_rec,
+                    metric_det_false_alarm=det_fa,
+                    predictions=pb,
+                    labels_for_metrics=y_cls_for_metric,
+                    noise_label_for_metrics=noise_label_for_metric,
+                )
 
                 prog_bar.set_description(
                     "T{}| Ep: {}/{}| Loss: {}| Rec: {}| Prec: {}| F1: {}| DetRec: {}| DetFA: {}".format(

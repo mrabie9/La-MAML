@@ -77,4 +77,6 @@ def append_iq_augmented_features(
     scaled_derived_channels = _scale_channels_per_sample(
         derived_channels, scaling_mode=scaling_mode
     )
-    return torch.cat((iq_tensor, scaled_derived_channels.to(dtype=iq_tensor.dtype)), dim=-2)
+    return torch.cat(
+        (iq_tensor, scaled_derived_channels.to(dtype=iq_tensor.dtype)), dim=-2
+    )

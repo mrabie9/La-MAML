@@ -61,7 +61,11 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             use_iq_aug_features = bool(getattr(args, "use_iq_aug_features", False))
             iq_aug_scaling_mode = str(getattr(args, "data_scaling", "none"))
             iq_aug_feature_type = str(
-                getattr(args, "iq_aug_feature_type", getattr(args, "iq_aug_feature", "power"))
+                getattr(
+                    args,
+                    "iq_aug_feature_type",
+                    getattr(args, "iq_aug_feature", "power"),
+                )
             )
             in_channels = 3 if use_iq_aug_features else 2
             self.net = ContextNet18(

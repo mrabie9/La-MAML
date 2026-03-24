@@ -13,6 +13,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
 import math
+import os
 from typing import Iterable, List, Optional, Tuple
 
 import torch
@@ -345,6 +346,7 @@ class UCLConfig:
     split: bool = True
     eval_samples: int = 1
     clipgrad: float = 10.0
+    class_weighted_ce: bool = False
 
     @staticmethod
     def from_args(args: object) -> "UCLConfig":
@@ -483,8 +485,12 @@ class Net(nn.Module):
         self.current_task: Optional[int] = None
         self.model_old: Optional[BayesianClassifier] = None
         self.saved = False
-        self.ce = nn.CrossEntropyLoss(reduction="mean")
+        self.ce = nn.CrossEntropyLoss()
         self.is_task_incremental: bool = True
+        self._debug_step_counter = 0
+        self._last_observe_task_index: Optional[int] = None
+        self._last_observe_predictions_cpu: Optional[torch.Tensor] = None
+        self._last_observe_labels_cpu: Optional[torch.Tensor] = None
 
     @contextmanager
     def _temporarily_enable_bn_training(self):
@@ -597,16 +603,30 @@ class Net(nn.Module):
             y_det = y_det.to(device)
 
         self.train()
-        for module in self.model.modules():
-            if isinstance(module, nn.BatchNorm1d):
-                module.track_running_stats = False
-
+        # Let BatchNorm update running buffers so ``model.eval()`` matches training stats.
         outputs = self.model(x_cls, sample=True)
         logits = outputs[t] if self.split else outputs
 
         preds = torch.argmax(logits, dim=1)
         cls_tr_rec = macro_recall(preds, y_cls_filtered)
-        loss = self.ce(logits, y_cls_filtered)
+        self._last_observe_task_index = int(t)
+        self._last_observe_predictions_cpu = preds.detach().cpu().long()
+        self._last_observe_labels_cpu = y_cls_filtered.detach().cpu().long()
+        self._maybe_log_training_debug(
+            task_index=t,
+            labels=y_cls_filtered,
+            predictions=preds,
+            logits=logits,
+        )
+        if self.cfg.class_weighted_ce:
+            class_weights = self._compute_class_weights_from_labels(
+                labels=y_cls_filtered,
+                num_classes=int(logits.size(1)),
+                device=logits.device,
+            )
+            loss = F.cross_entropy(logits, y_cls_filtered, weight=class_weights)
+        else:
+            loss = self.ce(logits, y_cls_filtered)
         loss = self._apply_regularisation(loss, y_cls_filtered.size(0))
 
         self.optimizer.zero_grad(set_to_none=True)
@@ -627,6 +647,82 @@ class Net(nn.Module):
         #     self.det_optimizer.step()
 
         return float(loss.detach().cpu()), cls_tr_rec
+
+    def _compute_class_weights_from_labels(
+        self, labels: torch.Tensor, num_classes: int, device: torch.device
+    ) -> torch.Tensor:
+        """Build inverse-frequency CE class weights for a minibatch.
+
+        Args:
+            labels: Task-local class ids in ``[0, num_classes - 1]``.
+            num_classes: Number of classes for the current task head.
+            device: Device where the returned weight tensor should live.
+
+        Returns:
+            Per-class weights normalized to mean 1.0 over observed classes.
+
+        Usage:
+            weights = self._compute_class_weights_from_labels(y, 6, logits.device)
+        """
+        label_counts = torch.bincount(labels, minlength=num_classes).float().to(device)
+        observed_mask = label_counts > 0
+        weights = torch.ones(num_classes, device=device, dtype=torch.float32)
+        if observed_mask.any():
+            observed_counts = label_counts[observed_mask]
+            inverse_frequency = observed_counts.sum() / observed_counts.clamp_min(1.0)
+            inverse_frequency = inverse_frequency / inverse_frequency.mean().clamp_min(
+                1e-8
+            )
+            weights[observed_mask] = inverse_frequency
+        return weights
+
+    def _maybe_log_training_debug(
+        self,
+        task_index: int,
+        labels: torch.Tensor,
+        predictions: torch.Tensor,
+        logits: torch.Tensor,
+    ) -> None:
+        """Print periodic UCL train diagnostics when enabled via env var.
+
+        Args:
+            task_index: Current task id.
+            labels: Task-local ground-truth labels for the current minibatch.
+            predictions: Argmax predictions for the current minibatch.
+            logits: Raw class logits for the current minibatch.
+
+        Usage:
+            self._maybe_log_training_debug(task_index, labels, predictions, logits)
+        """
+        debug_enabled = os.getenv("LA_MAML_UCL_DEBUG", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        if not debug_enabled:
+            return
+
+        debug_every = max(int(os.getenv("LA_MAML_UCL_DEBUG_EVERY", "50")), 1)
+        self._debug_step_counter += 1
+        if self._debug_step_counter % debug_every != 0:
+            return
+
+        labels_cpu = labels.detach().cpu().long()
+        predictions_cpu = predictions.detach().cpu().long()
+        confidence = (
+            torch.softmax(logits.detach(), dim=1).max(dim=1).values.mean().item()
+        )
+        print(
+            "[ucl-debug] step={} task={} saved={} uniq_y={} uniq_pred={} mean_max_softmax={:.4f}".format(
+                self._debug_step_counter,
+                task_index,
+                int(bool(self.saved)),
+                labels_cpu.unique(sorted=True).tolist(),
+                predictions_cpu.unique(sorted=True).tolist(),
+                float(confidence),
+            )
+        )
 
     def on_epoch_end(self) -> None:  # pragma: no cover
         pass

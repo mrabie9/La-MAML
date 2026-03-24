@@ -300,7 +300,11 @@ class HatBackbone(nn.Module):
             self.use_iq_aug_features = bool(getattr(args, "use_iq_aug_features", False))
             self.iq_aug_scaling_mode = str(getattr(args, "data_scaling", "none"))
             self.iq_aug_feature_type = str(
-                getattr(args, "iq_aug_feature_type", getattr(args, "iq_aug_feature", "power"))
+                getattr(
+                    args,
+                    "iq_aug_feature_type",
+                    getattr(args, "iq_aug_feature", "power"),
+                )
             )
             self.in_channels = 3 if self.use_iq_aug_features else 2
             self.seq_len = n_inputs // 2
@@ -410,9 +414,10 @@ class HatBackbone(nn.Module):
                 scaling_mode=self.iq_aug_scaling_mode,
                 feature_type=self.iq_aug_feature_type,
             )
-        masks = self.mask(task, s) # mask for each stage
-        mask_dict = { # dict of masks per layer
-            spec["name"]: masks[idx].view(-1) for idx, spec in enumerate(self.gate_specs)
+        masks = self.mask(task, s)  # mask for each stage
+        mask_dict = {  # dict of masks per layer
+            spec["name"]: masks[idx].view(-1)
+            for idx, spec in enumerate(self.gate_specs)
         }
         logits = self.model(x, mask_dict)
         if return_masks:

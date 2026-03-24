@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Sequence
 
+import numpy as np
 import torch
 import sys
 
@@ -363,6 +364,59 @@ def compute_mean(values: Sequence[float]) -> float:
     return float(sum(values) / len(values)) if values else float("nan")
 
 
+def extract_total_f1_mean_from_trial_logs(
+    log_dir: str | Path, fallback_num_tasks: int
+) -> float:
+    """Extract final mean total F1 from the latest trial metrics file.
+
+    This reads the latest ``task*.npz`` produced by a training run and resolves
+    ``val_f1`` to a single run-level score by taking the last ``n_tasks``
+    entries when needed.
+
+    Args:
+        log_dir: Trial output directory containing ``task*.npz`` files.
+        fallback_num_tasks: Fallback task count when detection vectors are
+            unavailable in metrics.
+
+    Returns:
+        Final mean total F1 score, or NaN when it cannot be recovered.
+
+    Usage:
+        f1_score = extract_total_f1_mean_from_trial_logs("/tmp/run", 3)
+    """
+    candidate_dir = Path(log_dir)
+    metrics_dir = candidate_dir / "metrics" if (candidate_dir / "metrics").is_dir() else candidate_dir
+    task_files = sorted(metrics_dir.glob("task*.npz"))
+    if not task_files:
+        return float("nan")
+
+    latest_metrics = np.load(task_files[-1], allow_pickle=False)
+    if "val_f1" not in latest_metrics:
+        return float("nan")
+
+    val_f1_array = np.asarray(latest_metrics["val_f1"], dtype=float).reshape(-1)
+    if val_f1_array.size == 0:
+        return float("nan")
+
+    inferred_num_tasks = 0
+    if "val_det_acc" in latest_metrics:
+        inferred_num_tasks = max(
+            inferred_num_tasks, int(np.asarray(latest_metrics["val_det_acc"]).size)
+        )
+    if "val_det_fa" in latest_metrics:
+        inferred_num_tasks = max(
+            inferred_num_tasks, int(np.asarray(latest_metrics["val_det_fa"]).size)
+        )
+    if inferred_num_tasks <= 0:
+        inferred_num_tasks = max(int(fallback_num_tasks), 1)
+
+    if val_f1_array.size >= inferred_num_tasks:
+        final_slice = val_f1_array[-inferred_num_tasks:]
+        return float(np.mean(final_slice))
+
+    return float(np.mean(val_f1_array))
+
+
 def run_single_trial(
     base_args: argparse.Namespace,
     constant_overrides: Dict[str, Any],
@@ -472,12 +526,18 @@ def run_single_trial(
     test_pfa_scores = extract_final_scores(result_test_det_fa)
 
     val_mean = compute_mean(val_scores)
+    val_f1_mean = extract_total_f1_mean_from_trial_logs(log_dir, len(val_scores))
     det_mean = compute_mean(val_det_scores)
     pfa_mean = compute_mean(val_pfa_scores)
-    if val_det_scores and val_pfa_scores:
-        score = val_mean * det_mean * (1.0 - pfa_mean)
-    else:
+    if np.isnan(val_f1_mean):
+        print(
+            "[WARN] Trial {} has no usable val_f1 in {}. Falling back to val_mean ({:.4f}) for tuning score.".format(
+                trial_idx, log_dir, val_mean
+            )
+        )
         score = val_mean
+    else:
+        score = val_f1_mean
 
     return {
         "status": "ok",
@@ -489,6 +549,7 @@ def run_single_trial(
         "fixed_params": dict(constant_overrides),
         "val_per_task": val_scores,
         "val_mean": val_mean,
+        "val_f1_mean": val_f1_mean,
         "val_det_per_task": val_det_scores,
         "val_det_mean": det_mean,
         "val_pfa_per_task": val_pfa_scores,

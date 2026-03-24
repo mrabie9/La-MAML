@@ -13,7 +13,6 @@ import parser as file_parser
 from main import (
     _split_labels,
     _noise_label_max_for_task,
-    _get_det_logits,
     _false_alarm_rate,
     eval_tasks,
     save_results,
@@ -285,7 +284,7 @@ def run_single_round_training(
                     else model(xb, fast_weights=None)
                 )
                 predictions = torch.argmax(logits, dim=1).cpu()
-                det_logits = _get_det_logits(model, xb, current_task_index)
+                det_logits = None
             model.train()
 
             y_cls_for_metric = y_cls.cpu()

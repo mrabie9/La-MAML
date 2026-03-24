@@ -206,20 +206,42 @@ def get_parser():
         help="When `--use_iq_aug_features` is enabled, select which derived IQ "
         "channel to append: `power` => I**2 + Q**2, `cross` => I*Q.",
     )
-    parser.add_argument("-order", "--class_order", default="old", type=str,
-                        help="define classes order of increment ",
-                        choices = ["random", "chrono", "old", "super"])
-    parser.add_argument("-inc", "--increment", default=5, type=int,
-                        help="number of classes to increment by in class incremental loader")
-    parser.add_argument('--test_batch_size', type=int, default=100000 ,
-                        help='batch size to use during testing.')
-    parser.add_argument('--nc_per_task', type=int, default=None,
-                        help='number of classes per task (uniform). Ignored if nc_per_task_list is provided.')
-    parser.add_argument('--nc_per_task_list', type=str, default='',
-                        help='comma-separated class counts per task (overrides nc_per_task)')
-    parser.add_argument('--val_rate', type=int, default=10,
-                        help='frequency (in epochs) of validation')
-
+    parser.add_argument(
+        "-order",
+        "--class_order",
+        default="old",
+        type=str,
+        help="define classes order of increment ",
+        choices=["random", "chrono", "old", "super"],
+    )
+    parser.add_argument(
+        "-inc",
+        "--increment",
+        default=5,
+        type=int,
+        help="number of classes to increment by in class incremental loader",
+    )
+    parser.add_argument(
+        "--test_batch_size",
+        type=int,
+        default=100000,
+        help="batch size to use during testing.",
+    )
+    parser.add_argument(
+        "--nc_per_task",
+        type=int,
+        default=None,
+        help="number of classes per task (uniform). Ignored if nc_per_task_list is provided.",
+    )
+    parser.add_argument(
+        "--nc_per_task_list",
+        type=str,
+        default="",
+        help="comma-separated class counts per task (overrides nc_per_task)",
+    )
+    parser.add_argument(
+        "--val_rate", type=int, default=10, help="frequency (in epochs) of validation"
+    )
 
     # La-MAML parameters
     parser.add_argument(
