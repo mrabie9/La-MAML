@@ -12,6 +12,28 @@ from itertools import chain
 from model.resnet1d import _ResNet1D, BasicBlock1D, AdcIqAdapter
 
 
+class ContextInputAdapter(nn.Module):
+    """Normalize 3-ADC IQ inputs before adapting to 2 channels."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.adapter = AdcIqAdapter()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.dim() == 3 and x.size(1) == 3:
+            if x.size(2) % 2 != 0:
+                raise ValueError(
+                    "Expected even sequence length for 3-channel interleaved IQ "
+                    f"input; got shape {tuple(x.shape)}."
+                )
+            sequence_length = x.size(2) // 2
+            x = x.view(x.size(0), 3, 2, sequence_length)
+            return self.adapter(x)
+        if x.dim() == 4 and x.size(1) == 3 and x.size(2) == 2:
+            return self.adapter(x)
+        return x
+
+
 def Xavier(m):
     if m.__class__.__name__ == "Linear":
         fan_in, fan_out = m.weight.data.size(1), m.weight.data.size(0)
@@ -88,7 +110,7 @@ class ContextNet(nn.Module):
             [2, 2, 2, 2],
             num_classes,
             in_channels=in_channels,
-            input_adapter=AdcIqAdapter(),
+            input_adapter=ContextInputAdapter(),
             use_iq_aug_features=use_iq_aug_features,
             iq_aug_scaling_mode=iq_aug_scaling_mode,
             iq_aug_feature_type=iq_aug_feature_type,
