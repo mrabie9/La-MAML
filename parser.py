@@ -91,6 +91,16 @@ def get_parser():
         default="sgd",
         help="optimizer name for models that support switching",
     )
+    parser.add_argument(
+        "--no_class_weighted_ce",
+        dest="class_weighted_ce",
+        action="store_false",
+        help=(
+            "Disable inverse-frequency class weights in cross-entropy "
+            "(default: weighted CE matches ucl_bresnet minibatch weighting)."
+        ),
+    )
+    parser.set_defaults(class_weighted_ce=True)
 
     # experiment parameters
     parser.add_argument("--cuda", default=True, action="store_true", help="Use GPU")

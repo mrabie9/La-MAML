@@ -5,6 +5,7 @@ import torch
 
 from model.resnet1d import ResNet1D
 from utils.training_metrics import macro_recall
+from utils.class_weighted_loss import classification_cross_entropy
 
 if not sys.warnoptions:
     import warnings
@@ -65,6 +66,7 @@ class Net(torch.nn.Module):
         del n_tasks
 
         self.cfg = IidConfig.from_args(args)
+        self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
         self.n_outputs = n_outputs
 
         if self.cfg.arch != "resnet1d":
@@ -77,7 +79,6 @@ class Net(torch.nn.Module):
 
         # Optimiser and loss.
         self.opt = torch.optim.SGD(self.parameters(), lr=self.cfg.lr, momentum=0.9)
-        self.loss = torch.nn.CrossEntropyLoss()
 
     def forward(
         self, x: torch.Tensor, t: torch.Tensor | int
@@ -113,7 +114,9 @@ class Net(torch.nn.Module):
         logits = self.net(x)
         targets = y.long()
 
-        loss_tensor = self.loss(logits, targets)
+        loss_tensor = classification_cross_entropy(
+            logits, targets, class_weighted_ce=self.class_weighted_ce
+        )
         loss_tensor.backward()
         self.opt.step()
 

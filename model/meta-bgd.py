@@ -14,6 +14,7 @@ from ast import literal_eval
 from model.resnet1d import ResNet1D
 from utils.training_metrics import macro_recall
 from utils import misc_utils
+from utils.class_weighted_loss import classification_cross_entropy
 
 """
 This baseline/ablation is constructed by merging C-MAML and BGD
@@ -63,6 +64,7 @@ class Net(torch.nn.Module):
     def __init__(self, n_inputs, n_outputs, n_tasks, args):
         super(Net, self).__init__()
         self.cfg = MetaBgdConfig.from_args(args)
+        self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
 
         if self.cfg.arch != "resnet1d":
             raise ValueError(
@@ -104,8 +106,6 @@ class Net(torch.nn.Module):
         self.M_new = []
         self.age = 0
 
-        # setup losses
-        self.loss = torch.nn.CrossEntropyLoss()
         self.is_cifar = (self.cfg.dataset == "cifar100") or (
             self.cfg.dataset == "tinyimagenet"
         )
@@ -140,8 +140,10 @@ class Net(torch.nn.Module):
 
         for i, ti in enumerate(bt):
             offset1, offset2 = self.compute_offsets(ti)
-            loss += self.loss(
-                logits[i, offset1:offset2].unsqueeze(0), y[i].unsqueeze(0) - offset1
+            loss += classification_cross_entropy(
+                logits[i, offset1:offset2].unsqueeze(0),
+                y[i].unsqueeze(0) - offset1,
+                class_weighted_ce=self.class_weighted_ce,
             )
         return loss / len(bt)
 
@@ -171,7 +173,9 @@ class Net(torch.nn.Module):
         else:
             logits = self.net.forward(x, fast_weights)
             # Cross Entropy Loss over data
-            loss_q = self.loss(logits, y)
+            loss_q = classification_cross_entropy(
+                logits, y, class_weighted_ce=self.class_weighted_ce
+            )
         return loss_q, logits
 
     def compute_offsets(self, task):
@@ -258,7 +262,11 @@ class Net(torch.nn.Module):
 
     def take_loss(self, t, logits, y):
         offset1, offset2 = self.compute_offsets(t)
-        loss = self.loss(logits[:, offset1:offset2], y - offset1)
+        loss = classification_cross_entropy(
+            logits[:, offset1:offset2],
+            y - offset1,
+            class_weighted_ce=self.class_weighted_ce,
+        )
 
         return loss
 
@@ -274,7 +282,9 @@ class Net(torch.nn.Module):
             # loss = self.loss(logits, y)
         else:
             logits = self.net.forward(x, fast_weights)
-            loss = self.loss(logits, y)
+            loss = classification_cross_entropy(
+                logits, y, class_weighted_ce=self.class_weighted_ce
+            )
 
         if fast_weights is None:
             fast_weights = [p for p in self.net.parameters()]

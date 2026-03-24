@@ -16,6 +16,7 @@ from copy import deepcopy
 from torch.utils.data import DataLoader
 from utils.training_metrics import macro_recall
 from utils import misc_utils
+from utils.class_weighted_loss import classification_cross_entropy
 
 
 @dataclass
@@ -63,8 +64,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.inner_opt = torch.optim.SGD(
             self.net.parameters(), lr=self.inner_lr, momentum=0.9
         )
-        # setup losses
-        self.bce = torch.nn.CrossEntropyLoss()
+        self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
         self.det_lambda = float(self.cfg.det_lambda)
         self.cls_lambda = float(self.cfg.cls_lambda)
         self._init_det_replay(
@@ -191,7 +191,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             for _ in range(self.glances):
                 model.zero_grad()
                 pred = model.forward(xx)
-                loss = self.bce(pred, yy)
+                loss = classification_cross_entropy(
+                    pred, yy, class_weighted_ce=self.class_weighted_ce
+                )
                 loss.backward()
                 opt.step()
             self.models[t] = model
@@ -410,7 +412,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                     )
                 preds = torch.argmax(logits, dim=1)
                 cls_tr_rec.append(macro_recall(preds, targets))
-                loss1 = self.bce(logits, targets)
+                loss1 = classification_cross_entropy(
+                    logits, targets, class_weighted_ce=self.class_weighted_ce
+                )
                 # det_logits, _ = self.net.forward_heads(x_det)
                 # det_loss = self.det_loss(det_logits, y_det.float())
                 # det_replay = self._sample_det_memory()
@@ -428,7 +432,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                         for row, size in enumerate(class_sizes):
                             if size < pred.size(1):
                                 pred[row, size:] = -1e9
-                        loss2 = self.bce(pred, yy)
+                        loss2 = classification_cross_entropy(
+                            pred, yy, class_weighted_ce=self.class_weighted_ce
+                        )
                         loss3 = self.reg * self.kl(
                             F.log_softmax(pred / self.temp, dim=1), feat
                         )
@@ -452,10 +458,16 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 for row, size in enumerate(class_sizes_val):
                     if size < pred.size(1):
                         pred[row, size:] = -1e9
-                outer_loss = self.bce(pred, yval)
+                outer_loss = classification_cross_entropy(
+                    pred, yval, class_weighted_ce=self.class_weighted_ce
+                )
             else:
                 pred = self.forward(x, t)
-                outer_loss = self.bce(pred[:, offset1:offset2], targets)
+                outer_loss = classification_cross_entropy(
+                    pred[:, offset1:offset2],
+                    targets,
+                    class_weighted_ce=self.class_weighted_ce,
+                )
             outer_loss.backward()
             self.inner_opt.step()
             self.zero_grad()

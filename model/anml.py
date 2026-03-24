@@ -17,6 +17,7 @@ import random
 
 # import model.learner as Learner
 from utils.training_metrics import macro_recall
+from utils.class_weighted_loss import classification_cross_entropy
 
 logger = logging.getLogger("experiment")
 
@@ -81,6 +82,7 @@ class Net(nn.Module):
         self.M_new = []
         self.age = 0
         self.memories = self.cfg.memories
+        self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
 
     def reset_classifer(self, class_to_reset):
         bias = self.parameters()[-1]
@@ -125,7 +127,9 @@ class Net(nn.Module):
     def inner_update(self, x, fast_weights, y, bn_training):
 
         logits = self(x, fast_weights)
-        loss = F.cross_entropy(logits, y)
+        loss = classification_cross_entropy(
+            logits, y, class_weighted_ce=self.class_weighted_ce
+        )
 
         if fast_weights is None:
             fast_weights = list(self.parameters())
@@ -150,7 +154,9 @@ class Net(nn.Module):
     def meta_loss(self, x, fast_weights, y):
 
         logits = self(x, fast_weights)
-        loss_q = F.cross_entropy(logits, y)
+        loss_q = classification_cross_entropy(
+            logits, y, class_weighted_ce=self.class_weighted_ce
+        )
         return loss_q, logits
 
     def eval_accuracy(self, logits, y):

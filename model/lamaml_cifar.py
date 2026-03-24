@@ -23,7 +23,7 @@ class Net(DetectionReplayMixin, BaseNet):
     def take_loss(self, t, logits, y):
         # compute loss on data from a single task
         offset1, offset2 = self.compute_offsets(t)
-        loss = self.loss(logits[:, offset1:offset2], y - offset1)
+        loss = self._classification_loss(logits[:, offset1:offset2], y - offset1)
 
         return loss
 
@@ -37,7 +37,7 @@ class Net(DetectionReplayMixin, BaseNet):
 
         for i, ti in enumerate(bt):
             offset1, offset2 = self.compute_offsets(ti)
-            loss += self.loss(
+            loss += self._classification_loss(
                 logits[i, offset1:offset2].unsqueeze(0), y[i].unsqueeze(0) - offset1
             )
         return loss / len(bt)

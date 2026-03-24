@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Optional
 from model.resnet1d import ResNet1D
 from utils import misc_utils
+from utils.class_weighted_loss import classification_cross_entropy
 
 
 @dataclass
@@ -45,6 +46,7 @@ class BaseNet(torch.nn.Module):
         super(BaseNet, self).__init__()
 
         self.args = args
+        self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
         self.cfg = LamamlBaseConfig.from_args(args)
         if self.cfg.arch != "resnet1d":
             raise ValueError(
@@ -66,8 +68,6 @@ class BaseNet(torch.nn.Module):
         self.M_new = []
         self.age = 0
 
-        # setup losses
-        self.loss = torch.nn.CrossEntropyLoss()
         self.is_cifar = (self.cfg.dataset == "cifar100") or (
             self.cfg.dataset == "tinyimagenet"
         )
@@ -92,6 +92,13 @@ class BaseNet(torch.nn.Module):
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
+
+    def _classification_loss(
+        self, logits: torch.Tensor, targets: torch.Tensor
+    ) -> torch.Tensor:
+        return classification_cross_entropy(
+            logits, targets, class_weighted_ce=self.class_weighted_ce
+        )
 
     def push_to_mem(self, batch_x, batch_y, t):
         """

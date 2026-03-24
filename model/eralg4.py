@@ -17,7 +17,6 @@ from torch.autograd import Variable
 import numpy as np
 
 import random
-from torch.nn.modules.loss import CrossEntropyLoss
 from random import shuffle
 import warnings
 import math
@@ -28,6 +27,7 @@ from model.detection_replay import DetectionReplayMixin
 warnings.filterwarnings("ignore")
 from utils.training_metrics import macro_recall
 from utils import misc_utils
+from utils.class_weighted_loss import classification_cross_entropy
 
 
 @dataclass
@@ -65,6 +65,7 @@ class Net(DetectionReplayMixin, nn.Module):
         super(Net, self).__init__()
 
         self.cfg = ErAlgConfig.from_args(args)
+        self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
 
         if self.cfg.arch != "resnet1d":
             raise ValueError(
@@ -83,7 +84,6 @@ class Net(DetectionReplayMixin, nn.Module):
                 list(self.net.alpha_lr.parameters()), lr=self.cfg.opt_lr, momentum=0.9
             )
 
-        self.loss = CrossEntropyLoss()
         self.is_cifar = (self.cfg.dataset == "cifar100") or (
             self.cfg.dataset == "tinyimagenet"
         )
@@ -136,8 +136,10 @@ class Net(DetectionReplayMixin, nn.Module):
         loss = 0.0
         for i, ti in enumerate(bt):
             offset1, offset2 = self.compute_offsets(ti)
-            loss += self.loss(
-                logits[i, offset1:offset2].unsqueeze(0), y[i].unsqueeze(0) - offset1
+            loss += classification_cross_entropy(
+                logits[i, offset1:offset2].unsqueeze(0),
+                y[i].unsqueeze(0) - offset1,
+                class_weighted_ce=self.class_weighted_ce,
             )
         return loss / len(bt)
 
@@ -336,7 +338,11 @@ class Net(DetectionReplayMixin, nn.Module):
 
         offset1, offset2 = self.compute_offsets(t)
         logits = self.net.forward(x, fast_weights)[:, :offset2]
-        loss = self.loss(logits[:, offset1:offset2], y - offset1)
+        loss = classification_cross_entropy(
+            logits[:, offset1:offset2],
+            y - offset1,
+            class_weighted_ce=self.class_weighted_ce,
+        )
 
         if fast_weights is None:
             # fast_weights = self.net.parameters()

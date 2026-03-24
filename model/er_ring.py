@@ -13,6 +13,7 @@ import torch.nn as nn
 import numpy as np
 from utils.training_metrics import macro_recall
 from utils import misc_utils
+from utils.class_weighted_loss import classification_cross_entropy
 
 
 @dataclass
@@ -60,8 +61,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             self.net.det_head.parameters(), lr=self.lr, momentum=0.9
         )
 
-        # setup losses
-        self.bce = torch.nn.CrossEntropyLoss()
+        self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
         self.det_lambda = float(self.cfg.det_lambda)
         self.cls_lambda = float(self.cfg.cls_lambda)
         self._init_det_replay(
@@ -288,7 +288,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 )
             preds = torch.argmax(logits, dim=1)
             cls_tr_rec.append(macro_recall(preds, targets))
-            loss1 = self.bce(logits, targets)
+            loss1 = classification_cross_entropy(
+                logits, targets, class_weighted_ce=self.class_weighted_ce
+            )
             if t > 0:
                 sampled = self.memory_sampling(t)
                 if sampled is not None:
@@ -303,7 +305,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                             f"Replay target out of range: min={int(yy.min())}, max={int(yy.max())}, "
                             f"class_count={pred.size(1)}, sizes={class_sizes.tolist()}"
                         )
-                    loss2 += self.bce(pred, yy)
+                    loss2 += classification_cross_entropy(
+                        pred, yy, class_weighted_ce=self.class_weighted_ce
+                    )
 
             loss = loss1 + loss2
             loss.backward()

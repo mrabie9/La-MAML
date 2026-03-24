@@ -21,7 +21,7 @@ class Net(BaseNet):
         differentiate the loss through the network updates wrt alpha
         """
         logits = self.net.forward(x, fast_weights)
-        loss_q = self.loss(logits.squeeze(1), y)
+        loss_q = self._classification_loss(logits.squeeze(1), y)
         return loss_q, logits
 
     def inner_update(self, x, fast_weights, y, t):
@@ -29,7 +29,7 @@ class Net(BaseNet):
         Update the fast weights using the current samples and return the updated fast
         """
         logits = self.net.forward(x, fast_weights)
-        loss = self.loss(logits, y)
+        loss = self._classification_loss(logits, y)
 
         if fast_weights is None:
             fast_weights = list(self.net.parameters())

@@ -22,6 +22,7 @@ from model.resnet1d import ResNet1D
 from model.detection_replay import DetectionReplayMixin
 from utils.training_metrics import macro_recall
 from utils import misc_utils
+from utils.class_weighted_loss import classification_cross_entropy
 
 
 @dataclass
@@ -77,7 +78,7 @@ class Net(DetectionReplayMixin, nn.Module):
         self.net = self._build_backbone(n_inputs, n_outputs, args)
         self.opt = self._build_optimizer()
 
-        self.ce = nn.CrossEntropyLoss()
+        self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
         self.kl = nn.KLDivLoss(reduction="batchmean")
         self.temperature = float(self.cfg.temperature)
         self.distill_lambda = float(self.cfg.distill_lambda)
@@ -153,7 +154,9 @@ class Net(DetectionReplayMixin, nn.Module):
             targets = self._map_labels_to_local(cls_labels, t)
             preds = torch.argmax(current_logits, dim=1)
             cls_tr_rec = macro_recall(preds, targets)
-            loss_ce = self.ce(current_logits, targets)
+            loss_ce = classification_cross_entropy(
+                current_logits, targets, class_weighted_ce=self.class_weighted_ce
+            )
         # else:
         #     loss_ce = cls_logits.new_zeros(1)
         #     cls_tr_rec = 0.0
@@ -261,17 +264,6 @@ class Net(DetectionReplayMixin, nn.Module):
     ) -> torch.Tensor:
         idx = torch.as_tensor(class_ids, dtype=torch.long, device=logits.device)
         return logits.index_select(1, idx)
-
-        with torch.no_grad():
-            teacher_logits = self.teacher(x)
-            teacher_logits = teacher_logits[:, :previous_classes]
-            teacher_probs = F.softmax(teacher_logits / self.temperature, dim=1)
-
-        student_log_probs = F.log_softmax(
-            student_logits[:, :previous_classes] / self.temperature, dim=1
-        )
-        loss = self.kl(student_log_probs, teacher_probs) * (self.temperature**2)
-        return loss
 
     # ------------------------------------------------------------------
     def _update_teacher(self) -> None:

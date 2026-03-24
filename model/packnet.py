@@ -21,6 +21,7 @@ from torch.nn.modules.batchnorm import _BatchNorm
 from model.resnet1d import ResNet1D
 from utils.training_metrics import macro_recall
 from utils import misc_utils
+from utils.class_weighted_loss import classification_cross_entropy
 
 
 @dataclass
@@ -70,7 +71,7 @@ class Net(nn.Module):
         self.net = self._build_backbone(n_inputs, n_outputs, args)
         self._named_modules = dict(self.net.named_modules())
         self._non_prunable_params = self._compute_non_prunable_params()
-        self.ce = nn.CrossEntropyLoss()
+        self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
         self.opt = self._build_optimizer()
         self.clipgrad = self.cfg.clipgrad
         self.prune_perc = float(1 / self.cfg.n_tasks)
@@ -137,7 +138,9 @@ class Net(nn.Module):
         logits = logits[:, offset1:offset2]
         targets = (y - offset1).long()
 
-        loss = self.ce(logits, targets)
+        loss = classification_cross_entropy(
+            logits, targets, class_weighted_ce=self.class_weighted_ce
+        )
         preds = torch.argmax(logits, dim=1)
         cls_tr_rec = macro_recall(preds, targets)
 

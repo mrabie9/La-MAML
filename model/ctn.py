@@ -17,6 +17,7 @@ import torch.nn.functional as F
 import numpy as np
 from utils.training_metrics import macro_recall
 from utils import misc_utils
+from utils.class_weighted_loss import classification_cross_entropy
 
 
 @dataclass
@@ -89,8 +90,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.opt = torch.optim.SGD(
             self.net.parameters(), lr=self.outer_lr, momentum=0.9
         )
-        # setup losses
-        self.bce = torch.nn.CrossEntropyLoss()
+        self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
         self.det_lambda = float(self.cfg.det_lambda)
         self.cls_lambda = float(self.cfg.cls_lambda)
         self._init_det_replay(
@@ -466,7 +466,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             else:
                 cls_tr_rec.append(0.0)
 
-            loss1 = self.bce(logits, targets)
+            loss1 = classification_cross_entropy(
+                logits, targets, class_weighted_ce=self.class_weighted_ce
+            )
             # tt = t + 1
             for i in range(self.inner_steps):
                 loss2 = torch.tensor(0.0, device=x.device)
@@ -480,7 +482,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                         for row, size in enumerate(class_sizes):
                             if size < pred.size(1):
                                 pred[row, size:] = -1e9
-                        loss2 = self.bce(pred, yy)
+                        loss2 = classification_cross_entropy(
+                            pred, yy, class_weighted_ce=self.class_weighted_ce
+                        )
                         loss3 = self.reg * self.kl(
                             F.log_softmax(pred / self.temp, dim=1), feat
                         )
@@ -509,7 +513,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
 
             sampled_validation = self.memory_sampling(t + 1, valid=True)
             if sampled_validation is None:
-                outer_loss = self.bce(logits, targets)
+                outer_loss = classification_cross_entropy(
+                    logits, targets, class_weighted_ce=self.class_weighted_ce
+                )
             else:
                 xval, yval, feat, mask, list_t, class_sizes_val = sampled_validation
                 pred_ = self.net(xval, list_t)
@@ -517,7 +523,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 for row, size in enumerate(class_sizes_val):
                     if size < pred.size(1):
                         pred[row, size:] = -1e9
-                outer_loss = self.bce(pred, yval)
+                outer_loss = classification_cross_entropy(
+                    pred, yval, class_weighted_ce=self.class_weighted_ce
+                )
             outer_grad = torch.autograd.grad(
                 outer_loss,
                 context_parameters,

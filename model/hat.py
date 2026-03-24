@@ -19,6 +19,7 @@ import torch
 import torch.nn as nn
 from utils.training_metrics import macro_recall
 from utils import misc_utils
+from utils.class_weighted_loss import classification_cross_entropy
 from model.resnet1d import AdcIqAdapter
 from utils.iq_features import append_iq_augmented_features
 
@@ -522,13 +523,14 @@ class Net(nn.Module):
 
         self.bridge = HatBackbone(n_inputs, n_tasks, n_outputs, self.cfg, args)
 
+        self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
+
         params: Iterable[nn.Parameter] = self.bridge.parameters()
         if self.cfg.optimizer.lower() == "adam":
             self.opt = torch.optim.Adam(params, lr=self.cfg.lr)
         else:
             self.opt = torch.optim.SGD(params, lr=self.cfg.lr, momentum=0.9)
 
-        self.ce = nn.CrossEntropyLoss()
         self.smax = float(self.cfg.smax)
         self.lamb = float(self.cfg.gamma)
         self.grad_clip = (
@@ -717,7 +719,14 @@ class Net(nn.Module):
         self, outputs: torch.Tensor, targets: torch.Tensor, masks: List[torch.Tensor]
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         if not masks:
-            return self.ce(outputs, targets), torch.tensor(0.0, device=outputs.device)
+            return (
+                classification_cross_entropy(
+                    outputs,
+                    targets,
+                    class_weighted_ce=self.class_weighted_ce,
+                ),
+                torch.tensor(0.0, device=outputs.device),
+            )
 
         reg = torch.zeros(1, device=outputs.device)
         count = torch.zeros(1, device=outputs.device)
@@ -731,7 +740,15 @@ class Net(nn.Module):
                 reg += m.sum()
                 count += torch.tensor(float(m.numel()), device=outputs.device)
         reg = reg / torch.clamp(count, min=1.0)
-        return self.ce(outputs, targets) + self.lamb * reg, reg
+        return (
+            classification_cross_entropy(
+                outputs,
+                targets,
+                class_weighted_ce=self.class_weighted_ce,
+            )
+            + self.lamb * reg,
+            reg,
+        )
 
 
 __all__ = ["Net"]

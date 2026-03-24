@@ -18,6 +18,7 @@ from model.resnet1d import ResNet1D
 from model.detection_replay import DetectionReplayMixin
 from utils.training_metrics import macro_recall
 from utils import misc_utils
+from utils.class_weighted_loss import classification_cross_entropy
 
 
 @dataclass
@@ -69,7 +70,7 @@ class Net(DetectionReplayMixin, nn.Module):
         self.is_task_incremental = True
 
         self.net = ResNet1D(n_outputs, args)
-        self.ce = nn.CrossEntropyLoss()
+        self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
         self.opt = self._build_optimizer()
 
         self.si_c = float(self.cfg.si_c)
@@ -141,7 +142,9 @@ class Net(DetectionReplayMixin, nn.Module):
             if self.is_task_incremental:
                 logits = logits[:, offset1:offset2]
                 targets = (targets - offset1).long()
-            loss_ce = self.ce(logits, targets)
+            loss_ce = classification_cross_entropy(
+                logits, targets, class_weighted_ce=self.class_weighted_ce
+            )
             preds = torch.argmax(logits, dim=1)
             cls_tr_rec = macro_recall(preds, targets)
         # else:

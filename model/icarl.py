@@ -24,6 +24,7 @@ sys.path.insert(
 from iq_data_loader import ensure_iq_two_channel
 from utils.training_metrics import macro_recall
 from utils import misc_utils
+from utils.class_weighted_loss import classification_cross_entropy
 
 if not sys.warnoptions:
     import warnings
@@ -108,8 +109,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             self.net.det_head.parameters(), lr=self.cfg.lr, momentum=0.9
         )
 
-        # setup losses
-        self.bce = torch.nn.CrossEntropyLoss()
+        self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
         # Use batchmean to follow KL definition and avoid PyTorch warning
         self.kl = torch.nn.KLDivLoss(reduction="batchmean")  # for distillation
         self.lsm = torch.nn.LogSoftmax(dim=1)
@@ -342,7 +342,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 )
             else:
                 cls_tr_rec.append(macro_recall(preds, targets))
-            loss = self.bce(logits, targets)
+            loss = classification_cross_entropy(
+                logits, targets, class_weighted_ce=self.class_weighted_ce
+            )
             # num_exemplars remains 0 unless final epoch is reached
             if self.num_exemplars > 0:
                 # distillation

@@ -23,6 +23,7 @@ from model.resnet1d import AdcIqAdapter, ResNet1D
 from utils.iq_features import append_iq_augmented_features
 from utils.training_metrics import macro_recall
 from utils import misc_utils
+from utils.class_weighted_loss import classification_cross_entropy
 
 
 def _calculate_fan_in_and_fan_out(tensor: torch.Tensor) -> Tuple[int, int]:
@@ -346,7 +347,7 @@ class UCLConfig:
     split: bool = True
     eval_samples: int = 1
     clipgrad: float = 10.0
-    class_weighted_ce: bool = False
+    class_weighted_ce: bool = True
 
     @staticmethod
     def from_args(args: object) -> "UCLConfig":
@@ -485,7 +486,6 @@ class Net(nn.Module):
         self.current_task: Optional[int] = None
         self.model_old: Optional[BayesianClassifier] = None
         self.saved = False
-        self.ce = nn.CrossEntropyLoss()
         self.is_task_incremental: bool = True
         self._debug_step_counter = 0
         self._last_observe_task_index: Optional[int] = None
@@ -618,15 +618,11 @@ class Net(nn.Module):
             predictions=preds,
             logits=logits,
         )
-        if self.cfg.class_weighted_ce:
-            class_weights = self._compute_class_weights_from_labels(
-                labels=y_cls_filtered,
-                num_classes=int(logits.size(1)),
-                device=logits.device,
-            )
-            loss = F.cross_entropy(logits, y_cls_filtered, weight=class_weights)
-        else:
-            loss = self.ce(logits, y_cls_filtered)
+        loss = classification_cross_entropy(
+            logits,
+            y_cls_filtered,
+            class_weighted_ce=bool(self.cfg.class_weighted_ce),
+        )
         loss = self._apply_regularisation(loss, y_cls_filtered.size(0))
 
         self.optimizer.zero_grad(set_to_none=True)
@@ -647,34 +643,6 @@ class Net(nn.Module):
         #     self.det_optimizer.step()
 
         return float(loss.detach().cpu()), cls_tr_rec
-
-    def _compute_class_weights_from_labels(
-        self, labels: torch.Tensor, num_classes: int, device: torch.device
-    ) -> torch.Tensor:
-        """Build inverse-frequency CE class weights for a minibatch.
-
-        Args:
-            labels: Task-local class ids in ``[0, num_classes - 1]``.
-            num_classes: Number of classes for the current task head.
-            device: Device where the returned weight tensor should live.
-
-        Returns:
-            Per-class weights normalized to mean 1.0 over observed classes.
-
-        Usage:
-            weights = self._compute_class_weights_from_labels(y, 6, logits.device)
-        """
-        label_counts = torch.bincount(labels, minlength=num_classes).float().to(device)
-        observed_mask = label_counts > 0
-        weights = torch.ones(num_classes, device=device, dtype=torch.float32)
-        if observed_mask.any():
-            observed_counts = label_counts[observed_mask]
-            inverse_frequency = observed_counts.sum() / observed_counts.clamp_min(1.0)
-            inverse_frequency = inverse_frequency / inverse_frequency.mean().clamp_min(
-                1e-8
-            )
-            weights[observed_mask] = inverse_frequency
-        return weights
 
     def _maybe_log_training_debug(
         self,

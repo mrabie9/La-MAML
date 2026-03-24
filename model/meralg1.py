@@ -20,6 +20,7 @@ warnings.filterwarnings("ignore")
 from model.resnet1d import ResNet1D
 from utils.training_metrics import macro_recall
 from utils import misc_utils
+from utils.class_weighted_loss import classification_cross_entropy
 
 
 @dataclass
@@ -69,7 +70,7 @@ class Net(nn.Module):
 
         self.netforward = self.net.forward
 
-        self.bce = torch.nn.CrossEntropyLoss()
+        self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
 
         self.n_outputs = n_outputs
         self.classes_per_task = misc_utils.build_task_class_list(
@@ -195,12 +196,18 @@ class Net(nn.Module):
                     if self.is_iq:
                         offset1, offset2 = self.compute_offsets(bt)
                         prediction = self.netforward(bx)[:, offset1:offset2]
-                        loss = self.bce(prediction, by - offset1)
+                        loss = classification_cross_entropy(
+                            prediction,
+                            by - offset1,
+                            class_weighted_ce=self.class_weighted_ce,
+                        )
                         preds = torch.argmax(prediction, dim=1)
                         target = by - offset1
                     else:
                         prediction = self.forward(bx, 0)
-                        loss = self.bce(prediction, by)
+                        loss = classification_cross_entropy(
+                            prediction, by, class_weighted_ce=self.class_weighted_ce
+                        )
                         preds = torch.argmax(prediction, dim=1)
                         target = by
                     if torch.isnan(loss):

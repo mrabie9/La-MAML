@@ -26,6 +26,7 @@ import torch.nn.functional as F
 from model.resnet1d import ResNet1D
 from utils.training_metrics import macro_recall
 from utils import misc_utils
+from utils.class_weighted_loss import classification_cross_entropy
 
 
 def _calculate_fan_in_and_fan_out(tensor: torch.Tensor) -> Tuple[int, int]:
@@ -107,6 +108,7 @@ class UCLConfig:
     ratio: float = 0.125
     clipgrad: float = 10.0
     split: bool = True
+    class_weighted_ce: bool = True
 
     @staticmethod
     def from_args(args: object) -> "UCLConfig":
@@ -220,7 +222,6 @@ class Net(nn.Module):
         self.current_task: Optional[int] = None
         self.model_old: Optional[BayesianClassifier] = None
         self.saved = False
-        self.ce = nn.CrossEntropyLoss(reduction="mean")
         self.is_task_incremental: bool = True
 
     # ------------------------------------------------------------------
@@ -278,7 +279,9 @@ class Net(nn.Module):
 
         preds = torch.argmax(logits, dim=1)
         cls_tr_rec = macro_recall(preds, y)
-        loss = self.ce(logits, y)
+        loss = classification_cross_entropy(
+            logits, y, class_weighted_ce=bool(self.cfg.class_weighted_ce)
+        )
         loss = self._apply_regularisation(loss, y.size(0))
 
         self.optimizer.zero_grad(set_to_none=True)
