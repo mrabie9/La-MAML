@@ -32,6 +32,25 @@ def _format_seconds(value: Any) -> str:
         return str(value)
 
 
+def _parse_comma_list(value: str | None) -> set[str]:
+    """Parse a comma-separated list into a set.
+
+    Args:
+        value: Comma-separated tokens (e.g. "iid2,rwalk"). `None` or empty
+            strings return an empty set.
+
+    Returns:
+        Set of stripped tokens.
+    """
+
+    if value is None:
+        return set()
+    trimmed = value.strip()
+    if not trimmed:
+        return set()
+    return {token.strip() for token in trimmed.split(",") if token.strip()}
+
+
 def _extract_comparison(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Extract comparison block from probe payload."""
 
@@ -269,6 +288,7 @@ def _generate_host_schedule_from_probe(
     probe_payload: Dict[str, Any],
     host1: str,
     host2: str,
+    excluded_models: set[str],
 ) -> Dict[str, Any]:
     """Generate a host split (pairs + singles) from auto-pair probe JSON.
 
@@ -295,7 +315,10 @@ def _generate_host_schedule_from_probe(
     if not isinstance(auto_pairs, list) or not isinstance(auto_comparisons, list):
         raise SystemExit("Probe JSON missing auto_pair_* lists.")
 
-    candidate_models = [str(k) for k in serial_map.keys()]
+    excluded_models_normalised = {str(m) for m in excluded_models}
+    candidate_models = [
+        str(k) for k in serial_map.keys() if str(k) not in excluded_models_normalised
+    ]
     serial_total_eta = 0.0
     for model_name in candidate_models:
         eta = serial_map.get(model_name, {}).get("eta_seconds")
@@ -322,6 +345,10 @@ def _generate_host_schedule_from_probe(
         parallel_faster = bool(comp.get("parallel_is_faster_than_serial_sum"))
         if not parallel_faster:
             # Keep both as serial singles.
+            continue
+
+        # If either algorithm is excluded, we never keep it as a concurrent pair.
+        if a in excluded_models_normalised or b in excluded_models_normalised:
             continue
 
         parallel_max_eta_seconds = comp.get("parallel_max_eta_seconds")
@@ -409,6 +436,7 @@ def _generate_queue_host_schedule_from_serial_probe(
     probe_payload: Dict[str, Any],
     host1: str,
     host2: str,
+    excluded_models: set[str],
 ) -> Dict[str, Any]:
     """Generate a 2-slot high/low queue schedule from serial probe JSON.
 
@@ -428,8 +456,11 @@ def _generate_queue_host_schedule_from_serial_probe(
     if not isinstance(serial_map, dict) or not serial_map:
         raise SystemExit("Probe JSON missing `serial` mapping.")
 
+    excluded_models_normalised = {str(m) for m in excluded_models}
     models: list[dict[str, Any]] = []
     for model_name, job in serial_map.items():
+        if str(model_name) in excluded_models_normalised:
+            continue
         if not isinstance(job, dict):
             continue
 
@@ -593,7 +624,18 @@ def main() -> None:
         default="lnx-elkk-2",
         help="Host shortname for host 2 in the generated schedule.",
     )
+    parser.add_argument(
+        "--exclude-algorithms",
+        type=str,
+        default=None,
+        help=(
+            "Comma-separated list of algorithm/model names to exclude from the "
+            "generated schedule (e.g. 'iid2,rwalk')."
+        ),
+    )
     args = parser.parse_args()
+
+    excluded_models = _parse_comma_list(args.exclude_algorithms)
 
     if args.generate_queue_host_schedule:
         probe_path = Path(args.serial_probe_json)
@@ -604,6 +646,7 @@ def main() -> None:
             probe_payload=payload,
             host1=args.host1,
             host2=args.host2,
+            excluded_models=excluded_models,
         )
         schedule_out = Path(args.schedule_out_json)
         schedule_out.parent.mkdir(parents=True, exist_ok=True)
@@ -633,6 +676,7 @@ def main() -> None:
             probe_payload=payload,
             host1=args.host1,
             host2=args.host2,
+            excluded_models=excluded_models,
         )
         schedule_out = Path(args.schedule_out_json)
         schedule_out.parent.mkdir(parents=True, exist_ok=True)
