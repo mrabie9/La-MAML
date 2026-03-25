@@ -78,7 +78,7 @@ if [ -n "$EXPERIMENT_DESC" ]; then
 fi
 
 # Create a run-specific folder so all logs for this script execution are together.
-RUN_LOG_DIR="${LOG_DIR}/run_${RUN_TIMESTAMP}${DESC_SUFFIX}"
+RUN_LOG_DIR="${LOG_DIR}/run_${RUN_TIMESTAMP}_${HOST_KEY}${DESC_SUFFIX}"
 mkdir -p "$RUN_LOG_DIR"
 
 # Job logs live in a subfolder under the run directory.
