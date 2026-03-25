@@ -314,7 +314,10 @@ run_job_bg() {
     return 1
   fi
   JOB_LOG_FILE="${JOB_LOG_DIR}/job_${name}_$(date +%Y%m%d_%H%M%S_%N).log"
-  log_msg "--- Dispatching: base + $name (job log: $JOB_LOG_FILE) ---"
+  # Important: keep stdout clean for pid capture (queue scheduler uses
+  # command-substitution to capture the returned pid).
+  # - Write logs to LOG_FILE and stderr only.
+  echo "[$(date -Iseconds)] --- Dispatching: base + $name (job log: $JOB_LOG_FILE) ---" >>"$LOG_FILE"
   echo "[$(date -Iseconds)] START $name" >>"$LOG_FILE"
 
   (
@@ -331,7 +334,10 @@ run_job_bg() {
     fi
     exit "$exit_code"
   ) &
-  echo $!
+  # Use a global variable rather than stdout so the queue scheduler doesn't
+  # rely on command-substitution timing.
+  LAST_BG_PID=$!
+  return 0
 }
 
 if [ "${#HOST_HIGH[@]}" -gt 0 ] || [ "${#HOST_LOW[@]}" -gt 0 ]; then
@@ -349,6 +355,9 @@ if [ "${#HOST_HIGH[@]}" -gt 0 ] || [ "${#HOST_LOW[@]}" -gt 0 ]; then
     fi
   done
 
+  log_msg "QUEUE_HIGH count=${#QUEUE_HIGH[@]}: ${QUEUE_HIGH[*]}"
+  log_msg "QUEUE_LOW  count=${#QUEUE_LOW[@]}: ${QUEUE_LOW[*]}"
+
   log_msg "=== Queue phase on $HOST_KEY (util high/low) ==="
 
   slot_high_pid=""
@@ -357,11 +366,13 @@ if [ "${#HOST_HIGH[@]}" -gt 0 ] || [ "${#HOST_LOW[@]}" -gt 0 ]; then
   idx_low=0
   while [ $idx_high -lt "${#QUEUE_HIGH[@]}" ] || [ $idx_low -lt "${#QUEUE_LOW[@]}" ] || [ -n "$slot_high_pid" ] || [ -n "$slot_low_pid" ]; do
     if [ -z "$slot_high_pid" ] && [ $idx_high -lt "${#QUEUE_HIGH[@]}" ]; then
-      slot_high_pid="$(run_job_bg "${QUEUE_HIGH[$idx_high]}")"
+      run_job_bg "${QUEUE_HIGH[$idx_high]}"
+      slot_high_pid="$LAST_BG_PID"
       idx_high=$((idx_high+1))
     fi
     if [ -z "$slot_low_pid" ] && [ $idx_low -lt "${#QUEUE_LOW[@]}" ]; then
-      slot_low_pid="$(run_job_bg "${QUEUE_LOW[$idx_low]}")"
+      run_job_bg "${QUEUE_LOW[$idx_low]}"
+      slot_low_pid="$LAST_BG_PID"
       idx_low=$((idx_low+1))
     fi
 
