@@ -2,8 +2,9 @@
 """
 Probe concurrency effects by sampling tqdm ETA for each job.
 
-This script runs `main.py` under a pseudo-TTY so tqdm is enabled, waits until
-the first epoch begins, then extracts the tqdm ETA after N iterations.
+This script runs either `main.py` or `main_single_round.py` under a pseudo-TTY
+so tqdm is enabled, waits until the first epoch begins, then extracts the tqdm
+ETA after N iterations.
 
 At the moment the ETA is extracted, it also records `nvidia-smi` GPU utilization.
 Results are written to JSON for later summarisation.
@@ -34,6 +35,7 @@ TQDM_LINE_REGEX = re.compile(
 TQDM_DESC_REGEX = re.compile(
     r"T(?P<task>\d+)\s*\|\s*Ep:\s*(?P<ep>\d+)\s*/\s*(?P<ep_total>\d+)"
 )
+SINGLE_ROUND_TQDM_DESC_REGEX = re.compile(r"Ep:\s*(?P<ep>\d+)\s*/\s*(?P<ep_total>\d+)")
 
 
 def _now_iso() -> str:
@@ -177,11 +179,15 @@ def _build_main_command(
     n_epochs: int,
     samples_per_task: Optional[int],
 ) -> list[str]:
-    """Build the `python3 main.py ...` command for a single probe job."""
+    """Build the `python3 ...` command for a single probe job."""
+
+    # `iid2` is a non-lifelong (single-round) baseline and must not go through
+    # `main.py`, which historically delegates its iid flow to `main_multi_task.py`.
+    entrypoint = "main_single_round.py" if target.model_name == "iid2" else "main.py"
 
     cmd = [
         sys.executable,
-        "main.py",
+        entrypoint,
         "--config",
         str(target.base_config_path),
         "--config",
@@ -200,7 +206,9 @@ def _parse_stream_until_eta(
     master_fd: int,
     proc: subprocess.Popen[str],
     wait_iters: int,
-    expected_task: int = 0,
+    expected_task: Optional[int],
+    expected_epoch: int,
+    expected_ep_total: int,
 ) -> Dict[str, Any]:
     """Read PTY output and capture ETA + avg GPU util for the window.
 
@@ -208,7 +216,11 @@ def _parse_stream_until_eta(
         master_fd: PTY master fd.
         proc: subprocess running main.py.
         wait_iters: minimum `done` count to consider ETA capture.
-        expected_task: task id to match in tqdm description (default task 0).
+        expected_task: optional task id to match in tqdm description (for
+            lifelong/CL baselines that include `T{task} | ...` in the tqdm
+            description). For single-round baselines set to `None`.
+        expected_epoch: expected epoch number (1-indexed in tqdm descriptions).
+        expected_ep_total: expected `ep_total` value (usually `n_epochs`).
 
     Returns:
         Dict with parsed fields:
@@ -356,16 +368,34 @@ def _parse_stream_until_eta(
 
         # Try to detect "epoch start" from tqdm description.
         if not epoch_started:
-            for m in TQDM_DESC_REGEX.finditer(buffer):
-                task_id = int(m.group("task"))
-                ep = int(m.group("ep"))
-                ep_total = int(m.group("ep_total"))
-                if task_id == expected_task and ep == 1 and ep_total == 1:
-                    epoch_started = True
-                    epoch_start_time = time.time()
-                    _take_util_sample_immediately()
-                    _maybe_start_util_polling()
-                    break
+            # Epoch start for CL baselines includes task id prefix: `T{task} | Ep: ...`.
+            if expected_task is not None:
+                for m in TQDM_DESC_REGEX.finditer(buffer):
+                    task_id = int(m.group("task"))
+                    ep = int(m.group("ep"))
+                    ep_total = int(m.group("ep_total"))
+                    if (
+                        task_id == expected_task
+                        and ep == expected_epoch
+                        and ep_total == expected_ep_total
+                    ):
+                        epoch_started = True
+                        epoch_start_time = time.time()
+                        _take_util_sample_immediately()
+                        _maybe_start_util_polling()
+                        break
+
+            # Epoch start for single-round baselines is `Ep: {}/{} | ...` (no `T{task}` prefix).
+            if not epoch_started:
+                for m in SINGLE_ROUND_TQDM_DESC_REGEX.finditer(buffer):
+                    ep = int(m.group("ep"))
+                    ep_total = int(m.group("ep_total"))
+                    if ep == expected_epoch and ep_total == expected_ep_total:
+                        epoch_started = True
+                        epoch_start_time = time.time()
+                        _take_util_sample_immediately()
+                        _maybe_start_util_polling()
+                        break
 
         # Attempt to parse ETA once we’re in the right epoch.
         if epoch_started:
@@ -453,11 +483,14 @@ def _probe_one_job(
 
     proc, master_fd = _spawn_with_pty(cmd)
     try:
+        expected_task_for_tqdm = 0 if target.model_name != "iid2" else None
         result = _parse_stream_until_eta(
             master_fd=master_fd,
             proc=proc,
             wait_iters=wait_iters,
-            expected_task=0,
+            expected_task=expected_task_for_tqdm,
+            expected_epoch=1,
+            expected_ep_total=n_epochs,
         )
         result["job_tag"] = job_tag
         result["command"] = cmd
@@ -541,6 +574,16 @@ def main() -> None:
         help="Output JSON file path.",
     )
     parser.add_argument(
+        "--append-out-json",
+        action="store_true",
+        default=False,
+        help=(
+            "If set and --out-json already exists, merge newly probed "
+            "`serial` results into the existing JSON instead of overwriting. "
+            "Only supported for serial-only probing."
+        ),
+    )
+    parser.add_argument(
         "--auto-pair",
         action="store_true",
         default=False,
@@ -584,6 +627,12 @@ def main() -> None:
         serial_model_names = [model_a, model_b]
     elif args.auto_pair:
         mode = "auto_pairing_serial_and_parallel"
+
+    if args.append_out_json and mode != "serial_only":
+        raise SystemExit(
+            "--append-out-json is only supported for serial-only probes "
+            "(i.e. run without --pair-models and without --auto-pair)."
+        )
 
     # Probe serial results (either all requested models, or only the pair).
     out_queue: queue.Queue[Tuple[str, Dict[str, Any]]] = queue.Queue()
@@ -847,8 +896,34 @@ def main() -> None:
             else None
         ),
     }
-    out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    print(f"Wrote probe results to: {out_path}")
+
+    if args.append_out_json and out_path.exists():
+        existing_payload = json.loads(out_path.read_text(encoding="utf-8"))
+        if not isinstance(existing_payload, dict):
+            raise SystemExit(f"Existing out-json is not an object: {out_path}")
+
+        existing_serial = existing_payload.get("serial")
+        if not isinstance(existing_serial, dict):
+            raise SystemExit(
+                f"Existing out-json missing/invalid 'serial' mapping: {out_path}"
+            )
+
+        # Merge/overwrite entries for the newly probed models.
+        for model_name in serial_model_names:
+            existing_serial[model_name] = serial_results[f"serial_{model_name}"]
+
+        existing_payload["serial"] = existing_serial
+        # Keep the original metadata where possible, but refresh the timestamp.
+        existing_payload["timestamp_utc_compact"] = timestamp
+        existing_payload["n_epochs"] = args.n_epochs
+        existing_payload["samples_per_task"] = args.samples_per_task
+        existing_payload["wait_iters"] = args.wait_iters
+
+        out_path.write_text(json.dumps(existing_payload, indent=2), encoding="utf-8")
+        print(f"Appended probe results to: {out_path}")
+    else:
+        out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        print(f"Wrote probe results to: {out_path}")
 
 
 if __name__ == "__main__":

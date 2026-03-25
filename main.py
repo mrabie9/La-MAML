@@ -19,7 +19,6 @@ from torch.autograd import Variable
 import parser as file_parser
 from metrics.metrics import confusion_matrix
 from utils import misc_utils
-from main_multi_task import life_experience_iid
 from utils.training_metrics import (
     macro_f1_including_noise,
     macro_precision_signal_only,
@@ -1609,19 +1608,20 @@ def main():
     )
     # run model on loader
     if args.model == "iid2":
-        # oracle baseline with all task data shown at same time
-        log_state(args.state_logging, "Invoking iid life experience flow")
-        (
-            result_val_t,
-            result_val_a,
-            result_test_t,
-            result_test_a,
-            _,
-            _,
-            _,
-            _,
-            spent_time,
-        ) = life_experience_iid(model, loader, args)
+        # `iid2` is handled by the single-round entrypoint; delegate so we
+        # never depend on `main_multi_task.py`.
+        #
+        # We preserve CLI compatibility by forwarding the original argv.
+        import subprocess
+
+        log_state(
+            args.state_logging,
+            "Delegating iid2 to main_single_round.py (no main_multi_task).",
+        )
+        exit_code = subprocess.call(
+            [sys.executable, "main_single_round.py"] + sys.argv[1:]
+        )
+        raise SystemExit(exit_code)
     else:
         # for all the CL baselines
         log_state(args.state_logging, "Invoking continual life experience flow")

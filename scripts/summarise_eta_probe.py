@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
@@ -404,6 +405,136 @@ def _generate_host_schedule_from_probe(
     }
 
 
+def _generate_queue_host_schedule_from_serial_probe(
+    probe_payload: Dict[str, Any],
+    host1: str,
+    host2: str,
+) -> Dict[str, Any]:
+    """Generate a 2-slot high/low queue schedule from serial probe JSON.
+
+    The algorithm ranks models by averaged GPU utilization during the
+    epoch-start->ETA-capture window (using `util_avg_epochstart_to_eta_capture_percent`
+    when available). It then:
+    - Splits models into `high` and `low` by count (high gets ceil(n/2)).
+    - Assigns each model to `host1` or `host2` to minimize the estimated
+      per-host makespan, where each host runs two sequential slots:
+      `slot_high` and `slot_low`.
+
+    Returns:
+        A schedule dict suitable for `scripts/full_experiments.sh`.
+    """
+
+    serial_map = probe_payload.get("serial") or {}
+    if not isinstance(serial_map, dict) or not serial_map:
+        raise SystemExit("Probe JSON missing `serial` mapping.")
+
+    models: list[dict[str, Any]] = []
+    for model_name, job in serial_map.items():
+        if not isinstance(job, dict):
+            continue
+
+        eta_seconds = job.get("eta_seconds")
+        if eta_seconds is None:
+            raise SystemExit(f"Probe JSON missing eta_seconds for '{model_name}'.")
+
+        util_avg = job.get("util_avg_epochstart_to_eta_capture_percent")
+        if util_avg is None:
+            util_avg = _extract_util_percent(job.get("util_at_eta_capture"))
+
+        if util_avg is None:
+            raise SystemExit(
+                "Probe JSON missing util_avg fields and could not fall back to "
+                "`util_at_eta_capture` for util extraction."
+            )
+
+        models.append(
+            {
+                "name": str(model_name),
+                "eta_seconds": float(eta_seconds),
+                "util_percent": float(util_avg),
+            }
+        )
+
+    if not models:
+        raise SystemExit("No usable models found in serial probe JSON.")
+
+    models_sorted_by_util = sorted(
+        models, key=lambda m: m["util_percent"], reverse=True
+    )
+    cut_high = int(math.ceil(len(models_sorted_by_util) / 2.0))
+    high_models = models_sorted_by_util[:cut_high]
+    low_models = models_sorted_by_util[cut_high:]
+
+    host_high_sum: dict[str, float] = {host1: 0.0, host2: 0.0}
+    host_low_sum: dict[str, float] = {host1: 0.0, host2: 0.0}
+    host_slot_high: dict[str, list[str]] = {host1: [], host2: []}
+    host_slot_low: dict[str, list[str]] = {host1: [], host2: []}
+
+    def _choose_host_for_high(eta_seconds: float) -> str:
+        candidates: list[tuple[float, float, str]] = []
+        for h in (host1, host2):
+            candidate_high = host_high_sum[h] + eta_seconds
+            candidate_wall = max(candidate_high, host_low_sum[h])
+            candidates.append((candidate_wall, candidate_high, h))
+        candidates_sorted = sorted(candidates, key=lambda x: (x[0], x[1]))
+        return candidates_sorted[0][2]
+
+    def _choose_host_for_low(eta_seconds: float) -> str:
+        candidates: list[tuple[float, float, str]] = []
+        for h in (host1, host2):
+            candidate_low = host_low_sum[h] + eta_seconds
+            candidate_wall = max(host_high_sum[h], candidate_low)
+            candidates.append((candidate_wall, candidate_low, h))
+        candidates_sorted = sorted(candidates, key=lambda x: (x[0], x[1]))
+        return candidates_sorted[0][2]
+
+    # Keep the high slot queue in util-desc order.
+    for m in high_models:
+        chosen_host = _choose_host_for_high(m["eta_seconds"])
+        host_slot_high[chosen_host].append(m["name"])
+        host_high_sum[chosen_host] += float(m["eta_seconds"])
+
+    # Keep the low slot queue in util-desc order (still "low util" in absolute).
+    for m in low_models:
+        chosen_host = _choose_host_for_low(m["eta_seconds"])
+        host_slot_low[chosen_host].append(m["name"])
+        host_low_sum[chosen_host] += float(m["eta_seconds"])
+
+    host1_wall = max(host_high_sum[host1], host_low_sum[host1])
+    host2_wall = max(host_high_sum[host2], host_low_sum[host2])
+    makespan_est = max(host1_wall, host2_wall)
+
+    serial_total_eta = sum(m["eta_seconds"] for m in models_sorted_by_util)
+    percent_time_saved = (
+        (serial_total_eta - makespan_est) / serial_total_eta * 100.0
+        if serial_total_eta > 0
+        else None
+    )
+
+    return {
+        "hosts": {
+            host1: {
+                "slot_high": host_slot_high[host1],
+                "slot_low": host_slot_low[host1],
+                "estimated_host_wall_seconds": host1_wall,
+            },
+            host2: {
+                "slot_high": host_slot_high[host2],
+                "slot_low": host_slot_low[host2],
+                "estimated_host_wall_seconds": host2_wall,
+            },
+        },
+        "stats": {
+            "serial_total_eta_sum_seconds": serial_total_eta,
+            "parallel_makespan_estimated_seconds": makespan_est,
+            "percent_time_saved_parallel_vs_serial": percent_time_saved,
+            "high_count": len(high_models),
+            "low_count": len(low_models),
+        },
+        "mode": "util_high_low_queue_schedule",
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Summarise ETA probe JSON results.")
     parser.add_argument(
@@ -424,10 +555,25 @@ def main() -> None:
         help="Generate host split (pairs + singles) from an auto-pair probe JSON.",
     )
     parser.add_argument(
+        "--generate-queue-host-schedule",
+        action="store_true",
+        default=False,
+        help=(
+            "Generate host schedule using util-ranked high/low 2-slot queues "
+            "from a serial-only probe JSON."
+        ),
+    )
+    parser.add_argument(
         "--probe-json",
         type=str,
         default="logs/eta_probe/eta_probe_elkk-1-algos_10-iter__avg-util-auto-pair.json",
         help="Probe JSON to generate the schedule from.",
+    )
+    parser.add_argument(
+        "--serial-probe-json",
+        type=str,
+        default="logs/eta_probe/eta_probe_elkk-1-algos_10-iter_avg-util-2.json",
+        help="Serial-only probe JSON to generate the queue schedule from.",
     )
     parser.add_argument(
         "--schedule-out-json",
@@ -448,6 +594,35 @@ def main() -> None:
         help="Host shortname for host 2 in the generated schedule.",
     )
     args = parser.parse_args()
+
+    if args.generate_queue_host_schedule:
+        probe_path = Path(args.serial_probe_json)
+        if not probe_path.exists():
+            raise SystemExit(f"Missing serial probe JSON: {probe_path}")
+        payload = _load_json(probe_path)
+        schedule = _generate_queue_host_schedule_from_serial_probe(
+            probe_payload=payload,
+            host1=args.host1,
+            host2=args.host2,
+        )
+        schedule_out = Path(args.schedule_out_json)
+        schedule_out.parent.mkdir(parents=True, exist_ok=True)
+        schedule_out.write_text(json.dumps(schedule, indent=2), encoding="utf-8")
+
+        stats = schedule.get("stats") or {}
+        percent_saved = stats.get("percent_time_saved_parallel_vs_serial")
+        serial_total = stats.get("serial_total_eta_sum_seconds")
+        parallel_makespan = stats.get("parallel_makespan_estimated_seconds")
+        if percent_saved is not None:
+            print(
+                f"Estimated time saved (parallel vs serial): {percent_saved:.2f}% "
+                f"(serial_total={_format_seconds(serial_total)}, "
+                f"parallel_makespan={_format_seconds(parallel_makespan)})"
+            )
+        else:
+            print("Estimated time saved (parallel vs serial): NA")
+        print(f"Wrote schedule to: {schedule_out}")
+        return
 
     if args.generate_host_schedule:
         probe_path = Path(args.probe_json)
