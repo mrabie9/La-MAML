@@ -415,8 +415,16 @@
       "B": "la-er"
     },
     {
+      "A": "smaml",
+      "B": "packnet"
+    },
+    {
       "A": "agem",
       "B": "smaml"
+    },
+    {
+      "A": "packnet",
+      "B": "bcl_dual"
     },
     {
       "A": "er_ring",
@@ -429,10 +437,6 @@
     {
       "A": "ewc",
       "B": "ucl"
-    },
-    {
-      "A": "packnet",
-      "B": "bcl_dual"
     },
     {
       "A": "si",
