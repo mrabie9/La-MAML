@@ -1637,6 +1637,8 @@ def main():
             spent_time,
         ) = life_experience(model, loader, args)
 
+        spent_time_hours = spent_time / 3600.0
+
         # save results in files or print on terminal
         save_results(
             args,
@@ -1649,11 +1651,11 @@ def main():
         )
         log_state(
             args.state_logging,
-            "Results saved; total runtime {:.2f}s".format(spent_time),
+            "Results saved; total runtime {:.2f}h".format(spent_time_hours),
         )
 
     # Print and append total runtime for this experiment.
-    print("Total runtime: {:.2f} seconds".format(spent_time))
+    print("Total runtime: {:.2f} hours".format(spent_time / 3600.0))
     results_txt_path = os.path.join(args.log_dir, "results.txt")
     try:
         with open(results_txt_path, "a", encoding="utf-8") as results_file:
