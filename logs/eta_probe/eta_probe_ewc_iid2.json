@@ -1,0 +1,189 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-03-25T10:57:49.414953+00:00",
+  "timestamp_utc_compact": "20260325_105749",
+  "base_config": "/home/lunet/wsmr11/repos/La-MAML/configs/base.yaml",
+  "task_token_first_from_base": "t2-rcn",
+  "wait_iters": 5,
+  "n_epochs": 1,
+  "samples_per_task": null,
+  "pair_models": {
+    "A": "ewc",
+    "B": "rwalk"
+  },
+  "serial": {
+    "ewc": {
+      "eta_seconds": 76.0,
+      "eta_raw": "01:16",
+      "done": 5,
+      "total": 197,
+      "util_at_epoch_start": {
+        "gpus": [
+          {
+            "index": 0,
+            "utilization.gpu": 83.0,
+            "memory.free_mb": 47700.0,
+            "memory.used_mb": 962.0
+          }
+        ]
+      },
+      "util_at_eta_capture": {
+        "gpus": [
+          {
+            "index": 0,
+            "utilization.gpu": 95.0,
+            "memory.free_mb": 47682.0,
+            "memory.used_mb": 980.0
+          }
+        ]
+      },
+      "probe_elapsed_seconds": 6.039236068725586,
+      "job_tag": "serial_ewc",
+      "command": [
+        "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/bin/python",
+        "main.py",
+        "--config",
+        "/home/lunet/wsmr11/repos/La-MAML/configs/base.yaml",
+        "--config",
+        "/home/lunet/wsmr11/repos/La-MAML/configs/models/ewc.yaml",
+        "--task-order-files",
+        "t2-rcn",
+        "--n_epochs",
+        "1"
+      ],
+      "start_time_utc": "2026-03-25T10:57:35.902204+00:00"
+    },
+    "rwalk": {
+      "eta_seconds": 55.0,
+      "eta_raw": "00:55",
+      "done": 5,
+      "total": 197,
+      "util_at_epoch_start": {
+        "gpus": [
+          {
+            "index": 0,
+            "utilization.gpu": 54.0,
+            "memory.free_mb": 47608.0,
+            "memory.used_mb": 1054.0
+          }
+        ]
+      },
+      "util_at_eta_capture": {
+        "gpus": [
+          {
+            "index": 0,
+            "utilization.gpu": 95.0,
+            "memory.free_mb": 47564.0,
+            "memory.used_mb": 1098.0
+          }
+        ]
+      },
+      "probe_elapsed_seconds": 5.680860757827759,
+      "job_tag": "serial_rwalk",
+      "command": [
+        "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/bin/python",
+        "main.py",
+        "--config",
+        "/home/lunet/wsmr11/repos/La-MAML/configs/base.yaml",
+        "--config",
+        "/home/lunet/wsmr11/repos/La-MAML/configs/models/rwalk.yaml",
+        "--task-order-files",
+        "t2-rcn",
+        "--n_epochs",
+        "1"
+      ],
+      "start_time_utc": "2026-03-25T10:57:41.748082+00:00"
+    }
+  },
+  "parallel": {
+    "ewc": {
+      "eta_seconds": 100.0,
+      "eta_raw": "01:40",
+      "done": 5,
+      "total": 197,
+      "util_at_epoch_start": {
+        "gpus": [
+          {
+            "index": 0,
+            "utilization.gpu": 98.0,
+            "memory.free_mb": 46687.0,
+            "memory.used_mb": 1975.0
+          }
+        ]
+      },
+      "util_at_eta_capture": {
+        "gpus": [
+          {
+            "index": 0,
+            "utilization.gpu": 92.0,
+            "memory.free_mb": 47682.0,
+            "memory.used_mb": 980.0
+          }
+        ]
+      },
+      "probe_elapsed_seconds": 7.336737871170044,
+      "job_tag": "parallel_ewc",
+      "command": [
+        "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/bin/python",
+        "main.py",
+        "--config",
+        "/home/lunet/wsmr11/repos/La-MAML/configs/base.yaml",
+        "--config",
+        "/home/lunet/wsmr11/repos/La-MAML/configs/models/ewc.yaml",
+        "--task-order-files",
+        "t2-rcn",
+        "--n_epochs",
+        "1"
+      ],
+      "start_time_utc": "2026-03-25T10:57:49.250609+00:00"
+    },
+    "rwalk": {
+      "eta_seconds": 69.0,
+      "eta_raw": "01:09",
+      "done": 5,
+      "total": 197,
+      "util_at_epoch_start": {
+        "gpus": [
+          {
+            "index": 0,
+            "utilization.gpu": 99.0,
+            "memory.free_mb": 46813.0,
+            "memory.used_mb": 1849.0
+          }
+        ]
+      },
+      "util_at_eta_capture": {
+        "gpus": [
+          {
+            "index": 0,
+            "utilization.gpu": 99.0,
+            "memory.free_mb": 46669.0,
+            "memory.used_mb": 1993.0
+          }
+        ]
+      },
+      "probe_elapsed_seconds": 6.0296056270599365,
+      "job_tag": "parallel_rwalk",
+      "command": [
+        "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/bin/python",
+        "main.py",
+        "--config",
+        "/home/lunet/wsmr11/repos/La-MAML/configs/base.yaml",
+        "--config",
+        "/home/lunet/wsmr11/repos/La-MAML/configs/models/rwalk.yaml",
+        "--task-order-files",
+        "t2-rcn",
+        "--n_epochs",
+        "1"
+      ],
+      "start_time_utc": "2026-03-25T10:57:47.944445+00:00"
+    }
+  },
+  "parallel_wall_clock_seconds": 7.502206087112427,
+  "comparison": {
+    "serial_sum_eta_seconds": 131.0,
+    "parallel_max_eta_seconds": 100.0,
+    "parallel_max_eta_minus_serial_sum_eta_seconds": -31.0,
+    "parallel_is_faster_than_serial_sum": true
+  }
+}
