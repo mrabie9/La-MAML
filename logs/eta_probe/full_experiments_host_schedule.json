@@ -3,9 +3,9 @@
     "lnx-elkk-1": {
       "slot_high": [
         "lwf",
-        "er_ring",
+        "hat",
         "ctn",
-        "si"
+        "ewc"
       ],
       "slot_low": [
         "cmaml",
@@ -16,27 +16,29 @@
     },
     "lnx-elkk-2": {
       "slot_high": [
+        "agem",
         "gem",
-        "hat",
+        "er_ring",
         "rwalk",
-        "ewc"
+        "si"
       ],
       "slot_low": [
         "packnet",
         "iid2",
         "ucl",
+        "bcl_dual",
         "smaml",
         "la-er"
       ],
-      "estimated_host_wall_seconds": 852.0
+      "estimated_host_wall_seconds": 941.0
     }
   },
   "stats": {
-    "serial_total_eta_sum_seconds": 2231.0,
+    "serial_total_eta_sum_seconds": 2366.0,
     "parallel_makespan_estimated_seconds": 946.0,
-    "percent_time_saved_parallel_vs_serial": 57.597489914836395,
-    "high_count": 8,
-    "low_count": 8
+    "percent_time_saved_parallel_vs_serial": 60.01690617075233,
+    "high_count": 9,
+    "low_count": 9
   },
   "mode": "util_high_low_queue_schedule"
 }
