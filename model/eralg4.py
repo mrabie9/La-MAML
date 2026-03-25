@@ -349,13 +349,28 @@ class Net(DetectionReplayMixin, nn.Module):
             fast_weights = list(self.net.parameters())
 
         graph_required = self.cfg.second_order
-        raw_gradients = torch.autograd.grad(
-            loss,
-            fast_weights,
-            create_graph=graph_required,
-            retain_graph=graph_required,
-            allow_unused=True,
-        )
+
+        # Some model parameters are intentionally frozen (e.g. adapter biases with
+        # `requires_grad=False`). `torch.autograd.grad` errors if any of the
+        # differentiation targets do not require grad, so we differentiate only
+        # w.r.t. tensors that are set to require gradients and then reconstruct the
+        # full gradient list aligned with `fast_weights`.
+        require_grad_targets = [w for w in fast_weights if w.requires_grad]
+        if require_grad_targets:
+            raw_gradients_subset = torch.autograd.grad(
+                loss,
+                require_grad_targets,
+                create_graph=graph_required,
+                retain_graph=graph_required,
+                allow_unused=True,
+            )
+            subset_iter = iter(raw_gradients_subset)
+            raw_gradients = [
+                next(subset_iter) if w.requires_grad else None for w in fast_weights
+            ]
+        else:
+            raw_gradients = [None for _ in fast_weights]
+
         grads = [
             grad if grad is not None else torch.zeros_like(weight)
             for grad, weight in zip(raw_gradients, fast_weights)
@@ -366,12 +381,15 @@ class Net(DetectionReplayMixin, nn.Module):
                 clip_val = self.cfg.grad_clip_norm
                 grads[i] = torch.clamp(grads[i], min=-clip_val, max=clip_val)
 
-        fast_weights = list(
-            map(
-                lambda p: p[1][0] - p[0] * p[1][1],
-                zip(grads, zip(fast_weights, self.net.alpha_lr)),
-            )
-        )
+        updated_fast_weights = []
+        for grad, weight, alpha_lr in zip(grads, fast_weights, self.net.alpha_lr):
+            # Preserve frozen tensors exactly; only update tensors that are
+            # intended to participate in gradient-based inner updates.
+            if not weight.requires_grad:
+                updated_fast_weights.append(weight)
+                continue
+            updated_fast_weights.append(weight - grad * alpha_lr)
+        fast_weights = updated_fast_weights
         return fast_weights, loss.item()
 
     def la_ER(self, x, y, t):
