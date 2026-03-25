@@ -31,8 +31,8 @@ done
 
 # Host-based algorithm selection.
 # Edit these lists to control which algorithms each machine runs.
-INCLUDED_LNX_ELKK_2="ewc er_ring eralg4 agem gem bcl_dual cmaml ctn hat"
-INCLUDED_LNX_ELKK_1="lwf packnet rwalk si ucl la-er lamaml smaml"
+INCLUDED_LNX_ELKK_1="ewc er_ring eralg4 agem gem bcl_dual cmaml ctn hat"
+INCLUDED_LNX_ELKK_2="lwf packnet rwalk si ucl la-er lamaml smaml"
 
 # CONCURRENCY_OPTION:
 #   0 = run sequentially
