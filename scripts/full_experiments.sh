@@ -424,7 +424,11 @@ else
       fi
       python3 "$entrypoint" --config "$BASE_CONFIG" --config "${MODELS_DIR}/${a}.yaml" >"$JOB_LOG_FILE_A" 2>&1
       exit_code=$?
-      echo "[$(date -Iseconds)] Completed: $a (exit $exit_code)" >>"$LOG_FILE"
+      if [ "$exit_code" -eq 0 ]; then
+        echo "[$(date -Iseconds)] Completed: $a (exit 0)" >>"$LOG_FILE"
+      else
+        echo "[$(date -Iseconds)] ERROR: $a failed with exit code $exit_code" >>"$LOG_FILE"
+      fi
       exit "$exit_code"
     ) &
     pid_a=$!
@@ -436,7 +440,11 @@ else
       fi
       python3 "$entrypoint" --config "$BASE_CONFIG" --config "${MODELS_DIR}/${b}.yaml" >"$JOB_LOG_FILE_B" 2>&1
       exit_code=$?
-      echo "[$(date -Iseconds)] Completed: $b (exit $exit_code)" >>"$LOG_FILE"
+      if [ "$exit_code" -eq 0 ]; then
+        echo "[$(date -Iseconds)] Completed: $b (exit 0)" >>"$LOG_FILE"
+      else
+        echo "[$(date -Iseconds)] ERROR: $b failed with exit code $exit_code" >>"$LOG_FILE"
+      fi
       exit "$exit_code"
     ) &
     pid_b=$!
