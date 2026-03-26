@@ -488,32 +488,63 @@ def _plot_loss_vs_steps(ax: plt.Axes, tasks: Sequence[TaskMetrics]) -> None:
         return
 
 
-def _plot_train_acc_vs_steps(
+def _resolve_train_metric_for_task(
+    task: TaskMetrics,
+    train_metric_choice: str,
+) -> Tuple[np.ndarray, str]:
+    """Resolve train metric series and display label for one task.
+
+    Args:
+        task: Per-task metric dictionary loaded from ``task*.npz``.
+        train_metric_choice: Selected training metric key semantic.
+
+    Returns:
+        Tuple ``(values, label)`` where ``values`` is the selected metric series
+        and ``label`` is a human-readable metric name.
+
+    Raises:
+        KeyError: If required metric keys are missing for the selected choice.
+    """
+    if train_metric_choice == "total_f1":
+        f1_values = task.get("train_f1")
+        if f1_values is None:
+            raise KeyError("Requested train total_f1 but 'train_f1' is missing.")
+        return np.asarray(f1_values, dtype=float), "Train total F1"
+
+    # train_metric_choice == "cls_recall"
+    recall_values = task.get("cls_tr_rec")
+    if recall_values is None:
+        recall_values = task.get("tr_acc")
+    if recall_values is None:
+        raise KeyError("Neither 'cls_tr_rec' nor 'tr_acc' found in task metrics.")
+    return np.asarray(recall_values, dtype=float), "Train recall"
+
+
+def _plot_train_metric_vs_steps(
     ax: plt.Axes,
     tasks: Sequence[TaskMetrics],
     task_names: Sequence[str] | None,
+    train_metric_choice: str,
 ) -> None:
-    """Plot training recall vs step for each task separately for an algorithm."""
+    """Plot selected training metric vs step for each task in a run."""
     if not tasks:
         return
+    y_label: str | None = None
     for task_idx, task in enumerate(tasks):
-        # Try both possible keys: prefer "cls_tr_rec" (new name), else fall back
-        # to "tr_acc" for backwards compatibility with older runs.
-        acc_values = task.get("cls_tr_rec")
-        if acc_values is None:
-            acc_values = task.get("tr_acc")
-        if acc_values is None:
-            raise KeyError("Neither 'cls_tr_rec' nor 'tr_acc' found in task metrics.")
-        acc = np.asarray(acc_values, dtype=float)
-        steps = np.arange(len(acc))
+        metric_values, metric_label = _resolve_train_metric_for_task(
+            task, train_metric_choice
+        )
+        y_label = metric_label
+        steps = np.arange(len(metric_values))
         ax.plot(
             steps,
-            acc,
+            metric_values,
             color=get_task_color(task_idx, task_names),
             alpha=0.8,
             label=f"Task {task_idx}",
         )
-    ax.set_ylabel("Train recall")
+    if y_label is not None:
+        ax.set_ylabel(y_label)
     ax.grid(True, alpha=0.3)
 
 
@@ -715,31 +746,36 @@ def _mean_final_metric_for_run(
     return float(np.mean(arr))
 
 
-def _concat_train_recall_for_run(tasks: Sequence[TaskMetrics]) -> np.ndarray | None:
-    """Concatenate per-task train recall series into one run-level sequence.
+def _concat_train_metric_for_run(
+    tasks: Sequence[TaskMetrics],
+    train_metric_choice: str,
+) -> Tuple[np.ndarray | None, str]:
+    """Concatenate per-task train metric series into one run-level sequence.
 
-    If there is only one task, this returns that task's train recall unchanged.
+    If there is only one task, this returns that task's train metric unchanged.
     If multiple tasks exist, task series are concatenated in task order.
     """
     if not tasks:
-        return None
+        return None, "Train recall"
 
     per_task_series: list[np.ndarray] = []
+    metric_label = "Train recall"
     for task in tasks:
-        acc_values = task.get("cls_tr_rec")
-        if acc_values is None:
-            acc_values = task.get("tr_acc")
-        if acc_values is None:
+        try:
+            metric_values, metric_label = _resolve_train_metric_for_task(
+                task, train_metric_choice
+            )
+        except KeyError:
             continue
-        arr = np.asarray(acc_values, dtype=float).reshape(-1)
+        arr = np.asarray(metric_values, dtype=float).reshape(-1)
         if arr.size > 0:
             per_task_series.append(arr)
 
     if not per_task_series:
-        return None
+        return None, metric_label
     if len(per_task_series) == 1:
-        return per_task_series[0]
-    return np.concatenate(per_task_series, axis=0)
+        return per_task_series[0], metric_label
+    return np.concatenate(per_task_series, axis=0), metric_label
 
 
 def plot_multi_algorithms(
@@ -747,6 +783,7 @@ def plot_multi_algorithms(
     output_dir: Path | None,
     same_y_limits: bool = False,
     val_metric_choice: str = "total_f1",
+    train_metric_choice: str = "cls_recall",
     labels: Sequence[str] | None = None,
     labels_grouping: Sequence[str] | None = None,
 ) -> None:
@@ -839,22 +876,25 @@ def plot_multi_algorithms(
 
         # Train recall vs step: one line per run. If multiple tasks are present,
         # concatenate task series so x-axis reflects total iterations.
+        train_metric_label = "Train recall"
         for run_idx, run in enumerate(runs):
             run_label = label_list[run_idx]
             if not run.tasks:
                 continue
-            acc = _concat_train_recall_for_run(run.tasks)
-            if acc is None:
+            train_series, train_metric_label = _concat_train_metric_for_run(
+                run.tasks, train_metric_choice
+            )
+            if train_series is None:
                 continue
-            steps = np.arange(len(acc))
+            steps = np.arange(len(train_series))
             row_axes[0].plot(
                 steps,
-                acc,
+                train_series,
                 label=run_label,
                 color=label_colors.get(run_label, f"C{run_idx % 10}"),
                 alpha=0.9,
             )
-        row_axes[0].set_ylabel("Train recall")
+        row_axes[0].set_ylabel(train_metric_label)
         row_axes[0].grid(True, alpha=0.3)
 
         # Final validation metrics: bars grouped by run, using the last task.
@@ -935,7 +975,7 @@ def plot_multi_algorithms(
         row_axes[2].grid(True, alpha=0.3)
 
         # Column titles on the single IID2 row.
-        axes[0][0].set_title("Train recall vs step")
+        axes[0][0].set_title(f"{train_metric_label} vs step")
         axes[0][1].set_title("Final validation metrics")
         axes[0][2].set_title(f"Val {first_label} over runs")
 
@@ -964,7 +1004,9 @@ def plot_multi_algorithms(
                 val_metric_choice, run
             )
             row_axes = axes[row_idx]
-            _plot_train_acc_vs_steps(row_axes[0], run.tasks, run.task_names)
+            _plot_train_metric_vs_steps(
+                row_axes[0], run.tasks, run.task_names, train_metric_choice
+            )
             _plot_final_validation_metrics(row_axes[1], run.tasks, run.task_names)
             # Avoid duplicating the same "task index" information as x tick
             # labels; keep the panel focused on the metric bars.
@@ -984,7 +1026,8 @@ def plot_multi_algorithms(
                 val_metric_label=val_metric_label,
             )
 
-            row_axes[0].set_ylabel(f"{run.name}\nTrain recall")
+            train_label_for_row = row_axes[0].get_ylabel() or "Train recall"
+            row_axes[0].set_ylabel(f"{run.name}\n{train_label_for_row}")
             for subplot_ax in row_axes:
                 subplot_ax.text(
                     0.99,
@@ -1014,7 +1057,7 @@ def plot_multi_algorithms(
                 )
 
         # Column titles on the top row (non-IID2 mode).
-        axes[0][0].set_title("Train recall vs step")
+        axes[0][0].set_title(f"{axes[0][0].get_ylabel().splitlines()[-1]} vs step")
         axes[0][1].set_title("Final validation metrics")
         axes[0][2].set_title(f"Val {first_label} over tasks")
         axes[0][3].set_title(f"Average forgetting ({first_label})")
@@ -1131,6 +1174,17 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--train-metric",
+        type=str,
+        choices=("total_f1", "cls_recall"),
+        default="cls_recall",
+        help=(
+            "Training metric to use for the 'vs step' panel. "
+            "Choose total_f1 for total F1 or cls_recall for recall "
+            "(default: cls_recall)."
+        ),
+    )
+    parser.add_argument(
         "--val-metric",
         type=str,
         choices=("total_f1", "cls_recall"),
@@ -1199,6 +1253,7 @@ def main() -> None:
         output_dir=args.output_dir,
         same_y_limits=args.same_y_limits,
         val_metric_choice=args.val_metric,
+        train_metric_choice=args.train_metric,
         labels=label_list,
         labels_grouping=labels_grouping_list,
     )
