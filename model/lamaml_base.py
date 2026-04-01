@@ -6,6 +6,7 @@ from torch.autograd import Variable
 from dataclasses import dataclass
 from typing import Optional
 from model.resnet1d import ResNet1D
+from model.detection_replay import noise_label_from_args, unpack_y_to_class_labels
 from utils import misc_utils
 from utils.class_weighted_loss import classification_cross_entropy
 
@@ -92,6 +93,7 @@ class BaseNet(torch.nn.Module):
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
+        self.noise_label: int | None = noise_label_from_args(args)
 
     def _classification_loss(
         self, logits: torch.Tensor, targets: torch.Tensor
@@ -109,7 +111,7 @@ class BaseNet(torch.nn.Module):
         if self.real_epoch > 0 or self.pass_itr > 0:
             return
         batch_x = batch_x.cpu()
-        batch_y = batch_y.cpu()
+        batch_y = unpack_y_to_class_labels(batch_y).long().cpu()
         t = t.cpu()
 
         for i in range(batch_x.shape[0]):
@@ -159,10 +161,12 @@ class BaseNet(torch.nn.Module):
                 x, y, t = MEM[k]
 
                 xi = np.array(x)
-                yi = np.array(y)
+                yi_scalar = int(torch.as_tensor(y).long().flatten()[0].item())
                 ti = np.array(t)
+                if self.noise_label is not None and yi_scalar == self.noise_label:
+                    continue
                 bxs.append(xi)
-                bys.append(yi)
+                bys.append(yi_scalar)
                 bts.append(ti)
 
         # add new data points - ratio of old to new becomes up to 1:1

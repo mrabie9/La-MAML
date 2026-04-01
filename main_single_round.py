@@ -12,7 +12,7 @@ from torch.utils.data import ConcatDataset, DataLoader
 import parser as file_parser
 from main import (
     _split_labels,
-    _noise_label_max_for_task,
+    _noise_label_for_metrics,
     _false_alarm_rate,
     eval_tasks,
     save_results,
@@ -226,7 +226,7 @@ def run_single_round_training(
     time_start = time.time()
 
     current_task_index = 0
-    noise_label_for_task = _noise_label_max_for_task(train_loader)
+    noise_label_for_task = _noise_label_for_metrics(args, train_loader)
 
     for epoch in range(args.n_epochs):
         model.real_epoch = epoch

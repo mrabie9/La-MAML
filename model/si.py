@@ -15,7 +15,13 @@ import torch
 import torch.nn as nn
 
 from model.resnet1d import ResNet1D
-from model.detection_replay import DetectionReplayMixin
+from model.detection_replay import (
+    DetectionReplayMixin,
+    classification_loss_zero_stub,
+    noise_label_from_args,
+    signal_mask_exclude_noise,
+    unpack_y_to_class_labels,
+)
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 from utils.class_weighted_loss import classification_cross_entropy
@@ -71,6 +77,7 @@ class Net(DetectionReplayMixin, nn.Module):
 
         self.net = ResNet1D(n_outputs, args)
         self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
+        self.noise_label: int | None = noise_label_from_args(args)
         self.opt = self._build_optimizer()
 
         self.si_c = float(self.cfg.si_c)
@@ -93,13 +100,14 @@ class Net(DetectionReplayMixin, nn.Module):
         logits = self.net(x)
         if not self.is_task_incremental:
             return logits
-        offset1, offset2 = self._compute_offsets(t)
-        masked = logits.clone()
-        if offset1 > 0:
-            masked[:, :offset1] = -1e9
-        if offset2 < self.n_outputs:
-            masked[:, offset2:] = -1e9
-        return masked
+        cil = kwargs.get("cil_all_seen_upto_task")
+        return misc_utils.apply_task_incremental_logit_mask(
+            logits,
+            t,
+            self.classes_per_task,
+            self.n_outputs,
+            cil_all_seen_upto_task=cil,
+        )
 
     # ------------------------------------------------------------------
     def observe(self, x: torch.Tensor, y: torch.Tensor, t: int) -> Tuple[float, float]:
@@ -124,21 +132,18 @@ class Net(DetectionReplayMixin, nn.Module):
         # )
         # if y_det is not None and self.det_memories > 0:
         #     self._update_det_memory(x, y_det)
-        y_cls = y
-        # det_logits, cls_logits = self.net.forward_heads(x)
+        y_cls = unpack_y_to_class_labels(y)
         cls_logits = self.net.forward_heads(x)[1]
         offset1, offset2 = (
             self._compute_offsets(t)
             if self.is_task_incremental
             else (0, self.n_outputs)
         )
-        # valid_mask = (y_det == 1) & (y_cls >= 0)
-        # if valid_mask.any():
-        if True:
-            # logits = cls_logits[valid_mask]
-            # targets = y_cls[valid_mask].long()
-            logits = cls_logits
-            targets = y_cls.long()
+        signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
+
+        if signal_mask.any():
+            logits = cls_logits[signal_mask]
+            targets = y_cls[signal_mask].long()
             if self.is_task_incremental:
                 logits = logits[:, offset1:offset2]
                 targets = (targets - offset1).long()
@@ -147,9 +152,14 @@ class Net(DetectionReplayMixin, nn.Module):
             )
             preds = torch.argmax(logits, dim=1)
             cls_tr_rec = macro_recall(preds, targets)
-        # else:
-        #     loss_ce = cls_logits.new_zeros(1)
-        #     cls_tr_rec = 0.0
+        else:
+            logits_slice = (
+                cls_logits[:, offset1:offset2]
+                if self.is_task_incremental
+                else cls_logits
+            )
+            loss_ce = classification_loss_zero_stub(logits_slice)
+            cls_tr_rec = 0.0
         # det_loss = self.det_loss(det_logits, y_det.float())
         # det_replay = self._sample_det_memory()
         # if det_replay is not None:

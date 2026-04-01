@@ -4,7 +4,14 @@ import sys
 import torch
 
 from model.resnet1d import ResNet1D
+from model.detection_replay import (
+    classification_loss_zero_stub,
+    noise_label_from_args,
+    signal_mask_exclude_noise,
+    unpack_y_to_class_labels,
+)
 from utils.training_metrics import macro_recall
+from utils import misc_utils
 from utils.class_weighted_loss import classification_cross_entropy
 
 if not sys.warnoptions:
@@ -68,6 +75,7 @@ class Net(torch.nn.Module):
         self.cfg = IidConfig.from_args(args)
         self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
         self.n_outputs = n_outputs
+        self.noise_label: int | None = noise_label_from_args(args)
 
         if self.cfg.arch != "resnet1d":
             raise ValueError(
@@ -81,11 +89,28 @@ class Net(torch.nn.Module):
         self.opt = torch.optim.SGD(self.parameters(), lr=self.cfg.lr, momentum=0.9)
 
     def forward(
-        self, x: torch.Tensor, t: torch.Tensor | int
+        self,
+        x: torch.Tensor,
+        t: torch.Tensor | int,
+        **kwargs,
     ) -> torch.Tensor:  # pragma: no cover - thin wrapper
-        """Return logits for all classes, ignoring task information."""
+        """Return logits for all classes; ``t`` is ignored except for API parity.
+
+        For class-incremental evaluation, ``cil_all_seen_upto_task`` masks logits
+        for classes not yet introduced (standard CIL protocol).
+        """
         del t
-        return self.net(x)
+        logits = self.net(x)
+        cil = kwargs.get("cil_all_seen_upto_task")
+        if cil is None:
+            return logits
+        return misc_utils.apply_task_incremental_logit_mask(
+            logits,
+            0,
+            self.classes_per_task,
+            self.n_outputs,
+            cil_all_seen_upto_task=cil,
+        )
 
     def observe(
         self,
@@ -112,17 +137,27 @@ class Net(torch.nn.Module):
         self.opt.zero_grad()
 
         logits = self.net(x)
-        targets = y.long()
-
-        loss_tensor = classification_cross_entropy(
-            logits, targets, class_weighted_ce=self.class_weighted_ce
-        )
+        targets = unpack_y_to_class_labels(y).long()
+        mask = signal_mask_exclude_noise(targets, self.noise_label)
+        if mask.any():
+            loss_tensor = classification_cross_entropy(
+                logits[mask],
+                targets[mask],
+                class_weighted_ce=self.class_weighted_ce,
+            )
+        else:
+            loss_tensor = classification_loss_zero_stub(logits)
         loss_tensor.backward()
         self.opt.step()
 
         with torch.no_grad():
             preds = torch.argmax(logits, dim=1)
-            cls_tr_rec = macro_recall(preds.detach().cpu(), targets.detach().cpu())
+            if mask.any():
+                cls_tr_rec = macro_recall(
+                    preds[mask].detach().cpu(), targets[mask].detach().cpu()
+                )
+            else:
+                cls_tr_rec = 0.0
 
         return float(loss_tensor.item()), float(cls_tr_rec)
 

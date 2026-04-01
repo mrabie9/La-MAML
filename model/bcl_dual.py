@@ -8,12 +8,17 @@ from dataclasses import dataclass
 
 import torch
 from model.resnet1d import ResNet1D
-from model.detection_replay import DetectionReplayMixin
+from model.detection_replay import (
+    DetectionReplayMixin,
+    classification_loss_zero_stub,
+    noise_label_from_args,
+    signal_mask_exclude_noise,
+    unpack_y_to_class_labels,
+)
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from copy import deepcopy
-from torch.utils.data import DataLoader
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 from utils.class_weighted_loss import classification_cross_entropy
@@ -84,6 +89,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         else:
             self.nc_per_task = n_outputs
+        self.noise_label = noise_label_from_args(args)
         # setup memories: n_memories = total buffer size, split across tasks
         self.current_task = 0
         self.fisher = {}
@@ -186,8 +192,6 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             xx = self.memx[t, :filled]
             yy = self.memy[t, :filled]
             opt = torch.optim.SGD(model.parameters(), self.adapt_lr, momentum=0.9)
-            train = torch.utils.data.TensorDataset(xx, yy)
-            loader = DataLoader(train, batch_size=self.bsz, shuffle=True, num_workers=0)
             for _ in range(self.glances):
                 model.zero_grad()
                 pred = model.forward(xx)
@@ -204,20 +208,21 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         else:
             return 0, self.n_outputs
 
-    def forward(self, x, t, return_feat=False):
+    def forward(self, x, t, return_feat=False, *, cil_all_seen_upto_task=None):
         if self.adapt_ and not self.net.training:
             output = self.models[t](x)
         else:
             output = self.net(x)
 
         if self.is_task_incremental:
-            # make sure we predict classes within the current task
-            offset1, offset2 = self.compute_offsets(t)
-
-            if offset1 > 0:
-                output[:, :offset1].data.fill_(-10e10)
-            if offset2 < self.n_outputs:
-                output[:, int(offset2) : self.n_outputs].data.fill_(-10e10)
+            output = misc_utils.apply_task_incremental_logit_mask(
+                output,
+                t,
+                self.classes_per_task,
+                self.n_outputs,
+                cil_all_seen_upto_task=cil_all_seen_upto_task,
+                fill_value=-10e10,
+            )
         return output
 
     def memory_sampling(self, t: int, valid: bool = False):
@@ -237,16 +242,23 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             mem_y = self.memy[:n_tasks]
             mem_feat = self.mem_feat[:n_tasks]
 
-        total_filled = sum(filled)
-        if total_filled == 0:
+        if sum(filled) == 0:
             return None
 
-        # Build flat index -> (task_idx, slot_idx)
+        # Build flat index -> (task_idx, slot_idx); skip padding / global noise for CE
         flat_to_task_slot = []
         for task_idx in range(n_tasks):
             for slot in range(filled[task_idx]):
+                lab = int(mem_y[task_idx, slot].item())
+                if lab < 0:
+                    continue
+                if self.noise_label is not None and lab == self.noise_label:
+                    continue
                 flat_to_task_slot.append((task_idx, slot))
         flat_to_task_slot = np.array(flat_to_task_slot)
+        total_filled = len(flat_to_task_slot)
+        if total_filled == 0:
+            return None
 
         sz = min(total_filled, self.sz)
         chosen = np.random.choice(total_filled, size=sz, replace=False)
@@ -278,7 +290,6 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         return xx, yy, feat, mask, t_idx.tolist(), sizes
 
     def observe(self, x, y, t):
-        class_counts = getattr(self, "classes_per_task", None)
         # noise_label = None
         # if class_counts is not None:
         #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
@@ -322,6 +333,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         # y = y_cls[signal_mask]
         x_train = self._canonicalize_input(x, detach=False)
         x_for_storage = self._input_for_replay(x)
+        y_work = unpack_y_to_class_labels(y).long()
         if t != self.current_task:
             tt = self.current_task
             previous_filled = int(self.task_mem_filled[tt].item())
@@ -342,15 +354,15 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         task_val_capacity = int(self.task_val_capacities[t])
         if task_val_capacity > 0 and x_train.size(0) > 0:
             n_val_taken = 1
-            _, valy = x_train[0], y[0]
-            x_train, y = x_train[1:], y[1:]
+            _, valy = x_train[0], y_work[0]
+            x_train, y_work = x_train[1:], y_work[1:]
             val_write = int(self.task_val_ptr[t].item())
             # Only rotate in when we're overwriting a slot that has valid data (buffer full)
             val_filled = int(self.task_val_filled[t].item())
             if val_filled >= task_val_capacity:
                 n_rotated_in = 1
                 x_train = torch.cat([x_train, self.valx[t, val_write].unsqueeze(0)])
-                y = torch.cat([y, self.valy[t, val_write].unsqueeze(0)])
+                y_work = torch.cat([y_work, self.valy[t, val_write].unsqueeze(0)])
             self.valx[t, val_write].copy_(x_for_storage[0])
             self.valy[t, val_write].copy_(valy)
             self.task_val_filled[t] = min(
@@ -362,15 +374,15 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             )
             if x_train.size(0) == 0:
                 x_train = x_for_storage[0].unsqueeze(0)
-                y = valy.unsqueeze(0)
+                y_work = valy.unsqueeze(0)
 
         # Replay memory (ring buffer per task); store adapted input
         # Only the "new" samples go to replay; rotated-in val sample is already in val buffer
         self.net.train()
         task_replay_capacity = int(self.task_replay_capacities[t])
-        if task_replay_capacity > 0 and y.data.size(0) > 0:
+        if task_replay_capacity > 0 and y_work.size(0) > 0:
             replay_write = int(self.task_mem_ptr[t].item())
-            bsz = y.data.size(0)
+            bsz = y_work.size(0)
             n_new = (
                 bsz - n_rotated_in
             )  # number of samples to write (exclude rotated-in)
@@ -381,7 +393,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 self.memx[t, replay_write:endcnt].copy_(
                     x_for_storage[replay_start : replay_start + effbsz]
                 )
-                self.memy[t, replay_write:endcnt].copy_(y.data[:effbsz])
+                self.memy[t, replay_write:endcnt].copy_(y_work[:effbsz])
                 self.task_mem_filled[t] = min(
                     task_replay_capacity,
                     int(self.task_mem_filled[t].item()) + effbsz,
@@ -399,21 +411,40 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             for i in range(self.glances):
                 pred = self.forward(x_train, t)
                 logits = pred[:, offset1:offset2]
-                targets = y - offset1
-                invalid = (targets < 0) | (targets >= n_classes_current)
-                if invalid.any():
-                    bad = y[invalid].detach().cpu().unique().tolist()
-                    raise RuntimeError(
-                        f"[BCL_Dual] Classification targets out of range for task {t}: "
-                        f"offset1={offset1}, offset2={offset2}, n_classes={n_classes_current}, "
-                        f"y in [{y.min().item()}, {y.max().item()}], bad global labels: {bad}. "
-                        f"Ensure loader uses global labels for this task."
-                    )
+                targets = y_work - offset1
+                signal_mask = signal_mask_exclude_noise(y_work, self.noise_label)
+                if signal_mask.any():
+                    targets_sig = targets[signal_mask]
+                    invalid = (targets_sig < 0) | (targets_sig >= n_classes_current)
+                    if invalid.any():
+                        bad = (
+                            y_work[signal_mask][invalid]
+                            .detach()
+                            .cpu()
+                            .unique()
+                            .tolist()
+                        )
+                        raise RuntimeError(
+                            f"[BCL_Dual] Classification targets out of range for task {t}: "
+                            f"offset1={offset1}, offset2={offset2}, n_classes={n_classes_current}, "
+                            f"y in [{y_work.min().item()}, {y_work.max().item()}], bad global labels: {bad}. "
+                            f"Ensure loader uses global labels for this task."
+                        )
                 preds = torch.argmax(logits, dim=1)
-                cls_tr_rec.append(macro_recall(preds, targets))
-                loss1 = classification_cross_entropy(
-                    logits, targets, class_weighted_ce=self.class_weighted_ce
-                )
+                if signal_mask.any():
+                    cls_tr_rec.append(
+                        macro_recall(preds[signal_mask], targets[signal_mask])
+                    )
+                else:
+                    cls_tr_rec.append(0.0)
+                if signal_mask.any():
+                    loss1 = classification_cross_entropy(
+                        logits[signal_mask],
+                        targets[signal_mask],
+                        class_weighted_ce=self.class_weighted_ce,
+                    )
+                else:
+                    loss1 = classification_loss_zero_stub(logits)
                 # det_logits, _ = self.net.forward_heads(x_det)
                 # det_loss = self.det_loss(det_logits, y_det.float())
                 # det_replay = self._sample_det_memory()
@@ -462,11 +493,15 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 )
             else:
                 pred = self.forward(x_train, t)
-                outer_loss = classification_cross_entropy(
-                    pred[:, offset1:offset2],
-                    targets,
-                    class_weighted_ce=self.class_weighted_ce,
-                )
+                logits_outer = pred[:, offset1:offset2]
+                if signal_mask.any():
+                    outer_loss = classification_cross_entropy(
+                        logits_outer[signal_mask],
+                        targets[signal_mask],
+                        class_weighted_ce=self.class_weighted_ce,
+                    )
+                else:
+                    outer_loss = classification_loss_zero_stub(logits_outer)
             outer_loss.backward()
             self.inner_opt.step()
             self.zero_grad()

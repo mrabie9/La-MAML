@@ -15,7 +15,13 @@ import random
 
 import sys
 from model.resnet1d import ResNet1D
-from model.detection_replay import DetectionReplayMixin
+from model.detection_replay import (
+    DetectionReplayMixin,
+    classification_loss_zero_stub,
+    noise_label_from_args,
+    signal_mask_exclude_noise,
+    unpack_y_to_class_labels,
+)
 import os
 
 sys.path.insert(
@@ -139,6 +145,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         self.n_outputs = n_outputs
+        self.noise_label: int | None = noise_label_from_args(args)
 
     def _ensure_iq_shape(self, x):
         if x.dim() == 3:
@@ -269,11 +276,12 @@ class Net(DetectionReplayMixin, torch.nn.Module):
 
         x_det = self._prepare_input(x)
         batch_count = x.size(0)
+        y_cls = unpack_y_to_class_labels(y)
         self.net.train()
         if self.gpu:
             self.net.cuda()
         class_counts = getattr(self, "classes_per_task", None)
-        noise_label = None
+        noise_label = self.noise_label
         # if class_counts is not None:
         #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
         #     noise_label = offset2 - 1
@@ -323,28 +331,27 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 if prev_examples_seen < samples_per_task:
                     if self.memx is None:
                         self.memx = x.data.clone()
-                        self.memy = y.data.clone()
+                        self.memy = y_cls.data.clone()
                     else:
                         self.memx = torch.cat((self.memx, x.data.clone()))
-                        self.memy = torch.cat((self.memy, y.data.clone()))
+                        self.memy = torch.cat((self.memy, y_cls.data.clone()))
 
             self.net.zero_grad()
             offset1, offset2 = self.compute_offsets(t)
-            logits = self.netforward(x)[:, offset1:offset2]
-            targets = y - offset1
-            preds = torch.argmax(logits, dim=1)
-            # Report classification recall on non-noise classes only, while
-            # keeping the optimization objective unchanged.
-            if noise_label is not None:
-                cls_metric_mask = y != noise_label
-                cls_tr_rec.append(
-                    macro_recall(preds[cls_metric_mask], targets[cls_metric_mask])
+            logits_full = self.netforward(x)[:, offset1:offset2]
+            signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
+            if signal_mask.any():
+                logits = logits_full[signal_mask]
+                targets = y_cls[signal_mask] - offset1
+                preds = torch.argmax(logits, dim=1)
+                cls_tr_rec.append(macro_recall(preds, targets))
+                loss = classification_cross_entropy(
+                    logits, targets, class_weighted_ce=self.class_weighted_ce
                 )
             else:
-                cls_tr_rec.append(macro_recall(preds, targets))
-            loss = classification_cross_entropy(
-                logits, targets, class_weighted_ce=self.class_weighted_ce
-            )
+                loss = classification_loss_zero_stub(logits_full)
+                cls_tr_rec.append(0.0)
+
             # num_exemplars remains 0 unless final epoch is reached
             if self.num_exemplars > 0:
                 # distillation

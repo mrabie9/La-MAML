@@ -89,6 +89,63 @@ def compute_offsets(task, nc_per_task):
     return int(offset1), int(offset2)
 
 
+def apply_task_incremental_logit_mask(
+    logits: torch.Tensor,
+    task_index: int,
+    nc_per_task,
+    n_outputs: int,
+    *,
+    cil_all_seen_upto_task: int | None = None,
+    fill_value: float = -1e9,
+) -> torch.Tensor:
+    """Apply task-wise or class-incremental (CIL) evaluation logit masking.
+
+    **Task-incremental (TIL) inference:** only the logit block for ``task_index``
+    is left active; past and future classes are masked.
+
+    **CIL evaluation (``cil_all_seen_upto_task`` set):** all classes introduced in
+    tasks ``0..cil_all_seen_upto_task`` (inclusive) stay active; only *future*
+    task logits are masked. This matches standard CIL eval where the model must
+    classify among every class seen so far without being told the sample's task ID
+    beyond what the label space implies.
+
+    Args:
+        logits: Unmasked classifier output ``(batch, n_classes)``.
+        task_index: Task index used only for the TIL branch (ignored when
+            ``cil_all_seen_upto_task`` is set).
+        nc_per_task: Per-task class counts or scalar (same convention as
+            :func:`compute_offsets`).
+        n_outputs: Logit width (truncate mask at this index).
+        cil_all_seen_upto_task: If not ``None``, cumulative CIL mask through this
+            task index (inclusive). If ``None``, use TIL masking for
+            ``task_index``.
+        fill_value: Mask fill value (large negative logit).
+
+    Returns:
+        Masked logits (clone); input tensor is not modified.
+
+    Usage:
+        >>> # TIL: only task 1 classes active
+        >>> y = apply_task_incremental_logit_mask(logits, 1, [5, 5, 5], 15)
+        >>> # CIL after task 1: classes from tasks 0 and 1 active
+        >>> y = apply_task_incremental_logit_mask(
+        ...     logits, 1, [5, 5, 5], 15, cil_all_seen_upto_task=1
+        ... )
+    """
+    masked = logits.clone()
+    if cil_all_seen_upto_task is not None:
+        _, offset2 = compute_offsets(cil_all_seen_upto_task, nc_per_task)
+        if offset2 < n_outputs:
+            masked[:, offset2:].fill_(fill_value)
+        return masked
+    offset1, offset2 = compute_offsets(task_index, nc_per_task)
+    if offset1 > 0:
+        masked[:, :offset1].fill_(fill_value)
+    if offset2 < n_outputs:
+        masked[:, offset2:].fill_(fill_value)
+    return masked
+
+
 def to_onehot(targets, n_classes):
     onehot = torch.zeros(targets.shape[0], n_classes).to(targets.device)
     onehot.scatter_(dim=1, index=targets.long().view(-1, 1), value=1.0)

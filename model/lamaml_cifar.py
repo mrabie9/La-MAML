@@ -1,13 +1,19 @@
 import math
 import torch
 import torch.nn as nn
-from model.lamaml_base import *
-from model.detection_replay import DetectionReplayMixin
+from model.lamaml_base import *  # noqa: F403
+from model.detection_replay import (
+    DetectionReplayMixin,
+    classification_loss_zero_stub,
+    signal_mask_exclude_noise,
+    unpack_y_to_class_labels,
+)
 from utils.training_metrics import macro_recall
 from utils import misc_utils
+from utils.class_weighted_loss import classification_cross_entropy
 
 
-class Net(DetectionReplayMixin, BaseNet):
+class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
 
     def __init__(self, n_inputs, n_outputs, n_tasks, args):
         super(Net, self).__init__(n_inputs, n_outputs, n_tasks, args)
@@ -23,9 +29,13 @@ class Net(DetectionReplayMixin, BaseNet):
     def take_loss(self, t, logits, y):
         # compute loss on data from a single task
         offset1, offset2 = self.compute_offsets(t)
-        loss = self._classification_loss(logits[:, offset1:offset2], y - offset1)
-
-        return loss
+        y_cls = unpack_y_to_class_labels(y).long()
+        narrow = logits[:, offset1:offset2]
+        targets = y_cls - offset1
+        mask = signal_mask_exclude_noise(y_cls, self.noise_label)
+        if mask.any():
+            return self._classification_loss(narrow[mask], targets[mask])
+        return classification_loss_zero_stub(narrow)
 
     def take_multitask_loss(self, bt, t, logits, y):
         # compute loss on data from a multiple tasks
@@ -33,24 +43,36 @@ class Net(DetectionReplayMixin, BaseNet):
         # logit vector are different and we nly want to compute loss on the relevant positions
         # since this is a task incremental setting
 
-        loss = 0.0
-
+        if len(bt) == 0:
+            return torch.zeros((), device=logits.device, dtype=logits.dtype)
+        loss = torch.zeros((), device=logits.device, dtype=logits.dtype)
         for i, ti in enumerate(bt):
             offset1, offset2 = self.compute_offsets(ti)
-            loss += self._classification_loss(
-                logits[i, offset1:offset2].unsqueeze(0), y[i].unsqueeze(0) - offset1
+            narrow = logits[i, offset1:offset2].unsqueeze(0)
+            y_i = int(y[i].item())
+            if self.noise_label is not None and y_i == self.noise_label:
+                loss = loss + classification_loss_zero_stub(narrow.squeeze(0))
+                continue
+            loss = loss + self._classification_loss(
+                narrow,
+                torch.tensor(
+                    [y_i - offset1],
+                    device=logits.device,
+                    dtype=torch.long,
+                ),
             )
         return loss / len(bt)
 
-    def forward(self, x, t):
+    def forward(self, x, t, *, cil_all_seen_upto_task=None):
         output = self.net.forward(x)
-        # make sure we predict classes within the current task
-        offset1, offset2 = self.compute_offsets(t)
-        if offset1 > 0:
-            output[:, :offset1].data.fill_(-10e10)
-        if offset2 < self.n_outputs:
-            output[:, int(offset2) : self.n_outputs].data.fill_(-10e10)
-        return output
+        return misc_utils.apply_task_incremental_logit_mask(
+            output,
+            t,
+            self.classes_per_task,
+            self.n_outputs,
+            cil_all_seen_upto_task=cil_all_seen_upto_task,
+            fill_value=-10e10,
+        )
 
     def meta_loss(self, x, fast_weights, y, bt, t):
         """
@@ -125,7 +147,6 @@ class Net(DetectionReplayMixin, BaseNet):
                 y = tuple(yi[perm] if yi is not None else None for yi in y)
             else:
                 y = y[perm]
-            class_counts = getattr(self, "classes_per_task", None)
             # noise_label = None
             # if class_counts is not None:
             #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
@@ -184,7 +205,8 @@ class Net(DetectionReplayMixin, BaseNet):
 
             # get a batch by augmented incming data with old task data, used for
             # computing meta-loss
-            bx, by, bt = self.getBatch(x.detach().cpu().numpy(), y.cpu().numpy(), t)
+            y_np = unpack_y_to_class_labels(y).long().cpu().numpy()
+            bx, by, bt = self.getBatch(x.detach().cpu().numpy(), y_np, t)
 
             for i in range(n_batches):
 
@@ -206,6 +228,9 @@ class Net(DetectionReplayMixin, BaseNet):
                     preds_list = []
                     target_list = []
                     for sample_idx, task_idx in enumerate(bt):
+                        y_s = int(by[sample_idx].item())
+                        if self.noise_label is not None and y_s == self.noise_label:
+                            continue
                         offset1_s, offset2_s = self.compute_offsets(int(task_idx))
                         preds = torch.argmax(
                             logits[sample_idx, offset1_s:offset2_s], dim=0
@@ -253,11 +278,18 @@ class Net(DetectionReplayMixin, BaseNet):
                 offset1, offset2 = self.compute_offsets(t)
                 self.net.zero_grad(set_to_none=True)
                 live_logits = self.net.forward(raw_x.detach())
-                live_loss = classification_cross_entropy(
-                    live_logits[:, offset1:offset2],
-                    y - offset1,
-                    class_weighted_ce=self.class_weighted_ce,
-                )
+                narrow = live_logits[:, offset1:offset2]
+                y_live = unpack_y_to_class_labels(y).long()
+                tgt = y_live - offset1
+                mask_live = signal_mask_exclude_noise(y_live, self.noise_label)
+                if mask_live.any():
+                    live_loss = classification_cross_entropy(
+                        narrow[mask_live],
+                        tgt[mask_live],
+                        class_weighted_ce=self.class_weighted_ce,
+                    )
+                else:
+                    live_loss = classification_loss_zero_stub(narrow)
                 live_loss.backward()
                 adapter_module = getattr(self.net.model, "input_adapter", None)
                 if adapter_module is not None:

@@ -8,7 +8,13 @@ from dataclasses import dataclass
 
 import torch
 from model.resnet1d import ResNet1D
-from model.detection_replay import DetectionReplayMixin
+from model.detection_replay import (
+    DetectionReplayMixin,
+    classification_loss_zero_stub,
+    noise_label_from_args,
+    signal_mask_exclude_noise,
+    unpack_y_to_class_labels,
+)
 import torch.nn as nn
 import numpy as np
 from utils.training_metrics import macro_recall
@@ -81,6 +87,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         else:
             self.nc_per_task = n_outputs
+        self.noise_label = noise_label_from_args(args)
         # setup memories
         self.current_task = 0
         self.fisher = {}
@@ -158,17 +165,18 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 continue
             yield param
 
-    def forward(self, x, t, return_feat=False):
+    def forward(self, x, t, return_feat=False, *, cil_all_seen_upto_task=None):
         output = self.net(x)
 
         if self.is_task_incremental:
-            # make sure we predict classes within the current task
-            offset1, offset2 = self.compute_offsets(t)
-
-            if offset1 > 0:
-                output[:, :offset1].data.fill_(-10e10)
-            if offset2 < self.n_outputs:
-                output[:, int(offset2) : self.n_outputs].data.fill_(-10e10)
+            output = misc_utils.apply_task_incremental_logit_mask(
+                output,
+                t,
+                self.classes_per_task,
+                self.n_outputs,
+                cil_all_seen_upto_task=cil_all_seen_upto_task,
+                fill_value=-10e10,
+            )
         return output
 
     def memory_sampling(self, t):
@@ -176,14 +184,26 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         total = sum(filled_counts)
         if total == 0:
             return None
-        sz = int(min(total, self.sz))
-        flat_indices = np.random.choice(total, sz, replace=False)
+        cum = np.cumsum([0] + filled_counts)
+        valid_flat: list[int] = []
+        for task_idx in range(t):
+            for sample_idx in range(filled_counts[task_idx]):
+                lab = int(self.memy[task_idx, sample_idx].item())
+                if lab < 0:
+                    continue
+                if self.noise_label is not None and lab == self.noise_label:
+                    continue
+                valid_flat.append(int(cum[task_idx] + sample_idx))
+        if not valid_flat:
+            return None
+        sz = int(min(len(valid_flat), self.sz))
+        flat_indices = np.random.choice(len(valid_flat), sz, replace=False)
+        chosen = [valid_flat[i] for i in flat_indices]
 
         # map flat indices to task/sample indices
         t_idx_list = []
         s_idx_list = []
-        cum = np.cumsum([0] + filled_counts)
-        for fi in flat_indices:
+        for fi in chosen:
             task_idx = max(i for i in range(len(cum) - 1) if cum[i] <= fi)
             sample_idx = fi - cum[task_idx]
             t_idx_list.append(task_idx)
@@ -245,16 +265,17 @@ class Net(DetectionReplayMixin, torch.nn.Module):
 
         # x = x[signal_mask]
         # y = y_cls[signal_mask]
+        y_work = unpack_y_to_class_labels(y).long()
         task_capacity = int(self.task_memory_capacities[t])
         if task_capacity > 0:
             write_pointer = int(self.task_mem_ptr[t].item())
-            bsz = y.data.size(0)
+            bsz = y_work.data.size(0)
             endcnt = min(write_pointer + bsz, task_capacity)
             effbsz = endcnt - write_pointer
             if effbsz > 0:
                 x_for_storage = self._input_for_replay(x)
                 self.memx[t, write_pointer:endcnt].copy_(x_for_storage.data[:effbsz])
-                self.memy[t, write_pointer:endcnt].copy_(y.data[:effbsz])
+                self.memy[t, write_pointer:endcnt].copy_(y_work.data[:effbsz])
                 filled_before_update = int(self.task_mem_filled[t].item())
                 self.task_mem_filled[t] = min(
                     task_capacity, filled_before_update + effbsz
@@ -274,23 +295,29 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             self.net.zero_grad()
             loss1 = torch.tensor(0.0).cuda()
             loss2 = torch.tensor(0.0).cuda()
-            loss3 = torch.tensor(0.0).cuda()
 
             offset1, offset2 = self.compute_offsets(t)
             pred = self.forward(x, t, True)
             logits = pred[:, offset1:offset2]
-            targets = y - offset1
-            if targets.min() < 0 or targets.max() >= logits.size(1):
-                raise ValueError(
-                    f"Target out of range for task {t}: "
-                    f"min={int(targets.min())}, max={int(targets.max())}, "
-                    f"class_count={logits.size(1)}, offset=({offset1},{offset2})"
+            targets = y_work - offset1
+            signal_mask = signal_mask_exclude_noise(y_work, self.noise_label)
+            if signal_mask.any():
+                targets_sig = targets[signal_mask]
+                if targets_sig.min() < 0 or targets_sig.max() >= logits.size(1):
+                    raise ValueError(
+                        f"Target out of range for task {t}: "
+                        f"min={int(targets_sig.min())}, max={int(targets_sig.max())}, "
+                        f"class_count={logits.size(1)}, offset=({offset1},{offset2})"
+                    )
+                loss1 = classification_cross_entropy(
+                    logits[signal_mask],
+                    targets_sig,
+                    class_weighted_ce=self.class_weighted_ce,
                 )
+            else:
+                loss1 = classification_loss_zero_stub(logits)
             preds = torch.argmax(logits, dim=1)
             cls_tr_rec.append(macro_recall(preds, targets))
-            loss1 = classification_cross_entropy(
-                logits, targets, class_weighted_ce=self.class_weighted_ce
-            )
             if t > 0:
                 sampled = self.memory_sampling(t)
                 if sampled is not None:

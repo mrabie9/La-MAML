@@ -20,6 +20,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from model.resnet1d import AdcIqAdapter, ResNet1D
+from model.detection_replay import (
+    classification_loss_zero_stub,
+    noise_label_from_args,
+    signal_mask_exclude_noise,
+    unpack_y_to_class_labels,
+)
 from utils.iq_features import append_iq_augmented_features
 from utils.training_metrics import macro_recall
 from utils import misc_utils
@@ -492,6 +498,7 @@ class Net(nn.Module):
         self._last_observe_task_index: Optional[int] = None
         self._last_observe_predictions_cpu: Optional[torch.Tensor] = None
         self._last_observe_labels_cpu: Optional[torch.Tensor] = None
+        self.noise_label: int | None = noise_label_from_args(args)
 
     @contextmanager
     def _temporarily_enable_bn_training(self):
@@ -558,6 +565,9 @@ class Net(nn.Module):
             y_cls = torch.as_tensor(y_cls)
         if y_det is not None and not torch.is_tensor(y_det):
             y_det = torch.as_tensor(y_det)
+        y_cls_glob = unpack_y_to_class_labels(
+            (y_cls, y_det) if y_det is not None else y_cls
+        ).long()
         if (self.current_task is None) or (t != self.current_task):
             if self.current_task is not None:
                 self.model_old = self._snapshot_model()
@@ -567,7 +577,7 @@ class Net(nn.Module):
         device = self._device()
 
         x_cls = x
-        y_cls_filtered = y_cls
+        y_cls_filtered = y_cls_glob
         # if y_det is not None:
         #     signal_mask = (y_det == 1) & (y_cls >= 0)
         #     if not signal_mask.any():
@@ -586,20 +596,24 @@ class Net(nn.Module):
         #     x_cls = x[signal_mask]
         #     y_cls_filtered = y_cls[signal_mask]
 
+        signal_mask = signal_mask_exclude_noise(y_cls_filtered, self.noise_label)
         if self.split:
             offset1, _ = self.compute_offsets(t)
             y_local = y_cls_filtered.clone() - offset1
             task_classes = self.classes_per_task[t]
-            if (y_local.min() < 0) or (y_local.max() >= task_classes):
-                raise ValueError(
-                    f"Labels out of range for task {t}: expected in [0, {task_classes - 1}] after offset, got "
-                    f"[{int(y_local.min())}, {int(y_local.max())}]"
-                )
+            if signal_mask.any():
+                y_sig = y_local[signal_mask]
+                if (y_sig.min() < 0) or (y_sig.max() >= task_classes):
+                    raise ValueError(
+                        f"Labels out of range for task {t}: expected in [0, {task_classes - 1}] after offset, got "
+                        f"[{int(y_sig.min())}, {int(y_sig.max())}]"
+                    )
             y_cls_filtered = y_local
 
         x = x.to(device)
         x_cls = x_cls.to(device)
         y_cls_filtered = y_cls_filtered.to(device)
+        signal_mask = signal_mask.to(device)
         if y_det is not None:
             y_det = y_det.to(device)
 
@@ -609,7 +623,10 @@ class Net(nn.Module):
         logits = outputs[t] if self.split else outputs
 
         preds = torch.argmax(logits, dim=1)
-        cls_tr_rec = macro_recall(preds, y_cls_filtered)
+        if signal_mask.any():
+            cls_tr_rec = macro_recall(preds[signal_mask], y_cls_filtered[signal_mask])
+        else:
+            cls_tr_rec = 0.0
         self._last_observe_task_index = int(t)
         self._last_observe_predictions_cpu = preds.detach().cpu().long()
         self._last_observe_labels_cpu = y_cls_filtered.detach().cpu().long()
@@ -619,12 +636,15 @@ class Net(nn.Module):
             predictions=preds,
             logits=logits,
         )
-        loss = classification_cross_entropy(
-            logits,
-            y_cls_filtered,
-            class_weighted_ce=bool(self.cfg.class_weighted_ce),
-        )
-        loss = self._apply_regularisation(loss, y_cls_filtered.size(0))
+        if signal_mask.any():
+            ce = classification_cross_entropy(
+                logits[signal_mask],
+                y_cls_filtered[signal_mask],
+                class_weighted_ce=bool(self.cfg.class_weighted_ce),
+            )
+        else:
+            ce = classification_loss_zero_stub(logits)
+        loss = self._apply_regularisation(ce, y_cls_filtered.size(0))
 
         self.optimizer.zero_grad(set_to_none=True)
         loss.backward()

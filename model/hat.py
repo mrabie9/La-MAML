@@ -17,6 +17,12 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
+from model.detection_replay import (
+    classification_loss_zero_stub,
+    noise_label_from_args,
+    signal_mask_exclude_noise,
+    unpack_y_to_class_labels,
+)
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 from utils.class_weighted_loss import classification_cross_entropy
@@ -524,6 +530,7 @@ class Net(nn.Module):
         self.bridge = HatBackbone(n_inputs, n_tasks, n_outputs, self.cfg, args)
 
         self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
+        self.noise_label: int | None = noise_label_from_args(args)
 
         params: Iterable[nn.Parameter] = self.bridge.parameters()
         if self.cfg.optimizer.lower() == "adam":
@@ -686,11 +693,19 @@ class Net(nn.Module):
         # for mask in masks:
         #     print(mask.mean(), mask.min())
         offset1, offset2 = misc_utils.compute_offsets(t, self.classes_per_task)
-        logits_task = logits[:, offset1:offset2]
-        targets = (y - offset1).long()
-        loss, _ = self._criterion(logits_task, targets, masks)
-        preds = torch.argmax(logits_task, dim=1)
-        cls_tr_rec = macro_recall(preds, targets)
+        y_cls = unpack_y_to_class_labels(y)
+        signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
+        logits_task_full = logits[:, offset1:offset2]
+
+        if signal_mask.any():
+            logits_task = logits_task_full[signal_mask]
+            targets = (y_cls[signal_mask] - offset1).long()
+            loss, _ = self._criterion(logits_task, targets, [])
+            preds = torch.argmax(logits_task, dim=1)
+            cls_tr_rec = macro_recall(preds, targets)
+        else:
+            loss = classification_loss_zero_stub(logits_task_full)
+            cls_tr_rec = 0.0
         loss.backward()
 
         if self.mask_back:

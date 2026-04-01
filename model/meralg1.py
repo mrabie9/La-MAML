@@ -103,14 +103,17 @@ class Net(nn.Module):
         if self.use_cuda:
             self.net = self.net.cuda()
 
-    def forward(self, x, t):
+    def forward(self, x, t, *, cil_all_seen_upto_task=None):
         output = self.netforward(x)
         if self.is_iq:
-            offset1, offset2 = self.compute_offsets(t)
-            if offset1 > 0:
-                output[:, :offset1].data.fill_(-10e10)
-            if offset2 < self.n_outputs:
-                output[:, int(offset2) : self.n_outputs].data.fill_(-10e10)
+            output = misc_utils.apply_task_incremental_logit_mask(
+                output,
+                t,
+                self.classes_per_task,
+                self.n_outputs,
+                cil_all_seen_upto_task=cil_all_seen_upto_task,
+                fill_value=-10e10,
+            )
         return output
 
     def compute_offsets(self, task):

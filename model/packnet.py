@@ -18,6 +18,12 @@ import torch
 import torch.nn as nn
 from torch.nn.modules.batchnorm import _BatchNorm
 
+from model.detection_replay import (
+    classification_loss_zero_stub,
+    noise_label_from_args,
+    signal_mask_exclude_noise,
+    unpack_y_to_class_labels,
+)
 from model.resnet1d import ResNet1D
 from utils.training_metrics import macro_recall
 from utils import misc_utils
@@ -72,6 +78,7 @@ class Net(nn.Module):
         self._named_modules = dict(self.net.named_modules())
         self._non_prunable_params = self._compute_non_prunable_params()
         self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
+        self.noise_label: int | None = noise_label_from_args(args)
         self.opt = self._build_optimizer()
         self.clipgrad = self.cfg.clipgrad
         self.prune_perc = float(1 / self.cfg.n_tasks)
@@ -110,13 +117,14 @@ class Net(nn.Module):
 
         if not self.is_task_incremental:
             return logits
-        offset1, offset2 = self._compute_offsets(t)
-        masked = logits.clone()
-        if offset1 > 0:
-            masked[:, :offset1] = -1e9
-        if offset2 < self.n_outputs:
-            masked[:, offset2:] = -1e9
-        return masked
+        cil = kwargs.get("cil_all_seen_upto_task")
+        return misc_utils.apply_task_incremental_logit_mask(
+            logits,
+            t,
+            self.classes_per_task,
+            self.n_outputs,
+            cil_all_seen_upto_task=cil,
+        )
 
     # ------------------------------------------------------------------
     def observe(self, x: torch.Tensor, y: torch.Tensor, t: int) -> Tuple[float, float]:
@@ -135,14 +143,21 @@ class Net(nn.Module):
         self.net.train()
         logits = self.net(x)
         offset1, offset2 = self._compute_offsets(t)
-        logits = logits[:, offset1:offset2]
-        targets = (y - offset1).long()
+        y_cls = unpack_y_to_class_labels(y)
+        signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
+        logits_task = logits[:, offset1:offset2]
 
-        loss = classification_cross_entropy(
-            logits, targets, class_weighted_ce=self.class_weighted_ce
-        )
-        preds = torch.argmax(logits, dim=1)
-        cls_tr_rec = macro_recall(preds, targets)
+        if signal_mask.any():
+            logits = logits_task[signal_mask]
+            targets = (y_cls[signal_mask] - offset1).long()
+            loss = classification_cross_entropy(
+                logits, targets, class_weighted_ce=self.class_weighted_ce
+            )
+            preds = torch.argmax(logits, dim=1)
+            cls_tr_rec = macro_recall(preds, targets)
+        else:
+            loss = classification_loss_zero_stub(logits_task)
+            cls_tr_rec = 0.0
 
         self.opt.zero_grad()
         loss.backward()

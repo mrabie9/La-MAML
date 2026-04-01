@@ -27,6 +27,8 @@ def compute_inverse_frequency_class_weights(
         >>> loss = F.cross_entropy(logits, y.long(), weight=w)
     """
     labels_long = labels.long().flatten()
+    in_range = (labels_long >= 0) & (labels_long < num_classes)
+    labels_long = labels_long[in_range]
     label_counts = torch.bincount(labels_long, minlength=num_classes).float().to(device)
     observed_mask = label_counts > 0
     weights = torch.ones(num_classes, device=device, dtype=torch.float32)

@@ -55,6 +55,83 @@ def ensure_iq_two_channel(iq_array: np.ndarray) -> np.ndarray:
     return np.ascontiguousarray(arr)
 
 
+def iq_numpy_batch_to_three_adc_channel_first(x: np.ndarray) -> np.ndarray:
+    """Reshape batched IQ features to ``(N, 3, L)`` float32 (ADC0 = I/Q interleaved).
+
+    This matches the tensor layout produced by :class:`IQDataGenerator` when
+    ``target_adc_channels=3``: row 0 carries interleaved I and Q along length ``L``;
+    rows 1 and 2 are zeros. The ResNet1D 3-ADC path then views each row as
+    interleaved pairs: ``(N, 3, L)`` -> ``(N, 3, 2, L//2)``.
+
+    Args:
+        x: Batch with one of the following shapes:
+            ``(N, F)`` — flat interleaved I/Q (``F`` even);
+            ``(N, 2, L)`` — channel-first I and Q;
+            ``(N, L, 2)`` — channel-last I/Q;
+            ``(N, 3, L)`` — already 3 ADC rows (returned as contiguous float32).
+
+    Returns:
+        Array of shape ``(N, 3, L)`` with ``L`` even when starting from flat or
+        2-channel inputs.
+
+    Raises:
+        ValueError: If ``x`` has an unsupported rank or an odd flat length.
+
+    Usage:
+        >>> x_flat = np.zeros((4, 1024), dtype=np.float32)
+        >>> y = iq_numpy_batch_to_three_adc_channel_first(x_flat)
+        >>> y.shape
+        (4, 3, 1024)
+    """
+    arr = np.asarray(x)
+    if arr.ndim == 2:
+        batch, features = arr.shape
+        if batch == 0:
+            return np.zeros((0, 3, 0), dtype=np.float32)
+        if features % 2 != 0:
+            raise ValueError(
+                "Flat IQ requires an even feature count for I/Q pairs; "
+                f"got shape {tuple(arr.shape)}"
+            )
+        arr = arr.astype(np.float32, copy=False)
+        i_ch = arr[:, 0::2]
+        q_ch = arr[:, 1::2]
+        interleaved = np.empty((batch, features), dtype=np.float32)
+        interleaved[:, 0::2] = i_ch
+        interleaved[:, 1::2] = q_ch
+        out = np.zeros((batch, 3, features), dtype=np.float32)
+        out[:, 0, :] = interleaved
+        return np.ascontiguousarray(out)
+
+    if arr.ndim == 3:
+        if arr.shape[0] == 0:
+            return np.zeros((0, 3, 0), dtype=np.float32)
+        # Channel-last (N, L, 2) or (N, L, 3)
+        if arr.shape[-1] == 2 and arr.shape[-2] != 2:
+            arr = np.ascontiguousarray(
+                np.swapaxes(arr.astype(np.float32, copy=False), 1, 2)
+            )
+            return iq_numpy_batch_to_three_adc_channel_first(arr)
+
+        if arr.shape[1] == 3:
+            return np.ascontiguousarray(arr.astype(np.float32, copy=False))
+
+        if arr.shape[1] == 2:
+            arr = arr.astype(np.float32, copy=False)
+            n_batch, _two, length = arr.shape
+            interleaved = np.empty((n_batch, 2 * length), dtype=np.float32)
+            interleaved[:, 0::2] = arr[:, 0, :]
+            interleaved[:, 1::2] = arr[:, 1, :]
+            out = np.zeros((n_batch, 3, 2 * length), dtype=np.float32)
+            out[:, 0, :] = interleaved
+            return np.ascontiguousarray(out)
+
+    raise ValueError(
+        "iq_numpy_batch_to_three_adc_channel_first expects x of shape "
+        f"(N, F), (N, 2, L), (N, L, 2), or (N, 3, L); got {tuple(arr.shape)}"
+    )
+
+
 class IQDataGenerator(Dataset):
     """Dataset for raw in-phase/quadrature (IQ) samples.
 
