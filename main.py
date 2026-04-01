@@ -167,6 +167,73 @@ def _split_eval_output(output):
     return output, None, None, None, None
 
 
+def _scalar_metric_at_task_index(metrics: object, task_index: int) -> float:
+    """Return the validation metric for one task index from evaluator output.
+
+    Args:
+        metrics: Per-task list/tuple from ``eval_tasks`` / ``eval_class_tasks``, or scalar.
+        task_index: Zero-based continual task id.
+
+    Returns:
+        Metric as float, or NaN if missing or out of range.
+    """
+    if metrics is None:
+        return float("nan")
+    if isinstance(metrics, (list, tuple)):
+        if task_index < 0 or task_index >= len(metrics):
+            return float("nan")
+        value = metrics[task_index]
+        if torch.is_tensor(value):
+            return float(value.detach().cpu().item())
+        return float(value)
+    if torch.is_tensor(metrics):
+        return float(metrics.detach().cpu().item())
+    return float(metrics)
+
+
+def _mean_metric_across_tasks(metrics: object) -> float:
+    """Mean of a per-task metric sequence (e.g. macro F1 averaged over tasks)."""
+    if metrics is None:
+        return float("nan")
+    if isinstance(metrics, (list, tuple)):
+        if not metrics:
+            return float("nan")
+        floats: List[float] = []
+        for value in metrics:
+            if torch.is_tensor(value):
+                floats.append(float(value.detach().cpu().item()))
+            else:
+                floats.append(float(value))
+        return float(sum(floats) / len(floats))
+    if torch.is_tensor(metrics):
+        return float(metrics.detach().cpu().item())
+    return float(metrics)
+
+
+def _per_task_metric_array(metrics: object, num_tasks: int) -> np.ndarray:
+    """Build a fixed-length per-task metric vector for zero-shot NPZ storage.
+
+    Args:
+        metrics: Per-task list from an evaluator, or ``None``.
+        num_tasks: Number of tasks seen so far (length of ``test_task_loaders``).
+
+    Returns:
+        ``float`` array of shape ``(num_tasks,)`` with NaNs for missing tasks/metrics.
+    """
+    row = np.full((num_tasks,), np.nan, dtype=float)
+    if metrics is None or num_tasks <= 0:
+        return row
+    if isinstance(metrics, (list, tuple)):
+        for task_index, value in enumerate(metrics):
+            if task_index >= num_tasks:
+                break
+            if torch.is_tensor(value):
+                row[task_index] = float(value.detach().cpu().item())
+            else:
+                row[task_index] = float(value)
+    return row
+
+
 def _get_det_logits(model, xb, t):
     if hasattr(model, "forward_heads"):
         det_logits, _ = model.forward_heads(xb)
@@ -701,6 +768,37 @@ def life_experience(model, inc_loader, args):
         current_task = task_info["task"]
         noise_label_for_task = _noise_label_max_for_task(train_loader)
 
+        log_state(
+            args.state_logging,
+            "Task {}: zero-shot validation (pre-train)".format(current_task),
+        )
+        zero_shot_raw = evaluator(model, test_task_loaders, args)
+        zs_rec, zs_prec, zs_f1, zs_det, zs_pfa = _split_eval_output(zero_shot_raw)
+        num_tasks_now = len(test_task_loaders)
+        current_task_idx = task_info["task"]
+        zero_shot_rec_cls = _scalar_metric_at_task_index(zs_rec, current_task_idx)
+        zero_shot_prec_cls = _scalar_metric_at_task_index(zs_prec, current_task_idx)
+        zero_shot_f1_cls = _scalar_metric_at_task_index(zs_f1, current_task_idx)
+        zero_shot_det = _scalar_metric_at_task_index(zs_det, current_task_idx)
+        zero_shot_pfa = _scalar_metric_at_task_index(zs_pfa, current_task_idx)
+        zero_shot_total_f1 = _mean_metric_across_tasks(zs_f1)
+        zero_shot_per_task_rec_cls = _per_task_metric_array(zs_rec, num_tasks_now)
+        zero_shot_per_task_prec_cls = _per_task_metric_array(zs_prec, num_tasks_now)
+        zero_shot_per_task_f1_cls = _per_task_metric_array(zs_f1, num_tasks_now)
+        zero_shot_per_task_det = _per_task_metric_array(zs_det, num_tasks_now)
+        zero_shot_per_task_pfa = _per_task_metric_array(zs_pfa, num_tasks_now)
+        print(
+            "---- Zero-shot (pre-train) task {}: rec_cls {:.4f} | prec_cls {:.4f} | f1_cls {:.4f} | det {:.4f} | pfa {:.4f} | total_f1 {:.4f} ----".format(
+                current_task,
+                zero_shot_rec_cls,
+                zero_shot_prec_cls,
+                zero_shot_f1_cls,
+                zero_shot_det,
+                zero_shot_pfa,
+                zero_shot_total_f1,
+            )
+        )
+
         # Per-epoch training metrics for this task (classification + detection).
         per_epoch_train_cls_rec = []
         per_epoch_train_cls_prec = []
@@ -1160,6 +1258,17 @@ def life_experience(model, inc_loader, args):
             "losses": losses,
             "cls_tr_rec": result_acc_tr,
             "val_acc": result_acc_val,
+            "zero_shot_rec_cls": np.float64(zero_shot_rec_cls),
+            "zero_shot_prec_cls": np.float64(zero_shot_prec_cls),
+            "zero_shot_f1_cls": np.float64(zero_shot_f1_cls),
+            "zero_shot_det": np.float64(zero_shot_det),
+            "zero_shot_pfa": np.float64(zero_shot_pfa),
+            "zero_shot_total_f1": np.float64(zero_shot_total_f1),
+            "zero_shot_per_task_rec_cls": zero_shot_per_task_rec_cls,
+            "zero_shot_per_task_prec_cls": zero_shot_per_task_prec_cls,
+            "zero_shot_per_task_f1_cls": zero_shot_per_task_f1_cls,
+            "zero_shot_per_task_det": zero_shot_per_task_det,
+            "zero_shot_per_task_pfa": zero_shot_per_task_pfa,
         }
         if result_val_f1_flat is not None:
             save_payload["val_f1"] = result_val_f1_flat
