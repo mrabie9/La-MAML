@@ -474,6 +474,7 @@ class Net(nn.Module):
         for module in self._iter_bayesian_modules(self.model):
             mu_params.extend(module.mu_parameters())
             rho_params.extend(module.rho_parameters())
+        mu_params.extend(self.model.input_adapter.parameters())
 
         self.optimizer = torch.optim.Adam(
             [

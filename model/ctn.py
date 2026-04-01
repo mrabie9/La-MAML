@@ -341,6 +341,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         #     return float(det_loss.item()), 0.0
         # x = x[signal_mask]
         # y = y_cls[signal_mask]
+        x_train = self._canonicalize_input(x, detach=False)
         x_for_storage = self._input_for_replay(x)
 
         # if task has changed, run model on val set of previous task to get soft targets
@@ -363,20 +364,19 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         n_val_taken = 0
         n_rotated_in = 0
         task_val_capacity = int(self.task_val_capacities[t])
-        if task_val_capacity > 0 and x.size(0) > 0:
+        if task_val_capacity > 0 and x_train.size(0) > 0:
             n_val_taken = 1
-            incoming_val_x = x[0]
             incoming_val_y = y[0]
-            x = x[1:]
+            x_train = x_train[1:]
             y = y[1:]
-            # Use adapted (canonical) form so channel count matches val buffer (e.g. 2-ch)
-            x = x_for_storage[1 : 1 + x.size(0)]
             val_write_pointer = int(self.task_val_ptr[t].item())
             val_filled = int(self.task_val_filled[t].item())
             # Only rotate in when overwriting a slot that has valid data (buffer full)
             if val_filled >= task_val_capacity:
                 n_rotated_in = 1
-                x = torch.cat([x, self.valx[t, val_write_pointer].unsqueeze(0)])
+                x_train = torch.cat(
+                    [x_train, self.valx[t, val_write_pointer].unsqueeze(0)]
+                )
                 y = torch.cat([y, self.valy[t, val_write_pointer].unsqueeze(0)])
             self.valx[t, val_write_pointer].copy_(x_for_storage[0])
             self.valy[t, val_write_pointer].copy_(incoming_val_y)
@@ -389,8 +389,8 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 if (val_write_pointer + 1) == task_val_capacity
                 else (val_write_pointer + 1)
             )
-            if x.size(0) == 0:
-                x = x_for_storage[0].unsqueeze(0)
+            if x_train.size(0) == 0:
+                x_train = x_for_storage[0].unsqueeze(0)
                 y = incoming_val_y.unsqueeze(0)
         # memory set: only write "new" samples to replay; rotated-in sample is already in val buffer
         self.net.train()
@@ -437,7 +437,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         #             param.add_(grad, alpha=-self.inner_lr)
         # else:
         if True:
-            det_loss_value = torch.zeros((), device=x.device, dtype=torch.float32)
+            det_loss_value = torch.zeros((), device=x_train.device, dtype=torch.float32)
 
         self.zero_grad()
         cls_tr_rec = []
@@ -446,7 +446,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             loss1 = torch.tensor(0.0, device=x.device)
 
             offset1, offset2 = self.compute_offsets(t)
-            pred = self.forward(x, t)
+            pred = self.forward(x_train, t)
             logits = pred[:, offset1:offset2]
             targets = y - offset1
             preds = torch.argmax(logits, dim=1)
