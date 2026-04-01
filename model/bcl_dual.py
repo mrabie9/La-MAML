@@ -221,6 +221,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 self.classes_per_task,
                 self.n_outputs,
                 cil_all_seen_upto_task=cil_all_seen_upto_task,
+                global_noise_label=self.noise_label,
                 fill_value=-10e10,
             )
         return output

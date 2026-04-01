@@ -17,6 +17,7 @@ import ipdb
 import warnings
 
 warnings.filterwarnings("ignore")
+from model.detection_replay import noise_label_from_args
 from model.resnet1d import ResNet1D
 from utils.training_metrics import macro_recall
 from utils import misc_utils
@@ -81,6 +82,7 @@ class Net(nn.Module):
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
+        self.noise_label: int | None = noise_label_from_args(args)
         # if self.is_cifar:
         #     self.nc_per_task = n_outputs / n_tasks
         # else:
@@ -112,6 +114,7 @@ class Net(nn.Module):
                 self.classes_per_task,
                 self.n_outputs,
                 cil_all_seen_upto_task=cil_all_seen_upto_task,
+                global_noise_label=self.noise_label,
                 fill_value=-10e10,
             )
         return output

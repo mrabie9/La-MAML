@@ -110,6 +110,7 @@ class Net(torch.nn.Module):
             self.classes_per_task,
             self.n_outputs,
             cil_all_seen_upto_task=cil,
+            global_noise_label=self.noise_label,
         )
 
     def observe(

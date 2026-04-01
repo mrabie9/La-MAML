@@ -11,6 +11,7 @@ from torch.autograd import Variable
 
 from model.optimizers_lib import optimizers_lib
 from ast import literal_eval
+from model.detection_replay import noise_label_from_args
 from model.resnet1d import ResNet1D
 from utils.training_metrics import macro_recall
 from utils import misc_utils
@@ -132,6 +133,7 @@ class Net(torch.nn.Module):
         # else:
         #     self.nc_per_task = n_outputs
         self.n_outputs = n_outputs
+        self.noise_label: int | None = noise_label_from_args(args)
 
         self.obseve_itr = 0
 
@@ -160,6 +162,7 @@ class Net(torch.nn.Module):
                 self.classes_per_task,
                 self.n_outputs,
                 cil_all_seen_upto_task=cil_all_seen_upto_task,
+                global_noise_label=self.noise_label,
                 fill_value=-10e10,
             )
         return output
