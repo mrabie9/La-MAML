@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Summarise full_experiments log files by algorithm performance.
+"""Summarise full_experiments logs by algorithm performance.
 
 Parses a `full_experiments_*.log` file and prints, for each algorithm:
 - status (completed or failed)
@@ -16,11 +16,14 @@ Time is computed per algorithm as follows:
   "Epoch Time <seconds>s" lines (EPOCH_TIME_RE) seen for that algorithm.
 
 Usage:
-    python scripts/summarise_full_experiments.py \
-        --log logs/full_experiments/full_experiments_20260305_175812.log
+    python scripts/summarise_full_experiments.py --log \
+        logs/full_experiments/full_experiments_20260305_175812.log
+    python scripts/summarise_full_experiments.py --log \
+        logs/full_experiments/run_20260325_154832_lnx-elkk-1
 
-If --log is omitted, the most recent matching log in
-`logs/full_experiments/` is used.
+If --log is omitted, the newest `run_*` directory under
+`logs/full_experiments/` is used when available; otherwise the newest
+`full_experiments_*.log` file is used.
 """
 
 from __future__ import annotations
@@ -30,7 +33,9 @@ import glob
 import os
 import re
 from dataclasses import dataclass
-from typing import Dict, Optional
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -53,6 +58,9 @@ class AlgoSummary:
 
 
 RUN_RE = re.compile(r"--- Running: base \+ (?P<algo>[\w\-]+) ---")
+DISPATCH_RE = re.compile(
+    r"--- Dispatching:\s+base \+\s+(?P<algo>[\w\-]+)\s+\(job log:\s+(?P<path>[^)]+)\)\s+---"
+)
 COMPLETED_RE = re.compile(r"Completed:\s+(?P<algo>[\w\-]+)\s+\(exit\s+(?P<code>\d+)\)")
 ERROR_RE = re.compile(
     r"ERROR:\s+(?P<algo>[\w\-]+)\s+failed with exit code\s+(?P<code>\d+)"
@@ -85,15 +93,20 @@ SUMMARY_TE_RE = re.compile(
     r"(?:fa=(?P<fa>[0-9.]+))?"
 )
 MODEL_SIZE_RE = re.compile(r"Model size:\s+(?P<gb>[0-9.]+)\s+GB")
+LOG_TIMESTAMP_RE = re.compile(r"^\[(?P<stamp>\d{4}-\d{2}-\d{2}T[^]]+)\]")
 
 
 def _find_default_log() -> str:
+    run_dirs = sorted(glob.glob(os.path.join("logs", "full_experiments", "run_*")))
+    if run_dirs:
+        return run_dirs[-1]
+
     candidates = sorted(
         glob.glob(os.path.join("logs", "full_experiments", "full_experiments_*.log"))
     )
-    if not candidates:
-        raise SystemExit("No full_experiments_*.log files found.")
-    return candidates[-1]
+    if candidates:
+        return candidates[-1]
+    raise SystemExit("No full_experiments logs found.")
 
 
 def parse_log(path: str) -> Dict[str, AlgoSummary]:
@@ -207,6 +220,164 @@ def parse_log(path: str) -> Dict[str, AlgoSummary]:
     return summaries
 
 
+def parse_job_log(path: str, algo_name: Optional[str] = None) -> Dict[str, AlgoSummary]:
+    summaries: Dict[str, AlgoSummary] = {}
+    current_algo = algo_name
+
+    with open(path, "r", encoding="utf-8") as file_handle:
+        for line in file_handle:
+            if current_algo is None:
+                match = re.search(r"Running model:\s+(?P<algo>[\w\-]+)", line)
+                if match:
+                    current_algo = match.group("algo")
+                    summaries.setdefault(current_algo, AlgoSummary(name=current_algo))
+                    continue
+                continue
+
+            summary = summaries.setdefault(current_algo, AlgoSummary(name=current_algo))
+
+            match = SUMMARY_TR_RE.search(line)
+            if match:
+                if match.group("cls_rec"):
+                    summary.cls_rec_tr = float(match.group("cls_rec"))
+                if match.group("cls_prec"):
+                    summary.cls_prec_tr = float(match.group("cls_prec"))
+                if match.group("cls_f1"):
+                    summary.cls_f1_tr = float(match.group("cls_f1"))
+                if match.group("det"):
+                    summary.det_tr = float(match.group("det"))
+                if match.group("fa"):
+                    summary.fa_tr = float(match.group("fa"))
+                continue
+
+            match = SUMMARY_TE_RE.search(line)
+            if match:
+                if match.group("cls_rec"):
+                    summary.cls_rec_te = float(match.group("cls_rec"))
+                if match.group("cls_prec"):
+                    summary.cls_prec_te = float(match.group("cls_prec"))
+                if match.group("cls_f1"):
+                    summary.cls_f1_te = float(match.group("cls_f1"))
+                if match.group("det"):
+                    summary.det_te = float(match.group("det"))
+                if match.group("fa"):
+                    summary.fa_te = float(match.group("fa"))
+                continue
+
+            match = MODEL_SIZE_RE.search(line)
+            if match:
+                summary.size_gb = float(match.group("gb"))
+                continue
+
+            match = TOTAL_ACC_RE.search(line)
+            if match and summary.cls_rec_te is None:
+                summary.cls_rec_te = float(match.group("val"))
+                continue
+
+            match = TOTAL_DET_RE.search(line)
+            if match and summary.det_te is None:
+                summary.det_te = float(match.group("val"))
+                continue
+
+            match = TOTAL_FA_RE.search(line)
+            if match and summary.fa_te is None:
+                summary.fa_te = float(match.group("val"))
+                continue
+
+            match = EPOCH_PREC_F1_RE.search(line)
+            if match:
+                if summary.cls_prec_tr is None:
+                    summary.cls_prec_tr = float(match.group("prec"))
+                if summary.cls_f1_tr is None:
+                    summary.cls_f1_tr = float(match.group("f1"))
+                continue
+
+            match = EPOCH_TIME_RE.search(line)
+            if match:
+                epoch_sec = float(match.group("sec"))
+                summary.time_sec = (summary.time_sec or 0.0) + epoch_sec
+                continue
+
+            match = RESULTS_TIME_RE.search(line)
+            if match:
+                summary.time_sec = float(match.group("sec"))
+                continue
+
+            match = re.search(r"Total runtime:\s+(?P<hours>[0-9.]+)\s+hours", line)
+            if match:
+                summary.time_sec = float(match.group("hours")) * 3600
+
+    return summaries
+
+
+def _merge_summary(into: AlgoSummary, source: AlgoSummary) -> None:
+    for field_name in (
+        "cls_rec_tr",
+        "cls_prec_tr",
+        "cls_f1_tr",
+        "det_tr",
+        "fa_tr",
+        "cls_rec_te",
+        "cls_prec_te",
+        "cls_f1_te",
+        "det_te",
+        "fa_te",
+        "size_gb",
+        "time_sec",
+    ):
+        value = getattr(source, field_name)
+        if value is not None:
+            setattr(into, field_name, value)
+    if source.exit_code is not None:
+        into.exit_code = source.exit_code
+        into.status = source.status
+
+
+def parse_run_directory(path: str) -> Dict[str, AlgoSummary]:
+    main_log_candidates = sorted(
+        glob.glob(os.path.join(path, "full_experiments_*.log"))
+    )
+    if not main_log_candidates:
+        raise SystemExit(f"No full_experiments_*.log found under run directory: {path}")
+    main_log_path = main_log_candidates[-1]
+
+    summaries = parse_log(main_log_path)
+    job_logs_by_algo: Dict[str, str] = {}
+
+    with open(main_log_path, "r", encoding="utf-8") as file_handle:
+        for line in file_handle:
+            dispatch_match = DISPATCH_RE.search(line)
+            if dispatch_match:
+                algo_name = dispatch_match.group("algo")
+                job_logs_by_algo[algo_name] = dispatch_match.group("path").strip()
+
+    if not job_logs_by_algo:
+        for job_log_path in sorted(
+            glob.glob(os.path.join(path, "job_logs", "job_*.log"))
+        ):
+            file_name = os.path.basename(job_log_path)
+            job_match = re.match(
+                r"job_(?P<algo>[\w\-]+)_\d{8}_\d{6}_\d+\.log", file_name
+            )
+            if not job_match:
+                continue
+            job_logs_by_algo[job_match.group("algo")] = job_log_path
+
+    for algo_name, job_log_path in job_logs_by_algo.items():
+        job_summaries = parse_job_log(job_log_path, algo_name=algo_name)
+        if algo_name in job_summaries:
+            summary = summaries.setdefault(algo_name, AlgoSummary(name=algo_name))
+            _merge_summary(summary, job_summaries[algo_name])
+
+    return summaries
+
+
+def parse_path(path: str) -> Dict[str, AlgoSummary]:
+    if os.path.isdir(path):
+        return parse_run_directory(path)
+    return parse_log(path)
+
+
 def _format_time(sec: Optional[float]) -> str:
     if sec is None:
         return "    -"
@@ -221,7 +392,37 @@ def _fmt(v: Optional[float]) -> str:
     return f"{v:.3f}" if v is not None else "  -"
 
 
-def print_summary(summaries: Dict[str, AlgoSummary]) -> None:
+def _compute_concurrent_runtime_seconds(log_path: str) -> Optional[float]:
+    """Estimate wall-clock concurrent runtime from file timestamps."""
+    if os.path.isdir(log_path):
+        candidates = sorted(glob.glob(os.path.join(log_path, "full_experiments_*.log")))
+        if not candidates:
+            return None
+        coordinator_log_path = Path(candidates[-1])
+    else:
+        coordinator_log_path = Path(log_path)
+
+    file_stat = coordinator_log_path.stat()
+    creation_timestamp = getattr(file_stat, "st_birthtime", None)
+    if creation_timestamp is None:
+        with open(coordinator_log_path, "r", encoding="utf-8") as file_handle:
+            first_line = file_handle.readline()
+        timestamp_match = LOG_TIMESTAMP_RE.search(first_line)
+        if timestamp_match:
+            creation_timestamp = datetime.fromisoformat(
+                timestamp_match.group("stamp")
+            ).timestamp()
+        else:
+            creation_timestamp = file_stat.st_ctime
+    modification_timestamp = file_stat.st_mtime
+    concurrent_runtime_seconds = modification_timestamp - creation_timestamp
+    return max(0.0, concurrent_runtime_seconds)
+
+
+def print_summary(
+    summaries: Dict[str, AlgoSummary],
+    concurrent_runtime_seconds: Optional[float] = None,
+) -> None:
     if not summaries:
         print("No algorithm runs found in log.")
         return
@@ -254,10 +455,32 @@ def print_summary(summaries: Dict[str, AlgoSummary]) -> None:
             f"{size_str:>{w_num}} {time_str:>{w_time}}"
         )
 
-    total_sec = sum(s.time_sec for s in summaries.values() if s.time_sec is not None)
-    if total_sec > 0:
+    total_serial_seconds = sum(
+        summary.time_sec
+        for summary in summaries.values()
+        if summary.time_sec is not None
+    )
+    if total_serial_seconds > 0:
         print("-" * len(header))
-        print(f"Total time (all models): {_format_time(total_sec)}")
+        print(f"Total serial time (all models): {_format_time(total_serial_seconds)}")
+        if concurrent_runtime_seconds is not None:
+            print(
+                "Total concurrent time (coordinator log wall-clock): "
+                f"{_format_time(concurrent_runtime_seconds)}"
+            )
+
+
+def _merge_many_summaries(
+    summary_collections: List[Dict[str, AlgoSummary]],
+) -> Dict[str, AlgoSummary]:
+    merged_summaries: Dict[str, AlgoSummary] = {}
+    for summary_collection in summary_collections:
+        for algorithm_name, summary in summary_collection.items():
+            merged_summary = merged_summaries.setdefault(
+                algorithm_name, AlgoSummary(name=algorithm_name)
+            )
+            _merge_summary(merged_summary, summary)
+    return merged_summaries
 
 
 def main() -> None:
@@ -270,12 +493,41 @@ def main() -> None:
         default=None,
         help="Path to full_experiments_*.log (default: latest in logs/full_experiments/).",
     )
+    parser.add_argument(
+        "--logs",
+        type=str,
+        nargs="+",
+        default=None,
+        help=(
+            "One or more log paths (files or run directories) to aggregate into a single "
+            "summary. Example: --logs run_elkk1 run_elkk2"
+        ),
+    )
     args = parser.parse_args()
 
-    log_path = args.log or _find_default_log()
-    summaries = parse_log(log_path)
-    print(f"Log: {log_path}")
-    print_summary(summaries)
+    if args.logs:
+        log_paths = args.logs
+    else:
+        log_paths = [args.log or _find_default_log()]
+
+    summary_collections: List[Dict[str, AlgoSummary]] = []
+    total_concurrent_runtime_seconds: Optional[float] = 0.0
+    for log_path in log_paths:
+        summary_collections.append(parse_path(log_path))
+        concurrent_runtime_seconds = _compute_concurrent_runtime_seconds(log_path)
+        if concurrent_runtime_seconds is None:
+            total_concurrent_runtime_seconds = None
+        elif total_concurrent_runtime_seconds is not None:
+            total_concurrent_runtime_seconds += concurrent_runtime_seconds
+
+    merged_summaries = _merge_many_summaries(summary_collections)
+    if len(log_paths) == 1:
+        print(f"Log: {log_paths[0]}")
+    else:
+        print(f"Logs ({len(log_paths)}): {', '.join(log_paths)}")
+    print_summary(
+        merged_summaries, concurrent_runtime_seconds=total_concurrent_runtime_seconds
+    )
 
 
 if __name__ == "__main__":
