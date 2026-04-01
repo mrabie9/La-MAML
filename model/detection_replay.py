@@ -70,39 +70,57 @@ class DetectionReplayMixin:
         # print(f"Unpacked labels: y_cls shape {y_cls.shape}, y_det shape {y_det.shape}")
         return y_cls, y_det
 
-    def _input_for_replay(self, x: torch.Tensor) -> torch.Tensor:
-        """Return the input in the form to store in replay buffers: (B, 2, 512) or (B, 1024).
+    def _canonicalize_input(
+        self,
+        x: torch.Tensor,
+        *,
+        detach: bool,
+    ) -> torch.Tensor:
+        """Convert inputs to canonical replay/training shape.
 
-        Matches the backbone's canonical shape after _prepare_input and input adapter:
-        - 2D (B, 1024): view to (B, 2, 512).
-        - 3D (B, 3, 1024): view to (B, 3, 2, 512), then adapter -> (B, 2, 512).
-        - 4D (B, 3, 2, L): ensure L=512 (take :512 if needed), then adapter -> (B, 2, 512).
+        Canonical shape is typically `(B, 2, 512)` for IQ inputs after optional
+        3-ADC adaptation.
+
+        Args:
+            x: Input batch in one of the supported formats.
+            detach: Whether to detach from graph and disable gradient flow.
+
+        Returns:
+            Canonicalized tensor suitable for replay buffers or training.
         """
-        with torch.no_grad():
+        if detach:
             x = x.detach()
-            if x.dim() == 2:
-                batch, features = x.shape
-                if features % 2 == 0 and features % 3 != 0:
-                    x = x.view(batch, 2, features // 2)
-                return x
-            if x.dim() == 3 and x.size(1) == 3:
-                # (B, 3, 1024) -> (B, 3, 2, 512) then adapter
-                batch, _, L = x.shape
-                if L % 2 != 0:
-                    return x
-                x = x.view(batch, 3, 2, L // 2)
-                # fall through to 4D adapter path
-            if x.dim() == 4 and x.size(1) == 3 and x.size(2) == 2:
-                adapter = getattr(self, "net", None) and (
-                    getattr(self.net, "input_adapter", None)
-                    or getattr(getattr(self.net, "model", None), "input_adapter", None)
-                )
-                if adapter is not None and not isinstance(adapter, nn.Identity):
-                    L = x.size(3)
-                    if L > 512:
-                        x = x[:, :, :, :512].contiguous()
-                    return adapter(x)
+
+        if x.dim() == 2:
+            batch, features = x.shape
+            if features % 2 == 0 and features % 3 != 0:
+                x = x.view(batch, 2, features // 2)
             return x
+
+        if x.dim() == 3 and x.size(1) == 3:
+            # (B, 3, 1024) -> (B, 3, 2, 512) then adapter
+            batch, _, sequence_length = x.shape
+            if sequence_length % 2 != 0:
+                return x
+            x = x.view(batch, 3, 2, sequence_length // 2)
+            # fall through to 4D adapter path
+
+        if x.dim() == 4 and x.size(1) == 3 and x.size(2) == 2:
+            adapter = getattr(self, "net", None) and (
+                getattr(self.net, "input_adapter", None)
+                or getattr(getattr(self.net, "model", None), "input_adapter", None)
+            )
+            if adapter is not None and not isinstance(adapter, nn.Identity):
+                sequence_length = x.size(3)
+                if sequence_length > 512:
+                    x = x[:, :, :, :512].contiguous()
+                return adapter(x)
+        return x
+
+    def _input_for_replay(self, x: torch.Tensor) -> torch.Tensor:
+        """Return detached canonical input for replay-buffer storage."""
+        with torch.no_grad():
+            return self._canonicalize_input(x, detach=True)
 
     def _init_det_memory(self, sample_x: torch.Tensor) -> None:
         if not getattr(self, "det_enabled", True):

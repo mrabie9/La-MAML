@@ -236,7 +236,8 @@ class Net(DetectionReplayMixin, nn.Module):
 
         # x = x[signal_mask]
         # y = y_cls[signal_mask]
-        # Store and replay canonical (post-adapter) shape so buffer has uniform (2, 512) across tasks
+        # Train with differentiable canonicalized inputs; use detached tensors for replay writes.
+        x_train = self._canonicalize_input(x, detach=False)
         x_for_storage = self._input_for_replay(x)
         xi = x_for_storage.data.cpu().numpy()
         yi = (
@@ -249,9 +250,32 @@ class Net(DetectionReplayMixin, nn.Module):
             self.current_task = t
 
         if self.cfg.learn_lr:
-            loss, cls_tr_rec = self.la_ER(x_for_storage, y, t)
+            loss, cls_tr_rec = self.la_ER(x_train, y, t)
         else:
             loss, cls_tr_rec = self.ER(xi, yi, t)
+
+        # Ensure the adapter is explicitly trained on the current differentiable
+        # 3-ADC/4D batch even when replay path uses detached storage tensors.
+        if (x.dim() == 3 and x.size(1) == 3) or (
+            x.dim() == 4 and x.size(1) == 3 and x.size(2) == 2
+        ):
+            offset1, offset2 = self.compute_offsets(t)
+            self.net.zero_grad(set_to_none=True)
+            live_logits = self.net.forward(x_train)
+            live_loss = classification_cross_entropy(
+                live_logits[:, offset1:offset2],
+                y - offset1,
+                class_weighted_ce=self.class_weighted_ce,
+            )
+            live_loss.backward()
+            adapter_module = getattr(self.net.model, "input_adapter", None)
+            if adapter_module is not None:
+                with torch.no_grad():
+                    for parameter in adapter_module.parameters():
+                        if parameter.grad is None:
+                            continue
+                        parameter.add_(parameter.grad, alpha=-self.cfg.lr)
+            self.net.zero_grad(set_to_none=True)
 
         for i in range(0, x.size()[0]):
             self.age += 1

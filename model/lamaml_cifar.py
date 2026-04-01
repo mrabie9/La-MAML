@@ -160,8 +160,14 @@ class Net(DetectionReplayMixin, BaseNet):
             # x_det = x
             # x = x[signal_mask]
             # y = y_cls[signal_mask]
-            # Convert to canonical shape so replay batch (old + new) is homogeneous
-            x = self._input_for_replay(x)
+            raw_x = x
+            input_was_3adc = (x.dim() == 3 and x.size(1) == 3) or (
+                x.dim() == 4 and x.size(1) == 3 and x.size(2) == 2
+            )
+            # Train with differentiable canonicalized inputs; use detached tensors for replay writes.
+            x_train = self._canonicalize_input(x, detach=False)
+            x_for_storage = self._input_for_replay(x)
+            x = x_train
 
             self.epoch += 1
             self.zero_grads()
@@ -178,7 +184,7 @@ class Net(DetectionReplayMixin, BaseNet):
 
             # get a batch by augmented incming data with old task data, used for
             # computing meta-loss
-            bx, by, bt = self.getBatch(x.cpu().numpy(), y.cpu().numpy(), t)
+            bx, by, bt = self.getBatch(x.detach().cpu().numpy(), y.cpu().numpy(), t)
 
             for i in range(n_batches):
 
@@ -190,7 +196,11 @@ class Net(DetectionReplayMixin, BaseNet):
                 # only sample and push to replay buffer once for each task's stream
                 # instead of pushing every epoch
                 if self.real_epoch == 0:
-                    self.push_to_mem(batch_x, batch_y, torch.tensor(t))
+                    self.push_to_mem(
+                        x_for_storage[i * rough_sz : (i + 1) * rough_sz],
+                        batch_y,
+                        torch.tensor(t),
+                    )
                 meta_loss, logits = self.meta_loss(bx, fast_weights, by, bt, t)
                 with torch.no_grad():
                     preds_list = []
@@ -236,6 +246,26 @@ class Net(DetectionReplayMixin, BaseNet):
                     if p.grad is None:
                         continue
                     p.data = p.data - p.grad * nn.functional.relu(self.net.alpha_lr[i])
+
+            # Ensure the input adapter is explicitly optimized on the current
+            # differentiable 3-ADC batch.
+            if input_was_3adc and x_train.dim() == 3 and x_train.size(1) == 2:
+                offset1, offset2 = self.compute_offsets(t)
+                self.net.zero_grad(set_to_none=True)
+                live_logits = self.net.forward(raw_x.detach())
+                live_loss = classification_cross_entropy(
+                    live_logits[:, offset1:offset2],
+                    y - offset1,
+                    class_weighted_ce=self.class_weighted_ce,
+                )
+                live_loss.backward()
+                adapter_module = getattr(self.net.model, "input_adapter", None)
+                if adapter_module is not None:
+                    with torch.no_grad():
+                        for parameter in adapter_module.parameters():
+                            if parameter.grad is None:
+                                continue
+                            parameter.add_(parameter.grad, alpha=-self.cfg.opt_wt)
             self.net.zero_grad()
             self.net.alpha_lr.zero_grad()
 
