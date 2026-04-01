@@ -210,6 +210,120 @@ def print_adapter_params(
         print("No 2x3 weight or proj_3ch found in adapter keys.")
 
 
+def _tensor_changed_from_reference(
+    tensor: torch.Tensor, reference: torch.Tensor, atol: float = 1e-8
+) -> bool:
+    """Return True when tensor differs from a reference tensor."""
+    if tensor.shape != reference.shape:
+        return True
+    return not torch.allclose(tensor, reference, atol=atol, rtol=0.0)
+
+
+def evaluate_adapter_training_status(
+    state_dict: dict,
+    *,
+    atol: float = 1e-8,
+) -> tuple[bool, dict[str, bool]]:
+    """Heuristically determine whether input adapter parameters were updated.
+
+    The 4D path parameters have deterministic defaults:
+    - weight_4d starts at all ones with shape (2, 3)
+    - bias_4d starts at all zeros with shape (2,)
+
+    We mark the adapter as "trained" when either deterministic default changes.
+    For 3D path Conv1d weights, defaults are random and cannot be compared
+    against a fixed reference without an initialization snapshot.
+
+    Args:
+        state_dict: Model state dict loaded from a checkpoint.
+        atol: Absolute tolerance for equality checks.
+
+    Returns:
+        Tuple of:
+            - trained flag (bool)
+            - detail flags (dict)
+    """
+    adapter_keys = find_input_adapter_keys(state_dict)
+    weight_3d, bias_3d, weight_4d, bias_4d = get_combined_weight_bias(
+        state_dict, adapter_keys
+    )
+
+    details = {
+        "found_adapter_keys": bool(adapter_keys),
+        "found_weight_4d": weight_4d is not None,
+        "found_bias_4d": bias_4d is not None,
+        "weight_4d_changed_from_init": False,
+        "bias_4d_changed_from_init": False,
+        "found_weight_3d": weight_3d is not None,
+        "found_bias_3d": bias_3d is not None,
+    }
+
+    if weight_4d is not None:
+        details["weight_4d_changed_from_init"] = _tensor_changed_from_reference(
+            weight_4d.detach().float(),
+            torch.ones_like(weight_4d.detach().float()),
+            atol=atol,
+        )
+
+    if bias_4d is not None:
+        details["bias_4d_changed_from_init"] = _tensor_changed_from_reference(
+            bias_4d.detach().float(),
+            torch.zeros_like(bias_4d.detach().float()),
+            atol=atol,
+        )
+
+    trained = bool(
+        details["weight_4d_changed_from_init"] or details["bias_4d_changed_from_init"]
+    )
+    return trained, details
+
+
+def find_latest_results_pt_for_algo(logs_root: Path, algo: str) -> Path | None:
+    """Find the newest results.pt under logs_root/algo."""
+    algo_dir = logs_root / algo
+    if not algo_dir.exists():
+        return None
+
+    candidates = [p for p in algo_dir.glob("**/results.pt") if p.is_file()]
+    if not candidates:
+        return None
+
+    return max(candidates, key=lambda p: p.stat().st_mtime)
+
+
+def scan_latest_runs(logs_root: Path, algos: list[str], atol: float = 1e-8) -> int:
+    """Scan latest checkpoint per algorithm and print adapter training status."""
+    print(f"Scanning latest runs under: {logs_root}")
+    print()
+
+    missing: list[str] = []
+    for algo in algos:
+        latest_results = find_latest_results_pt_for_algo(logs_root, algo)
+        if latest_results is None:
+            missing.append(algo)
+            print(f"[{algo}] latest results.pt: NOT FOUND")
+            print()
+            continue
+
+        state_dict, _ = load_results_pt(latest_results)
+        trained, details = evaluate_adapter_training_status(state_dict, atol=atol)
+        status = "TRAINED" if trained else "UNCHANGED_FROM_4D_INIT"
+        print(f"[{algo}] latest results.pt: {latest_results}")
+        print(f"  status: {status}")
+        print(
+            "  checks: "
+            f"weight_4d_changed={details['weight_4d_changed_from_init']}, "
+            f"bias_4d_changed={details['bias_4d_changed_from_init']}, "
+            f"found_weight_3d={details['found_weight_3d']}"
+        )
+        print()
+
+    if missing:
+        print("Algorithms with no checkpoint found:", ", ".join(missing))
+        return 1
+    return 0
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -217,7 +331,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "results_pt",
         type=Path,
+        nargs="?",
         help="Path to results.pt file",
+    )
+    parser.add_argument(
+        "--scan-latest",
+        nargs="+",
+        default=None,
+        metavar="ALGO",
+        help="Scan latest results.pt for each listed algorithm under logs root",
+    )
+    parser.add_argument(
+        "--logs-root",
+        type=Path,
+        default=Path("logs"),
+        help="Root logs directory for --scan-latest (default: logs)",
+    )
+    parser.add_argument(
+        "--atol",
+        type=float,
+        default=1e-8,
+        help="Absolute tolerance for init-comparison checks (default: 1e-8)",
     )
     parser.add_argument(
         "--format",
@@ -242,6 +376,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.scan_latest:
+        return scan_latest_runs(args.logs_root, args.scan_latest, atol=float(args.atol))
+    if args.results_pt is None:
+        raise ValueError(
+            "Provide results_pt path or use --scan-latest ALGO [ALGO ...]."
+        )
     state_dict, _ = load_results_pt(args.results_pt)
     print_adapter_params(
         args.results_pt,
