@@ -70,11 +70,22 @@ class Net(torch.nn.Module):
     ) -> None:
         super().__init__()
         del n_inputs  # ResNet1D determines its own front-end shape
-        del n_tasks
+
+        if n_tasks <= 0:
+            raise ValueError("IID2 requires a positive number of tasks")
 
         self.cfg = IidConfig.from_args(args)
         self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
         self.n_outputs = n_outputs
+        self.n_tasks = n_tasks
+        self.classes_per_task = misc_utils.build_task_class_list(
+            n_tasks,
+            n_outputs,
+            nc_per_task=getattr(args, "nc_per_task_list", "")
+            or getattr(args, "nc_per_task", None),
+            classes_per_task=getattr(args, "classes_per_task", None),
+        )
+        self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         self.noise_label: int | None = noise_label_from_args(args)
 
         if self.cfg.arch != "resnet1d":
