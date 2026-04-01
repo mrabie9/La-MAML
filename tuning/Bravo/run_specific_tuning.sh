@@ -1,29 +1,24 @@
-#!/bin/bash
-# python3 tuning/Bravo/tune_lamaml.py --config configs/models/lamaml.yaml --tune-only "opt_lr, alpha_init" 
-# python3 tuning/Bravo/tune_cmaml.py --config configs/models/cmaml.yaml --tune-only "opt_wt, alpha_init" 
-# python3 tuning/Bravo/tune_packnet.py --config configs/models/packnet.yaml --lr-first
-# python3 tuning/Bravo/tune_ewc.py --config configs/models/ewc.yaml --lr-first  
-# python3 tuning/Bravo/tune_si.py --config configs/models/si.yaml --lr-first 
-# python3 tuning/Bravo/tune_rwalk.py --config configs/models/rwalk.yaml --lr-first 
+#!/usr/bin/env bash
+# Bravo suite: forwards to scripts/run_all_tuning.sh with the same concurrency
+#
+# Previously run by hand (examples, commented in older revision):
+#   # tune_lamaml, tune_cmaml, tune_packnet, tune_ewc, tune_si, tune_rwalk, tune_smaml, tune_hat,
+#   # tune_bcl, tune_lwf with various --lr-first / --hierarchical flags
+# environment variables as scripts/full_experiments.sh:
+#   CONCURRENCY_OPTION  (default 1): 0 = serial, 1 = up to MAX_JOBS parallel jobs
+#   MAX_JOBS            (default 2)
+#
+# Examples:
+#   CONCURRENCY_OPTION=0 ./tuning/Bravo/run_specific_tuning.sh
+#   MAX_JOBS=2 ./tuning/Bravo/run_specific_tuning.sh
 
-# python3 tuning/Bravo/tune_smaml.py --config configs/models/smaml.yaml --tune-only "opt_wt,opt_lr,alpha_init" 
-# python3 tuning/Bravo/tune_hat.py --config configs/models/hat.yaml --lr-first 
+set -euo pipefail
 
-# python3 tuning/Bravo/tune_ewc.py --config configs/models/ewc.yaml --hierarchical #--dry-run
-# python3 tuning/Bravo/tune_si.py --config configs/models/si.yaml --hierarchical #--dry-run
-# python3 tuning/Bravo/tune_bcl.py --config configs/models/bcl_dual.yaml --hierarchical #--dry-run
-# python3 tuning/Bravo/tune_lwf.py --config configs/models/lwf.yaml --hierarchical #--dry-run
-# python3 tuning/Bravo/tune_rwalk.py --config configs/models/rwalk.yaml --hierarchical #--dry-run
-python3 tuning/Bravo/tune_la-er.py --config configs/models/la-er.yaml --hierarchical #--dry-run
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-python3 tuning/Bravo/tune_ctn.py --config configs/models/ctn.yaml --hierarchical
-# python3 tuning/Bravo/tune_cmaml.py --config configs/models/cmaml.yaml --hierarchical
-# python3 tuning/Bravo/tune_smaml.py --config configs/models/smaml.yaml --hierarchical
-# python3 tuning/Bravo/tune_hat.py --config configs/models/hat.yaml --hierarchical
-python3 tuning/Bravo/tune_packnet.py --config configs/models/packnet.yaml --hierarchical
-# python3 tuning/Alpha/tune_agem.py --config configs/models/agem.yaml --hierarchical
-# python3 tuning/Alpha/tune_gem.py --config configs/models/gem.yaml --hierarchical
-python3 tuning/Bravo/tune_ucl.py --config configs/models/ucl.yaml --hierarchical
-
-
-#--dry-run
+exec "$REPO_ROOT/scripts/run_all_tuning.sh" \
+    --scripts-root "$REPO_ROOT/tuning/Bravo" \
+    --models "la-er,ctn,packnet,ucl" \
+    -- \
+    --hierarchical
