@@ -14,7 +14,7 @@
  # trained for n_epochs, with the specific tasks selected via task_order_files.
 
  # Give runs a distinct experiment name so logs are easy to filter.
- expt_name: test_uclresm-single-task
+#  expt_name: test_uclresm-single-task
  model: iid2
 
  # Number of epochs for the single-round experiment.
