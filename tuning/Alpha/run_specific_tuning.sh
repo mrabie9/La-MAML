@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Alpha suite: forwards to scripts/run_all_tuning.sh with the same concurrency
+# Alpha suite: delegates to scripts/run_all_tuning.sh.
 #
-# Previously run by hand (examples):
-#   # python3 tuning/Alpha/tune_er_ring.py --config configs/models/er_ring.yaml --hierarchical --dry-run
-#   # python3 tuning/Alpha/tune_eralg4.py --config configs/models/eralg4.yaml --hierarchical  --dry-run
-#   # python3 tuning/Alpha/tune_lamaml.py --config configs/models/lamaml.yaml --hierarchical --dry-run
-# environment variables as scripts/full_experiments.sh:
-#   CONCURRENCY_OPTION  (default 1): 0 = serial, 1 = up to MAX_JOBS parallel jobs
-#   MAX_JOBS            (default 2)
+# On lnx-elkk-1 / lnx-elkk-2, the same host schedule JSON as full_experiments.sh
+# (SCHEDULE_JSON_PATH, default logs/eta_probe/full_experiments_host_schedule.json)
+# restricts which models run on which server. Elsewhere, set HOST_KEY to mimic a host.
+#
+# Environment (see run_all_tuning.sh): CONCURRENCY_OPTION, MAX_JOBS, HOST_KEY,
+# SCHEDULE_JSON_PATH, HOST_SCHEDULE_MODE=auto|on|off.
 #
 # Examples:
+#   ./tuning/Alpha/run_specific_tuning.sh
+#   HOST_SCHEDULE_MODE=off ./tuning/Alpha/run_specific_tuning.sh
 #   CONCURRENCY_OPTION=0 ./tuning/Alpha/run_specific_tuning.sh
-#   MAX_JOBS=2 ./tuning/Alpha/run_specific_tuning.sh
 
 set -euo pipefail
 

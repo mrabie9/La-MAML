@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
-# Bravo suite: forwards to scripts/run_all_tuning.sh with the same concurrency
+# Bravo suite: delegates to scripts/run_all_tuning.sh.
 #
-# Previously run by hand (examples, commented in older revision):
-#   # tune_lamaml, tune_cmaml, tune_packnet, tune_ewc, tune_si, tune_rwalk, tune_smaml, tune_hat,
-#   # tune_bcl, tune_lwf with various --lr-first / --hierarchical flags
-# environment variables as scripts/full_experiments.sh:
-#   CONCURRENCY_OPTION  (default 1): 0 = serial, 1 = up to MAX_JOBS parallel jobs
-#   MAX_JOBS            (default 2)
+# On lnx-elkk-1 / lnx-elkk-2, the same host schedule JSON as full_experiments.sh
+# restricts which models run on which server. Elsewhere, set HOST_KEY to mimic a host.
+#
+# Environment: CONCURRENCY_OPTION, MAX_JOBS, HOST_KEY, SCHEDULE_JSON_PATH,
+# HOST_SCHEDULE_MODE=auto|on|off (see run_all_tuning.sh).
 #
 # Examples:
-#   CONCURRENCY_OPTION=0 ./tuning/Bravo/run_specific_tuning.sh
-#   MAX_JOBS=2 ./tuning/Bravo/run_specific_tuning.sh
+#   ./tuning/Bravo/run_specific_tuning.sh
+#   HOST_SCHEDULE_MODE=off ./tuning/Bravo/run_specific_tuning.sh
 
 set -euo pipefail
 
