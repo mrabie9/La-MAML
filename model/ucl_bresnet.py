@@ -21,7 +21,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from model.resnet1d import AdcIqAdapter, ResNet1D
 from model.detection_replay import (
-    classification_loss_zero_stub,
     noise_label_from_args,
     signal_mask_exclude_noise,
     unpack_y_to_class_labels,
@@ -636,14 +635,11 @@ class Net(nn.Module):
             predictions=preds,
             logits=logits,
         )
-        if signal_mask.any():
-            ce = classification_cross_entropy(
-                logits[signal_mask],
-                y_cls_filtered[signal_mask],
-                class_weighted_ce=bool(self.cfg.class_weighted_ce),
-            )
-        else:
-            ce = classification_loss_zero_stub(logits)
+        ce = classification_cross_entropy(
+            logits,
+            y_cls_filtered,
+            class_weighted_ce=bool(self.cfg.class_weighted_ce),
+        )
         loss = self._apply_regularisation(ce, y_cls_filtered.size(0))
 
         self.optimizer.zero_grad(set_to_none=True)

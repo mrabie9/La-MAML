@@ -10,7 +10,6 @@ import torch
 from model.resnet1d import ResNet1D
 from model.detection_replay import (
     DetectionReplayMixin,
-    classification_loss_zero_stub,
     noise_label_from_args,
     signal_mask_exclude_noise,
     unpack_y_to_class_labels,
@@ -298,27 +297,20 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             loss2 = torch.tensor(0.0).cuda()
 
             offset1, offset2 = self.compute_offsets(t)
-            pred = self.forward(x, t, True)
-            logits = pred[:, offset1:offset2]
-            targets = y_work - offset1
+            pred = self.forward(x, t, True, cil_all_seen_upto_task=t)
+            logits = pred
+            targets = y_work.long()
             signal_mask = signal_mask_exclude_noise(y_work, self.noise_label)
             if signal_mask.any():
-                targets_sig = targets[signal_mask]
-                if targets_sig.min() < 0 or targets_sig.max() >= logits.size(1):
-                    raise ValueError(
-                        f"Target out of range for task {t}: "
-                        f"min={int(targets_sig.min())}, max={int(targets_sig.max())}, "
-                        f"class_count={logits.size(1)}, offset=({offset1},{offset2})"
-                    )
-                loss1 = classification_cross_entropy(
-                    logits[signal_mask],
-                    targets_sig,
-                    class_weighted_ce=self.class_weighted_ce,
-                )
+                preds = torch.argmax(logits[signal_mask], dim=1)
+                cls_tr_rec.append(macro_recall(preds, targets[signal_mask]))
             else:
-                loss1 = classification_loss_zero_stub(logits)
-            preds = torch.argmax(logits, dim=1)
-            cls_tr_rec.append(macro_recall(preds, targets))
+                cls_tr_rec.append(0.0)
+            loss1 = classification_cross_entropy(
+                logits,
+                targets,
+                class_weighted_ce=self.class_weighted_ce,
+            )
             if t > 0:
                 sampled = self.memory_sampling(t)
                 if sampled is not None:

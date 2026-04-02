@@ -10,7 +10,6 @@ import torch
 from model.resnet1d import ResNet1D
 from model.detection_replay import (
     DetectionReplayMixin,
-    classification_loss_zero_stub,
     noise_label_from_args,
     signal_mask_exclude_noise,
     unpack_y_to_class_labels,
@@ -404,48 +403,34 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.zero_grad()
         tt = t + 1
         cls_tr_rec = []
-        n_classes_current = None
         for _ in range(self.n_meta):
             weights_before = deepcopy(self.net.state_dict())
-            offset1, offset2 = self.compute_offsets(t)
-            n_classes_current = offset2 - offset1
             for i in range(self.glances):
                 pred = self.forward(x_train, t)
-                logits = pred[:, offset1:offset2]
-                targets = y_work - offset1
                 signal_mask = signal_mask_exclude_noise(y_work, self.noise_label)
-                if signal_mask.any():
-                    targets_sig = targets[signal_mask]
-                    invalid = (targets_sig < 0) | (targets_sig >= n_classes_current)
-                    if invalid.any():
-                        bad = (
-                            y_work[signal_mask][invalid]
-                            .detach()
-                            .cpu()
-                            .unique()
-                            .tolist()
-                        )
-                        raise RuntimeError(
-                            f"[BCL_Dual] Classification targets out of range for task {t}: "
-                            f"offset1={offset1}, offset2={offset2}, n_classes={n_classes_current}, "
-                            f"y in [{y_work.min().item()}, {y_work.max().item()}], bad global labels: {bad}. "
-                            f"Ensure loader uses global labels for this task."
-                        )
-                preds = torch.argmax(logits, dim=1)
+                logits_for_loss = pred
+                if self.is_task_incremental:
+                    logits_for_loss = misc_utils.apply_task_incremental_logit_mask(
+                        pred,
+                        t,
+                        self.nc_per_task,
+                        self.n_outputs,
+                        cil_all_seen_upto_task=t,
+                        global_noise_label=self.noise_label,
+                    )
+                targets = y_work.long()
+                preds = torch.argmax(logits_for_loss, dim=1)
                 if signal_mask.any():
                     cls_tr_rec.append(
                         macro_recall(preds[signal_mask], targets[signal_mask])
                     )
                 else:
                     cls_tr_rec.append(0.0)
-                if signal_mask.any():
-                    loss1 = classification_cross_entropy(
-                        logits[signal_mask],
-                        targets[signal_mask],
-                        class_weighted_ce=self.class_weighted_ce,
-                    )
-                else:
-                    loss1 = classification_loss_zero_stub(logits)
+                loss1 = classification_cross_entropy(
+                    logits_for_loss,
+                    targets,
+                    class_weighted_ce=self.class_weighted_ce,
+                )
                 # det_logits, _ = self.net.forward_heads(x_det)
                 # det_loss = self.det_loss(det_logits, y_det.float())
                 # det_replay = self._sample_det_memory()
@@ -494,15 +479,23 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 )
             else:
                 pred = self.forward(x_train, t)
-                logits_outer = pred[:, offset1:offset2]
-                if signal_mask.any():
-                    outer_loss = classification_cross_entropy(
-                        logits_outer[signal_mask],
-                        targets[signal_mask],
-                        class_weighted_ce=self.class_weighted_ce,
+                logits_outer_for_loss = pred
+                if self.is_task_incremental:
+                    logits_outer_for_loss = (
+                        misc_utils.apply_task_incremental_logit_mask(
+                            pred,
+                            t,
+                            self.nc_per_task,
+                            self.n_outputs,
+                            cil_all_seen_upto_task=t,
+                            global_noise_label=self.noise_label,
+                        )
                     )
-                else:
-                    outer_loss = classification_loss_zero_stub(logits_outer)
+                outer_loss = classification_cross_entropy(
+                    logits_outer_for_loss,
+                    targets,
+                    class_weighted_ce=self.class_weighted_ce,
+                )
             outer_loss.backward()
             self.inner_opt.step()
             self.zero_grad()

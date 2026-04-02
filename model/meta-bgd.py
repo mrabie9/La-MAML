@@ -50,6 +50,7 @@ class MetaBgdConfig:
     use_old_task_memory: bool = False
     grad_clip_norm: Optional[float] = 2.0
     meta_batches: int = 3
+    cifar_batches: int = 1
 
     @staticmethod
     def from_args(args: object) -> "MetaBgdConfig":
@@ -134,6 +135,7 @@ class Net(torch.nn.Module):
         #     self.nc_per_task = n_outputs
         self.n_outputs = n_outputs
         self.noise_label: int | None = noise_label_from_args(args)
+        self.is_task_incremental = True
 
         self.obseve_itr = 0
 

@@ -21,7 +21,6 @@ import torch.nn.functional as F
 from model.resnet1d import ResNet1D
 from model.detection_replay import (
     DetectionReplayMixin,
-    classification_loss_zero_stub,
     noise_label_from_args,
     signal_mask_exclude_noise,
     unpack_y_to_class_labels,
@@ -168,21 +167,16 @@ class Net(DetectionReplayMixin, nn.Module):
         y_cls = unpack_y_to_class_labels(y)
         cls_logits = self.net.forward_heads(x)[1]
         signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
-
+        class_ids = self._update_task_classes(t, y_cls)
+        current_logits = self._select_task_logits(cls_logits, class_ids)
+        targets = self._map_labels_to_local(y_cls, t)
+        loss_ce = classification_cross_entropy(
+            current_logits, targets, class_weighted_ce=self.class_weighted_ce
+        )
         if signal_mask.any():
-            cls_labels = y_cls[signal_mask]
-            class_ids = self._update_task_classes(t, y_cls)
-            current_logits = self._select_task_logits(
-                cls_logits[signal_mask], class_ids
-            )
-            targets = self._map_labels_to_local(cls_labels, t)
-            preds = torch.argmax(current_logits, dim=1)
-            cls_tr_rec = macro_recall(preds, targets)
-            loss_ce = classification_cross_entropy(
-                current_logits, targets, class_weighted_ce=self.class_weighted_ce
-            )
+            preds = torch.argmax(current_logits[signal_mask], dim=1)
+            cls_tr_rec = macro_recall(preds, targets[signal_mask])
         else:
-            loss_ce = classification_loss_zero_stub(cls_logits)
             cls_tr_rec = 0.0
 
         prev_class_ids = self._collect_previous_class_ids(t)
@@ -270,9 +264,6 @@ class Net(DetectionReplayMixin, nn.Module):
         class_ids = self.task_class_ids.setdefault(task, [])
         labels_np = labels.detach().cpu()
         labels_np = labels_np[labels_np >= 0]
-        if getattr(self, "noise_label", None) is not None:
-            noise = int(self.noise_label)
-            labels_np = labels_np[labels_np != noise]
         unique_labels = torch.unique(labels_np).tolist()
         for label in unique_labels:
             label = int(label)

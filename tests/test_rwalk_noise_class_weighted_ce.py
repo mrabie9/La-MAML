@@ -106,14 +106,17 @@ def test_rwalk_observe_accepts_two_column_iq_labels() -> None:
     assert 0.0 <= rec <= 1.0
 
 
-def test_rwalk_all_noise_batch_yields_zero_loss() -> None:
+def test_rwalk_all_noise_batch_trains_noise_class() -> None:
+    """Noise rows contribute to CE; loss should be positive and finite."""
     args = _minimal_rwalk_args(
-        classes_per_task=[5], noise_label=99, class_weighted_ce=True
+        classes_per_task=[5], noise_label=9, class_weighted_ce=True
     )
-    model = RWalkNet(64, 10, 1, args)
-    model.eval()
+    n_outputs = 10
+    model = RWalkNet(64, n_outputs, 1, args)
+    model.train()
     x = torch.randn(4, 2, 32)
-    y = torch.full((4,), 99, dtype=torch.long)
+    y = torch.full((4,), 9, dtype=torch.long)
     loss, rec = model.observe(x, y, 0)
-    assert loss == 0.0
+    assert loss > 0.0
+    assert loss == loss
     assert rec == 0.0

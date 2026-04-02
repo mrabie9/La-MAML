@@ -163,8 +163,6 @@ class BaseNet(torch.nn.Module):
                 xi = np.array(x)
                 yi_scalar = int(torch.as_tensor(y).long().flatten()[0].item())
                 ti = np.array(t)
-                if self.noise_label is not None and yi_scalar == self.noise_label:
-                    continue
                 bxs.append(xi)
                 bys.append(yi_scalar)
                 bts.append(ti)

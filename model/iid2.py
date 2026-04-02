@@ -5,7 +5,6 @@ import torch
 
 from model.resnet1d import ResNet1D
 from model.detection_replay import (
-    classification_loss_zero_stub,
     noise_label_from_args,
     signal_mask_exclude_noise,
     unpack_y_to_class_labels,
@@ -150,23 +149,21 @@ class Net(torch.nn.Module):
 
         logits = self.net(x)
         targets = unpack_y_to_class_labels(y).long()
-        mask = signal_mask_exclude_noise(targets, self.noise_label)
-        if mask.any():
-            loss_tensor = classification_cross_entropy(
-                logits[mask],
-                targets[mask],
-                class_weighted_ce=self.class_weighted_ce,
-            )
-        else:
-            loss_tensor = classification_loss_zero_stub(logits)
+        signal_mask = signal_mask_exclude_noise(targets, self.noise_label)
+        loss_tensor = classification_cross_entropy(
+            logits,
+            targets,
+            class_weighted_ce=self.class_weighted_ce,
+        )
         loss_tensor.backward()
         self.opt.step()
 
         with torch.no_grad():
             preds = torch.argmax(logits, dim=1)
-            if mask.any():
+            if signal_mask.any():
                 cls_tr_rec = macro_recall(
-                    preds[mask].detach().cpu(), targets[mask].detach().cpu()
+                    preds[signal_mask].detach().cpu(),
+                    targets[signal_mask].detach().cpu(),
                 )
             else:
                 cls_tr_rec = 0.0

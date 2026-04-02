@@ -17,7 +17,6 @@ import sys
 from model.resnet1d import ResNet1D
 from model.detection_replay import (
     DetectionReplayMixin,
-    classification_loss_zero_stub,
     noise_label_from_args,
     signal_mask_exclude_noise,
     unpack_y_to_class_labels,
@@ -274,14 +273,11 @@ class Net(DetectionReplayMixin, torch.nn.Module):
 
     def observe(self, x, y, t):
 
-        x_det = self._prepare_input(x)
         batch_count = x.size(0)
         y_cls = unpack_y_to_class_labels(y)
         self.net.train()
         if self.gpu:
             self.net.cuda()
-        class_counts = getattr(self, "classes_per_task", None)
-        noise_label = self.noise_label
         # if class_counts is not None:
         #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
         #     noise_label = offset2 - 1
@@ -337,20 +333,27 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                         self.memy = torch.cat((self.memy, y_cls.data.clone()))
 
             self.net.zero_grad()
-            offset1, offset2 = self.compute_offsets(t)
-            logits_full = self.netforward(x)[:, offset1:offset2]
+            offset1, _offset2 = self.compute_offsets(t)
+            logits_full = misc_utils.apply_task_incremental_logit_mask(
+                self.netforward(x),
+                t,
+                self.classes_per_task,
+                self.n_classes,
+                cil_all_seen_upto_task=t,
+                global_noise_label=self.noise_label,
+            )
             signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
+            targets = y_cls.long()
             if signal_mask.any():
-                logits = logits_full[signal_mask]
-                targets = y_cls[signal_mask] - offset1
-                preds = torch.argmax(logits, dim=1)
-                cls_tr_rec.append(macro_recall(preds, targets))
-                loss = classification_cross_entropy(
-                    logits, targets, class_weighted_ce=self.class_weighted_ce
-                )
+                preds = torch.argmax(logits_full[signal_mask], dim=1)
+                cls_tr_rec.append(macro_recall(preds, targets[signal_mask]))
             else:
-                loss = classification_loss_zero_stub(logits_full)
                 cls_tr_rec.append(0.0)
+            loss = classification_cross_entropy(
+                logits_full,
+                targets,
+                class_weighted_ce=self.class_weighted_ce,
+            )
 
             # num_exemplars remains 0 unless final epoch is reached
             if self.num_exemplars > 0:

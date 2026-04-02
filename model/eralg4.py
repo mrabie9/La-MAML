@@ -24,9 +24,7 @@ import math
 from model.resnet1d import ResNet1D
 from model.detection_replay import (
     DetectionReplayMixin,
-    classification_loss_zero_stub,
     noise_label_from_args,
-    signal_mask_exclude_noise,
     unpack_y_to_class_labels,
 )
 from utils.training_metrics import macro_recall
@@ -143,20 +141,12 @@ class Net(DetectionReplayMixin, nn.Module):
         if len(bt) == 0:
             return torch.zeros((), device=logits.device, dtype=logits.dtype)
         loss = torch.zeros((), device=logits.device, dtype=logits.dtype)
-        for i, ti in enumerate(bt):
-            offset1, offset2 = self.compute_offsets(ti)
-            narrow = logits[i, offset1:offset2].unsqueeze(0)
+        for i, _ti in enumerate(bt):
+            row = logits[i : i + 1]
             y_i = int(y[i].item())
-            if self.noise_label is not None and y_i == self.noise_label:
-                loss = loss + classification_loss_zero_stub(narrow.squeeze(0))
-                continue
             loss = loss + classification_cross_entropy(
-                narrow,
-                torch.tensor(
-                    [y_i - offset1],
-                    device=logits.device,
-                    dtype=torch.long,
-                ),
+                row,
+                torch.tensor([y_i], device=logits.device, dtype=torch.long),
                 class_weighted_ce=self.class_weighted_ce,
             )
         return loss / len(bt)
@@ -278,20 +268,21 @@ class Net(DetectionReplayMixin, nn.Module):
         if (x.dim() == 3 and x.size(1) == 3) or (
             x.dim() == 4 and x.size(1) == 3 and x.size(2) == 2
         ):
-            offset1, offset2 = self.compute_offsets(t)
             self.net.zero_grad(set_to_none=True)
-            live_logits = self.net.forward(x_train)
-            narrow = live_logits[:, offset1:offset2]
-            targets = y_work - offset1
-            mask_live = signal_mask_exclude_noise(y_work, self.noise_label)
-            if mask_live.any():
-                live_loss = classification_cross_entropy(
-                    narrow[mask_live],
-                    targets[mask_live],
-                    class_weighted_ce=self.class_weighted_ce,
-                )
-            else:
-                live_loss = classification_loss_zero_stub(narrow)
+            live_logits = misc_utils.apply_task_incremental_logit_mask(
+                self.net.forward(x_train),
+                t,
+                self.classes_per_task,
+                self.n_outputs,
+                cil_all_seen_upto_task=t,
+                global_noise_label=self.noise_label,
+            )
+            targets = y_work.long()
+            live_loss = classification_cross_entropy(
+                live_logits,
+                targets,
+                class_weighted_ce=self.class_weighted_ce,
+            )
             live_loss.backward()
             adapter_module = getattr(self.net.model, "input_adapter", None)
             if adapter_module is not None:
@@ -360,6 +351,8 @@ class Net(DetectionReplayMixin, nn.Module):
             bx, by, bt = self.getBatch(x, y, t)
 
             bx = bx.squeeze()
+            # Unmasked logits: replay rows may span tasks; global CE targets index
+            # the full ``n_outputs`` vector (including shared noise class).
             prediction = self.net.forward(bx)
             loss = self.take_multitask_loss(bt, prediction, by)
             cls_tr_rec.append(self._batch_accuracy(bt, prediction, by))
@@ -388,20 +381,21 @@ class Net(DetectionReplayMixin, nn.Module):
         #     logits = self.net.forward(x, fast_weights)
         #     loss = self.loss(logits, y)
 
-        offset1, offset2 = self.compute_offsets(t)
-        logits = self.net.forward(x, fast_weights)[:, :offset2]
+        logits = misc_utils.apply_task_incremental_logit_mask(
+            self.net.forward(x, fast_weights)[:, : self.n_outputs],
+            t,
+            self.classes_per_task,
+            self.n_outputs,
+            cil_all_seen_upto_task=t,
+            global_noise_label=self.noise_label,
+        )
         y_cls = unpack_y_to_class_labels(y).long()
-        narrow = logits[:, offset1:offset2]
-        targets = y_cls - offset1
-        mask_inner = signal_mask_exclude_noise(y_cls, self.noise_label)
-        if mask_inner.any():
-            loss = classification_cross_entropy(
-                narrow[mask_inner],
-                targets[mask_inner],
-                class_weighted_ce=self.class_weighted_ce,
-            )
-        else:
-            loss = classification_loss_zero_stub(narrow)
+        targets = y_cls
+        loss = classification_cross_entropy(
+            logits,
+            targets,
+            class_weighted_ce=self.class_weighted_ce,
+        )
 
         if fast_weights is None:
             # fast_weights = self.net.parameters()

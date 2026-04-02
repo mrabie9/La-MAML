@@ -19,7 +19,6 @@ import torch.nn as nn
 from model.resnet1d import ResNet1D
 from model.detection_replay import (
     DetectionReplayMixin,
-    classification_loss_zero_stub,
     noise_label_from_args,
     signal_mask_exclude_noise,
     unpack_y_to_class_labels,
@@ -77,6 +76,7 @@ class Net(DetectionReplayMixin, nn.Module):
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
+        self.is_task_incremental = True
 
         self.net = ResNet1D(n_outputs, args)
 
@@ -150,27 +150,32 @@ class Net(DetectionReplayMixin, nn.Module):
         #     self._update_det_memory(x, y_det)
         y_cls = unpack_y_to_class_labels(y)
         cls_logits = self._forward_heads(x)[1]
-        offset1, offset2 = self._compute_offsets(t)
         signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
-
-        if signal_mask.any():
-            logits_task = cls_logits[signal_mask][:, offset1:offset2]
-            targets = (y_cls[signal_mask] - offset1).long()
-            preds = torch.argmax(logits_task, dim=1)
-            cls_tr_rec = macro_recall(preds, targets)
-            loss_ce = classification_cross_entropy(
-                logits_task, targets, class_weighted_ce=self.class_weighted_ce
+        logits_for_loss = cls_logits
+        if self.is_task_incremental:
+            logits_for_loss = misc_utils.apply_task_incremental_logit_mask(
+                cls_logits,
+                t,
+                self.classes_per_task,
+                self.n_outputs,
+                cil_all_seen_upto_task=t,
+                global_noise_label=self.noise_label,
             )
+        targets_for_loss = y_cls.long()
+        loss_ce = classification_cross_entropy(
+            logits_for_loss, targets_for_loss, class_weighted_ce=self.class_weighted_ce
+        )
+        if signal_mask.any():
+            preds = torch.argmax(logits_for_loss[signal_mask], dim=1)
+            cls_tr_rec = macro_recall(preds, y_cls[signal_mask].long())
         else:
-            logits_task = cls_logits[:, offset1:offset2]
-            loss_ce = classification_loss_zero_stub(logits_task)
             cls_tr_rec = 0.0
 
         self.opt.zero_grad()
         if True:
             torch.autograd.set_detect_anomaly(True)
             loss_ce.backward(retain_graph=True)
-            self._accumulate_fisher(int(signal_mask.sum().item()))
+            self._accumulate_fisher(int(y_cls.size(0)))
 
         # self.opt.zero_grad()
         # det_loss = self.det_loss(det_logits, y_det.float())

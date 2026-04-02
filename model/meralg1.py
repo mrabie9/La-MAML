@@ -83,6 +83,7 @@ class Net(nn.Module):
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         self.noise_label: int | None = noise_label_from_args(args)
+        self.is_task_incremental = True
         # if self.is_cifar:
         #     self.nc_per_task = n_outputs / n_tasks
         # else:
