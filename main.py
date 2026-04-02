@@ -599,6 +599,13 @@ def _model_forward_for_metric_loop(
     task-incremental loaders, no extra keyword is passed (per-task masking
     only).
 
+    **iCaRL:** Metrics use ``netforward`` logits plus the same
+    :func:`utils.misc_utils.apply_task_incremental_logit_mask` call as
+    :meth:`model.icarl.Net.observe` (``cil_all_seen_upto_task=task_index`` and
+    ``global_noise_label``), not nearest-mean ``forward`` (which omits noise
+    before / without exemplars). This matches training for TIL and CIL runs,
+    because ``observe`` always passes ``cil_all_seen_upto_task=task_index``.
+
     Args:
         model: Continual-learning module with ``forward(x, task_index, ...)``.
         x: Input batch on the correct device.
@@ -613,6 +620,16 @@ def _model_forward_for_metric_loop(
         forward_kw["cil_all_seen_upto_task"] = task_index
     if getattr(args, "model", "") == "anml":
         return model(x, fast_weights=None)  # type: ignore[operator]
+    if getattr(args, "model", "") == "icarl":
+        raw_logits = model.netforward(x)  # type: ignore[attr-defined]
+        return misc_utils.apply_task_incremental_logit_mask(
+            raw_logits,
+            task_index,
+            model.classes_per_task,  # type: ignore[attr-defined]
+            model.n_classes,  # type: ignore[attr-defined]
+            cil_all_seen_upto_task=task_index,
+            global_noise_label=getattr(model, "noise_label", None),
+        )
     try:
         return model(x, task_index, **forward_kw)  # type: ignore[operator]
     except TypeError:

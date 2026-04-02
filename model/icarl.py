@@ -278,36 +278,6 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.net.train()
         if self.gpu:
             self.net.cuda()
-        # if class_counts is not None:
-        #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
-        #     noise_label = offset2 - 1
-        # y_cls, y_det = self._unpack_labels(
-        #     y,
-        #     noise_label=noise_label,
-        #     use_detector_arch=bool(getattr(self, "det_enabled", False)),
-        # )
-        # if y_det is not None and self.det_memories > 0:
-        #     self._update_det_memory(x, y_det)
-        # signal_mask = (y_det == 1) & (y_cls >= 0)
-        # if not signal_mask.any():
-        #     if not getattr(self, "det_enabled", True):
-        #         return 0.0, 0.0
-        #     self.det_opt.zero_grad()
-        #     det_logits, _ = self.net.forward_heads(x_det)
-        #     det_loss = self.det_loss(det_logits, y_det.float())
-        #     det_replay = self._sample_det_memory()
-        #     if det_replay is not None:
-        #         mem_x, mem_y = det_replay
-        #         mem_det_logits, _ = self.net.forward_heads(mem_x)
-        #         mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-        #         det_loss = 0.5 * (det_loss + mem_loss)
-        #     det_loss = self.det_lambda * det_loss
-        #     det_loss.backward()
-        #     self.det_opt.step()
-        #     return float(det_loss.item()), 0.0
-
-        # x = x[signal_mask]
-        # y = y_cls[signal_mask]
 
         cls_tr_rec = []
 
@@ -416,18 +386,32 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             else:
                 all_labs = torch.LongTensor(np.unique(self.memy.numpy()))
 
-            # Only count labels that belong to the current task slice.
+            # Per-task signal slice plus global noise (same id across IQ tasks) when present.
             in_task = (all_labs >= offset1) & (all_labs < offset2)
-            task_labs = all_labs[in_task]
+            signal_labs = all_labs[in_task]
+            noise_key = self.noise_label
+            has_noise_exemplars = (
+                noise_key is not None
+                and 0 <= int(noise_key) < self.n_classes
+                and (all_labs == int(noise_key)).any()
+            )
+            if has_noise_exemplars:
+                noise_tensor = signal_labs.new_tensor(
+                    [int(noise_key)], dtype=signal_labs.dtype
+                )
+                task_labs = torch.cat([signal_labs, noise_tensor])
+            else:
+                task_labs = signal_labs
+            task_labs, _ = torch.sort(task_labs)
             num_classes = task_labs.size(0)
 
             # print("num_classes", num_classes, "nc_per_task", self.nc_per_task, "offsets",
             #       offset1, offset2)
             current_task_classes = self.classes_per_task[t]
-            if num_classes != current_task_classes:
+            if signal_labs.size(0) != current_task_classes:
                 print(
                     "[WARNING][iCaRL] Task {} expected {} classes, found {} in memory.".format(
-                        t, current_task_classes, num_classes
+                        t, current_task_classes, signal_labs.size(0)
                     )
                 )
             if num_classes > 0:
