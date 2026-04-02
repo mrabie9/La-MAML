@@ -437,8 +437,6 @@ class HatBackbone(nn.Module):
     ) -> None:
         # if s <= 0:
         #     return
-        s_eff = max(float(s), 1.0)
-        scale = min(self.cfg.smax / s_eff, 10.0)
         for emb in self.embeddings:
             weight = emb.weight
             if weight.grad is None:
@@ -700,7 +698,8 @@ class Net(nn.Module):
         if signal_mask.any():
             logits_task = logits_task_full[signal_mask]
             targets = (y_cls[signal_mask] - offset1).long()
-            loss, _ = self._criterion(logits_task, targets, [])
+            # Pass current gate masks so HAT regularization uses gamma (self.lamb).
+            loss, _ = self._criterion(logits_task, targets, masks)
             preds = torch.argmax(logits_task, dim=1)
             cls_tr_rec = macro_recall(preds, targets)
         else:
