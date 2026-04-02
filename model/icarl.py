@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Any
 
 import torch
 import torch.nn.functional as F
@@ -211,46 +211,70 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             return self.samples_per_task
         return int(self.samples_per_task_resolver(task))
 
-    def forward(self, x, t):
-        # nearest neighbor
-        nd = self.n_feat
+    def forward(
+        self,
+        x: torch.Tensor,
+        t: int,
+        *,
+        cil_all_seen_upto_task: int | None = None,
+        **kwargs: Any,
+    ) -> torch.Tensor:
+        """Classify with the iCaRL nearest-class-mean (NCM) rule over exemplars.
+
+        Per Rebuffi et al., CVPR 2017, inference uses **all** stored class
+        prototypes (every class with exemplars), not only the current task's
+        label block. This makes the built-in evaluator compatible with
+        class-incremental protocols. The ``cil_all_seen_upto_task`` keyword is
+        accepted for API parity with other learners and is ignored here because
+        the exemplar set already defines the active class set.
+
+        Args:
+            x: Input batch.
+            t: Current task index (used only when no exemplars exist yet).
+            cil_all_seen_upto_task: Ignored (NCM uses all classes with exemplars).
+            **kwargs: Swallows extra keys from the training loop.
+
+        Returns:
+            One-hot style predictions ``(batch, n_classes)`` (large negative
+            mass off the predicted class), matching the previous interface.
+        """
+        del kwargs
+        _ = cil_all_seen_upto_task
+
         ns = x.size(0)
+        device = x.device
+        dtype = torch.float32
         task_classes = self.classes_per_task[t]
         offset1, offset2 = self.compute_offsets(t)
-        if offset1 not in self.mem_class_x.keys():
-            # no exemplar in memory yet, output uniform distr. over classes in
-            # task t above, we check presence of first class for this task, we
-            # should check them all
-            out = torch.Tensor(ns, self.n_classes).fill_(-10e10)
-            out[:, offset1:offset2].fill_(1.0 / max(task_classes, 1))
-            if self.gpu:
-                out = out.cuda()
-            return out
-        means = torch.ones(task_classes, nd) * float("inf")
-        if self.gpu:
-            means = means.cuda()
-        for cc in range(offset1, offset2):
-            means[cc - offset1] = self.feature_forward(self.mem_class_x[cc]).data.mean(
-                0
-            )
-        classpred = torch.LongTensor(ns)
-        preds = self.feature_forward(x).data.clone()
-        # L2-normalise prototypes and predictions before distance computation,
-        # following the standard iCaRL nearest-mean classifier.
-        means = F.normalize(means, p=2, dim=1)
-        preds = F.normalize(preds, p=2, dim=1)
-        for ss in range(ns):
-            dist = (means - preds[ss].expand(task_classes, nd)).norm(2, 1)
-            _, ii = dist.min(0)
-            ii = ii.squeeze()
-            classpred[ss] = ii.item() + offset1
 
-        out = torch.zeros(ns, self.n_classes)
-        if self.gpu:
-            out = out.cuda()
-        for ss in range(ns):
-            out[ss, classpred[ss]] = 1
-        return out  # return 1-of-C code, ns x nc
+        class_ids = sorted(self.mem_class_x.keys())
+        if not class_ids:
+            out = torch.full(
+                (ns, self.n_classes),
+                -1e10,
+                device=device,
+                dtype=dtype,
+            )
+            block = max(task_classes, 1)
+            out[:, offset1:offset2] = 1.0 / block
+            return out
+
+        means_rows: list[torch.Tensor] = []
+        for class_id in class_ids:
+            exemplars = self.mem_class_x[class_id]
+            means_rows.append(self.feature_forward(exemplars).detach().mean(dim=0))
+        means = torch.stack(means_rows, dim=0)
+        feats = self.feature_forward(x).detach()
+        means = F.normalize(means, p=2, dim=1)
+        feats = F.normalize(feats, p=2, dim=1)
+        distances = torch.cdist(feats, means, p=2)
+        nearest = distances.argmin(dim=1)
+        id_tensor = torch.tensor(class_ids, device=device, dtype=torch.long)
+        pred_labels = id_tensor[nearest]
+
+        out = torch.full((ns, self.n_classes), -1e10, device=device, dtype=dtype)
+        out.scatter_(1, pred_labels.unsqueeze(1), 1.0)
+        return out
 
     def _ll_params(self):
         for name, param in self.net.named_parameters():

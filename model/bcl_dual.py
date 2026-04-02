@@ -157,6 +157,11 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.adapt_ = False  # args.adapt
         self.adapt_lr = self.cfg.lr
         self.models = {}
+        # Per-task ``adapt()`` checkpoints are TIL-only; class-incremental runs
+        # should use the shared backbone at inference.
+        self.use_cil_inference: bool = (
+            getattr(args, "loader", "") == "class_incremental_loader"
+        )
 
         # print(f"task_val_capacities: {self.task_val_capacities}")
         # print(f"task_replay_capacities: {self.task_replay_capacities}")
@@ -208,7 +213,13 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             return 0, self.n_outputs
 
     def forward(self, x, t, return_feat=False, *, cil_all_seen_upto_task=None):
-        if self.adapt_ and not self.net.training:
+        use_task_adapted = (
+            self.adapt_
+            and not self.net.training
+            and not self.use_cil_inference
+            and t in self.models
+        )
+        if use_task_adapted:
             output = self.models[t](x)
         else:
             output = self.net(x)

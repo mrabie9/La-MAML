@@ -363,6 +363,25 @@ class UCLConfig:
         return cfg
 
 
+def _infer_ucl_split_from_loader(args: object, cfg: UCLConfig) -> None:
+    """Set ``cfg.split`` from ``args.loader`` for CIL vs TIL.
+
+    Class-incremental runs need a single full-width logit vector (concatenated
+    heads). Task-incremental runs keep one head per task. Explicit ``split`` on
+    ``args`` is applied in :meth:`UCLConfig.from_args` first; this overwrites it
+    when the loader name is recognised so YAML defaults stay loader-aligned.
+
+    Args:
+        args: Parsed experiment arguments (``loader`` string).
+        cfg: Config instance to mutate in place.
+    """
+    loader_name = str(getattr(args, "loader", "") or "")
+    if loader_name == "class_incremental_loader":
+        cfg.split = False
+    elif loader_name == "task_incremental_loader":
+        cfg.split = True
+
+
 class BayesianClassifier(nn.Module):
     """Bayesian ResNet feature extractor followed by per-task Bayesian heads."""
 
@@ -446,6 +465,7 @@ class Net(nn.Module):
         super().__init__()
 
         self.cfg = UCLConfig.from_args(args)
+        _infer_ucl_split_from_loader(args, self.cfg)
         assert n_tasks > 0, "Number of tasks must be positive for UCL"
 
         self.args = args
@@ -525,31 +545,62 @@ class Net(nn.Module):
         return next(self.parameters()).device
 
     def forward(
-        self, x: torch.Tensor, t: int, s: Optional[float] = None
+        self,
+        x: torch.Tensor,
+        t: int,
+        s: Optional[float] = None,
+        *,
+        cil_all_seen_upto_task: int | None = None,
     ) -> torch.Tensor:
+        """Return task head logits, or concatenated heads when ``split`` is False.
+
+        ``split`` is set from ``args.loader`` in :meth:`Net.__init__` (CIL →
+        concatenated heads; TIL → separate heads). With concatenated logits,
+        :func:`~utils.misc_utils.apply_task_incremental_logit_mask` applies in
+        eval. With ``split=True``, only head ``t`` is returned.
+        """
         if not self.training:
             num_samples = max(1, self.cfg.eval_samples)
             if num_samples == 1:
                 outputs = self.model(x, sample=False)
-                return outputs[t] if self.split else outputs
+                logits = outputs[t] if self.split else outputs
+            else:
+                probs_acc: Optional[torch.Tensor] = None
+                with torch.no_grad():
+                    with self._temporarily_enable_bn_training():
+                        for _ in range(num_samples):
+                            sampled = self.model(x, sample=True)
+                            head_logits = sampled[t] if self.split else sampled
+                            head_probs = F.softmax(head_logits, dim=-1)
+                            probs_acc = (
+                                head_probs
+                                if probs_acc is None
+                                else probs_acc + head_probs
+                            )
 
-            probs_acc: Optional[torch.Tensor] = None
-            with torch.no_grad():
-                with self._temporarily_enable_bn_training():
-                    for _ in range(num_samples):
-                        sampled = self.model(x, sample=True)
-                        head_logits = sampled[t] if self.split else sampled
-                        head_probs = F.softmax(head_logits, dim=-1)
-                        probs_acc = (
-                            head_probs if probs_acc is None else probs_acc + head_probs
-                        )
+                assert probs_acc is not None
+                probs_mean = probs_acc / float(num_samples)
+                logits = torch.log(probs_mean.clamp_min(1e-8))
+        else:
+            outputs = self.model(x, sample=False)
+            logits = outputs[t] if self.split else outputs
 
-            assert probs_acc is not None
-            probs_mean = probs_acc / float(num_samples)
-            return torch.log(probs_mean.clamp_min(1e-8))
-
-        outputs = self.model(x, sample=False)
-        return outputs[t] if self.split else outputs
+        if (
+            not self.training
+            and self.is_task_incremental
+            and not self.split
+            and logits.size(-1) == self.n_outputs
+        ):
+            logits = misc_utils.apply_task_incremental_logit_mask(
+                logits,
+                t,
+                self.classes_per_task,
+                self.n_outputs,
+                cil_all_seen_upto_task=cil_all_seen_upto_task,
+                global_noise_label=self.noise_label,
+                fill_value=-10e10,
+            )
+        return logits
 
     def forward_heads(
         self, x: torch.Tensor, sample: bool = False
