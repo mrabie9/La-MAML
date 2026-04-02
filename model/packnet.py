@@ -19,7 +19,6 @@ import torch.nn as nn
 from torch.nn.modules.batchnorm import _BatchNorm
 
 from model.detection_replay import (
-    classification_loss_zero_stub,
     noise_label_from_args,
     signal_mask_exclude_noise,
     unpack_y_to_class_labels,
@@ -143,21 +142,26 @@ class Net(nn.Module):
 
         self.net.train()
         logits = self.net(x)
-        offset1, offset2 = self._compute_offsets(t)
         y_cls = unpack_y_to_class_labels(y)
         signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
-        logits_task = logits[:, offset1:offset2]
-
-        if signal_mask.any():
-            logits = logits_task[signal_mask]
-            targets = (y_cls[signal_mask] - offset1).long()
-            loss = classification_cross_entropy(
-                logits, targets, class_weighted_ce=self.class_weighted_ce
+        logits_for_loss = logits
+        if self.is_task_incremental:
+            logits_for_loss = misc_utils.apply_task_incremental_logit_mask(
+                logits,
+                t,
+                self.classes_per_task,
+                self.n_outputs,
+                cil_all_seen_upto_task=t,
+                global_noise_label=self.noise_label,
             )
-            preds = torch.argmax(logits, dim=1)
-            cls_tr_rec = macro_recall(preds, targets)
+        targets_for_loss = y_cls.long()
+        loss = classification_cross_entropy(
+            logits_for_loss, targets_for_loss, class_weighted_ce=self.class_weighted_ce
+        )
+        if signal_mask.any():
+            preds = torch.argmax(logits_for_loss[signal_mask], dim=1)
+            cls_tr_rec = macro_recall(preds, y_cls[signal_mask].long())
         else:
-            loss = classification_loss_zero_stub(logits_task)
             cls_tr_rec = 0.0
 
         self.opt.zero_grad()

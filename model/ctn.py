@@ -13,7 +13,6 @@ import torch
 from model.ctn_base import ContextNet18
 from model.detection_replay import (
     DetectionReplayMixin,
-    classification_loss_zero_stub,
     noise_label_from_args,
     signal_mask_exclude_noise,
     unpack_y_to_class_labels,
@@ -462,29 +461,21 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         for _ in range(self.n_meta):
             loss1 = torch.tensor(0.0, device=x.device)
 
-            offset1, offset2 = self.compute_offsets(t)
-            pred = self.forward(x_train, t)
-            logits = pred[:, offset1:offset2]
-            targets = y_work - offset1
-            preds = torch.argmax(logits, dim=1)
+            pred = self.forward(x_train, t, cil_all_seen_upto_task=t)
+            logits = pred
+            targets = y_work.long()
             signal_mask_for_metric = signal_mask_exclude_noise(y_work, self.noise_label)
             if signal_mask_for_metric.any():
-                cls_tr_rec.append(
-                    macro_recall(
-                        preds[signal_mask_for_metric], targets[signal_mask_for_metric]
-                    )
-                )
+                preds = torch.argmax(logits[signal_mask_for_metric], dim=1)
+                cls_tr_rec.append(macro_recall(preds, targets[signal_mask_for_metric]))
             else:
                 cls_tr_rec.append(0.0)
 
-            if signal_mask_for_metric.any():
-                loss1 = classification_cross_entropy(
-                    logits[signal_mask_for_metric],
-                    targets[signal_mask_for_metric],
-                    class_weighted_ce=self.class_weighted_ce,
-                )
-            else:
-                loss1 = classification_loss_zero_stub(logits)
+            loss1 = classification_cross_entropy(
+                logits,
+                targets,
+                class_weighted_ce=self.class_weighted_ce,
+            )
             # tt = t + 1
             for i in range(self.inner_steps):
                 loss2 = torch.tensor(0.0, device=x.device)
@@ -527,16 +518,18 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                     with torch.no_grad():
                         param.add_(grad, alpha=-self.inner_lr)
 
+            # Inner-loop `autograd.grad` freed the graph built from the pre-update
+            # `logits`; re-forward after in-place base-parameter updates before
+            # differentiating w.r.t. context parameters.
+            logits = self.forward(x_train, t, cil_all_seen_upto_task=t)
+
             sampled_validation = self.memory_sampling(t + 1, valid=True)
             if sampled_validation is None:
-                if signal_mask_for_metric.any():
-                    outer_loss = classification_cross_entropy(
-                        logits[signal_mask_for_metric],
-                        targets[signal_mask_for_metric],
-                        class_weighted_ce=self.class_weighted_ce,
-                    )
-                else:
-                    outer_loss = classification_loss_zero_stub(logits)
+                outer_loss = classification_cross_entropy(
+                    logits,
+                    targets,
+                    class_weighted_ce=self.class_weighted_ce,
+                )
             else:
                 xval, yval, feat, mask, list_t, class_sizes_val = sampled_validation
                 pred_ = self.net(xval, list_t)

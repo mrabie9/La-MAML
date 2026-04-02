@@ -14,6 +14,7 @@ from main import (
     _split_labels,
     _noise_label_for_metrics,
     _false_alarm_rate,
+    _model_forward_for_metric_loop,
     eval_tasks,
     save_results,
     log_state,
@@ -278,10 +279,8 @@ def run_single_round_training(
 
             model.eval()
             with torch.no_grad():
-                logits = (
-                    model(xb, current_task_index)
-                    if args.model != "anml"
-                    else model(xb, fast_weights=None)
+                logits = _model_forward_for_metric_loop(
+                    model, xb, current_task_index, args
                 )
                 predictions = torch.argmax(logits, dim=1).cpu()
                 det_logits = None

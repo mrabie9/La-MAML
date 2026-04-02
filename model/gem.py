@@ -336,7 +336,6 @@ class Net(DetectionReplayMixin, nn.Module):
             # legacy: flatten non-IQ inputs
             x = x.view(x.size(0), -1)
         y_work = unpack_y_to_class_labels(y)
-        class_counts = getattr(self, "classes_per_task", None)
         # noise_label = None
         # if class_counts is not None:
         #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
@@ -449,20 +448,17 @@ class Net(DetectionReplayMixin, nn.Module):
 
             # current batch
             self.zero_grad()
-            offset1, offset2 = compute_offsets(t, self.classes_per_task, self.is_cifar)
-            logits_full = self.forward(x, t)[:, offset1:offset2]
+            logits_full = self.forward(x, t, cil_all_seen_upto_task=t)
+            targets = y_work.long()
             signal_mask = signal_mask_exclude_noise(y_work, self.noise_label)
             if signal_mask.any():
-                logits = logits_full[signal_mask]
-                targets = y_work[signal_mask] - offset1
-                preds = torch.argmax(logits, dim=1)
-                cls_tr_rec.append(macro_recall(preds, targets))
-                loss = classification_cross_entropy(
-                    logits, targets, class_weighted_ce=self.class_weighted_ce
-                )
+                preds = torch.argmax(logits_full[signal_mask], dim=1)
+                cls_tr_rec.append(macro_recall(preds, targets[signal_mask]))
             else:
-                loss = classification_loss_zero_stub(logits_full)
                 cls_tr_rec.append(0.0)
+            loss = classification_cross_entropy(
+                logits_full, targets, class_weighted_ce=self.class_weighted_ce
+            )
             loss.backward()
             if self.cfg.grad_clip_norm:
                 torch.nn.utils.clip_grad_norm_(

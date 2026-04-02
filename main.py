@@ -588,6 +588,37 @@ def _maybe_print_eval_detection_alignment_debug(
     )
 
 
+def _model_forward_for_metric_loop(
+    model: object, x: torch.Tensor, task_index: int, args: object
+) -> torch.Tensor:
+    """Run ``model`` forward for metric computation (validation, test, or train probe).
+
+    For ``class_incremental_loader``, passes ``cil_all_seen_upto_task`` so
+    :func:`utils.misc_utils.apply_task_incremental_logit_mask` is applied in
+    model code with the **cumulative** class boundary (true CIL inference). For
+    task-incremental loaders, no extra keyword is passed (per-task masking
+    only).
+
+    Args:
+        model: Continual-learning module with ``forward(x, task_index, ...)``.
+        x: Input batch on the correct device.
+        task_index: Zero-based continual task id (same as ``task_info['task']``).
+        args: Experiment arguments (``loader``, ``model`` id).
+
+    Returns:
+        Classifier logits tensor.
+    """
+    forward_kw: dict = {}
+    if getattr(args, "loader", "") == "class_incremental_loader":
+        forward_kw["cil_all_seen_upto_task"] = task_index
+    if getattr(args, "model", "") == "anml":
+        return model(x, fast_weights=None)  # type: ignore[operator]
+    try:
+        return model(x, task_index, **forward_kw)  # type: ignore[operator]
+    except TypeError:
+        return model(x, task_index)  # type: ignore[operator]
+
+
 def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
     model.eval()
     device = torch.device(
@@ -629,16 +660,7 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
             if not torch.is_tensor(yb_cls):
                 yb_cls = torch.as_tensor(yb_cls)
 
-            forward_kw: dict = {}
-            if getattr(args, "loader", "") == "class_incremental_loader":
-                forward_kw["cil_all_seen_upto_task"] = task_position
-            if args.model != "anml":
-                try:
-                    logits = model(xb, t, **forward_kw)
-                except TypeError:
-                    logits = model(xb, t)
-            else:
-                logits = model(xb, fast_weights=None)
+            logits = _model_forward_for_metric_loop(model, xb, t, args)
             pb = torch.argmax(logits, dim=1).cpu()
             yb_cls_cpu = yb_cls.detach().cpu()
             yb_cls_for_metrics = yb_cls_cpu
@@ -959,10 +981,8 @@ def life_experience(model, inc_loader, args):
                 else:
                     model.eval()
                     with torch.no_grad():
-                        logits = (
-                            model(v_x, task_info["task"])
-                            if args.model != "anml"
-                            else model(v_x, fast_weights=None)
+                        logits = _model_forward_for_metric_loop(
+                            model, v_x, task_info["task"], args
                         )
                         pb = torch.argmax(logits, dim=1).cpu()
                     model.train()

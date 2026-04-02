@@ -18,7 +18,6 @@ import torch.nn as nn
 from model.resnet1d import ResNet1D
 from model.detection_replay import (
     DetectionReplayMixin,
-    classification_loss_zero_stub,
     noise_label_from_args,
     signal_mask_exclude_noise,
     unpack_y_to_class_labels,
@@ -146,21 +145,26 @@ class Net(DetectionReplayMixin, nn.Module):
         #     noise_label = offset2 - 1
         y_cls = unpack_y_to_class_labels(y)
         cls_logits = self.net.forward_heads(x)[1]
-        offset1, offset2 = (0, self.n_outputs)
-        if self.is_task_incremental:
-            offset1, offset2 = self._compute_offsets(t)
         signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
+        logits_for_loss = cls_logits
+        if self.is_task_incremental:
+            logits_for_loss = misc_utils.apply_task_incremental_logit_mask(
+                cls_logits,
+                t,
+                self.classes_per_task,
+                self.n_outputs,
+                cil_all_seen_upto_task=t,
+                global_noise_label=self.noise_label,
+            )
+        targets_for_loss = y_cls.long()
+        loss_ce = classification_cross_entropy(
+            logits_for_loss, targets_for_loss, class_weighted_ce=self.class_weighted_ce
+        )
 
         if signal_mask.any():
-            logits = cls_logits[signal_mask][:, offset1:offset2]
-            targets = (y_cls[signal_mask] - offset1).long()
-            loss_ce = classification_cross_entropy(
-                logits, targets, class_weighted_ce=self.class_weighted_ce
-            )
-            preds = torch.argmax(logits, dim=1)
-            cls_tr_rec = macro_recall(preds, targets)
+            preds = torch.argmax(logits_for_loss[signal_mask], dim=1)
+            cls_tr_rec = macro_recall(preds, y_cls[signal_mask].long())
         else:
-            loss_ce = classification_loss_zero_stub(cls_logits[:, offset1:offset2])
             cls_tr_rec = 0.0
         # else:
         #     loss_ce = cls_logits.new_zeros(1)

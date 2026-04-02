@@ -4,8 +4,6 @@ import torch.nn as nn
 from model.lamaml_base import *  # noqa: F403
 from model.detection_replay import (
     DetectionReplayMixin,
-    classification_loss_zero_stub,
-    signal_mask_exclude_noise,
     unpack_y_to_class_labels,
 )
 from utils.training_metrics import macro_recall
@@ -26,16 +24,10 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
             enabled=bool(getattr(args, "use_detector_arch", False)),
         )
 
-    def take_loss(self, t, logits, y):
-        # compute loss on data from a single task
-        offset1, offset2 = self.compute_offsets(t)
+    def take_loss(self, _t, logits, y):
+        # Full CIL logits (including global noise class); targets are global indices.
         y_cls = unpack_y_to_class_labels(y).long()
-        narrow = logits[:, offset1:offset2]
-        targets = y_cls - offset1
-        mask = signal_mask_exclude_noise(y_cls, self.noise_label)
-        if mask.any():
-            return self._classification_loss(narrow[mask], targets[mask])
-        return classification_loss_zero_stub(narrow)
+        return self._classification_loss(logits, y_cls)
 
     def take_multitask_loss(self, bt, t, logits, y):
         # compute loss on data from a multiple tasks
@@ -46,20 +38,12 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
         if len(bt) == 0:
             return torch.zeros((), device=logits.device, dtype=logits.dtype)
         loss = torch.zeros((), device=logits.device, dtype=logits.dtype)
-        for i, ti in enumerate(bt):
-            offset1, offset2 = self.compute_offsets(ti)
-            narrow = logits[i, offset1:offset2].unsqueeze(0)
+        for i, _ti in enumerate(bt):
+            row = logits[i : i + 1]
             y_i = int(y[i].item())
-            if self.noise_label is not None and y_i == self.noise_label:
-                loss = loss + classification_loss_zero_stub(narrow.squeeze(0))
-                continue
             loss = loss + self._classification_loss(
-                narrow,
-                torch.tensor(
-                    [y_i - offset1],
-                    device=logits.device,
-                    dtype=torch.long,
-                ),
+                row,
+                torch.tensor([y_i], device=logits.device, dtype=torch.long),
             )
         return loss / len(bt)
 
@@ -80,16 +64,20 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
         differentiate the loss through the network updates wrt alpha
         """
 
-        offset1, offset2 = self.compute_offsets(t)
-
-        logits = self.net.forward(x, fast_weights)[:, :offset2]
+        raw = self.net.forward(x, fast_weights)
+        logits = misc_utils.apply_task_incremental_logit_mask(
+            raw,
+            t,
+            self.classes_per_task,
+            self.n_outputs,
+            cil_all_seen_upto_task=t,
+            global_noise_label=self.noise_label,
+        )
         loss_q = self.take_multitask_loss(bt, t, logits, y)
 
         return loss_q, logits
 
     def inner_update(self, x, fast_weights, y, t):
-        offset1, offset2 = self.compute_offsets(t)
-
         # Ensure we have a concrete, non-empty list of tensors
         if not fast_weights:  # handles None or []
             fast_weights = [p for p in self.net.parameters()]
@@ -98,7 +86,15 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
             fast_weights = list(fast_weights)
 
         # Forward using fast weights
-        logits = self.net.forward(x, vars=fast_weights)[:, :offset2]
+        raw = self.net.forward(x, vars=fast_weights)
+        logits = misc_utils.apply_task_incremental_logit_mask(
+            raw,
+            t,
+            self.classes_per_task,
+            self.n_outputs,
+            cil_all_seen_upto_task=t,
+            global_noise_label=self.noise_label,
+        )
         loss = self.take_loss(t, logits, y)
 
         graph_required = bool(self.cfg.second_order)
@@ -276,21 +272,22 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
             # Ensure the input adapter is explicitly optimized on the current
             # differentiable 3-ADC batch.
             if input_was_3adc and x_train.dim() == 3 and x_train.size(1) == 2:
-                offset1, offset2 = self.compute_offsets(t)
+                _offset1, _offset2 = self.compute_offsets(t)
                 self.net.zero_grad(set_to_none=True)
-                live_logits = self.net.forward(raw_x.detach())
-                narrow = live_logits[:, offset1:offset2]
+                live_logits = misc_utils.apply_task_incremental_logit_mask(
+                    self.net.forward(raw_x.detach()),
+                    t,
+                    self.classes_per_task,
+                    self.n_outputs,
+                    cil_all_seen_upto_task=t,
+                    global_noise_label=self.noise_label,
+                )
                 y_live = unpack_y_to_class_labels(y).long()
-                tgt = y_live - offset1
-                mask_live = signal_mask_exclude_noise(y_live, self.noise_label)
-                if mask_live.any():
-                    live_loss = classification_cross_entropy(
-                        narrow[mask_live],
-                        tgt[mask_live],
-                        class_weighted_ce=self.class_weighted_ce,
-                    )
-                else:
-                    live_loss = classification_loss_zero_stub(narrow)
+                live_loss = classification_cross_entropy(
+                    live_logits,
+                    y_live,
+                    class_weighted_ce=self.class_weighted_ce,
+                )
                 live_loss.backward()
                 adapter_module = getattr(self.net.model, "input_adapter", None)
                 if adapter_module is not None:

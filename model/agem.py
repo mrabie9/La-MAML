@@ -17,7 +17,6 @@ import random
 from model.resnet1d import ResNet1D
 from model.detection_replay import (
     DetectionReplayMixin,
-    classification_loss_zero_stub,
     noise_label_from_args,
     signal_mask_exclude_noise,
     unpack_y_to_class_labels,
@@ -432,23 +431,20 @@ class Net(DetectionReplayMixin, nn.Module):
 
             # now compute the grad on the current minibatch
             self.zero_grad()
-            offset1, offset2 = compute_offsets(t, self.classes_per_task, self.is_cifar)
-            logits_full = self.forward(x, t)[:, offset1:offset2]
-            y_cls = y_work - offset1
+            logits_full = self.forward(x, t, cil_all_seen_upto_task=t)
+            y_cls = y_work.long()
             signal_mask = signal_mask_exclude_noise(y_work, self.noise_label)
-            if signal_mask.any():
-                logits_sig = logits_full[signal_mask]
-                y_sig = y_cls[signal_mask]
-                loss = classification_cross_entropy(
-                    logits_sig,
-                    y_sig,
-                    class_weighted_ce=self.class_weighted_ce,
-                )
-            else:
-                loss = classification_loss_zero_stub(logits_full)
             pb = torch.argmax(logits_full, dim=1)
             targets = y_cls
-            cls_tr_rec.append(macro_recall(pb, targets))
+            if signal_mask.any():
+                cls_tr_rec.append(macro_recall(pb[signal_mask], targets[signal_mask]))
+            else:
+                cls_tr_rec.append(0.0)
+            loss = classification_cross_entropy(
+                logits_full,
+                y_cls,
+                class_weighted_ce=self.class_weighted_ce,
+            )
             loss.backward()
             if self.cfg.grad_clip_norm:
                 torch.nn.utils.clip_grad_norm_(
