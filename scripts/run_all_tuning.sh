@@ -514,6 +514,10 @@ fill_cmd_for_idx() {
     if [[ -f "$model_cfg" ]]; then
         cmd+=( "--config" "$model_cfg" )
     fi
+    # Always run hierarchical tuning unless explicitly already provided.
+    if ! contains "--hierarchical" "${EXTRA_ARGS[@]}"; then
+        cmd+=( "--hierarchical" )
+    fi
     if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
         cmd+=( "${EXTRA_ARGS[@]}" )
     fi
