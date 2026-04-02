@@ -609,17 +609,26 @@ elif [[ "$USE_HOST_SCHEDULE" -eq 1 && "$SCHED_KIND" == "queue" && "$CONCURRENCY_
             slot_low_model="${SELECTED_MODELS[$lo]}"
             idx_l=$((idx_l + 1))
         fi
-        if [[ -n "$slot_high_pid" ]] && ! kill -0 "$slot_high_pid" 2>/dev/null; then
-            reap_pid_record "$slot_high_pid" "$slot_high_model"
-            slot_high_pid=""
-            slot_high_model=""
-            continue
+        if [[ -n "$slot_high_pid" ]]; then
+            # `kill -0` is fragile: it stays true for zombies and can lead to a
+            # deadlock if we never reap the finished job. Using `ps` lets us
+            # reliably detect the zombie state.
+            high_stat="$(ps -o stat= -p "$slot_high_pid" 2>/dev/null || true)"
+            if [[ -z "$high_stat" ]] || [[ "$high_stat" == *Z* ]]; then
+                reap_pid_record "$slot_high_pid" "$slot_high_model"
+                slot_high_pid=""
+                slot_high_model=""
+                continue
+            fi
         fi
-        if [[ -n "$slot_low_pid" ]] && ! kill -0 "$slot_low_pid" 2>/dev/null; then
-            reap_pid_record "$slot_low_pid" "$slot_low_model"
-            slot_low_pid=""
-            slot_low_model=""
-            continue
+        if [[ -n "$slot_low_pid" ]]; then
+            low_stat="$(ps -o stat= -p "$slot_low_pid" 2>/dev/null || true)"
+            if [[ -z "$low_stat" ]] || [[ "$low_stat" == *Z* ]]; then
+                reap_pid_record "$slot_low_pid" "$slot_low_model"
+                slot_low_pid=""
+                slot_low_model=""
+                continue
+            fi
         fi
         sleep 1
     done
