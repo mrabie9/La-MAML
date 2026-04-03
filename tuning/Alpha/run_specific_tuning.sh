@@ -20,7 +20,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 exec "$REPO_ROOT/scripts/run_all_tuning.sh" \
     --scripts-root "$REPO_ROOT/tuning/Alpha" \
-    --models "gem,agem,icarl,ucl,bcl,ewc,si,lwf,rwalk" \
+    --models "bcl_dual,ctn,ucl" \
     -- \
     --hierarchical \
-    --dry-run
+    # --dry-run
