@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 export PYTHONUNBUFFERED=1
+SCRIPT_START_EPOCH="$(date +%s)"
 
 EXPERIMENT_DESC=""
 RERUN_PROBE=0
@@ -90,6 +91,14 @@ LOG_FILE="${RUN_LOG_DIR}/full_experiments_${RUN_TIMESTAMP}.log"
 
 log_msg() {
     echo "[$(date -Iseconds)] $*" | tee -a "$LOG_FILE"
+}
+
+format_duration() {
+    local total_seconds="$1"
+    local hours=$((total_seconds / 3600))
+    local minutes=$(((total_seconds % 3600) / 60))
+    local seconds=$((total_seconds % 60))
+    printf "%02d:%02d:%02d" "$hours" "$minutes" "$seconds"
 }
 
 log_msg "=== full_experiments.sh started ==="
@@ -297,7 +306,10 @@ PY
 run_job_sync() {
   local name="$1"
   local model_yaml
-  model_yaml="$(resolve_model_yaml "$name")" || return 1
+  model_yaml="$(resolve_model_yaml "$name")" || {
+    record_job_result 1
+    return 1
+  }
   JOB_LOG_FILE="${JOB_LOG_DIR}/job_${name}_$(date +%Y%m%d_%H%M%S_%N).log"
   log_msg "--- Dispatching: base + $name + $(basename "$model_yaml") (job log: $JOB_LOG_FILE) ---"
   echo "[$(date -Iseconds)] START $name" >>"$LOG_FILE"
@@ -307,6 +319,7 @@ run_job_sync() {
   fi
   python3 "$entrypoint" --config "$BASE_CONFIG" --config "$model_yaml" >"$JOB_LOG_FILE" 2>&1
   local exit_code=$?
+  record_job_result "$exit_code"
   if [ "$exit_code" -eq 0 ]; then
     echo "[$(date -Iseconds)] Completed: $name (exit 0)" >>"$LOG_FILE"
   else
@@ -326,11 +339,25 @@ is_allowed() {
 }
 
 overall_exit=0
+successful_runs=0
+unsuccessful_runs=0
+
+record_job_result() {
+  local exit_code="$1"
+  if [ "$exit_code" -eq 0 ]; then
+    successful_runs=$((successful_runs + 1))
+  else
+    unsuccessful_runs=$((unsuccessful_runs + 1))
+  fi
+}
 
 run_job_bg() {
   local name="$1"
   local model_yaml
-  model_yaml="$(resolve_model_yaml "$name")" || return 1
+  model_yaml="$(resolve_model_yaml "$name")" || {
+    record_job_result 1
+    return 1
+  }
   JOB_LOG_FILE="${JOB_LOG_DIR}/job_${name}_$(date +%Y%m%d_%H%M%S_%N).log"
   # Important: keep stdout clean for pid capture (queue scheduler uses
   # command-substitution to capture the returned pid).
@@ -384,13 +411,19 @@ if [ "${#HOST_HIGH[@]}" -gt 0 ] || [ "${#HOST_LOW[@]}" -gt 0 ]; then
   idx_low=0
   while [ $idx_high -lt "${#QUEUE_HIGH[@]}" ] || [ $idx_low -lt "${#QUEUE_LOW[@]}" ] || [ -n "$slot_high_pid" ] || [ -n "$slot_low_pid" ]; do
     if [ -z "$slot_high_pid" ] && [ $idx_high -lt "${#QUEUE_HIGH[@]}" ]; then
-      run_job_bg "${QUEUE_HIGH[$idx_high]}"
-      slot_high_pid="$LAST_BG_PID"
+      if run_job_bg "${QUEUE_HIGH[$idx_high]}"; then
+        slot_high_pid="$LAST_BG_PID"
+      else
+        overall_exit=1
+      fi
       idx_high=$((idx_high+1))
     fi
     if [ -z "$slot_low_pid" ] && [ $idx_low -lt "${#QUEUE_LOW[@]}" ]; then
-      run_job_bg "${QUEUE_LOW[$idx_low]}"
-      slot_low_pid="$LAST_BG_PID"
+      if run_job_bg "${QUEUE_LOW[$idx_low]}"; then
+        slot_low_pid="$LAST_BG_PID"
+      else
+        overall_exit=1
+      fi
       idx_low=$((idx_low+1))
     fi
 
@@ -398,6 +431,7 @@ if [ "${#HOST_HIGH[@]}" -gt 0 ] || [ "${#HOST_LOW[@]}" -gt 0 ]; then
     if [ -n "$slot_high_pid" ] && ! kill -0 "$slot_high_pid" 2>/dev/null; then
       wait "$slot_high_pid"
       rc=$?
+      record_job_result "$rc"
       slot_high_pid=""
       if [ $rc -ne 0 ]; then overall_exit=1; fi
       continue
@@ -405,6 +439,7 @@ if [ "${#HOST_HIGH[@]}" -gt 0 ] || [ "${#HOST_LOW[@]}" -gt 0 ]; then
     if [ -n "$slot_low_pid" ] && ! kill -0 "$slot_low_pid" 2>/dev/null; then
       wait "$slot_low_pid"
       rc=$?
+      record_job_result "$rc"
       slot_low_pid=""
       if [ $rc -ne 0 ]; then overall_exit=1; fi
       continue
@@ -442,8 +477,16 @@ else
     # Concurrent pair: run both in parallel and wait.
     JOB_LOG_FILE_A="${JOB_LOG_DIR}/job_${a}_$(date +%Y%m%d_%H%M%S_%N).log"
     JOB_LOG_FILE_B="${JOB_LOG_DIR}/job_${b}_$(date +%Y%m%d_%H%M%S_%N).log"
-    model_yaml_a="$(resolve_model_yaml "$a")" || { overall_exit=1; continue; }
-    model_yaml_b="$(resolve_model_yaml "$b")" || { overall_exit=1; continue; }
+    model_yaml_a="$(resolve_model_yaml "$a")" || {
+      overall_exit=1
+      record_job_result 1
+      continue
+    }
+    model_yaml_b="$(resolve_model_yaml "$b")" || {
+      overall_exit=1
+      record_job_result 1
+      continue
+    }
 
     echo "[$(date -Iseconds)] START $a" >>"$LOG_FILE"
     echo "[$(date -Iseconds)] START $b" >>"$LOG_FILE"
@@ -480,8 +523,15 @@ else
     ) &
     pid_b=$!
 
-    wait "$pid_a" || overall_exit=1
-    wait "$pid_b" || overall_exit=1
+    wait "$pid_a"
+    rc_a=$?
+    record_job_result "$rc_a"
+    if [ "$rc_a" -ne 0 ]; then overall_exit=1; fi
+
+    wait "$pid_b"
+    rc_b=$?
+    record_job_result "$rc_b"
+    if [ "$rc_b" -ne 0 ]; then overall_exit=1; fi
   done
 fi
 
@@ -495,5 +545,10 @@ if [ "${#HOST_SINGLES[@]}" -gt 0 ]; then
     run_job_sync "$name" || overall_exit=1
   done
 fi
+
+script_end_epoch="$(date +%s)"
+total_runtime_seconds=$((script_end_epoch - SCRIPT_START_EPOCH))
+total_runtime_hms="$(format_duration "$total_runtime_seconds")"
+log_msg "=== full_experiments.sh finished: successful_runs=${successful_runs} unsuccessful_runs=${unsuccessful_runs} total_runtime=${total_runtime_hms} (${total_runtime_seconds}s) ==="
 
 exit "$overall_exit"
