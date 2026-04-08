@@ -16,7 +16,12 @@ import torch
 import torch.nn as nn
 
 from model.resnet1d import ResNet1D
-from model.detection_replay import DetectionReplayMixin
+from model.detection_replay import (
+    DetectionReplayMixin,
+    noise_label_from_args,
+    signal_mask_exclude_noise,
+    unpack_y_to_class_labels,
+)
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 from utils.class_weighted_loss import classification_cross_entropy
@@ -73,6 +78,7 @@ class Net(DetectionReplayMixin, nn.Module):
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         self.is_task_incremental = getattr(args, "class_incremental", True)
+        self.noise_label: int | None = noise_label_from_args(args)
 
         self.net = ResNet1D(n_outputs, args)
         self.class_weighted_ce = bool(
@@ -111,13 +117,15 @@ class Net(DetectionReplayMixin, nn.Module):
         logits = self.net(x)
         if not self.is_task_incremental:
             return logits
-        offset1, offset2 = self._compute_offsets(t)
-        masked = logits.clone()
-        if offset1 > 0:
-            masked[:, :offset1] = -1e9
-        if offset2 < self.n_outputs:
-            masked[:, offset2:] = -1e9
-        return masked
+        cil = kwargs.get("cil_all_seen_upto_task")
+        return misc_utils.apply_task_incremental_logit_mask(
+            logits,
+            t,
+            self.classes_per_task,
+            self.n_outputs,
+            cil_all_seen_upto_task=cil,
+            global_noise_label=self.noise_label,
+        )
 
     # ------------------------------------------------------------------
     def observe(self, x: torch.Tensor, y: torch.Tensor, t: int) -> Tuple[float, float]:
@@ -135,32 +143,29 @@ class Net(DetectionReplayMixin, nn.Module):
         # if class_counts is not None:
         #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
         #     noise_label = offset2 - 1
-        # y_cls, y_det = self._unpack_labels(
-        #     y,
-        #     noise_label=noise_label,
-        #     use_detector_arch=bool(getattr(self, "det_enabled", False)),
-        # )
-        # if y_det is not None and self.det_memories > 0:
-        #     self._update_det_memory(x, y_det)
-        y_cls = y
-        # det_logits, cls_logits = self.net.forward_heads(x)
+        y_cls = unpack_y_to_class_labels(y)
         cls_logits = self.net.forward_heads(x)[1]
-        offset1, offset2 = (0, self.n_outputs)
-        targets = y_cls.long()
+        signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
+        logits_for_loss = cls_logits
         if self.is_task_incremental:
-            offset1, offset2 = self._compute_offsets(t)
-        # valid_mask = (y_det == 1) & (y_cls >= 0)
-        # if valid_mask.any():
-        if True:
-            # logits = cls_logits[valid_mask][:, offset1:offset2]
-            # targets = (targets[valid_mask] - offset1).long()
-            logits = cls_logits[:, offset1:offset2]
-            targets = (targets - offset1).long()
-            loss_ce = classification_cross_entropy(
-                logits, targets, class_weighted_ce=self.class_weighted_ce
+            logits_for_loss = misc_utils.apply_task_incremental_logit_mask(
+                cls_logits,
+                t,
+                self.classes_per_task,
+                self.n_outputs,
+                cil_all_seen_upto_task=t,
+                global_noise_label=self.noise_label,
             )
-            preds = torch.argmax(logits, dim=1)
-            cls_tr_rec = macro_recall(preds, targets)
+        targets_for_loss = y_cls.long()
+        loss_ce = classification_cross_entropy(
+            logits_for_loss, targets_for_loss, class_weighted_ce=self.class_weighted_ce
+        )
+
+        if signal_mask.any():
+            preds = torch.argmax(logits_for_loss[signal_mask], dim=1)
+            cls_tr_rec = macro_recall(preds, y_cls[signal_mask].long())
+        else:
+            cls_tr_rec = 0.0
         # else:
         #     loss_ce = cls_logits.new_zeros(1)
         #     cls_tr_rec = 0.0

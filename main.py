@@ -305,6 +305,30 @@ def _noise_label_max_for_task(task: object) -> int | None:
     return max_label
 
 
+def _noise_label_for_metrics(args: object, task: object) -> int | None:
+    """Resolve the noise class id for masking classification / detection metrics.
+
+    IQ class-incremental loaders set ``args.noise_label`` once to a **global**
+    index shared by every task. Eval and train-side metric masking must use that
+    value. Falling back to the per-split maximum label is incorrect for CIL when
+    the split omits noise or when the last signal class equals that maximum.
+
+    When ``args.noise_label`` is unset, we keep the legacy behavior of using the
+    largest label observed in the task's dataloader (older TIL setups).
+
+    Args:
+        args: Parsed experiment arguments (may carry ``noise_label``).
+        task: Per-task dataloader or a ``(x, y, t)`` task tuple for evaluation.
+
+    Returns:
+        Noise class index in **global** label space, or ``None`` if unknown.
+    """
+    raw = getattr(args, "noise_label", None)
+    if raw is not None:
+        return int(raw)
+    return _noise_label_max_for_task(task)
+
+
 def _labels_to_numpy(labels: object) -> np.ndarray:
     """Return labels as a NumPy array regardless of source container type."""
     if torch.is_tensor(labels):
@@ -564,33 +588,52 @@ def _maybe_print_eval_detection_alignment_debug(
     )
 
 
-def eval_class_tasks(model, tasks, args):
+def _model_forward_for_metric_loop(
+    model: object, x: torch.Tensor, task_index: int, args: object
+) -> torch.Tensor:
+    """Run ``model`` forward for metric computation (validation, test, or train probe).
 
-    model.eval()
-    result = []
-    for t, task_loader in enumerate(tasks):
-        correct = 0.0
-        total = 0.0
-        noise_label = _noise_label_max_for_task(task_loader)
+    For ``class_incremental_loader``, passes ``cil_all_seen_upto_task`` so
+    :func:`utils.misc_utils.apply_task_incremental_logit_mask` is applied in
+    model code with the **cumulative** class boundary (true CIL inference). For
+    task-incremental loaders, no extra keyword is passed (per-task masking
+    only).
 
-        for i, (x, y) in enumerate(task_loader):
-            y_cls = _split_labels(y)
-            if not torch.is_tensor(y_cls):
-                y_cls = torch.as_tensor(y_cls)
-            if args.cuda:
-                x = x.cuda()
-            _, p = torch.max(model(x, t).data.cpu(), 1, keepdim=False)
-            if noise_label is not None:
-                mask = y_cls != noise_label
-                if mask.any():
-                    correct += (p[mask] == y_cls[mask]).float().sum().item()
-                    total += float(mask.sum().item())
-            else:
-                correct += (p == y_cls).float().sum().item()
-                total += float(y_cls.size(0))
+    **iCaRL:** Metrics use ``netforward`` logits plus the same
+    :func:`utils.misc_utils.apply_task_incremental_logit_mask` call as
+    :meth:`model.icarl.Net.observe` (``cil_all_seen_upto_task=task_index`` and
+    ``global_noise_label``), not nearest-mean ``forward`` (which omits noise
+    before / without exemplars). This matches training for TIL and CIL runs,
+    because ``observe`` always passes ``cil_all_seen_upto_task=task_index``.
 
-        result.append(correct / total if total > 0 else 0.0)
-    return result
+    Args:
+        model: Continual-learning module with ``forward(x, task_index, ...)``.
+        x: Input batch on the correct device.
+        task_index: Zero-based continual task id (same as ``task_info['task']``).
+        args: Experiment arguments (``loader``, ``model`` id).
+
+    Returns:
+        Classifier logits tensor.
+    """
+    forward_kw: dict = {}
+    if getattr(args, "loader", "") == "class_incremental_loader":
+        forward_kw["cil_all_seen_upto_task"] = task_index
+    if getattr(args, "model", "") == "anml":
+        return model(x, fast_weights=None)  # type: ignore[operator]
+    if getattr(args, "model", "") == "icarl":
+        raw_logits = model.netforward(x)  # type: ignore[attr-defined]
+        return misc_utils.apply_task_incremental_logit_mask(
+            raw_logits,
+            task_index,
+            model.classes_per_task,  # type: ignore[attr-defined]
+            model.n_classes,  # type: ignore[attr-defined]
+            cil_all_seen_upto_task=task_index,
+            global_noise_label=getattr(model, "noise_label", None),
+        )
+    try:
+        return model(x, task_index, **forward_kw)  # type: ignore[operator]
+    except TypeError:
+        return model(x, task_index)  # type: ignore[operator]
 
 
 def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
@@ -620,7 +663,7 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
         det_false_alarms = []
         eval_debug_predictions: List[torch.Tensor] = []
         eval_debug_targets: List[torch.Tensor] = []
-        noise_label = _noise_label_max_for_task(task)
+        noise_label = _noise_label_for_metrics(args, task)
         task_noise_label_for_metrics = noise_label
         for batch_index, batch in enumerate(task):
             if isinstance(batch, (list, tuple)) and len(batch) == 3:
@@ -634,9 +677,7 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
             if not torch.is_tensor(yb_cls):
                 yb_cls = torch.as_tensor(yb_cls)
 
-            logits = (
-                model(xb, t) if args.model != "anml" else model(xb, fast_weights=None)
-            )
+            logits = _model_forward_for_metric_loop(model, xb, t, args)
             pb = torch.argmax(logits, dim=1).cpu()
             yb_cls_cpu = yb_cls.detach().cpu()
             yb_cls_for_metrics = yb_cls_cpu
@@ -729,6 +770,23 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
     return results, prec_results, f1_results, None, None
 
 
+def eval_class_tasks(model, tasks, args, **kwargs):
+    """Evaluate class-incremental runs with the same metrics as :func:`eval_tasks`.
+
+    The previous implementation returned only coarse per-task accuracy and
+    ``None`` for precision, F1, and detection, which made zero-shot / val
+    log lines show ``nan`` for those fields.
+    """
+
+    return eval_tasks(
+        model,
+        tasks,
+        args,
+        specific_task=kwargs.get("specific_task"),
+        eval_epistemic=kwargs.get("eval_epistemic", False),
+    )
+
+
 def life_experience(model, inc_loader, args):
     result_val_a = []
     result_test_a = []
@@ -766,7 +824,7 @@ def life_experience(model, inc_loader, args):
         train_task_loaders.append(train_loader)
         test_task_loaders.append(test_loader)
         current_task = task_info["task"]
-        noise_label_for_task = _noise_label_max_for_task(train_loader)
+        noise_label_for_task = _noise_label_for_metrics(args, train_loader)
 
         log_state(
             args.state_logging,
@@ -940,10 +998,8 @@ def life_experience(model, inc_loader, args):
                 else:
                     model.eval()
                     with torch.no_grad():
-                        logits = (
-                            model(v_x, task_info["task"])
-                            if args.model != "anml"
-                            else model(v_x, fast_weights=None)
+                        logits = _model_forward_for_metric_loop(
+                            model, v_x, task_info["task"], args
                         )
                         pb = torch.argmax(logits, dim=1).cpu()
                     model.train()
@@ -1041,14 +1097,20 @@ def life_experience(model, inc_loader, args):
                     result_val_f1.append(val_f1)
                 if val_det_acc is not None:
                     result_val_det_a.append(val_det_acc)
-                    last_tr_det = (
-                        sum(val_det_acc) / len(val_det_acc) if val_det_acc else None
-                    )
+                    if isinstance(val_det_acc, (list, tuple)):
+                        last_tr_det = (
+                            sum(val_det_acc) / len(val_det_acc) if val_det_acc else None
+                        )
+                    else:
+                        last_tr_det = float(val_det_acc)
                 if val_det_fa is not None:
                     result_val_det_fa.append(val_det_fa)
-                    last_tr_fa = (
-                        sum(val_det_fa) / len(val_det_fa) if val_det_fa else None
-                    )
+                    if isinstance(val_det_fa, (list, tuple)):
+                        last_tr_fa = (
+                            sum(val_det_fa) / len(val_det_fa) if val_det_fa else None
+                        )
+                    else:
+                        last_tr_fa = float(val_det_fa)
                 result_val_t.append(task_info["task"])
                 if val_det_acc is not None:
                     print(

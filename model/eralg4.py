@@ -22,12 +22,16 @@ import warnings
 import math
 
 from model.resnet1d import ResNet1D
-from model.detection_replay import DetectionReplayMixin
-
-warnings.filterwarnings("ignore")
+from model.detection_replay import (
+    DetectionReplayMixin,
+    noise_label_from_args,
+    unpack_y_to_class_labels,
+)
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 from utils.class_weighted_loss import classification_cross_entropy
+
+warnings.filterwarnings("ignore")
 
 
 @dataclass
@@ -118,6 +122,7 @@ class Net(DetectionReplayMixin, nn.Module):
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
+        self.noise_label: int | None = noise_label_from_args(args)
         # if self.is_cifar:
         #     self.nc_per_task = int(n_outputs / n_tasks)
         # else:
@@ -133,25 +138,31 @@ class Net(DetectionReplayMixin, nn.Module):
             yield param
 
     def take_multitask_loss(self, bt, logits, y):
-        loss = 0.0
-        for i, ti in enumerate(bt):
-            offset1, offset2 = self.compute_offsets(ti)
-            loss += classification_cross_entropy(
-                logits[i, offset1:offset2].unsqueeze(0),
-                y[i].unsqueeze(0) - offset1,
+        if len(bt) == 0:
+            return torch.zeros((), device=logits.device, dtype=logits.dtype)
+        loss = torch.zeros((), device=logits.device, dtype=logits.dtype)
+        for i, _ti in enumerate(bt):
+            row = logits[i : i + 1]
+            y_i = int(y[i].item())
+            loss = loss + classification_cross_entropy(
+                row,
+                torch.tensor([y_i], device=logits.device, dtype=torch.long),
                 class_weighted_ce=self.class_weighted_ce,
             )
         return loss / len(bt)
 
-    def forward(self, x, t):
+    def forward(self, x, t, *, cil_all_seen_upto_task=None):
         output = self.net.forward(x)
         if True:  # self.is_cifar:
-            # make sure we predict classes within the current task
-            offset1, offset2 = self.compute_offsets(t)
-            if offset1 > 0:
-                output[:, :offset1].data.fill_(-10e10)
-            if offset2 < self.n_outputs:
-                output[:, offset2 : self.n_outputs].data.fill_(-10e10)
+            output = misc_utils.apply_task_incremental_logit_mask(
+                output,
+                t,
+                self.classes_per_task,
+                self.n_outputs,
+                cil_all_seen_upto_task=cil_all_seen_upto_task,
+                global_noise_label=self.noise_label,
+                fill_value=-10e10,
+            )
         return output
 
     def getBatch(self, x, y, t):
@@ -176,11 +187,13 @@ class Net(DetectionReplayMixin, nn.Module):
                 k = order[j]
                 x, y, t = self.M[k]
                 xi = np.array(x)
-                yi = np.array(y)
+                yi_scalar = int(torch.as_tensor(y).long().flatten()[0].item())
                 ti = np.array(t)
+                if self.noise_label is not None and yi_scalar == self.noise_label:
+                    continue
 
                 bxs.append(xi)
-                bys.append(yi)
+                bys.append(yi_scalar)
                 bts.append(ti)
 
         for i in range(len(myi)):
@@ -203,7 +216,6 @@ class Net(DetectionReplayMixin, nn.Module):
     def observe(self, x, y, t):
         ### step through elements of x
 
-        class_counts = getattr(self, "classes_per_task", None)
         # noise_label = None
         # if class_counts is not None:
         #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
@@ -240,11 +252,8 @@ class Net(DetectionReplayMixin, nn.Module):
         x_train = self._canonicalize_input(x, detach=False)
         x_for_storage = self._input_for_replay(x)
         xi = x_for_storage.data.cpu().numpy()
-        yi = (
-            y[0].data.cpu().numpy()
-            if isinstance(y, (list, tuple))
-            else y.data.cpu().numpy()
-        )
+        y_work = unpack_y_to_class_labels(y).long()
+        yi = y_work.data.cpu().numpy()
 
         if t != self.current_task:
             self.current_task = t
@@ -259,13 +268,19 @@ class Net(DetectionReplayMixin, nn.Module):
         if (x.dim() == 3 and x.size(1) == 3) or (
             x.dim() == 4 and x.size(1) == 3 and x.size(2) == 2
         ):
-            offset1, offset2 = self.compute_offsets(t)
             self.net.zero_grad(set_to_none=True)
-            live_x_train = self._canonicalize_input(x, detach=False)
-            live_logits = self.net.forward(live_x_train)
+            live_logits = misc_utils.apply_task_incremental_logit_mask(
+                self.net.forward(x_train),
+                t,
+                self.classes_per_task,
+                self.n_outputs,
+                cil_all_seen_upto_task=t,
+                global_noise_label=self.noise_label,
+            )
+            targets = y_work.long()
             live_loss = classification_cross_entropy(
-                live_logits[:, offset1:offset2],
-                y - offset1,
+                live_logits,
+                targets,
                 class_weighted_ce=self.class_weighted_ce,
             )
             live_loss.backward()
@@ -313,6 +328,9 @@ class Net(DetectionReplayMixin, nn.Module):
         with torch.no_grad():
             for idx, task_idx in enumerate(bt):
                 offset1, offset2 = self.compute_offsets(int(task_idx))
+                y_g = int(labels[idx].item())
+                if self.noise_label is not None and y_g == self.noise_label:
+                    continue
                 preds = torch.argmax(logits[idx, offset1:offset2], dim=0)
                 target = labels[idx] - offset1
                 preds_list.append(preds.detach().cpu())
@@ -333,6 +351,8 @@ class Net(DetectionReplayMixin, nn.Module):
             bx, by, bt = self.getBatch(x, y, t)
 
             bx = bx.squeeze()
+            # Unmasked logits: replay rows may span tasks; global CE targets index
+            # the full ``n_outputs`` vector (including shared noise class).
             prediction = self.net.forward(bx)
             loss = self.take_multitask_loss(bt, prediction, by)
             cls_tr_rec.append(self._batch_accuracy(bt, prediction, by))
@@ -361,11 +381,19 @@ class Net(DetectionReplayMixin, nn.Module):
         #     logits = self.net.forward(x, fast_weights)
         #     loss = self.loss(logits, y)
 
-        offset1, offset2 = self.compute_offsets(t)
-        logits = self.net.forward(x, fast_weights)[:, :offset2]
+        logits = misc_utils.apply_task_incremental_logit_mask(
+            self.net.forward(x, fast_weights)[:, : self.n_outputs],
+            t,
+            self.classes_per_task,
+            self.n_outputs,
+            cil_all_seen_upto_task=t,
+            global_noise_label=self.noise_label,
+        )
+        y_cls = unpack_y_to_class_labels(y).long()
+        targets = y_cls
         loss = classification_cross_entropy(
-            logits[:, offset1:offset2],
-            y - offset1,
+            logits,
+            targets,
             class_weighted_ce=self.class_weighted_ce,
         )
 
@@ -440,9 +468,10 @@ class Net(DetectionReplayMixin, nn.Module):
             fast_weights = None
             meta_losses = [0 for _ in range(n_batches)]
 
+            y_pack = unpack_y_to_class_labels(y)
             bx, by, bt = self.getBatch(
-                x.detach().cpu().numpy(),
-                y[0].cpu().numpy() if isinstance(y, (list, tuple)) else y.cpu().numpy(),
+                x.cpu().numpy(),
+                y_pack.cpu().numpy(),
                 t,
             )
             bx = bx.squeeze()

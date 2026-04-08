@@ -1,10 +1,53 @@
 from __future__ import annotations
 
 import random
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
+
+
+def noise_label_from_args(args: object | None) -> int | None:
+    """Return the global IQ noise class id from training args, if configured."""
+    if args is None:
+        return None
+    raw = getattr(args, "noise_label", None)
+    if raw is None:
+        return None
+    return int(raw)
+
+
+def signal_mask_exclude_noise(
+    y_cls: torch.Tensor,
+    noise_label: int | None,
+) -> torch.Tensor:
+    """Boolean mask of samples that participate in task-local classification CE."""
+    mask = torch.ones(y_cls.shape[0], dtype=torch.bool, device=y_cls.device)
+    if noise_label is not None:
+        mask = y_cls != noise_label
+    return mask
+
+
+def classification_loss_zero_stub(cls_logits: torch.Tensor) -> torch.Tensor:
+    """Scalar zero loss tied to logits (keeps autograd on an empty CE minibatch)."""
+    return cls_logits.sum() * 0.0
+
+
+def unpack_y_to_class_labels(
+    y: Union[torch.Tensor, Tuple[torch.Tensor, ...], Dict[str, torch.Tensor]],
+) -> torch.Tensor:
+    """Extract 1D class labels (IQ ``[N, 2]`` tensors and tuple payloads use column 0)."""
+    if isinstance(y, (tuple, list)) and len(y) == 2:
+        y_cls = y[0]
+    elif isinstance(y, dict):
+        y_cls = y.get("y_cls", y.get("y"))
+    elif torch.is_tensor(y) and y.dim() == 2 and y.size(1) == 2:
+        y_cls = y[:, 0]
+    else:
+        y_cls = y
+    if not torch.is_tensor(y_cls):
+        y_cls = torch.as_tensor(y_cls)
+    return y_cls
 
 
 class _ZeroLoss(nn.Module):
@@ -54,6 +97,9 @@ class DetectionReplayMixin:
         elif isinstance(y, dict):
             y_cls = y.get("y_cls", y.get("y"))
             y_det = y.get("y_det")
+        elif torch.is_tensor(y) and y.dim() == 2 and y.size(1) == 2:
+            y_cls = y[:, 0]
+            y_det = y[:, 1]
         else:
             y_cls = y
             y_det = None

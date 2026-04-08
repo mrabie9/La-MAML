@@ -17,6 +17,7 @@ import ipdb
 import warnings
 
 warnings.filterwarnings("ignore")
+from model.detection_replay import noise_label_from_args
 from model.resnet1d import ResNet1D
 from utils.training_metrics import macro_recall
 from utils import misc_utils
@@ -81,6 +82,8 @@ class Net(nn.Module):
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
+        self.noise_label: int | None = noise_label_from_args(args)
+        self.is_task_incremental = True
         # if self.is_cifar:
         #     self.nc_per_task = n_outputs / n_tasks
         # else:
@@ -103,14 +106,18 @@ class Net(nn.Module):
         if self.use_cuda:
             self.net = self.net.cuda()
 
-    def forward(self, x, t):
+    def forward(self, x, t, *, cil_all_seen_upto_task=None):
         output = self.netforward(x)
         if self.is_iq:
-            offset1, offset2 = self.compute_offsets(t)
-            if offset1 > 0:
-                output[:, :offset1].data.fill_(-10e10)
-            if offset2 < self.n_outputs:
-                output[:, int(offset2) : self.n_outputs].data.fill_(-10e10)
+            output = misc_utils.apply_task_incremental_logit_mask(
+                output,
+                t,
+                self.classes_per_task,
+                self.n_outputs,
+                cil_all_seen_upto_task=cil_all_seen_upto_task,
+                global_noise_label=self.noise_label,
+                fill_value=-10e10,
+            )
         return output
 
     def compute_offsets(self, task):

@@ -1,5 +1,6 @@
 # Model-specific overrides for eralg4.
 model: eralg4
+loader: task_incremental_loader
 learn_lr: true
 meta_batches: 3
 

@@ -21,7 +21,13 @@ import numpy as np
 import quadprog
 
 from model.resnet1d import ResNet1D
-from model.detection_replay import DetectionReplayMixin
+from model.detection_replay import (
+    DetectionReplayMixin,
+    classification_loss_zero_stub,
+    noise_label_from_args,
+    signal_mask_exclude_noise,
+    unpack_y_to_class_labels,
+)
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 from utils.class_weighted_loss import classification_cross_entropy
@@ -210,6 +216,7 @@ class Net(DetectionReplayMixin, nn.Module):
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
+        self.noise_label: int | None = noise_label_from_args(args)
 
         if self.gpu:
             self.cuda()
@@ -295,7 +302,7 @@ class Net(DetectionReplayMixin, nn.Module):
                 continue
             yield param
 
-    def forward(self, x, t):
+    def forward(self, x, t, *, cil_all_seen_upto_task=None):
         if self.cfg.dataset == "tinyimagenet":
             x = x.view(-1, 3, 64, 64)
         elif self.cfg.dataset == "cifar100":
@@ -305,12 +312,16 @@ class Net(DetectionReplayMixin, nn.Module):
 
         output = self.netforward(x)
 
-        # Task-incremental masking: always restrict logits to the task slice.
-        offset1, offset2 = compute_offsets(t, self.classes_per_task, self.is_cifar)
-        if offset1 > 0:
-            output[:, :offset1].data.fill_(-10e10)
-        if offset2 < self.n_outputs:
-            output[:, offset2 : self.n_outputs].data.fill_(-10e10)
+        # TIL slice masking, or CIL eval: keep all logits for tasks seen so far.
+        output = misc_utils.apply_task_incremental_logit_mask(
+            output,
+            t,
+            self.classes_per_task,
+            self.n_outputs,
+            cil_all_seen_upto_task=cil_all_seen_upto_task,
+            global_noise_label=self.noise_label,
+            fill_value=-10e10,
+        )
         return output
 
     def observe(self, x, y, t):
@@ -324,7 +335,7 @@ class Net(DetectionReplayMixin, nn.Module):
         else:
             # legacy: flatten non-IQ inputs
             x = x.view(x.size(0), -1)
-        class_counts = getattr(self, "classes_per_task", None)
+        y_work = unpack_y_to_class_labels(y)
         # noise_label = None
         # if class_counts is not None:
         #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
@@ -372,12 +383,7 @@ class Net(DetectionReplayMixin, nn.Module):
                 task_capacity = int(self.task_memory_capacities[t])
                 if task_capacity > 0:
                     write_pointer = int(self.task_mem_ptr[t].item())
-                    # extract the true batch size
-                    bsz = (
-                        y[0].data.size(0)
-                        if isinstance(y, (tuple, list))
-                        else y.data.size(0)
-                    )
+                    bsz = y_work.size(0)
                     endcnt = min(write_pointer + bsz, task_capacity)
                     effbsz = endcnt - write_pointer
                     # Store adapter output (e.g. 3-ADC -> 2-channel) so replay matches forward
@@ -385,16 +391,9 @@ class Net(DetectionReplayMixin, nn.Module):
                     self.memory_data[t, write_pointer:endcnt].copy_(mem_x)
 
                     if bsz == 1:
-                        y_val = (
-                            y[0].data[0] if isinstance(y, (tuple, list)) else y.data[0]
-                        )
-                        self.memory_labs[t, write_pointer] = y_val
+                        self.memory_labs[t, write_pointer] = y_work.data[0]
                     else:
-                        y_slice = (
-                            y[0].data[:effbsz]
-                            if isinstance(y, (tuple, list))
-                            else y.data[:effbsz]
-                        )
+                        y_slice = y_work.data[:effbsz]
                         self.memory_labs[t, write_pointer:endcnt].copy_(y_slice)
 
                     if effbsz > 0:
@@ -420,24 +419,26 @@ class Net(DetectionReplayMixin, nn.Module):
                     mem_x = Variable(
                         self.memory_data[past_task, :filled]
                     )  # (mem, F) or (mem, 2, L)
-                    mem_y = Variable(self.memory_labs[past_task, :filled])  # (mem,)
-
-                    logits_replay = self.forward(mem_x, past_task)[:, offset1:offset2]
-                    targets_replay = mem_y - offset1
-                    if (
-                        targets_replay.min() < 0
-                        or targets_replay.max() >= logits_replay.size(1)
-                    ):
-                        raise ValueError(
-                            f"GEM replay target out of range for task {past_task}: "
-                            f"min={int(targets_replay.min())}, max={int(targets_replay.max())}, "
-                            f"classes={logits_replay.size(1)}, offset=({offset1},{offset2})"
-                        )
-                    ptloss = classification_cross_entropy(
-                        logits_replay,
-                        targets_replay,
-                        class_weighted_ce=self.class_weighted_ce,
+                    mem_y_flat = self.memory_labs[past_task, :filled]
+                    replay_mask = signal_mask_exclude_noise(
+                        mem_y_flat, self.noise_label
                     )
+                    if replay_mask.any():
+                        mem_x_sub = mem_x[replay_mask]
+                        logits_replay = self.forward(mem_x_sub, past_task)[
+                            :, offset1:offset2
+                        ]
+                        targets_replay = mem_y_flat[replay_mask] - offset1
+                        ptloss = classification_cross_entropy(
+                            logits_replay,
+                            targets_replay,
+                            class_weighted_ce=self.class_weighted_ce,
+                        )
+                    else:
+                        logits_replay = self.forward(mem_x[:1], past_task)[
+                            :, offset1:offset2
+                        ]
+                        ptloss = classification_loss_zero_stub(logits_replay)
                     ptloss.backward()
                     if self.cfg.grad_clip_norm:
                         torch.nn.utils.clip_grad_norm_(
@@ -447,19 +448,16 @@ class Net(DetectionReplayMixin, nn.Module):
 
             # current batch
             self.zero_grad()
-            offset1, offset2 = compute_offsets(t, self.classes_per_task, self.is_cifar)
-            logits = self.forward(x, t)[:, offset1:offset2]
-            targets = y - offset1
-            if targets.min() < 0 or targets.max() >= logits.size(1):
-                raise ValueError(
-                    f"GEM target out of range for task {t}: "
-                    f"min={int(targets.min())}, max={int(targets.max())}, classes={logits.size(1)}, "
-                    f"offset=({offset1},{offset2})"
-                )
-            preds = torch.argmax(logits, dim=1)
-            cls_tr_rec.append(macro_recall(preds, targets))
+            logits_full = self.forward(x, t, cil_all_seen_upto_task=t)
+            targets = y_work.long()
+            signal_mask = signal_mask_exclude_noise(y_work, self.noise_label)
+            if signal_mask.any():
+                preds = torch.argmax(logits_full[signal_mask], dim=1)
+                cls_tr_rec.append(macro_recall(preds, targets[signal_mask]))
+            else:
+                cls_tr_rec.append(0.0)
             loss = classification_cross_entropy(
-                logits, targets, class_weighted_ce=self.class_weighted_ce
+                logits_full, targets, class_weighted_ce=self.class_weighted_ce
             )
             loss.backward()
             if self.cfg.grad_clip_norm:

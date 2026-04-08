@@ -1,14 +1,26 @@
-#!/bin/bash
-# python3 tuning/Alpha/tune_er_ring.py --config configs/models/er_ring.yaml --hierarchical --dry-run
-# python3 tuning/Alpha/tune_eralg4.py --config configs/models/eralg4.yaml --hierarchical  --dry-run
-python3 tuning/Alpha/tune_gem.py --config configs/models/gem.yaml --hierarchical --dry-run
-python3 tuning/Alpha/tune_agem.py --config configs/models/agem.yaml --hierarchical --dry-run
-python3 tuning/Alpha/tune_icarl.py --config configs/models/icarl.yaml --hierarchical --dry-run
-python3 tuning/Alpha/tune_ucl.py --config configs/models/ucl.yaml --hierarchical --dry-run
-# python3 tuning/Alpha/tune_lamaml.py --config configs/models/lamaml.yaml --hierarchical --dry-run
+#!/usr/bin/env bash
+# Alpha suite: delegates to scripts/run_all_tuning.sh.
+#
+# On lnx-elkk-1 / lnx-elkk-2, the same host schedule JSON as full_experiments.sh
+# (SCHEDULE_JSON_PATH, default logs/eta_probe/full_experiments_host_schedule.json)
+# restricts which models run on which server. Elsewhere, set HOST_KEY to mimic a host.
+#
+# Environment (see run_all_tuning.sh): CONCURRENCY_OPTION, MAX_JOBS, HOST_KEY,
+# SCHEDULE_JSON_PATH, HOST_SCHEDULE_MODE=auto|on|off.
+#
+# Examples:
+#   ./tuning/Alpha/run_specific_tuning.sh
+#   HOST_SCHEDULE_MODE=off ./tuning/Alpha/run_specific_tuning.sh
+#   CONCURRENCY_OPTION=0 ./tuning/Alpha/run_specific_tuning.sh
 
-python3 tuning/Alpha/tune_bcl.py --config configs/models/bcl_dual.yaml --hierarchical --dry-run
-python3 tuning/Alpha/tune_ewc.py --config configs/models/ewc.yaml --hierarchical --dry-run
-python3 tuning/Alpha/tune_si.py --config configs/models/si.yaml --hierarchical --dry-run
-python3 tuning/Alpha/tune_lwf.py --config configs/models/lwf.yaml --hierarchical --dry-run
-python3 tuning/Alpha/tune_rwalk.py --config configs/models/rwalk.yaml --hierarchical --dry-run
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+exec "$REPO_ROOT/scripts/run_all_tuning.sh" \
+    --scripts-root "$REPO_ROOT/tuning/Alpha" \
+    --models "bcl_dual,ctn,ucl" \
+    -- \
+    --hierarchical \
+    # --dry-run

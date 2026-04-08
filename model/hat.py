@@ -17,6 +17,11 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
+from model.detection_replay import (
+    noise_label_from_args,
+    signal_mask_exclude_noise,
+    unpack_y_to_class_labels,
+)
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 from utils.class_weighted_loss import classification_cross_entropy
@@ -431,8 +436,6 @@ class HatBackbone(nn.Module):
     ) -> None:
         # if s <= 0:
         #     return
-        s_eff = max(float(s), 1.0)
-        scale = min(self.cfg.smax / s_eff, 10.0)
         for emb in self.embeddings:
             weight = emb.weight
             if weight.grad is None:
@@ -524,6 +527,7 @@ class Net(nn.Module):
         self.bridge = HatBackbone(n_inputs, n_tasks, n_outputs, self.cfg, args)
 
         self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
+        self.noise_label: int | None = noise_label_from_args(args)
 
         params: Iterable[nn.Parameter] = self.bridge.parameters()
         if self.cfg.optimizer.lower() == "adam":
@@ -685,12 +689,23 @@ class Net(nn.Module):
 
         # for mask in masks:
         #     print(mask.mean(), mask.min())
-        offset1, offset2 = misc_utils.compute_offsets(t, self.classes_per_task)
-        logits_task = logits[:, offset1:offset2]
-        targets = (y - offset1).long()
-        loss, _ = self._criterion(logits_task, targets, masks)
-        preds = torch.argmax(logits_task, dim=1)
-        cls_tr_rec = macro_recall(preds, targets)
+        y_cls = unpack_y_to_class_labels(y)
+        signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
+        logits_for_loss = misc_utils.apply_task_incremental_logit_mask(
+            logits,
+            t,
+            self.classes_per_task,
+            self.n_outputs,
+            cil_all_seen_upto_task=t,
+            global_noise_label=self.noise_label,
+        )
+        targets = y_cls.long()
+        loss, _ = self._criterion(logits_for_loss, targets, masks)
+        if signal_mask.any():
+            preds = torch.argmax(logits_for_loss[signal_mask], dim=1)
+            cls_tr_rec = macro_recall(preds, targets[signal_mask])
+        else:
+            cls_tr_rec = 0.0
         loss.backward()
 
         if self.mask_back:

@@ -1,5 +1,5 @@
 # Baseline configuration used when sweeping hyperparameters.
-expt_name: tuning_sweep
+expt_name: tuning_sweep_CIL
 arch: resnet1d
 loader: task_incremental_loader
 

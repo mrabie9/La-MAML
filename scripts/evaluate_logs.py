@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """Evaluate saved La-MAML checkpoints on the validation split.
 
 This script scans the `logs/` directory (or a user-specified location),
@@ -28,7 +29,7 @@ import copy
 import importlib
 import sys
 from pathlib import Path
-from typing import Iterable, List, Sequence
+from typing import Iterable, List
 
 import torch
 
@@ -187,9 +188,11 @@ def evaluate_run(results_path: Path, device: torch.device, opts: argparse.Namesp
 
     with torch.no_grad():
         val_tasks = loader.get_tasks("val")
-        task_accuracies: Sequence[float] = evaluator(
-            model, val_tasks, args, eval_epistemic=True
-        )
+        eval_raw = evaluator(model, val_tasks, args, eval_epistemic=True)
+        if isinstance(eval_raw, tuple) and len(eval_raw) == 5:
+            task_accuracies = eval_raw[0]
+        else:
+            task_accuracies = eval_raw
 
     overall = (
         sum(task_accuracies) / len(task_accuracies) if task_accuracies else float("nan")

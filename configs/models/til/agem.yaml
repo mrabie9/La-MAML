@@ -1,5 +1,6 @@
 # Model-specific overrides for agem.
 model: agem
+loader: task_incremental_loader
+
 lr: 0.01
-glances: 1
-memories: 5120
+

@@ -15,7 +15,12 @@ import numpy as np
 import random
 
 from model.resnet1d import ResNet1D
-from model.detection_replay import DetectionReplayMixin
+from model.detection_replay import (
+    DetectionReplayMixin,
+    noise_label_from_args,
+    signal_mask_exclude_noise,
+    unpack_y_to_class_labels,
+)
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 from utils.class_weighted_loss import classification_cross_entropy
@@ -108,16 +113,10 @@ def projectgrad(gradient, memories, margin=0.5, eps=1e-3, oiter=0):
     output: x, p-vector
     """
 
-    similarity = torch.nn.functional.cosine_similarity(
-        gradient.t(), memories.t().mean(dim=0).unsqueeze(0)
-    )
-
     memories_np = memories.cpu().t().double().numpy()
     gradient_np = gradient.cpu().contiguous().view(-1).double().numpy()
 
     # merge memories
-    t = memories_np.shape[0]
-
     memories_np2 = memories_np.mean(axis=0).reshape(1, memories_np.shape[1])
 
     ref_mag = np.dot(memories_np2, memories_np2.transpose())
@@ -218,6 +217,7 @@ class Net(DetectionReplayMixin, nn.Module):
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
+        self.noise_label = noise_label_from_args(args)
 
         if self.gpu:
             self.cuda()
@@ -263,7 +263,7 @@ class Net(DetectionReplayMixin, nn.Module):
                 return self.net.model.input_adapter(x4)
         return self._ensure_iq_shape(x)
 
-    def forward(self, x, t):
+    def forward(self, x, t, *, cil_all_seen_upto_task=None):
         if self.cfg.dataset == "tinyimagenet":
             x = x.view(-1, 3, 64, 64)
         elif self.cfg.dataset == "cifar100":
@@ -273,13 +273,15 @@ class Net(DetectionReplayMixin, nn.Module):
 
         output = self.net.forward(x)
 
-        # Task-incremental masking: always restrict logits to the task slice.
-        offset1, offset2 = compute_offsets(t, self.classes_per_task, self.is_cifar)
-        if offset1 > 0:
-            output[:, :offset1].data.fill_(-10e10)
-        if offset2 < self.n_outputs:
-            output[:, offset2 : self.n_outputs].data.fill_(-10e10)
-        return output
+        return misc_utils.apply_task_incremental_logit_mask(
+            output,
+            t,
+            self.classes_per_task,
+            self.n_outputs,
+            cil_all_seen_upto_task=cil_all_seen_upto_task,
+            global_noise_label=self.noise_label,
+            fill_value=-10e10,
+        )
 
     def _ll_params(self):
         for name, param in self.net.named_parameters():
@@ -298,7 +300,9 @@ class Net(DetectionReplayMixin, nn.Module):
         else:
             # legacy: flatten non-IQ inputs
             x = x.view(x.size(0), -1)
-        class_counts = getattr(self, "classes_per_task", None)
+
+        y_work = unpack_y_to_class_labels(y).long()
+
         # noise_label = None
         # if class_counts is not None:
         #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
@@ -353,7 +357,7 @@ class Net(DetectionReplayMixin, nn.Module):
 
             if pass_itr == 0:
                 # Update ring buffer storing examples from current task
-                bsz = y.data.size(0)
+                bsz = y_work.data.size(0)
                 endcnt = min(self.mem_cnt + bsz, self.n_memories)
                 effbsz = endcnt - self.mem_cnt
                 # self.memory_data[t, self.mem_cnt: endcnt].copy_(
@@ -372,10 +376,10 @@ class Net(DetectionReplayMixin, nn.Module):
                     self.memory_data[t, self.mem_cnt : endcnt].copy_(mem_x)
 
                     if bsz == 1:
-                        self.memory_labs[t, self.mem_cnt] = y.data[0]
+                        self.memory_labs[t, self.mem_cnt] = y_work.data[0]
                     else:
                         self.memory_labs[t, self.mem_cnt : endcnt].copy_(
-                            y.data[:effbsz]
+                            y_work.data[:effbsz]
                         )
 
                     self.mem_cnt += effbsz
@@ -400,10 +404,21 @@ class Net(DetectionReplayMixin, nn.Module):
                         continue
                     mem_x = Variable(self.memory_data[past_task, :filled])
                     mem_y = Variable(self.memory_labs[past_task, :filled])
+                    mem_y_flat = unpack_y_to_class_labels(mem_y.data).long()
+                    signal_mask_mem = signal_mask_exclude_noise(
+                        mem_y_flat, self.noise_label
+                    )
+                    if not signal_mask_mem.any():
+                        continue
+                    mem_y_task = mem_y_flat - offset1
+                    mem_x = mem_x[signal_mask_mem]
+                    mem_y_task = mem_y_task[signal_mask_mem]
                     logits = self.forward(mem_x, past_task)[:, offset1:offset2]
+                    if logits.numel() == 0:
+                        continue
                     ptloss = classification_cross_entropy(
                         logits,
-                        mem_y - offset1,
+                        mem_y_task,
                         class_weighted_ce=self.class_weighted_ce,
                     )
                     ptloss.backward()
@@ -416,13 +431,19 @@ class Net(DetectionReplayMixin, nn.Module):
 
             # now compute the grad on the current minibatch
             self.zero_grad()
-            offset1, offset2 = compute_offsets(t, self.classes_per_task, self.is_cifar)
-            logits = self.forward(x, t)[:, offset1:offset2]
-            pb = torch.argmax(logits, dim=1)
-            targets = y - offset1
-            cls_tr_rec.append(macro_recall(pb, targets))
+            logits_full = self.forward(x, t, cil_all_seen_upto_task=t)
+            y_cls = y_work.long()
+            signal_mask = signal_mask_exclude_noise(y_work, self.noise_label)
+            pb = torch.argmax(logits_full, dim=1)
+            targets = y_cls
+            if signal_mask.any():
+                cls_tr_rec.append(macro_recall(pb[signal_mask], targets[signal_mask]))
+            else:
+                cls_tr_rec.append(0.0)
             loss = classification_cross_entropy(
-                logits, targets, class_weighted_ce=self.class_weighted_ce
+                logits_full,
+                y_cls,
+                class_weighted_ce=self.class_weighted_ce,
             )
             loss.backward()
             if self.cfg.grad_clip_norm:
@@ -456,11 +477,7 @@ class Net(DetectionReplayMixin, nn.Module):
 
         x_for_storage = self._input_for_replay(x)
         xi = x_for_storage.data.cpu().numpy()
-        yi = (
-            y[0].data.cpu().numpy()
-            if isinstance(y, (list, tuple))
-            else y.data.cpu().numpy()
-        )
+        yi = y_work.data.cpu().numpy()
         for i in range(0, x.size()[0]):
             self.age += 1
             # Reservoir sampling memory update:

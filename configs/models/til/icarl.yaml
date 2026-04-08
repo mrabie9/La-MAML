@@ -1,4 +1,6 @@
 # Model-specific overrides for icarl.
 model: icarl
-lr: 0.03
+loader: task_incremental_loader
+
+lr: 0.001
 memory_strength: 0.1

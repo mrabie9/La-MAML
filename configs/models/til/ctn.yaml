@@ -1,5 +1,7 @@
 # Model-specific overrides for ctn.
 model: ctn
+loader: task_incremental_loader
+
 lr: 0.03
 ctx_lr: 0.003
 task_emb: 64

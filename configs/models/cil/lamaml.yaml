@@ -1,5 +1,6 @@
 # La-MAML specific defaults
 model: lamaml_cifar
+loader: class_incremental_loader
 learn_lr: true
 sync_update: false
 use_old_task_memory: false

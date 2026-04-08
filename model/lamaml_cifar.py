@@ -1,13 +1,17 @@
 import math
 import torch
 import torch.nn as nn
-from model.lamaml_base import *
-from model.detection_replay import DetectionReplayMixin
+from model.lamaml_base import *  # noqa: F403
+from model.detection_replay import (
+    DetectionReplayMixin,
+    unpack_y_to_class_labels,
+)
 from utils.training_metrics import macro_recall
 from utils import misc_utils
+from utils.class_weighted_loss import classification_cross_entropy
 
 
-class Net(DetectionReplayMixin, BaseNet):
+class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
 
     def __init__(self, n_inputs, n_outputs, n_tasks, args):
         super(Net, self).__init__(n_inputs, n_outputs, n_tasks, args)
@@ -20,12 +24,10 @@ class Net(DetectionReplayMixin, BaseNet):
             enabled=bool(getattr(args, "use_detector_arch", False)),
         )
 
-    def take_loss(self, t, logits, y):
-        # compute loss on data from a single task
-        offset1, offset2 = self.compute_offsets(t)
-        loss = self._classification_loss(logits[:, offset1:offset2], y - offset1)
-
-        return loss
+    def take_loss(self, _t, logits, y):
+        # Full CIL logits (including global noise class); targets are global indices.
+        y_cls = unpack_y_to_class_labels(y).long()
+        return self._classification_loss(logits, y_cls)
 
     def take_multitask_loss(self, bt, t, logits, y):
         # compute loss on data from a multiple tasks
@@ -33,40 +35,49 @@ class Net(DetectionReplayMixin, BaseNet):
         # logit vector are different and we nly want to compute loss on the relevant positions
         # since this is a task incremental setting
 
-        loss = 0.0
-
-        for i, ti in enumerate(bt):
-            offset1, offset2 = self.compute_offsets(ti)
-            loss += self._classification_loss(
-                logits[i, offset1:offset2].unsqueeze(0), y[i].unsqueeze(0) - offset1
+        if len(bt) == 0:
+            return torch.zeros((), device=logits.device, dtype=logits.dtype)
+        loss = torch.zeros((), device=logits.device, dtype=logits.dtype)
+        for i, _ti in enumerate(bt):
+            row = logits[i : i + 1]
+            y_i = int(y[i].item())
+            loss = loss + self._classification_loss(
+                row,
+                torch.tensor([y_i], device=logits.device, dtype=torch.long),
             )
         return loss / len(bt)
 
-    def forward(self, x, t):
+    def forward(self, x, t, *, cil_all_seen_upto_task=None):
         output = self.net.forward(x)
-        # make sure we predict classes within the current task
-        offset1, offset2 = self.compute_offsets(t)
-        if offset1 > 0:
-            output[:, :offset1].data.fill_(-10e10)
-        if offset2 < self.n_outputs:
-            output[:, int(offset2) : self.n_outputs].data.fill_(-10e10)
-        return output
+        return misc_utils.apply_task_incremental_logit_mask(
+            output,
+            t,
+            self.classes_per_task,
+            self.n_outputs,
+            cil_all_seen_upto_task=cil_all_seen_upto_task,
+            global_noise_label=self.noise_label,
+            fill_value=-10e10,
+        )
 
     def meta_loss(self, x, fast_weights, y, bt, t):
         """
         differentiate the loss through the network updates wrt alpha
         """
 
-        offset1, offset2 = self.compute_offsets(t)
-
-        logits = self.net.forward(x, fast_weights)[:, :offset2]
+        raw = self.net.forward(x, fast_weights)
+        logits = misc_utils.apply_task_incremental_logit_mask(
+            raw,
+            t,
+            self.classes_per_task,
+            self.n_outputs,
+            cil_all_seen_upto_task=t,
+            global_noise_label=self.noise_label,
+        )
         loss_q = self.take_multitask_loss(bt, t, logits, y)
 
         return loss_q, logits
 
     def inner_update(self, x, fast_weights, y, t):
-        offset1, offset2 = self.compute_offsets(t)
-
         # Ensure we have a concrete, non-empty list of tensors
         if not fast_weights:  # handles None or []
             fast_weights = [p for p in self.net.parameters()]
@@ -75,7 +86,15 @@ class Net(DetectionReplayMixin, BaseNet):
             fast_weights = list(fast_weights)
 
         # Forward using fast weights
-        logits = self.net.forward(x, vars=fast_weights)[:, :offset2]
+        raw = self.net.forward(x, vars=fast_weights)
+        logits = misc_utils.apply_task_incremental_logit_mask(
+            raw,
+            t,
+            self.classes_per_task,
+            self.n_outputs,
+            cil_all_seen_upto_task=t,
+            global_noise_label=self.noise_label,
+        )
         loss = self.take_loss(t, logits, y)
 
         graph_required = bool(self.cfg.second_order)
@@ -125,7 +144,6 @@ class Net(DetectionReplayMixin, BaseNet):
                 y = tuple(yi[perm] if yi is not None else None for yi in y)
             else:
                 y = y[perm]
-            class_counts = getattr(self, "classes_per_task", None)
             # noise_label = None
             # if class_counts is not None:
             #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
@@ -184,7 +202,8 @@ class Net(DetectionReplayMixin, BaseNet):
 
             # get a batch by augmented incming data with old task data, used for
             # computing meta-loss
-            bx, by, bt = self.getBatch(x.detach().cpu().numpy(), y.cpu().numpy(), t)
+            y_np = unpack_y_to_class_labels(y).long().cpu().numpy()
+            bx, by, bt = self.getBatch(x.detach().cpu().numpy(), y_np, t)
 
             for i in range(n_batches):
 
@@ -206,6 +225,9 @@ class Net(DetectionReplayMixin, BaseNet):
                     preds_list = []
                     target_list = []
                     for sample_idx, task_idx in enumerate(bt):
+                        y_s = int(by[sample_idx].item())
+                        if self.noise_label is not None and y_s == self.noise_label:
+                            continue
                         offset1_s, offset2_s = self.compute_offsets(int(task_idx))
                         preds = torch.argmax(
                             logits[sample_idx, offset1_s:offset2_s], dim=0
@@ -250,12 +272,20 @@ class Net(DetectionReplayMixin, BaseNet):
             # Ensure the input adapter is explicitly optimized on the current
             # differentiable 3-ADC batch.
             if input_was_3adc and x_train.dim() == 3 and x_train.size(1) == 2:
-                offset1, offset2 = self.compute_offsets(t)
+                _offset1, _offset2 = self.compute_offsets(t)
                 self.net.zero_grad(set_to_none=True)
-                live_logits = self.net.forward(raw_x.detach())
+                live_logits = misc_utils.apply_task_incremental_logit_mask(
+                    self.net.forward(raw_x.detach()),
+                    t,
+                    self.classes_per_task,
+                    self.n_outputs,
+                    cil_all_seen_upto_task=t,
+                    global_noise_label=self.noise_label,
+                )
+                y_live = unpack_y_to_class_labels(y).long()
                 live_loss = classification_cross_entropy(
-                    live_logits[:, offset1:offset2],
-                    y - offset1,
+                    live_logits,
+                    y_live,
                     class_weighted_ce=self.class_weighted_ce,
                 )
                 live_loss.backward()

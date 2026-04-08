@@ -20,6 +20,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from model.resnet1d import AdcIqAdapter, ResNet1D
+from model.detection_replay import (
+    noise_label_from_args,
+    signal_mask_exclude_noise,
+    unpack_y_to_class_labels,
+)
 from utils.iq_features import append_iq_augmented_features
 from utils.training_metrics import macro_recall
 from utils import misc_utils
@@ -358,6 +363,25 @@ class UCLConfig:
         return cfg
 
 
+def _infer_ucl_split_from_loader(args: object, cfg: UCLConfig) -> None:
+    """Set ``cfg.split`` from ``args.loader`` for CIL vs TIL.
+
+    Class-incremental runs need a single full-width logit vector (concatenated
+    heads). Task-incremental runs keep one head per task. Explicit ``split`` on
+    ``args`` is applied in :meth:`UCLConfig.from_args` first; this overwrites it
+    when the loader name is recognised so YAML defaults stay loader-aligned.
+
+    Args:
+        args: Parsed experiment arguments (``loader`` string).
+        cfg: Config instance to mutate in place.
+    """
+    loader_name = str(getattr(args, "loader", "") or "")
+    if loader_name == "class_incremental_loader":
+        cfg.split = False
+    elif loader_name == "task_incremental_loader":
+        cfg.split = True
+
+
 class BayesianClassifier(nn.Module):
     """Bayesian ResNet feature extractor followed by per-task Bayesian heads."""
 
@@ -441,6 +465,7 @@ class Net(nn.Module):
         super().__init__()
 
         self.cfg = UCLConfig.from_args(args)
+        _infer_ucl_split_from_loader(args, self.cfg)
         assert n_tasks > 0, "Number of tasks must be positive for UCL"
 
         self.args = args
@@ -492,6 +517,7 @@ class Net(nn.Module):
         self._last_observe_task_index: Optional[int] = None
         self._last_observe_predictions_cpu: Optional[torch.Tensor] = None
         self._last_observe_labels_cpu: Optional[torch.Tensor] = None
+        self.noise_label: int | None = noise_label_from_args(args)
 
     @contextmanager
     def _temporarily_enable_bn_training(self):
@@ -519,31 +545,62 @@ class Net(nn.Module):
         return next(self.parameters()).device
 
     def forward(
-        self, x: torch.Tensor, t: int, s: Optional[float] = None
+        self,
+        x: torch.Tensor,
+        t: int,
+        s: Optional[float] = None,
+        *,
+        cil_all_seen_upto_task: int | None = None,
     ) -> torch.Tensor:
+        """Return task head logits, or concatenated heads when ``split`` is False.
+
+        ``split`` is set from ``args.loader`` in :meth:`Net.__init__` (CIL →
+        concatenated heads; TIL → separate heads). With concatenated logits,
+        :func:`~utils.misc_utils.apply_task_incremental_logit_mask` applies in
+        eval. With ``split=True``, only head ``t`` is returned.
+        """
         if not self.training:
             num_samples = max(1, self.cfg.eval_samples)
             if num_samples == 1:
                 outputs = self.model(x, sample=False)
-                return outputs[t] if self.split else outputs
+                logits = outputs[t] if self.split else outputs
+            else:
+                probs_acc: Optional[torch.Tensor] = None
+                with torch.no_grad():
+                    with self._temporarily_enable_bn_training():
+                        for _ in range(num_samples):
+                            sampled = self.model(x, sample=True)
+                            head_logits = sampled[t] if self.split else sampled
+                            head_probs = F.softmax(head_logits, dim=-1)
+                            probs_acc = (
+                                head_probs
+                                if probs_acc is None
+                                else probs_acc + head_probs
+                            )
 
-            probs_acc: Optional[torch.Tensor] = None
-            with torch.no_grad():
-                with self._temporarily_enable_bn_training():
-                    for _ in range(num_samples):
-                        sampled = self.model(x, sample=True)
-                        head_logits = sampled[t] if self.split else sampled
-                        head_probs = F.softmax(head_logits, dim=-1)
-                        probs_acc = (
-                            head_probs if probs_acc is None else probs_acc + head_probs
-                        )
+                assert probs_acc is not None
+                probs_mean = probs_acc / float(num_samples)
+                logits = torch.log(probs_mean.clamp_min(1e-8))
+        else:
+            outputs = self.model(x, sample=False)
+            logits = outputs[t] if self.split else outputs
 
-            assert probs_acc is not None
-            probs_mean = probs_acc / float(num_samples)
-            return torch.log(probs_mean.clamp_min(1e-8))
-
-        outputs = self.model(x, sample=False)
-        return outputs[t] if self.split else outputs
+        if (
+            not self.training
+            and self.is_task_incremental
+            and not self.split
+            and logits.size(-1) == self.n_outputs
+        ):
+            logits = misc_utils.apply_task_incremental_logit_mask(
+                logits,
+                t,
+                self.classes_per_task,
+                self.n_outputs,
+                cil_all_seen_upto_task=cil_all_seen_upto_task,
+                global_noise_label=self.noise_label,
+                fill_value=-10e10,
+            )
+        return logits
 
     def forward_heads(
         self, x: torch.Tensor, sample: bool = False
@@ -558,6 +615,9 @@ class Net(nn.Module):
             y_cls = torch.as_tensor(y_cls)
         if y_det is not None and not torch.is_tensor(y_det):
             y_det = torch.as_tensor(y_det)
+        y_cls_glob = unpack_y_to_class_labels(
+            (y_cls, y_det) if y_det is not None else y_cls
+        ).long()
         if (self.current_task is None) or (t != self.current_task):
             if self.current_task is not None:
                 self.model_old = self._snapshot_model()
@@ -567,7 +627,7 @@ class Net(nn.Module):
         device = self._device()
 
         x_cls = x
-        y_cls_filtered = y_cls
+        y_cls_filtered = y_cls_glob
         # if y_det is not None:
         #     signal_mask = (y_det == 1) & (y_cls >= 0)
         #     if not signal_mask.any():
@@ -586,20 +646,24 @@ class Net(nn.Module):
         #     x_cls = x[signal_mask]
         #     y_cls_filtered = y_cls[signal_mask]
 
+        signal_mask = signal_mask_exclude_noise(y_cls_filtered, self.noise_label)
         if self.split:
             offset1, _ = self.compute_offsets(t)
             y_local = y_cls_filtered.clone() - offset1
             task_classes = self.classes_per_task[t]
-            if (y_local.min() < 0) or (y_local.max() >= task_classes):
-                raise ValueError(
-                    f"Labels out of range for task {t}: expected in [0, {task_classes - 1}] after offset, got "
-                    f"[{int(y_local.min())}, {int(y_local.max())}]"
-                )
+            if signal_mask.any():
+                y_sig = y_local[signal_mask]
+                if (y_sig.min() < 0) or (y_sig.max() >= task_classes):
+                    raise ValueError(
+                        f"Labels out of range for task {t}: expected in [0, {task_classes - 1}] after offset, got "
+                        f"[{int(y_sig.min())}, {int(y_sig.max())}]"
+                    )
             y_cls_filtered = y_local
 
         x = x.to(device)
         x_cls = x_cls.to(device)
         y_cls_filtered = y_cls_filtered.to(device)
+        signal_mask = signal_mask.to(device)
         if y_det is not None:
             y_det = y_det.to(device)
 
@@ -609,7 +673,10 @@ class Net(nn.Module):
         logits = outputs[t] if self.split else outputs
 
         preds = torch.argmax(logits, dim=1)
-        cls_tr_rec = macro_recall(preds, y_cls_filtered)
+        if signal_mask.any():
+            cls_tr_rec = macro_recall(preds[signal_mask], y_cls_filtered[signal_mask])
+        else:
+            cls_tr_rec = 0.0
         self._last_observe_task_index = int(t)
         self._last_observe_predictions_cpu = preds.detach().cpu().long()
         self._last_observe_labels_cpu = y_cls_filtered.detach().cpu().long()
@@ -619,12 +686,12 @@ class Net(nn.Module):
             predictions=preds,
             logits=logits,
         )
-        loss = classification_cross_entropy(
+        ce = classification_cross_entropy(
             logits,
             y_cls_filtered,
             class_weighted_ce=bool(self.cfg.class_weighted_ce),
         )
-        loss = self._apply_regularisation(loss, y_cls_filtered.size(0))
+        loss = self._apply_regularisation(ce, y_cls_filtered.size(0))
 
         self.optimizer.zero_grad(set_to_none=True)
         loss.backward()

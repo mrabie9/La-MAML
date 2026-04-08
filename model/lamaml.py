@@ -12,9 +12,18 @@ class Net(BaseNet):
 
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
 
-    def forward(self, x, t):
+    def forward(self, x, t, *, cil_all_seen_upto_task=None):
         output = self.net.forward(x)
-        return output
+        if cil_all_seen_upto_task is None:
+            return output
+        return misc_utils.apply_task_incremental_logit_mask(
+            output,
+            t,
+            self.classes_per_task,
+            self.n_outputs,
+            cil_all_seen_upto_task=cil_all_seen_upto_task,
+            global_noise_label=self.noise_label,
+        )
 
     def meta_loss(self, x, fast_weights, y, t):
         """
