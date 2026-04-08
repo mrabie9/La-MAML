@@ -35,6 +35,13 @@ Row = Dict[str, Any]
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for the baseline aggregation script.
+
+    Returns:
+        Namespace populated with base config path, models directory, optional
+        model name filter, device choice, output path, and failure handling flag.
+
+    """
     parser = argparse.ArgumentParser(
         description="Collect untrained zero-shot baselines across model configs."
     )
@@ -62,7 +69,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--include-iid2",
         action="store_true",
-        help="Include iid2.yaml in the evaluation set (excluded by default).",
+        help=(
+            "When auto-discovering models (--models omitted), include iid2.yaml "
+            "(excluded by default). Explicit --models lists always honor every name."
+        ),
     )
     parser.add_argument(
         "--device",
@@ -89,6 +99,27 @@ def _selected_model_config_paths(
     model_names_csv: str | None,
     include_iid2: bool,
 ) -> List[Path]:
+    """Resolve YAML paths for models to evaluate.
+
+    When ``model_names_csv`` is ``None``, every ``*.yaml`` under ``models_dir`` is
+    used; ``iid2`` is omitted unless ``include_iid2`` is true. When the user lists
+    models explicitly, every requested name is honored (including ``iid2``).
+
+    Args:
+        models_dir: Directory containing per-model YAML files.
+        model_names_csv: Comma-separated stems (no ``.yaml``), or ``None`` for
+            auto-discovery.
+        include_iid2: If false and ``model_names_csv`` is ``None``, skip
+            ``iid2.yaml``. Ignored when names are listed explicitly.
+
+    Returns:
+        Sorted list of resolved config paths.
+
+    Raises:
+        FileNotFoundError: If ``models_dir`` is missing or an explicit name has no
+            matching file.
+
+    """
     if not models_dir.is_dir():
         raise FileNotFoundError(f"Models directory not found: {models_dir}")
     if model_names_csv is None:
@@ -100,8 +131,6 @@ def _selected_model_config_paths(
     selected_names = {
         item.strip() for item in model_names_csv.split(",") if item.strip()
     }
-    if not include_iid2:
-        selected_names.discard("iid2")
     paths: List[Path] = []
     for name in sorted(selected_names):
         model_path = models_dir / f"{name}.yaml"
@@ -112,6 +141,18 @@ def _selected_model_config_paths(
 
 
 def _load_args_for_model(base_config: Path, model_config: Path) -> argparse.Namespace:
+    """Load and merge YAML parse args for one model (base + model overlay).
+
+    Applies batch-size-scaled learning rate adjustment to match training defaults.
+
+    Args:
+        base_config: Path to shared base YAML (e.g. ``configs/base.yaml``).
+        model_config: Path to the model-specific YAML.
+
+    Returns:
+        Parsed namespace ready for model and dataloader construction.
+
+    """
     config_chain = [str(base_config), str(model_config)]
     run_args = file_parser.parse_args_from_yaml(config_chain)
     run_args.lr = misc_utils.scale_learning_rate_for_batch_size(
@@ -125,6 +166,18 @@ def _collect_one_model(
     model_config: Path,
     device_choice: str,
 ) -> List[Row]:
+    """Run untrained zero-shot evaluation for a single model config file.
+
+    Args:
+        base_config: Shared base YAML path.
+        model_config: Model YAML path to evaluate.
+        device_choice: One of ``"auto"``, ``"cpu"``, or ``"cuda"``.
+
+    Returns:
+        List of per-task metric rows (same schema as
+        ``evaluate_zero_shot_untrained``).
+
+    """
     run_args = _load_args_for_model(base_config, model_config)
     _apply_device_override(run_args, device_choice)
     model, loader = _build_model_and_loader(run_args)
@@ -138,6 +191,24 @@ def _collect_one_model(
 
 
 def main() -> None:
+    """Evaluate all selected model YAMLs without training and write combined JSON.
+
+    Auto-discovery skips ``iid2`` unless ``--include-iid2`` is set; an explicit
+    ``--models iid2`` always includes that config.
+
+    Usage:
+        From the repo root, after activating ``la-maml_env``::
+
+            python scripts/collect_zero_shot_baselines_all_models.py \\
+                --output logs/my_run/zs_baseline.json
+
+        Limit to named models (``iid2`` is included when listed)::
+
+            python scripts/collect_zero_shot_baselines_all_models.py \\
+                --models cmaml,iid2 \\
+                --output logs/my_run/zs_baseline.json
+
+    """
     args = _parse_args()
     if not args.base_config.is_file():
         raise FileNotFoundError(f"Base config not found: {args.base_config}")
