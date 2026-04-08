@@ -1,4 +1,0 @@
-# Model-specific overrides for eralg4.
-model: eralg4
-learn_lr: false
-lr: 0.003

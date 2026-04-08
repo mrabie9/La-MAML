@@ -1,4 +1,0 @@
-# Model-specific overrides for si.
-model: si
-lr: 0.003
-si_c: 0.4

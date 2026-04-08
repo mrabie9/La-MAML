@@ -108,6 +108,29 @@ fi
 
 BASE_CONFIG="configs/base.yaml"
 MODELS_DIR="configs/models"
+MODEL_MODE="${MODEL_MODE:-til}"
+if [ "$MODEL_MODE" != "til" ] && [ "$MODEL_MODE" != "cil" ]; then
+  echo "Invalid MODEL_MODE='$MODEL_MODE'. Expected 'til' or 'cil'." >&2
+  exit 1
+fi
+
+resolve_model_yaml() {
+  local name="$1"
+  local legacy_path="${MODELS_DIR}/${name}.yaml"
+  local mode_path="${MODELS_DIR}/${MODEL_MODE}/${name}.yaml"
+
+  if [ -f "$legacy_path" ]; then
+    printf '%s\n' "$legacy_path"
+    return 0
+  fi
+  if [ -f "$mode_path" ]; then
+    printf '%s\n' "$mode_path"
+    return 0
+  fi
+
+  log_msg "ERROR: Missing model config for '${name}'. Checked: ${legacy_path}, ${mode_path}"
+  return 1
+}
 
 # Cached serial timings used for util high/low splits.
 SERIAL_PROBE_JSON_PATH="${SERIAL_PROBE_JSON_PATH:-logs/eta_probe/eta_probe_elkk-1-algos_10-iter_avg-util-2.json}"
@@ -116,6 +139,7 @@ SCHEDULE_JSON_PATH="${SCHEDULE_JSON_PATH:-logs/eta_probe/full_experiments_host_s
 log_msg "Using SERIAL_PROBE_JSON_PATH=$SERIAL_PROBE_JSON_PATH"
 log_msg "Using SCHEDULE_JSON_PATH=$SCHEDULE_JSON_PATH"
 log_msg "HOST_KEY=$HOST_KEY"
+log_msg "MODEL_MODE=$MODEL_MODE"
 
 SERIAL_PROBE_INVALID=0
 if [ ! -f "$SERIAL_PROBE_JSON_PATH" ]; then
@@ -272,13 +296,10 @@ PY
 
 run_job_sync() {
   local name="$1"
-  local model_yaml="${MODELS_DIR}/${name}.yaml"
-  if [ ! -f "$model_yaml" ]; then
-    log_msg "ERROR: Missing model config: $model_yaml"
-    return 1
-  fi
+  local model_yaml
+  model_yaml="$(resolve_model_yaml "$name")" || return 1
   JOB_LOG_FILE="${JOB_LOG_DIR}/job_${name}_$(date +%Y%m%d_%H%M%S_%N).log"
-  log_msg "--- Dispatching: base + $name (job log: $JOB_LOG_FILE) ---"
+  log_msg "--- Dispatching: base + $name + $(basename "$model_yaml") (job log: $JOB_LOG_FILE) ---"
   echo "[$(date -Iseconds)] START $name" >>"$LOG_FILE"
   local entrypoint="main.py"
   if [ "$name" = "iid2" ]; then
@@ -308,16 +329,13 @@ overall_exit=0
 
 run_job_bg() {
   local name="$1"
-  local model_yaml="${MODELS_DIR}/${name}.yaml"
-  if [ ! -f "$model_yaml" ]; then
-    log_msg "ERROR: Missing model config: $model_yaml"
-    return 1
-  fi
+  local model_yaml
+  model_yaml="$(resolve_model_yaml "$name")" || return 1
   JOB_LOG_FILE="${JOB_LOG_DIR}/job_${name}_$(date +%Y%m%d_%H%M%S_%N).log"
   # Important: keep stdout clean for pid capture (queue scheduler uses
   # command-substitution to capture the returned pid).
   # - Write logs to LOG_FILE and stderr only.
-  echo "[$(date -Iseconds)] --- Dispatching: base + $name (job log: $JOB_LOG_FILE) ---" >>"$LOG_FILE"
+  echo "[$(date -Iseconds)] --- Dispatching: base + $name + $(basename "$model_yaml") (job log: $JOB_LOG_FILE) ---" >>"$LOG_FILE"
   echo "[$(date -Iseconds)] START $name" >>"$LOG_FILE"
 
   (
@@ -424,6 +442,8 @@ else
     # Concurrent pair: run both in parallel and wait.
     JOB_LOG_FILE_A="${JOB_LOG_DIR}/job_${a}_$(date +%Y%m%d_%H%M%S_%N).log"
     JOB_LOG_FILE_B="${JOB_LOG_DIR}/job_${b}_$(date +%Y%m%d_%H%M%S_%N).log"
+    model_yaml_a="$(resolve_model_yaml "$a")" || { overall_exit=1; continue; }
+    model_yaml_b="$(resolve_model_yaml "$b")" || { overall_exit=1; continue; }
 
     echo "[$(date -Iseconds)] START $a" >>"$LOG_FILE"
     echo "[$(date -Iseconds)] START $b" >>"$LOG_FILE"
@@ -433,7 +453,7 @@ else
       if [ "$a" = "iid2" ]; then
         entrypoint="main_single_round.py"
       fi
-      python3 "$entrypoint" --config "$BASE_CONFIG" --config "${MODELS_DIR}/${a}.yaml" >"$JOB_LOG_FILE_A" 2>&1
+      python3 "$entrypoint" --config "$BASE_CONFIG" --config "$model_yaml_a" >"$JOB_LOG_FILE_A" 2>&1
       exit_code=$?
       if [ "$exit_code" -eq 0 ]; then
         echo "[$(date -Iseconds)] Completed: $a (exit 0)" >>"$LOG_FILE"
@@ -449,7 +469,7 @@ else
       if [ "$b" = "iid2" ]; then
         entrypoint="main_single_round.py"
       fi
-      python3 "$entrypoint" --config "$BASE_CONFIG" --config "${MODELS_DIR}/${b}.yaml" >"$JOB_LOG_FILE_B" 2>&1
+      python3 "$entrypoint" --config "$BASE_CONFIG" --config "$model_yaml_b" >"$JOB_LOG_FILE_B" 2>&1
       exit_code=$?
       if [ "$exit_code" -eq 0 ]; then
         echo "[$(date -Iseconds)] Completed: $b (exit 0)" >>"$LOG_FILE"

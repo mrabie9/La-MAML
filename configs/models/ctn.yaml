@@ -1,8 +1,0 @@
-# Model-specific overrides for ctn.
-model: ctn
-lr: 0.03
-ctx_lr: 0.003
-task_emb: 64
-memory_strength: 10
-
-validation: 0.3

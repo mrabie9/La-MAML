@@ -1,6 +1,0 @@
-# Model-specific overrides for eralg4.
-model: eralg4
-learn_lr: true
-meta_batches: 3
-
-opt_lr: 0.3

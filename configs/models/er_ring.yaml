@@ -1,4 +1,0 @@
-# Model-specific overrides for er_ring.
-model: er_ring
-lr: 0.001
-# memory_strength: 1.0

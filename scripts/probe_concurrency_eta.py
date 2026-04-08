@@ -136,6 +136,30 @@ def _select_first_task_token_from_base(base_config_path: Path) -> str:
     return tokens[0]
 
 
+def _resolve_model_config_path(
+    models_dir: Path, model_name: str, model_mode: str
+) -> Path:
+    """Resolve model config path for legacy and mode-nested layouts.
+
+    Resolution order:
+      1) configs/models/<name>.yaml
+      2) configs/models/<model_mode>/<name>.yaml
+    """
+
+    legacy_path = models_dir / f"{model_name}.yaml"
+    if legacy_path.exists():
+        return legacy_path
+
+    mode_path = models_dir / model_mode / f"{model_name}.yaml"
+    if mode_path.exists():
+        return mode_path
+
+    raise SystemExit(
+        "Missing model config for "
+        f"'{model_name}'. Checked: '{legacy_path}' and '{mode_path}'."
+    )
+
+
 def _spawn_with_pty(args: list[str]) -> Tuple[subprocess.Popen[str], int]:
     """Spawn a subprocess attached to a pseudo-TTY.
 
@@ -535,7 +559,18 @@ def main() -> None:
         "--models",
         nargs="+",
         required=True,
-        help="Model config names to run (must match files in configs/models/<name>.yaml).",
+        help=(
+            "Model config names to run. Resolution prefers "
+            "configs/models/<name>.yaml, then "
+            "configs/models/<model_mode>/<name>.yaml."
+        ),
+    )
+    parser.add_argument(
+        "--model-mode",
+        type=str,
+        choices=["til", "cil"],
+        default="til",
+        help="Mode used when resolving nested model configs.",
     )
     parser.add_argument(
         "--pair-models",
@@ -608,9 +643,7 @@ def main() -> None:
     models_dir = repo_root / "configs" / "models"
 
     for model_name in args.models:
-        model_config_path = models_dir / f"{model_name}.yaml"
-        if not model_config_path.exists():
-            raise SystemExit(f"Missing model config: {model_config_path}")
+        _resolve_model_config_path(models_dir, model_name, args.model_mode)
 
     mode: str = "serial_only"
     serial_model_names: list[str] = list(args.models)
@@ -641,7 +674,9 @@ def main() -> None:
         target = ProbeTarget(
             model_name=model_name,
             base_config_path=base_config_path,
-            model_config_path=(models_dir / f"{model_name}.yaml").resolve(),
+            model_config_path=_resolve_model_config_path(
+                models_dir, model_name, args.model_mode
+            ).resolve(),
             task_token=task_token,
         )
         job_tag = f"serial_{model_name}"
@@ -677,7 +712,9 @@ def main() -> None:
             target = ProbeTarget(
                 model_name=model_name,
                 base_config_path=base_config_path,
-                model_config_path=(models_dir / f"{model_name}.yaml").resolve(),
+                model_config_path=_resolve_model_config_path(
+                    models_dir, model_name, args.model_mode
+                ).resolve(),
                 task_token=task_token,
             )
             t = threading.Thread(
@@ -773,7 +810,9 @@ def main() -> None:
                 target = ProbeTarget(
                     model_name=model_name,
                     base_config_path=base_config_path,
-                    model_config_path=(models_dir / f"{model_name}.yaml").resolve(),
+                    model_config_path=_resolve_model_config_path(
+                        models_dir, model_name, args.model_mode
+                    ).resolve(),
                     task_token=task_token,
                 )
                 t = threading.Thread(

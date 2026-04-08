@@ -1,3 +1,0 @@
-# Model-specific overrides for packnet.
-model: packnet
-lr: 0.03

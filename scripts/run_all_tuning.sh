@@ -20,6 +20,7 @@ Options:
   --exclude "m3,m4"    Skip the listed models.
   --scripts-root DIR   Directory that contains tune_*.py files (default: tuning).
   --config FILE        Base config applied to every run (default: configs/tuning_defaults.yaml).
+  --model-mode MODE    Model config mode for nested paths: til | cil (default: til).
   --tune-only PARAM    Restrict grid to one or more hyperparameters (repeatable).
   --python PATH        Python interpreter to invoke (default: $PYTHON or python3).
   --log-dir DIR        Directory for aggregated log files (default: logs/tuning/suites).
@@ -59,6 +60,8 @@ PYTHON_BIN="${PYTHON:-python3}"
 SCRIPTS_ROOT="../tuning"
 CONFIG_FILE="../configs/tuning_defaults.yaml"
 MODEL_CONFIG_DIR="../configs/models"
+MODEL_MODE="til"
+STRICT_MODEL_CONFIG="${STRICT_MODEL_CONFIG:-1}"
 SCHEDULE_JSON_PATH="${SCHEDULE_JSON_PATH:-$REPO_ROOT/logs/eta_probe/full_experiments_host_schedule.json}"
 KEEP_GOING=0
 DRY_RUN=0
@@ -93,6 +96,11 @@ while [[ $# -gt 0 ]]; do
         --config)
             [[ $# -ge 2 ]] || { echo "Missing value for --config" >&2; exit 1; }
             CONFIG_FILE="$2"
+            shift 2
+            ;;
+        --model-mode)
+            [[ $# -ge 2 ]] || { echo "Missing value for --model-mode" >&2; exit 1; }
+            MODEL_MODE="$2"
             shift 2
             ;;
         --schedule-json)
@@ -151,6 +159,26 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [[ "$MODEL_MODE" != "til" && "$MODEL_MODE" != "cil" ]]; then
+    echo "Invalid --model-mode '$MODEL_MODE' (expected til or cil)." >&2
+    exit 1
+fi
+
+resolve_model_config() {
+    local model="$1"
+    local legacy_cfg="${MODEL_CONFIG_DIR}/${model}.yaml"
+    local nested_cfg="${MODEL_CONFIG_DIR}/${MODEL_MODE}/${model}.yaml"
+    if [[ -f "$legacy_cfg" ]]; then
+        printf "%s\n" "$legacy_cfg"
+        return 0
+    fi
+    if [[ -f "$nested_cfg" ]]; then
+        printf "%s\n" "$nested_cfg"
+        return 0
+    fi
+    return 1
+}
 
 if [[ "$MAX_JOBS" -lt 1 ]]; then
     echo "MAX_JOBS must be >= 1 (got $MAX_JOBS)." >&2
@@ -494,6 +522,7 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 
 echo "Logging tuning sweep to $LOG_FILE"
 echo "Using config: $CONFIG_FILE"
+echo "MODEL_MODE=$MODEL_MODE STRICT_MODEL_CONFIG=$STRICT_MODEL_CONFIG"
 echo "HOST_KEY=${HOST_KEY:-} USE_HOST_SCHEDULE=$USE_HOST_SCHEDULE SCHED_KIND=${SCHED_KIND:-none}"
 echo "SCHEDULE_JSON_PATH=$SCHEDULE_JSON_PATH"
 echo "CONCURRENCY_OPTION=$CONCURRENCY_OPTION MAX_JOBS=$MAX_JOBS"
@@ -507,12 +536,19 @@ fill_cmd_for_idx() {
     local script="${SELECTED_SCRIPTS[$idx]}"
     local model="${SELECTED_MODELS[$idx]}"
     cmd=( "$PYTHON_BIN" "$script" "--config" "$CONFIG_FILE" )
-    local model_cfg="${MODEL_CONFIG_DIR}/${model}.yaml"
-    if [[ ! -f "$model_cfg" && "$model" == "bcl" ]]; then
-        model_cfg="${MODEL_CONFIG_DIR}/bcl_dual.yaml"
+    local lookup_model="$model"
+    if [[ "$model" == "bcl" ]]; then
+        lookup_model="bcl_dual"
     fi
-    if [[ -f "$model_cfg" ]]; then
+    local model_cfg=""
+    if model_cfg="$(resolve_model_config "$lookup_model")"; then
         cmd+=( "--config" "$model_cfg" )
+    elif [[ "$STRICT_MODEL_CONFIG" == "1" ]]; then
+        echo "ERROR: Missing model config for '$model' (lookup '$lookup_model')." >&2
+        echo "Checked: ${MODEL_CONFIG_DIR}/${lookup_model}.yaml and ${MODEL_CONFIG_DIR}/${MODEL_MODE}/${lookup_model}.yaml" >&2
+        return 1
+    else
+        echo "WARNING: Missing model config for '$model'; continuing without model-specific config." >&2
     fi
     # Always run hierarchical tuning unless explicitly already provided.
     if ! contains "--hierarchical" "${EXTRA_ARGS[@]}"; then
@@ -527,7 +563,7 @@ launch_job_at_index() {
     local idx="$1"
     local model="${SELECTED_MODELS[$idx]}"
     local script="${SELECTED_SCRIPTS[$idx]}"
-    fill_cmd_for_idx "$idx"
+    fill_cmd_for_idx "$idx" || return 1
     local job_stamp slot_tag
     job_stamp="$(date +"%Y%m%d_%H%M%S_%N")"
     slot_tag="${2:-slot}"
@@ -581,7 +617,11 @@ reap_pid_record() {
 if [[ $DRY_RUN -eq 1 ]]; then
     for idx in "${!SELECTED_SCRIPTS[@]}"; do
         model="${SELECTED_MODELS[$idx]}"
-        fill_cmd_for_idx "$idx"
+        if ! fill_cmd_for_idx "$idx"; then
+            FAILURES+=("$model")
+            echo "Skipping $model due to config resolution failure."
+            continue
+        fi
         script="${SELECTED_SCRIPTS[$idx]}"
         echo
         echo "[ $((idx + 1)) / $total ] $model via $script"
@@ -602,6 +642,11 @@ elif [[ "$USE_HOST_SCHEDULE" -eq 1 && "$SCHED_KIND" == "queue" && "$CONCURRENCY_
         if [[ -z "$slot_high_pid" && "$idx_h" -lt "${#QUEUE_HIGH_IDX[@]}" && "$stop_launching" -eq 0 ]]; then
             hi="${QUEUE_HIGH_IDX[$idx_h]}"
             launch_job_at_index "$hi" "high"
+            if [[ $? -ne 0 ]]; then
+                FAILURES+=("${SELECTED_MODELS[$hi]}")
+                stop_launching=1
+                continue
+            fi
             slot_high_pid="$LAST_JOB_PID"
             slot_high_model="${SELECTED_MODELS[$hi]}"
             idx_h=$((idx_h + 1))
@@ -609,6 +654,11 @@ elif [[ "$USE_HOST_SCHEDULE" -eq 1 && "$SCHED_KIND" == "queue" && "$CONCURRENCY_
         if [[ -z "$slot_low_pid" && "$idx_l" -lt "${#QUEUE_LOW_IDX[@]}" && "$stop_launching" -eq 0 ]]; then
             lo="${QUEUE_LOW_IDX[$idx_l]}"
             launch_job_at_index "$lo" "low"
+            if [[ $? -ne 0 ]]; then
+                FAILURES+=("${SELECTED_MODELS[$lo]}")
+                stop_launching=1
+                continue
+            fi
             slot_low_pid="$LAST_JOB_PID"
             slot_low_model="${SELECTED_MODELS[$lo]}"
             idx_l=$((idx_l + 1))
@@ -642,6 +692,11 @@ elif [[ "$USE_HOST_SCHEDULE" -eq 1 && "$SCHED_KIND" == "queue" ]]; then
     for hi in "${QUEUE_HIGH_IDX[@]}"; do
         [[ "$stop_launching" -eq 1 ]] && break
         fill_cmd_for_idx "$hi"
+        if [[ $? -ne 0 ]]; then
+            FAILURES+=("${SELECTED_MODELS[$hi]}")
+            [[ $KEEP_GOING -eq 1 ]] || stop_launching=1
+            continue
+        fi
         model="${SELECTED_MODELS[$hi]}"
         script="${SELECTED_SCRIPTS[$hi]}"
         echo
@@ -658,6 +713,11 @@ elif [[ "$USE_HOST_SCHEDULE" -eq 1 && "$SCHED_KIND" == "queue" ]]; then
     for lo in "${QUEUE_LOW_IDX[@]}"; do
         [[ "$stop_launching" -eq 1 ]] && break
         fill_cmd_for_idx "$lo"
+        if [[ $? -ne 0 ]]; then
+            FAILURES+=("${SELECTED_MODELS[$lo]}")
+            [[ $KEEP_GOING -eq 1 ]] || break
+            continue
+        fi
         model="${SELECTED_MODELS[$lo]}"
         script="${SELECTED_SCRIPTS[$lo]}"
         echo
@@ -679,9 +739,17 @@ elif [[ "$USE_HOST_SCHEDULE" -eq 1 && "$SCHED_KIND" == "legacy" ]]; then
         i1="${LEGACY_PAIR_I1[$pi]}"
         if [[ "$CONCURRENCY_OPTION" -eq 1 ]]; then
             launch_job_at_index "$i0" "pairA"
+            if [[ $? -ne 0 ]]; then
+                FAILURES+=("${SELECTED_MODELS[$i0]}")
+                [[ $KEEP_GOING -eq 1 ]] || { stop_launching=1; continue; }
+            fi
             pa_pid=$LAST_JOB_PID
             ma="${SELECTED_MODELS[$i0]}"
             launch_job_at_index "$i1" "pairB"
+            if [[ $? -ne 0 ]]; then
+                FAILURES+=("${SELECTED_MODELS[$i1]}")
+                [[ $KEEP_GOING -eq 1 ]] || { stop_launching=1; continue; }
+            fi
             pb_pid=$LAST_JOB_PID
             mb="${SELECTED_MODELS[$i1]}"
             wait_rc_a=0
@@ -703,6 +771,11 @@ elif [[ "$USE_HOST_SCHEDULE" -eq 1 && "$SCHED_KIND" == "legacy" ]]; then
         else
             for ix in "$i0" "$i1"; do
                 fill_cmd_for_idx "$ix"
+                if [[ $? -ne 0 ]]; then
+                    FAILURES+=("${SELECTED_MODELS[$ix]}")
+                    [[ $KEEP_GOING -eq 1 ]] || stop_launching=1
+                    break
+                fi
                 model="${SELECTED_MODELS[$ix]}"
                 if PYTHONPATH="$PYTHONPATH_OVERRIDE" "${cmd[@]}"; then
                     SUCCESSES+=("$model")
@@ -717,6 +790,11 @@ elif [[ "$USE_HOST_SCHEDULE" -eq 1 && "$SCHED_KIND" == "legacy" ]]; then
     for si in "${LEGACY_SINGLE_IDX[@]}"; do
         [[ "$stop_launching" -eq 1 ]] && break
         fill_cmd_for_idx "$si"
+        if [[ $? -ne 0 ]]; then
+            FAILURES+=("${SELECTED_MODELS[$si]}")
+            [[ $KEEP_GOING -eq 1 ]] || break
+            continue
+        fi
         model="${SELECTED_MODELS[$si]}"
         if PYTHONPATH="$PYTHONPATH_OVERRIDE" "${cmd[@]}"; then
             SUCCESSES+=("$model")
@@ -729,6 +807,11 @@ elif [[ "$CONCURRENCY_OPTION" -eq 0 ]]; then
     for idx in "${!SELECTED_SCRIPTS[@]}"; do
         model="${SELECTED_MODELS[$idx]}"
         fill_cmd_for_idx "$idx"
+        if [[ $? -ne 0 ]]; then
+            FAILURES+=("$model")
+            [[ $KEEP_GOING -eq 1 ]] || break
+            continue
+        fi
         script="${SELECTED_SCRIPTS[$idx]}"
         echo
         echo "[ $((idx + 1)) / $total ] Running $model via $script"
@@ -784,6 +867,12 @@ else
         reap_finished_slots
         while [[ "$stop_launching" -eq 0 && ${#running_pids[@]} -lt MAX_JOBS && "$next_idx" -lt "$total" ]]; do
             launch_job_at_index "$next_idx" "flat"
+            if [[ $? -ne 0 ]]; then
+                FAILURES+=("${SELECTED_MODELS[$next_idx]}")
+                [[ $KEEP_GOING -eq 1 ]] || { stop_launching=1; break; }
+                next_idx=$((next_idx + 1))
+                continue
+            fi
             running_pids+=($LAST_JOB_PID)
             running_slot_idx+=("$next_idx")
             next_idx=$((next_idx + 1))

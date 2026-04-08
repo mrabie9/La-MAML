@@ -1,5 +1,0 @@
-# Model-specific overrides for hat.
-model: hat
-lr: 0.001
-gamma: 2.5
-smax: 400

@@ -51,11 +51,21 @@ MODEL_MODULES_EXCLUDED_FROM_NOISE_SMOKE: frozenset[str] = frozenset(
 )
 
 
+def _ordered_model_config_paths() -> list[Path]:
+    """Return deterministically ordered model config files.
+
+    Preference order (per model) is handled by `_yaml_chain_for_module`:
+    legacy top-level path first, then nested mode-specific paths.
+    """
+
+    return sorted(CONFIG_MODEL_DIR.rglob("*.yaml"), key=lambda p: p.as_posix())
+
+
 def _ordered_model_modules_from_configs() -> list[str]:
-    """Return unique ``model:`` ids from ``configs/models/*.yaml`` (file order)."""
+    """Return unique ``model:`` ids from ``configs/models/**/*.yaml``."""
     discovered: list[str] = []
     seen: set[str] = set()
-    for path in sorted(CONFIG_MODEL_DIR.glob("*.yaml")):
+    for path in _ordered_model_config_paths():
         with path.open(encoding="utf-8") as handle:
             payload = yaml.safe_load(handle) or {}
         module_name = payload.get("model")
@@ -71,12 +81,21 @@ def _ordered_model_modules_from_configs() -> list[str]:
 def _yaml_chain_for_module(model_module: str) -> list[str]:
     """``base.yaml`` plus the YAML that declares this ``model`` (if any)."""
     chain = [str(ROOT / "configs" / "base.yaml")]
-    for path in sorted(CONFIG_MODEL_DIR.glob("*.yaml")):
+    matching_paths: list[Path] = []
+    for path in _ordered_model_config_paths():
         with path.open(encoding="utf-8") as handle:
             payload = yaml.safe_load(handle) or {}
         if payload.get("model") == model_module:
-            chain.append(str(path))
-            break
+            matching_paths.append(path)
+
+    if matching_paths:
+        legacy_matches = [
+            path for path in matching_paths if path.parent == CONFIG_MODEL_DIR
+        ]
+        if legacy_matches:
+            chain.append(str(legacy_matches[0]))
+        else:
+            chain.append(str(matching_paths[0]))
     return chain
 
 
