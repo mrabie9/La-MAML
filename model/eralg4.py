@@ -261,7 +261,8 @@ class Net(DetectionReplayMixin, nn.Module):
         ):
             offset1, offset2 = self.compute_offsets(t)
             self.net.zero_grad(set_to_none=True)
-            live_logits = self.net.forward(x_train)
+            live_x_train = self._canonicalize_input(x, detach=False)
+            live_logits = self.net.forward(live_x_train)
             live_loss = classification_cross_entropy(
                 live_logits[:, offset1:offset2],
                 y - offset1,
@@ -440,7 +441,7 @@ class Net(DetectionReplayMixin, nn.Module):
             meta_losses = [0 for _ in range(n_batches)]
 
             bx, by, bt = self.getBatch(
-                x.cpu().numpy(),
+                x.detach().cpu().numpy(),
                 y[0].cpu().numpy() if isinstance(y, (list, tuple)) else y.cpu().numpy(),
                 t,
             )

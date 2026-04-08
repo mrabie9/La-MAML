@@ -1,5 +1,5 @@
 # Shared experiment defaults
-expt_name: full-tasks_all-10epochs_weighted-loss
+expt_name: full-tasks-2_all-10epochs_weighted-loss
 arch: resnet1d
 loader: task_incremental_loader
 data_path: data/rff/radar/full
@@ -27,14 +27,14 @@ samples_per_task: -1
 
 # Optimizer defaults
 glances: 1
+n_meta: 1
+inner_steps: 1
 n_epochs: 10
 batch_size: 256
 n_memories: 5120
 memories: 5120
-glances: 1
 replay_batch_size: 128
 temperature: 5.0
-inner_steps: 1
 alpha_init: 0.001
 grad_clip_norm: 5.0
 optimizer: sgd
