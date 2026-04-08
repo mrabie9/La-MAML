@@ -13,16 +13,26 @@ SCRIPT_START_EPOCH="$(date +%s)"
 EXPERIMENT_DESC=""
 RERUN_PROBE=0
 SCHEDULE_JSON_OVERRIDE=""
+MODEL_MODE_OVERRIDE=""
 while [ $# -gt 0 ]; do
     case "$1" in
         -d|--desc|--description)
             EXPERIMENT_DESC="${2:-}"
             shift 2
             ;;
+        --mode|--model)
+            if [ -z "${2:-}" ]; then
+                echo "Missing value for $1"
+                echo "Usage: $0 [--desc/-d DESCRIPTION] [--schedule-json PATH] [--mode til|cil]"
+                exit 1
+            fi
+            MODEL_MODE_OVERRIDE="${2:-}"
+            shift 2
+            ;;
         --schedule-json|--schedule-file)
             if [ -z "${2:-}" ]; then
                 echo "Missing value for $1"
-                echo "Usage: $0 [--desc/-d DESCRIPTION] [--schedule-json PATH]"
+                echo "Usage: $0 [--desc/-d DESCRIPTION] [--schedule-json PATH] [--mode til|cil]"
                 exit 1
             fi
             SCHEDULE_JSON_OVERRIDE="${2:-}"
@@ -33,15 +43,16 @@ while [ $# -gt 0 ]; do
             shift 1
             ;;
         -h|--help)
-            echo "Usage: $0 [--desc/-d DESCRIPTION] [--schedule-json PATH]"
+            echo "Usage: $0 [--desc/-d DESCRIPTION] [--schedule-json PATH] [--mode til|cil]"
             echo "  DESCRIPTION is used to label the logs folder (sanitized)."
             echo "  --schedule-json  use a specific host schedule JSON file."
+            echo "  --mode/--model   select model mode: til or cil."
             echo "  --rerun-probe   regenerate host schedule split (serial timings cached)."
             exit 0
             ;;
         *)
             echo "Unknown argument: $1"
-            echo "Usage: $0 [--desc/-d DESCRIPTION] [--schedule-json PATH]"
+            echo "Usage: $0 [--desc/-d DESCRIPTION] [--schedule-json PATH] [--mode til|cil]"
             exit 1
             ;;
     esac
@@ -129,6 +140,9 @@ fi
 BASE_CONFIG="configs/base.yaml"
 MODELS_DIR="configs/models"
 MODEL_MODE="${MODEL_MODE:-til}"
+if [ -n "$MODEL_MODE_OVERRIDE" ]; then
+  MODEL_MODE="$MODEL_MODE_OVERRIDE"
+fi
 if [ "$MODEL_MODE" != "til" ] && [ "$MODEL_MODE" != "cil" ]; then
   echo "Invalid MODEL_MODE='$MODEL_MODE'. Expected 'til' or 'cil'." >&2
   exit 1
