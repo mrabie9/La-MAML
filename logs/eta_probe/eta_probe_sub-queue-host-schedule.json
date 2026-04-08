@@ -1,23 +1,23 @@
 {
   "schema_version": 1,
-  "created_utc": "2026-04-08T15:13:15.828623+00:00",
-  "timestamp_utc_compact": "20260408_151315",
+  "created_utc": "2026-04-08T16:02:27.761627+00:00",
+  "timestamp_utc_compact": "20260408_160227",
   "base_config": "/home/lunet/wsmr11/repos/La-MAML/configs/base.yaml",
   "task_token_first_from_base": "t2-rcn",
-  "wait_iters": 5,
+  "wait_iters": 10,
   "n_epochs": 1,
   "samples_per_task": null,
-  "mode": "auto_pairing_serial_and_parallel",
+  "mode": "serial_only",
   "pair_models": null,
   "serial": {
     "ctn": {
-      "eta_seconds": 76.0,
-      "eta_raw": "01:16",
-      "done": 5,
+      "eta_seconds": 69.0,
+      "eta_raw": "01:09",
+      "done": 10,
       "total": 197,
-      "util_avg_epochstart_to_eta_capture_percent": 58.833333333333336,
-      "util_avg_n_samples": 6,
-      "probe_elapsed_seconds": 11.30110216140747,
+      "util_avg_epochstart_to_eta_capture_percent": 60.857142857142854,
+      "util_avg_n_samples": 14,
+      "probe_elapsed_seconds": 12.379168033599854,
       "job_tag": "serial_ctn",
       "command": [
         "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/bin/python3",
@@ -31,16 +31,16 @@
         "--n_epochs",
         "1"
       ],
-      "start_time_utc": "2026-04-08T15:11:50.597091+00:00"
+      "start_time_utc": "2026-04-08T16:01:15.666767+00:00"
     },
     "la-er": {
-      "eta_seconds": 349.0,
-      "eta_raw": "05:49",
-      "done": 5,
+      "eta_seconds": 346.0,
+      "eta_raw": "05:46",
+      "done": 10,
       "total": 197,
-      "util_avg_epochstart_to_eta_capture_percent": 44.03030303030303,
-      "util_avg_n_samples": 33,
-      "probe_elapsed_seconds": 18.139973402023315,
+      "util_avg_epochstart_to_eta_capture_percent": 43.93421052631579,
+      "util_avg_n_samples": 76,
+      "probe_elapsed_seconds": 27.460439920425415,
       "job_tag": "serial_la-er",
       "command": [
         "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/bin/python3",
@@ -54,16 +54,16 @@
         "--n_epochs",
         "1"
       ],
-      "start_time_utc": "2026-04-08T15:12:09.001606+00:00"
+      "start_time_utc": "2026-04-08T16:01:43.391978+00:00"
     },
     "bcl_dual": {
-      "eta_seconds": 63.0,
-      "eta_raw": "01:03",
-      "done": 5,
+      "eta_seconds": 60.0,
+      "eta_raw": "01:00",
+      "done": 10,
       "total": 197,
-      "util_avg_epochstart_to_eta_capture_percent": 58.6,
-      "util_avg_n_samples": 5,
-      "probe_elapsed_seconds": 10.899842023849487,
+      "util_avg_epochstart_to_eta_capture_percent": 56.5,
+      "util_avg_n_samples": 12,
+      "probe_elapsed_seconds": 12.354692220687866,
       "job_tag": "serial_bcl_dual",
       "command": [
         "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/bin/python3",
@@ -77,16 +77,16 @@
         "--n_epochs",
         "1"
       ],
-      "start_time_utc": "2026-04-08T15:12:20.116163+00:00"
+      "start_time_utc": "2026-04-08T16:01:55.961580+00:00"
     },
     "agem": {
-      "eta_seconds": 59.0,
-      "eta_raw": "00:59",
-      "done": 5,
+      "eta_seconds": 53.0,
+      "eta_raw": "00:53",
+      "done": 10,
       "total": 197,
-      "util_avg_epochstart_to_eta_capture_percent": 61.0,
-      "util_avg_n_samples": 5,
-      "probe_elapsed_seconds": 10.903618574142456,
+      "util_avg_epochstart_to_eta_capture_percent": 63.81818181818182,
+      "util_avg_n_samples": 11,
+      "probe_elapsed_seconds": 11.952674150466919,
       "job_tag": "serial_agem",
       "command": [
         "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/bin/python3",
@@ -100,16 +100,16 @@
         "--n_epochs",
         "1"
       ],
-      "start_time_utc": "2026-04-08T15:12:31.234465+00:00"
+      "start_time_utc": "2026-04-08T16:02:08.128936+00:00"
     },
     "icarl": {
-      "eta_seconds": 57.0,
-      "eta_raw": "00:57",
-      "done": 5,
+      "eta_seconds": 49.0,
+      "eta_raw": "00:49",
+      "done": 10,
       "total": 197,
-      "util_avg_epochstart_to_eta_capture_percent": 63.75,
-      "util_avg_n_samples": 4,
-      "probe_elapsed_seconds": 10.807150602340698,
+      "util_avg_epochstart_to_eta_capture_percent": 69.0,
+      "util_avg_n_samples": 10,
+      "probe_elapsed_seconds": 11.648705244064331,
       "job_tag": "serial_icarl",
       "command": [
         "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/bin/python3",
@@ -123,43 +123,36 @@
         "--n_epochs",
         "1"
       ],
-      "start_time_utc": "2026-04-08T15:12:42.306148+00:00"
+      "start_time_utc": "2026-04-08T16:02:19.992257+00:00"
+    },
+    "iid2": {
+      "eta_seconds": 54.0,
+      "eta_raw": "00:54",
+      "done": 10,
+      "total": 197,
+      "util_avg_epochstart_to_eta_capture_percent": 62.18181818181818,
+      "util_avg_n_samples": 11,
+      "probe_elapsed_seconds": 7.2905778884887695,
+      "job_tag": "serial_iid2",
+      "command": [
+        "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/bin/python3",
+        "main_single_round.py",
+        "--config",
+        "/home/lunet/wsmr11/repos/La-MAML/configs/base.yaml",
+        "--config",
+        "/home/lunet/wsmr11/repos/La-MAML/configs/models/iid2.yaml",
+        "--task-order-files",
+        "t2-rcn",
+        "--n_epochs",
+        "1"
+      ],
+      "start_time_utc": "2026-04-08T16:02:27.547454+00:00"
     }
   },
   "parallel": null,
   "parallel_wall_clock_seconds": null,
   "comparison": null,
-  "auto_pair_models": [
-    {
-      "A": "icarl",
-      "B": "la-er"
-    },
-    {
-      "A": "agem",
-      "B": "bcl_dual"
-    }
-  ],
-  "auto_pair_comparisons": [
-    {
-      "serial_sum_eta_seconds": 406.0,
-      "parallel_max_eta_seconds": 364.0,
-      "parallel_max_eta_minus_serial_sum_eta_seconds": -42.0,
-      "parallel_is_faster_than_serial_sum": true,
-      "pair_idx": 0,
-      "serial_util_high_percent": 63.75,
-      "serial_util_low_percent": 44.03030303030303,
-      "parallel_wall_clock_seconds": 20.590572118759155
-    },
-    {
-      "serial_sum_eta_seconds": 122.0,
-      "parallel_max_eta_seconds": 79.0,
-      "parallel_max_eta_minus_serial_sum_eta_seconds": -43.0,
-      "parallel_is_faster_than_serial_sum": true,
-      "pair_idx": 1,
-      "serial_util_high_percent": 61.0,
-      "serial_util_low_percent": 58.6,
-      "parallel_wall_clock_seconds": 12.717118740081787
-    }
-  ],
-  "auto_parallel_wall_total_seconds": 33.30769085884094
+  "auto_pair_models": null,
+  "auto_pair_comparisons": null,
+  "auto_parallel_wall_total_seconds": null
 }
