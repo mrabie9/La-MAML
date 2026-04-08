@@ -12,10 +12,20 @@ SCRIPT_START_EPOCH="$(date +%s)"
 
 EXPERIMENT_DESC=""
 RERUN_PROBE=0
+SCHEDULE_JSON_OVERRIDE=""
 while [ $# -gt 0 ]; do
     case "$1" in
         -d|--desc|--description)
             EXPERIMENT_DESC="${2:-}"
+            shift 2
+            ;;
+        --schedule-json|--schedule-file)
+            if [ -z "${2:-}" ]; then
+                echo "Missing value for $1"
+                echo "Usage: $0 [--desc/-d DESCRIPTION] [--schedule-json PATH]"
+                exit 1
+            fi
+            SCHEDULE_JSON_OVERRIDE="${2:-}"
             shift 2
             ;;
         --rerun-probe|--rerun-eta-probe|--reprobe)
@@ -23,14 +33,15 @@ while [ $# -gt 0 ]; do
             shift 1
             ;;
         -h|--help)
-            echo "Usage: $0 [--desc/-d DESCRIPTION]"
+            echo "Usage: $0 [--desc/-d DESCRIPTION] [--schedule-json PATH]"
             echo "  DESCRIPTION is used to label the logs folder (sanitized)."
+            echo "  --schedule-json  use a specific host schedule JSON file."
             echo "  --rerun-probe   regenerate host schedule split (serial timings cached)."
             exit 0
             ;;
         *)
             echo "Unknown argument: $1"
-            echo "Usage: $0 [--desc/-d DESCRIPTION]"
+            echo "Usage: $0 [--desc/-d DESCRIPTION] [--schedule-json PATH]"
             exit 1
             ;;
     esac
@@ -144,6 +155,9 @@ resolve_model_yaml() {
 # Cached serial timings used for util high/low splits.
 SERIAL_PROBE_JSON_PATH="${SERIAL_PROBE_JSON_PATH:-logs/eta_probe/eta_probe_elkk-1-algos_10-iter_avg-util-2.json}"
 SCHEDULE_JSON_PATH="${SCHEDULE_JSON_PATH:-logs/eta_probe/full_experiments_host_schedule.json}"
+if [ -n "$SCHEDULE_JSON_OVERRIDE" ]; then
+  SCHEDULE_JSON_PATH="$SCHEDULE_JSON_OVERRIDE"
+fi
 
 log_msg "Using SERIAL_PROBE_JSON_PATH=$SERIAL_PROBE_JSON_PATH"
 log_msg "Using SCHEDULE_JSON_PATH=$SCHEDULE_JSON_PATH"
