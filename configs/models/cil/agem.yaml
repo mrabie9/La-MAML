@@ -1,0 +1,6 @@
+# Model-specific overrides for agem.
+model: agem
+loader: class_incremental_loader
+
+lr: 0.01
+

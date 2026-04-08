@@ -1,0 +1,6 @@
+# Model-specific overrides for si.
+model: si
+loader: task_incremental_loader
+
+lr: 0.003
+si_c: 0.4

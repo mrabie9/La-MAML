@@ -1,0 +1,4 @@
+# Model-specific overrides for er_ring.
+model: er_ring
+loader: class_incremental_loader
+lr: 0.001

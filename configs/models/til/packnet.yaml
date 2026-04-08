@@ -1,0 +1,4 @@
+# Model-specific overrides for packnet.
+model: packnet
+loader: task_incremental_loader
+lr: 0.03
