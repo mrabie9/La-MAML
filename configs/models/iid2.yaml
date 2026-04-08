@@ -14,11 +14,14 @@
  # trained for n_epochs, with the specific tasks selected via task_order_files.
 
  # Give runs a distinct experiment name so logs are easy to filter.
- expt_name: test_uclresm-single-task
+#  expt_name: test_uclresm-single-task
  model: iid2
 
+ lr: 0.03
  # Number of epochs for the single-round experiment.
  # Override this per-run on the CLI if needed.
+#  n_epochs: 10
+#  samples_per_task: -1
 #  n_epochs: 10
 #  samples_per_task: -1
 #  task_order_files: "t2-uclresm-25noise"

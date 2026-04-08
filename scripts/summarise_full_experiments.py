@@ -392,6 +392,17 @@ def _fmt(v: Optional[float]) -> str:
     return f"{v:.3f}" if v is not None else "  -"
 
 
+def _classification_f1_from_recall_precision(
+    recall_value: Optional[float], precision_value: Optional[float]
+) -> Optional[float]:
+    if recall_value is None or precision_value is None:
+        return None
+    denominator = recall_value + precision_value
+    if denominator == 0:
+        return None
+    return 2 * (recall_value * precision_value) / denominator
+
+
 def _compute_concurrent_runtime_seconds(log_path: str) -> Optional[float]:
     """Estimate wall-clock concurrent runtime from file timestamps."""
     if os.path.isdir(log_path):
@@ -430,27 +441,44 @@ def print_summary(
     w_algo, w_exit = 8, 5
     w_num = 7
     w_time = 8
-    # tr: rec prec f1 det fa | te: rec prec f1 det fa | Size_GB Time
+    # tr: rec prec f1_c det fa f1 | te: rec prec f1_c det fa f1 | Size_GB Time
     header = (
         f"{'Algo':<{w_algo}} {'Exit':<{w_exit}} "
-        f"{'rec':>{w_num}} {'prec':>{w_num}}  {'det':>{w_num}} {'fa':>{w_num}} {'f1':>{w_num}} "
+        f"{'rec':>{w_num}} {'prec':>{w_num}} {'F1_c':>{w_num}} "
+        f"{'det':>{w_num}} {'fa':>{w_num}} {'f1':>{w_num}} "
         f"| "
-        f"{'rec':>{w_num}} {'prec':>{w_num}}  {'det':>{w_num}} {'fa':>{w_num}} {'f1':>{w_num}} "
+        f"{'rec':>{w_num}} {'prec':>{w_num}} {'F1_c':>{w_num}} "
+        f"{'det':>{w_num}} {'fa':>{w_num}} {'f1':>{w_num}} "
         f"{'Size_GB':>{w_num}} {'Time':>{w_time}}"
     )
     print(header)
     print("-" * len(header))
-    for name in sorted(summaries.keys()):
-        s = summaries[name]
+    sorted_summaries = sorted(
+        summaries.values(),
+        key=lambda summary: (
+            summary.cls_f1_te is None,
+            summary.cls_f1_te if summary.cls_f1_te is not None else float("inf"),
+            summary.name,
+        ),
+    )
+    for s in sorted_summaries:
+        train_classification_f1 = _classification_f1_from_recall_precision(
+            s.cls_rec_tr, s.cls_prec_tr
+        )
+        test_classification_f1 = _classification_f1_from_recall_precision(
+            s.cls_rec_te, s.cls_prec_te
+        )
         size_str = f"{s.size_gb:.3f}" if s.size_gb is not None else "  -"
         time_str = _format_time(s.time_sec)
         exit_str = str(s.exit_code) if s.exit_code is not None else ""
         print(
             f"{s.name:<{w_algo}} {exit_str:<{w_exit}} "
-            f"{_fmt(s.cls_rec_tr):>{w_num}} {_fmt(s.cls_prec_tr):>{w_num}}  "
+            f"{_fmt(s.cls_rec_tr):>{w_num}} {_fmt(s.cls_prec_tr):>{w_num}} "
+            f"{_fmt(train_classification_f1):>{w_num}} "
             f"{_fmt(s.det_tr):>{w_num}} {_fmt(s.fa_tr):>{w_num}} {_fmt(s.cls_f1_tr):>{w_num}} "
             f"| "
             f"{_fmt(s.cls_rec_te):>{w_num}} {_fmt(s.cls_prec_te):>{w_num}} "
+            f"{_fmt(test_classification_f1):>{w_num}} "
             f"{_fmt(s.det_te):>{w_num}} {_fmt(s.fa_te):>{w_num}} {_fmt(s.cls_f1_te):>{w_num}} "
             f"{size_str:>{w_num}} {time_str:>{w_time}}"
         )
