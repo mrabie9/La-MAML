@@ -21,7 +21,7 @@
  # Override this per-run on the CLI if needed.
 #  n_epochs: 10
  samples_per_task: -1
- lr: 0.01
+ lr: 0.03
 #  task_order_files: "t2-uclresm-25noise"
 #  task_order_files: "t2-uclresm-25noise, t1-uclresm-25noise, t0-uclresm-25noise"
 #  data_path: data/rff/radar/uclresm_25noise
