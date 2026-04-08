@@ -439,10 +439,14 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         if True:
             det_loss_value = torch.zeros((), device=x_train.device, dtype=torch.float32)
 
+        # Keep a detached canonical source and rebuild the train tensor per meta step
+        # to avoid reusing a freed autograd graph across meta iterations.
+        x_train_source = x_train.detach()
         self.zero_grad()
         cls_tr_rec = []
         context_parameters = list(self.net.context_param())
         for _ in range(self.n_meta):
+            x_train = self._canonicalize_input(x_train_source, detach=False)
             loss1 = torch.tensor(0.0, device=x.device)
 
             offset1, offset2 = self.compute_offsets(t)
