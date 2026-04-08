@@ -17,15 +17,16 @@
  expt_name: test_uclresm-single-task
  model: iid2
 
+ lr: 0.03
  # Number of epochs for the single-round experiment.
  # Override this per-run on the CLI if needed.
- n_epochs: 10
- samples_per_task: -1
+#  n_epochs: 10
+#  samples_per_task: -1
 #  task_order_files: "t2-uclresm-25noise"
 #  task_order_files: "t2-uclresm-25noise, t1-uclresm-25noise, t0-uclresm-25noise"
 #  data_path: data/rff/radar/uclresm_25noise
- task_order_files: "t2-uclresm-25noise-ch-as-samples, t1-uclresm-25noise-ch-as-samples, t0-uclresm-25noise-ch-as-samples"
- data_path: data/rff/radar/uclresm_25noise_ch-as-samples
+#  task_order_files: "t2-uclresm-25noise-ch-as-samples, t1-uclresm-25noise-ch-as-samples, t0-uclresm-25noise-ch-as-samples"
+#  data_path: data/rff/radar/uclresm_25noise_ch-as-samples
 
  # By default, reuse the same task ordering as base.yaml.
  # Override this in your command line or in a copy of this file to select
