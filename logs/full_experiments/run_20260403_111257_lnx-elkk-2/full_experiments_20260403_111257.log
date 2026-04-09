@@ -35,3 +35,9 @@
 [2026-04-05T15:52:18+01:00] --- Dispatching: base + la-er (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260403_111257_lnx-elkk-2/job_logs/job_la-er_20260405_155218_548143569.log) ---
 [2026-04-05T15:52:18+01:00] START la-er
 [2026-04-05T18:01:28+01:00] ERROR: la-er failed with exit code 1
+[2026-04-08T17:09:37+01:00] --- Dispatching: base + agem (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260403_111257_lnx-elkk-2/job_logs/job_agem_20260408_170937_149760339.log) ---
+[2026-04-08T17:09:37+01:00] START agem
+[2026-04-08T17:09:37+01:00] --- Dispatching: base + ctn (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260408_170937_lnx-elkk-2/job_logs/job_ctn_20260408_170937_156555810.log) ---
+[2026-04-08T17:09:37+01:00] START ctn
+[2026-04-09T05:00:41+01:00] Completed: agem (exit 0)
+[2026-04-09T07:04:45+01:00] Completed: ctn (exit 0)
