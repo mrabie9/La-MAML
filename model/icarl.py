@@ -51,6 +51,7 @@ class IcarlConfig:
     cls_lambda: float = 1.0
     det_memories: int = 2000
     det_replay_batch: int = 64
+    icarl_feature_chunk_size: int = 512
 
     @staticmethod
     def from_args(args: object) -> "IcarlConfig":
@@ -193,6 +194,31 @@ class Net(DetectionReplayMixin, torch.nn.Module):
 
         return self.net.forward_features(x)
 
+    def _extract_features_chunked(
+        self, x: torch.Tensor, chunk_size: Optional[int] = None
+    ) -> torch.Tensor:
+        """Extract penultimate features in no-grad chunks.
+
+        This avoids large one-shot forwards over full class tensors during
+        iCaRL exemplar construction.
+        """
+        if x.numel() == 0:
+            return x.new_zeros((0, self.n_feat))
+
+        effective_chunk_size = int(
+            chunk_size if chunk_size is not None else self.cfg.icarl_feature_chunk_size
+        )
+        effective_chunk_size = max(effective_chunk_size, 1)
+        target_device = next(self.net.parameters()).device
+        chunks: list[torch.Tensor] = []
+        with torch.no_grad():
+            for start in range(0, int(x.size(0)), effective_chunk_size):
+                stop = min(start + effective_chunk_size, int(x.size(0)))
+                batch_x = x[start:stop].to(target_device, non_blocking=True)
+                batch_features = self.feature_forward(batch_x).detach()
+                chunks.append(batch_features)
+        return torch.cat(chunks, dim=0)
+
     def compute_offsets(self, task):
         offset1, offset2 = misc_utils.compute_offsets(task, self.classes_per_task)
         return int(offset1), int(offset2)
@@ -253,7 +279,11 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         means_rows: list[torch.Tensor] = []
         for class_id in class_ids:
             exemplars = self.mem_class_x[class_id]
-            means_rows.append(self.feature_forward(exemplars).detach().mean(dim=0))
+            means_rows.append(
+                self._extract_features_chunked(exemplars.to(device, non_blocking=True))
+                .detach()
+                .mean(dim=0)
+            )
         means = torch.stack(means_rows, dim=0)
         feats = self.feature_forward(x).detach()
         means = F.normalize(means, p=2, dim=1)
@@ -310,13 +340,14 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 # Stage only the first pass through the task data. This keeps
                 # exemplar construction bounded while still supporting n_epochs > 1.
                 if prev_examples_seen < samples_per_task:
-                    staged_x = self._input_for_replay(x).data.clone()
+                    staged_x = self._input_for_replay(x).detach().cpu().clone()
+                    staged_y = y_cls.detach().cpu().clone()
                     if self.memx is None:
                         self.memx = staged_x
-                        self.memy = y_cls.data.clone()
+                        self.memy = staged_y
                     else:
                         self.memx = torch.cat((self.memx, staged_x))
-                        self.memy = torch.cat((self.memy, y_cls.data.clone()))
+                        self.memy = torch.cat((self.memy, staged_y))
 
             self.net.zero_grad()
             offset1, _offset2 = self.compute_offsets(t)
@@ -365,6 +396,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                         )
                     inp_dist = torch.stack(sampled_inputs, dim=0)
                     target_dist = torch.stack(sampled_targets, dim=0)
+                    target_device = next(self.net.parameters()).device
+                    inp_dist = inp_dist.to(target_device, non_blocking=True)
+                    target_dist = target_dist.to(target_device, non_blocking=True)
                     # Add distillation loss
                     loss += (
                         self.reg
@@ -450,26 +484,26 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                     )  # grab training data for current label
                     # Construct exemplar set for last task using penultimate
                     # features as in the original iCaRL algorithm.
-                    feat_cdata = self.feature_forward(cdata).data.clone()
+                    feat_cdata = self._extract_features_chunked(cdata).detach()
                     mean_feature = feat_cdata.mean(0)
                     nd = self.n_feat
                     exemplars = cdata.new_zeros((self.num_exemplars,) + cdata.shape[1:])
                     ntr = cdata.size(0)  # num data points for current label
                     # used to keep track of which examples we have already used
-                    taken = torch.zeros(ntr)
+                    taken = torch.zeros(ntr, device=feat_cdata.device, dtype=torch.bool)
                     model_output = feat_cdata
+                    selected_feature_sum = feat_cdata.new_zeros(nd)
                     for ee in range(self.num_exemplars):  # herding loop
-                        prev = torch.zeros(1, nd)
-                        if self.gpu:
-                            prev = prev.cuda()
                         if ee > 0:
-                            prev = (
-                                self.feature_forward(exemplars[:ee]).data.clone().sum(0)
+                            prev_expanded = selected_feature_sum.unsqueeze(0).expand(
+                                ntr, nd
                             )
+                        else:
+                            prev_expanded = model_output.new_zeros((ntr, nd))
                         cost = (
                             (
                                 mean_feature.expand(ntr, nd)
-                                - (model_output + prev.expand(ntr, nd)) / (ee + 1)
+                                - (model_output + prev_expanded) / (ee + 1)
                             )
                             .norm(2, 1)
                             .squeeze()
@@ -480,7 +514,11 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                             winner += 1
                         if winner < indx.size(0):
                             taken[indx[winner]] = 1
-                            exemplars[ee] = cdata[indx[winner]].clone()
+                            selected_index = int(indx[winner].item())
+                            exemplars[ee] = cdata[selected_index].clone()
+                            selected_feature_sum = (
+                                selected_feature_sum + model_output[selected_index]
+                            )
                         else:
                             exemplars = exemplars[: indx.size(0)].clone()
                             self.num_exemplars = indx.size(0)
@@ -491,9 +529,15 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 # recompute outputs for distillation purposes
                 for cc in self.mem_class_x.keys():
                     self.mem_class_x[cc] = self.mem_class_x[cc][: self.num_exemplars]
-                    self.mem_class_y[cc] = self.netforward(
-                        self.mem_class_x[cc]
-                    ).data.clone()
+                    logits = self.netforward(
+                        self.mem_class_x[cc].to(
+                            next(self.net.parameters()).device, non_blocking=True
+                        )
+                    ).detach()
+                    self.mem_class_y[cc] = logits.cpu().clone()
+                del feat_cdata, model_output, selected_feature_sum
+                if self.gpu and torch.cuda.is_available():
+                    torch.cuda.empty_cache()
             self.memx = None
             self.memy = None
             # print(len(self.mem_class_x[0]))
