@@ -14,6 +14,7 @@ if ROOT not in sys.path:
 from model.bcl_dual import Net as BclDualNet
 from model.ctn import Net as CtnNet
 from model.eralg4 import Net as ErAlg4Net
+from model.icarl import Net as IcarlNet
 from model.lamaml_cifar import Net as LamamlCifarNet
 from model.ucl_bresnet import Net as UclBresnetNet
 
@@ -46,6 +47,7 @@ def _make_args(classes_per_task=None):
     o.memory_strength = 0.5
     o.temperature = 5.0
     o.task_emb = 16
+    o.samples_per_task = 16
     o.det_lambda = 1.0
     o.cls_lambda = 1.0
     o.det_memories = 0
@@ -89,6 +91,19 @@ def test_lamaml_cifar_updates_adapter_weight():
 def test_eralg4_updates_adapter_weight():
     args = _make_args()
     model = ErAlg4Net(n_inputs=1024, n_outputs=12, n_tasks=2, args=args)
+    model.train()
+    x = torch.randn(8, 3, 1024)
+    y = _labels(8, task_id=0)
+
+    _assert_adapter_weight_changes(
+        lambda: model.observe(x, y, t=0),
+        model.net.model.input_adapter.weight,
+    )
+
+
+def test_icarl_updates_adapter_weight():
+    args = _make_args()
+    model = IcarlNet(n_inputs=1024, n_outputs=12, n_tasks=2, args=args)
     model.train()
     x = torch.randn(8, 3, 1024)
     y = _labels(8, task_id=0)
