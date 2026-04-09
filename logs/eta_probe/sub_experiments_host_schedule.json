@@ -2,18 +2,16 @@
   "hosts": {
     "lnx-elkk-1": {
       "slot_high": [
-        "icarl",
-        "iid2"
+        "icarl"
       ],
       "slot_low": [
-        "bcl_dual",
-        "la-er"
+        "iid2"
       ],
       "estimated_host_wall_seconds": 406.0
     },
     "lnx-elkk-2": {
       "slot_high": [
-        "agem"
+        
       ],
       "slot_low": [
         "ctn"
