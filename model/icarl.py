@@ -21,12 +21,7 @@ from model.detection_replay import (
     signal_mask_exclude_noise,
     unpack_y_to_class_labels,
 )
-import os
 
-sys.path.insert(
-    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../dataloaders"))
-)
-from iq_data_loader import ensure_iq_two_channel
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 from utils.class_weighted_loss import classification_cross_entropy
@@ -129,7 +124,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         )
 
         # memory
-        self.memx = None  # stores raw inputs, PxD
+        self.memx = None  # stores canonical replay inputs
         self.memy = None
         self.mem_class_x = {}  # stores exemplars class by class
         self.mem_class_y = {}
@@ -176,10 +171,9 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         elif self.cfg.dataset == "cifar100":
             x = x.view(-1, 3, 32, 32)
         elif "iq" in self.cfg.dataset.lower():
-            x_np = ensure_iq_two_channel(x.detach().cpu().numpy())
-            x = torch.from_numpy(x_np).float()
-            if self.gpu:
-                x = x.cuda()
+            # Keep canonicalization in torch so the adapter path remains
+            # differentiable during training.
+            x = self._canonicalize_input(x, detach=False)
 
         return self.net.forward(x)
 
@@ -195,10 +189,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         elif self.cfg.dataset == "cifar100":
             x = x.view(-1, 3, 32, 32)
         elif "iq" in self.cfg.dataset.lower():
-            x_np = ensure_iq_two_channel(x.detach().cpu().numpy())
-            x = torch.from_numpy(x_np).float()
-            if self.gpu:
-                x = x.cuda()
+            x = self._canonicalize_input(x, detach=False)
 
         return self.net.forward_features(x)
 
@@ -319,11 +310,12 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 # Stage only the first pass through the task data. This keeps
                 # exemplar construction bounded while still supporting n_epochs > 1.
                 if prev_examples_seen < samples_per_task:
+                    staged_x = self._input_for_replay(x).data.clone()
                     if self.memx is None:
-                        self.memx = x.data.clone()
+                        self.memx = staged_x
                         self.memy = y_cls.data.clone()
                     else:
-                        self.memx = torch.cat((self.memx, x.data.clone()))
+                        self.memx = torch.cat((self.memx, staged_x))
                         self.memy = torch.cat((self.memy, y_cls.data.clone()))
 
             self.net.zero_grad()
@@ -356,18 +348,23 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                     # first generate a minibatch with one example per class from
                     # previous tasks
                     task_classes = self.classes_per_task[tt]
-                    input_shape = x.shape[1:]
-                    inp_dist = x.new_zeros((task_classes,) + input_shape)
                     # Distillation operates over classifier logits, which have
                     # dimension ``n_classes`` rather than the feature size.
-                    target_dist = x.new_zeros((task_classes, self.n_classes))
+                    sampled_inputs: list[torch.Tensor] = []
+                    sampled_targets: list[torch.Tensor] = []
                     offset1, offset2 = self.compute_offsets(tt)
                     for cc in range(task_classes):
                         indx = random.randint(
                             0, len(self.mem_class_x[cc + offset1]) - 1
                         )
-                        inp_dist[cc] = self.mem_class_x[cc + offset1][indx].clone()
-                        target_dist[cc] = self.mem_class_y[cc + offset1][indx].clone()
+                        sampled_inputs.append(
+                            self.mem_class_x[cc + offset1][indx].clone()
+                        )
+                        sampled_targets.append(
+                            self.mem_class_y[cc + offset1][indx].clone()
+                        )
+                    inp_dist = torch.stack(sampled_inputs, dim=0)
+                    target_dist = torch.stack(sampled_targets, dim=0)
                     # Add distillation loss
                     loss += (
                         self.reg

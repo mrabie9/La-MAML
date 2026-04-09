@@ -472,7 +472,7 @@ class Net(DetectionReplayMixin, nn.Module):
             y_pack = unpack_y_to_class_labels(y)
             bx, by, bt = self.getBatch(
                 x.detach().cpu().numpy(),
-                y_pack.cpu().numpy(),
+                y_pack.detach().cpu().numpy(),
                 t,
             )
             bx = bx.squeeze()
