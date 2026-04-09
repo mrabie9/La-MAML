@@ -269,8 +269,9 @@ class Net(DetectionReplayMixin, nn.Module):
             x.dim() == 4 and x.size(1) == 3 and x.size(2) == 2
         ):
             self.net.zero_grad(set_to_none=True)
+            live_x_train = self._canonicalize_input(x.detach(), detach=False)
             live_logits = misc_utils.apply_task_incremental_logit_mask(
-                self.net.forward(x_train),
+                self.net.forward(live_x_train),
                 t,
                 self.classes_per_task,
                 self.n_outputs,
@@ -470,7 +471,7 @@ class Net(DetectionReplayMixin, nn.Module):
 
             y_pack = unpack_y_to_class_labels(y)
             bx, by, bt = self.getBatch(
-                x.cpu().numpy(),
+                x.detach().cpu().numpy(),
                 y_pack.cpu().numpy(),
                 t,
             )

@@ -354,7 +354,8 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         #     return float(det_loss.item()), 0.0
         # x = x[signal_mask]
         # y = y_cls[signal_mask]
-        x_train = self._canonicalize_input(x, detach=False)
+        raw_x_train = x
+        x_train = self._canonicalize_input(raw_x_train, detach=False)
         x_for_storage = self._input_for_replay(x)
         y_work = unpack_y_to_class_labels(y).long()
 
@@ -377,10 +378,12 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         # maintain validation set (store adapted input in val buffer)
         n_val_taken = 0
         n_rotated_in = 0
+        rotated_validation_sample_for_meta = None
         task_val_capacity = int(self.task_val_capacities[t])
         if task_val_capacity > 0 and x_train.size(0) > 0:
             n_val_taken = 1
             incoming_val_y = y_work[0]
+            raw_x_train = raw_x_train[1:]
             x_train = x_train[1:]
             y_work = y_work[1:]
             val_write_pointer = int(self.task_val_ptr[t].item())
@@ -388,9 +391,10 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             # Only rotate in when overwriting a slot that has valid data (buffer full)
             if val_filled >= task_val_capacity:
                 n_rotated_in = 1
-                x_train = torch.cat(
-                    [x_train, self.valx[t, val_write_pointer].unsqueeze(0)]
-                )
+                rotated_validation_sample_for_meta = self.valx[
+                    t, val_write_pointer
+                ].unsqueeze(0)
+                x_train = torch.cat([x_train, rotated_validation_sample_for_meta])
                 y_work = torch.cat(
                     [y_work, self.valy[t, val_write_pointer].unsqueeze(0)]
                 )
@@ -455,14 +459,17 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         if True:
             det_loss_value = torch.zeros((), device=x_train.device, dtype=torch.float32)
 
-        # Keep a detached canonical source and rebuild the train tensor per meta step
-        # to avoid reusing a freed autograd graph across meta iterations.
-        x_train_source = x_train.detach()
+        # Rebuild canonicalized train input per meta step from raw inputs to avoid
+        # reusing a freed autograd graph while still allowing adapter gradients.
         self.zero_grad()
         cls_tr_rec = []
         context_parameters = list(self.net.context_param())
         for _ in range(self.n_meta):
-            x_train = self._canonicalize_input(x_train_source, detach=False)
+            x_train = self._canonicalize_input(raw_x_train, detach=False)
+            if rotated_validation_sample_for_meta is not None:
+                x_train = torch.cat(
+                    [x_train, rotated_validation_sample_for_meta], dim=0
+                )
             loss1 = torch.tensor(0.0, device=x.device)
 
             pred = self.forward(x_train, t, cil_all_seen_upto_task=t)
