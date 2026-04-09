@@ -629,6 +629,7 @@ def _model_forward_for_metric_loop(
             model.n_classes,  # type: ignore[attr-defined]
             cil_all_seen_upto_task=task_index,
             global_noise_label=getattr(model, "noise_label", None),
+            loader=getattr(args, "loader", None),
         )
     try:
         return model(x, task_index, **forward_kw)  # type: ignore[operator]

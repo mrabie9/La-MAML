@@ -86,6 +86,7 @@ class Net(torch.nn.Module):
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         self.noise_label: int | None = noise_label_from_args(args)
+        self.incremental_loader_name = getattr(args, "loader", None)
 
         if self.cfg.arch != "resnet1d":
             raise ValueError(
@@ -121,6 +122,7 @@ class Net(torch.nn.Module):
             self.n_outputs,
             cil_all_seen_upto_task=cil,
             global_noise_label=self.noise_label,
+            loader=self.incremental_loader_name,
         )
 
     def observe(

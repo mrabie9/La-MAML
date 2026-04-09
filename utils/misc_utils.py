@@ -89,6 +89,36 @@ def compute_offsets(task, nc_per_task):
     return int(offset1), int(offset2)
 
 
+def _effective_cil_upto_for_loader(
+    *,
+    loader: str | None,
+    cil_all_seen_upto_task: int | None,
+) -> int | None:
+    """Return the cumulative CIL task bound to honour, or None for TIL masking.
+
+    Aligns with ``main._model_forward_for_metric_loop``: only
+    ``class_incremental_loader`` uses cumulative (seen-so-far) masking. When
+    ``loader`` is ``None``, ``cil_all_seen_upto_task`` is used as given (backward
+    compatible with call sites that do not pass ``loader``).
+
+    Args:
+        loader: Value of ``args.loader`` from the incremental dataloader, if any.
+        cil_all_seen_upto_task: Requested CIL upper task index from the caller.
+
+    Returns:
+        Task index for the CIL branch, or ``None`` to use the TIL branch.
+
+    Usage:
+        >>> _effective_cil_upto_for_loader(
+        ...     loader="task_incremental_loader", cil_all_seen_upto_task=3
+        ... )
+        None
+    """
+    if loader is not None and loader != "class_incremental_loader":
+        return None
+    return cil_all_seen_upto_task
+
+
 def apply_task_incremental_logit_mask(
     logits: torch.Tensor,
     task_index: int,
@@ -98,6 +128,7 @@ def apply_task_incremental_logit_mask(
     cil_all_seen_upto_task: int | None = None,
     global_noise_label: int | None = None,
     fill_value: float = -1e9,
+    loader: str | None = None,
 ) -> torch.Tensor:
     """Apply task-wise or class-incremental (CIL) evaluation logit masking.
 
@@ -111,20 +142,25 @@ def apply_task_incremental_logit_mask(
     predict noise jointly with seen classes; otherwise a naive mask
     ``[:, offset2:]`` would zero the noise logit and break detection metrics.
 
+    If ``loader`` is ``"task_incremental_loader"`` (or any value other than
+    ``"class_incremental_loader"``), ``cil_all_seen_upto_task`` is ignored and
+    the TIL branch is used — same rule as the metric forward path in ``main.py``.
+
     Args:
         logits: Unmasked classifier output ``(batch, n_classes)``.
         task_index: Task index used only for the TIL branch (ignored when
-            ``cil_all_seen_upto_task`` is set).
+            the effective CIL bound is not ``None``).
         nc_per_task: Per-task class counts or scalar (same convention as
             :func:`compute_offsets`).
         n_outputs: Logit width (truncate mask at this index).
-        cil_all_seen_upto_task: If not ``None``, cumulative CIL mask through this
-            task index (inclusive). If ``None``, use TIL masking for
-            ``task_index``.
+        cil_all_seen_upto_task: If not ``None`` (after ``loader`` resolution),
+            cumulative CIL mask through this task index (inclusive).
         global_noise_label: Optional global noise class index (not counted in
             ``nc_per_task`` / ``compute_offsets``). When set, future-signal mask
             is ``[offset2:noise)`` and ``(noise:]`` instead of ``[offset2:]``.
         fill_value: Mask fill value (large negative logit).
+        loader: Optional ``args.loader`` string; when set and not the CIL loader,
+            forces TIL masking regardless of ``cil_all_seen_upto_task``.
 
     Returns:
         Masked logits (clone); input tensor is not modified.
@@ -138,8 +174,11 @@ def apply_task_incremental_logit_mask(
         ... )
     """
     masked = logits.clone()
-    if cil_all_seen_upto_task is not None:
-        _, offset2 = compute_offsets(cil_all_seen_upto_task, nc_per_task)
+    effective_cil = _effective_cil_upto_for_loader(
+        loader=loader, cil_all_seen_upto_task=cil_all_seen_upto_task
+    )
+    if effective_cil is not None:
+        _, offset2 = compute_offsets(effective_cil, nc_per_task)
         if global_noise_label is not None and 0 <= int(global_noise_label) < n_outputs:
             gnoise = int(global_noise_label)
             if offset2 < gnoise:
@@ -155,6 +194,10 @@ def apply_task_incremental_logit_mask(
         masked[:, :offset1].fill_(fill_value)
     if offset2 < n_outputs:
         masked[:, offset2:].fill_(fill_value)
+    if global_noise_label is not None:
+        gnoise = int(global_noise_label)
+        if 0 <= gnoise < n_outputs and (gnoise < offset1 or gnoise >= offset2):
+            masked[:, gnoise] = logits[:, gnoise]
     return masked
 
 

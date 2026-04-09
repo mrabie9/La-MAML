@@ -67,6 +67,7 @@ class Net(torch.nn.Module):
         super(Net, self).__init__()
         self.cfg = MetaBgdConfig.from_args(args)
         self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
+        self.incremental_loader_name = getattr(args, "loader", None)
 
         if self.cfg.arch != "resnet1d":
             raise ValueError(
@@ -166,6 +167,7 @@ class Net(torch.nn.Module):
                 cil_all_seen_upto_task=cil_all_seen_upto_task,
                 global_noise_label=self.noise_label,
                 fill_value=-10e10,
+                loader=self.incremental_loader_name,
             )
         return output
 

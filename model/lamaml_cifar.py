@@ -57,6 +57,7 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
             cil_all_seen_upto_task=cil_all_seen_upto_task,
             global_noise_label=self.noise_label,
             fill_value=-10e10,
+            loader=self.incremental_loader_name,
         )
 
     def meta_loss(self, x, fast_weights, y, bt, t):
@@ -72,6 +73,7 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
             self.n_outputs,
             cil_all_seen_upto_task=t,
             global_noise_label=self.noise_label,
+            loader=self.incremental_loader_name,
         )
         loss_q = self.take_multitask_loss(bt, t, logits, y)
 
@@ -94,6 +96,7 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
             self.n_outputs,
             cil_all_seen_upto_task=t,
             global_noise_label=self.noise_label,
+            loader=self.incremental_loader_name,
         )
         loss = self.take_loss(t, logits, y)
 
@@ -281,6 +284,7 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
                     self.n_outputs,
                     cil_all_seen_upto_task=t,
                     global_noise_label=self.noise_label,
+                    loader=self.incremental_loader_name,
                 )
                 y_live = unpack_y_to_class_labels(y).long()
                 live_loss = classification_cross_entropy(

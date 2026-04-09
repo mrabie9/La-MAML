@@ -2,6 +2,7 @@ import argparse
 import time
 import importlib
 import os
+import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -212,6 +213,8 @@ def run_single_round_training(
 
     from tqdm import tqdm  # Imported lazily to keep top-level imports minimal.
 
+    interactive_terminal = sys.stdout.isatty()
+
     result_val_a: List[List[float]] = []
     result_val_t: List[int] = []
     per_epoch_losses: List[float] = []
@@ -238,7 +241,7 @@ def run_single_round_training(
         epoch_det_recalls: List[float] = []
         epoch_det_fas: List[float] = []
 
-        progress_bar = tqdm(train_loader)
+        progress_bar = tqdm(train_loader, disable=not interactive_terminal)
         for batch in progress_bar:
             if isinstance(batch, (list, tuple)) and len(batch) == 2:
                 xb, yb = batch

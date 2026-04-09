@@ -141,6 +141,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         self.n_outputs = n_outputs
         self.noise_label: int | None = noise_label_from_args(args)
+        self.incremental_loader_name = getattr(args, "loader", None)
 
     def _ensure_iq_shape(self, x):
         if x.dim() == 3:
@@ -358,6 +359,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 self.n_classes,
                 cil_all_seen_upto_task=t,
                 global_noise_label=self.noise_label,
+                loader=self.incremental_loader_name,
             )
             signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
             targets = y_cls.long()

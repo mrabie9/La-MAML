@@ -83,6 +83,7 @@ class Net(nn.Module):
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         self.noise_label: int | None = noise_label_from_args(args)
+        self.incremental_loader_name = getattr(args, "loader", None)
         self.is_task_incremental = True
         # if self.is_cifar:
         #     self.nc_per_task = n_outputs / n_tasks
@@ -117,6 +118,7 @@ class Net(nn.Module):
                 cil_all_seen_upto_task=cil_all_seen_upto_task,
                 global_noise_label=self.noise_label,
                 fill_value=-10e10,
+                loader=self.incremental_loader_name,
             )
         return output
 

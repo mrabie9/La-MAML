@@ -518,6 +518,7 @@ class Net(nn.Module):
         self._last_observe_predictions_cpu: Optional[torch.Tensor] = None
         self._last_observe_labels_cpu: Optional[torch.Tensor] = None
         self.noise_label: int | None = noise_label_from_args(args)
+        self.incremental_loader_name = getattr(args, "loader", None)
 
     @contextmanager
     def _temporarily_enable_bn_training(self):
@@ -599,6 +600,7 @@ class Net(nn.Module):
                 cil_all_seen_upto_task=cil_all_seen_upto_task,
                 global_noise_label=self.noise_label,
                 fill_value=-10e10,
+                loader=self.incremental_loader_name,
             )
         return logits
 
