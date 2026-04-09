@@ -47,6 +47,7 @@ class BaseNet(torch.nn.Module):
         super(BaseNet, self).__init__()
 
         self.args = args
+        self.incremental_loader_name = getattr(args, "loader", None)
         self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
         self.cfg = LamamlBaseConfig.from_args(args)
         if self.cfg.arch != "resnet1d":

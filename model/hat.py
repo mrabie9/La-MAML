@@ -528,6 +528,7 @@ class Net(nn.Module):
 
         self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
         self.noise_label: int | None = noise_label_from_args(args)
+        self.incremental_loader_name = getattr(args, "loader", None)
 
         params: Iterable[nn.Parameter] = self.bridge.parameters()
         if self.cfg.optimizer.lower() == "adam":
@@ -698,6 +699,7 @@ class Net(nn.Module):
             self.n_outputs,
             cil_all_seen_upto_task=t,
             global_noise_label=self.noise_label,
+            loader=self.incremental_loader_name,
         )
         targets = y_cls.long()
         loss, _ = self._criterion(logits_for_loss, targets, masks)

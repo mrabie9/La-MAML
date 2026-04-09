@@ -115,6 +115,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         else:
             self.nc_per_task = n_outputs
         self.noise_label = noise_label_from_args(args)
+        self.incremental_loader_name = getattr(args, "loader", None)
         # setup memories
         self.current_task = 0
         self.fisher = {}
@@ -238,6 +239,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 cil_all_seen_upto_task=cil_all_seen_upto_task,
                 global_noise_label=self.noise_label,
                 fill_value=-10e10,
+                loader=self.incremental_loader_name,
             )
         return output
 

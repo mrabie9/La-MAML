@@ -79,6 +79,9 @@ class Net(DetectionReplayMixin, nn.Module):
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         self.is_task_incremental = getattr(args, "class_incremental", True)
         self.noise_label: int | None = noise_label_from_args(args)
+        self.incremental_loader_name: str | None = (
+            getattr(args, "loader", None) if args is not None else None
+        )
 
         self.net = ResNet1D(n_outputs, args)
         self.class_weighted_ce = bool(
@@ -125,6 +128,7 @@ class Net(DetectionReplayMixin, nn.Module):
             self.n_outputs,
             cil_all_seen_upto_task=cil,
             global_noise_label=self.noise_label,
+            loader=self.incremental_loader_name,
         )
 
     # ------------------------------------------------------------------
@@ -155,6 +159,7 @@ class Net(DetectionReplayMixin, nn.Module):
                 self.n_outputs,
                 cil_all_seen_upto_task=t,
                 global_noise_label=self.noise_label,
+                loader=self.incremental_loader_name,
             )
         targets_for_loss = y_cls.long()
         loss_ce = classification_cross_entropy(

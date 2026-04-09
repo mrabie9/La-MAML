@@ -104,6 +104,7 @@ class Net(DetectionReplayMixin, nn.Module):
         self.task_class_ids: Dict[int, List[int]] = {}
         self.task_label_maps: Dict[int, Dict[int, int]] = {}
         self.noise_label: int | None = noise_label_from_args(args)
+        self.incremental_loader_name = getattr(args, "loader", None)
 
     # ------------------------------------------------------------------
     def forward(self, x: torch.Tensor, t: int, **kwargs) -> torch.Tensor:
@@ -132,11 +133,16 @@ class Net(DetectionReplayMixin, nn.Module):
                 self.n_outputs,
                 cil_all_seen_upto_task=cil,
                 global_noise_label=self.noise_label,
+                loader=self.incremental_loader_name,
             )
         class_ids = self.task_class_ids.get(t)
         if not class_ids:
             return misc_utils.apply_task_incremental_logit_mask(
-                logits, t, self.classes_per_task, self.n_outputs
+                logits,
+                t,
+                self.classes_per_task,
+                self.n_outputs,
+                loader=self.incremental_loader_name,
             )
         masked = logits.new_full(logits.shape, -1e9)
         idx = torch.as_tensor(class_ids, dtype=torch.long, device=logits.device)

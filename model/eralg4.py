@@ -123,6 +123,7 @@ class Net(DetectionReplayMixin, nn.Module):
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         self.noise_label: int | None = noise_label_from_args(args)
+        self.incremental_loader_name = getattr(args, "loader", None)
         # if self.is_cifar:
         #     self.nc_per_task = int(n_outputs / n_tasks)
         # else:
@@ -162,6 +163,7 @@ class Net(DetectionReplayMixin, nn.Module):
                 cil_all_seen_upto_task=cil_all_seen_upto_task,
                 global_noise_label=self.noise_label,
                 fill_value=-10e10,
+                loader=self.incremental_loader_name,
             )
         return output
 
@@ -277,6 +279,7 @@ class Net(DetectionReplayMixin, nn.Module):
                 self.n_outputs,
                 cil_all_seen_upto_task=t,
                 global_noise_label=self.noise_label,
+                loader=self.incremental_loader_name,
             )
             targets = y_work.long()
             live_loss = classification_cross_entropy(
@@ -389,6 +392,7 @@ class Net(DetectionReplayMixin, nn.Module):
             self.n_outputs,
             cil_all_seen_upto_task=t,
             global_noise_label=self.noise_label,
+            loader=self.incremental_loader_name,
         )
         y_cls = unpack_y_to_class_labels(y).long()
         targets = y_cls

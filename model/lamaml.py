@@ -23,6 +23,7 @@ class Net(BaseNet):
             self.n_outputs,
             cil_all_seen_upto_task=cil_all_seen_upto_task,
             global_noise_label=self.noise_label,
+            loader=self.incremental_loader_name,
         )
 
     def meta_loss(self, x, fast_weights, y, t):

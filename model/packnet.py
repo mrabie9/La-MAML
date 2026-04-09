@@ -78,6 +78,7 @@ class Net(nn.Module):
         self._non_prunable_params = self._compute_non_prunable_params()
         self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
         self.noise_label: int | None = noise_label_from_args(args)
+        self.incremental_loader_name = getattr(args, "loader", None)
         self.opt = self._build_optimizer()
         self.clipgrad = self.cfg.clipgrad
         self.prune_perc = float(1 / self.cfg.n_tasks)
@@ -124,6 +125,7 @@ class Net(nn.Module):
             self.n_outputs,
             cil_all_seen_upto_task=cil,
             global_noise_label=self.noise_label,
+            loader=self.incremental_loader_name,
         )
 
     # ------------------------------------------------------------------
@@ -153,6 +155,7 @@ class Net(nn.Module):
                 self.n_outputs,
                 cil_all_seen_upto_task=t,
                 global_noise_label=self.noise_label,
+                loader=self.incremental_loader_name,
             )
         targets_for_loss = y_cls.long()
         loss = classification_cross_entropy(
