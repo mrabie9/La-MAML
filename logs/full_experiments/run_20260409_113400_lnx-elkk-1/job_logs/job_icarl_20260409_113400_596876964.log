@@ -96,3 +96,139 @@ T0 Ep 2/10 | L 0.6883 | Train Acc 0.75 | Prec 0.75 | F1 0.70 | Det Rec 0.86 | De
 T0 Ep 3/10 | L 0.4804 | Train Acc 0.84 | Prec 0.85 | F1 0.78 | Det Rec 0.88 | Det FA 0.23 | Epoch Time 55.33s (Eval 0.00s, Train 55.33s)
 [STATE 2026-04-09 11:38:04] T0 Ep 3/10 complete: Prec 0.8490 F1 0.7836 DetRec 0.8761 DetFA 0.2280 | 55.33s total (0.00s eval/55.33s train)
 [STATE 2026-04-09 11:38:04] Task 0 Epoch 4/10: entering train loop
+T0 Ep 4/10 | L 0.4082 | Train Acc 0.87 | Prec 0.88 | F1 0.81 | Det Rec 0.88 | Det FA 0.22 | Epoch Time 55.31s (Eval 0.00s, Train 55.31s)
+[STATE 2026-04-09 11:38:59] T0 Ep 4/10 complete: Prec 0.8809 F1 0.8109 DetRec 0.8790 DetFA 0.2214 | 55.31s total (0.00s eval/55.31s train)
+[STATE 2026-04-09 11:38:59] Task 0 Epoch 5/10: entering train loop
+T0 Ep 5/10 | L 0.3750 | Train Acc 0.88 | Prec 0.89 | F1 0.82 | Det Rec 0.88 | Det FA 0.22 | Epoch Time 55.47s (Eval 0.00s, Train 55.47s)
+[STATE 2026-04-09 11:39:55] T0 Ep 5/10 complete: Prec 0.8942 F1 0.8239 DetRec 0.8803 DetFA 0.2203 | 55.47s total (0.00s eval/55.47s train)
+[STATE 2026-04-09 11:39:55] Task 0 Epoch 6/10: entering train loop
+T0 Ep 6/10 | L 0.3535 | Train Acc 0.89 | Prec 0.90 | F1 0.83 | Det Rec 0.88 | Det FA 0.22 | Epoch Time 55.47s (Eval 0.00s, Train 55.47s)
+[STATE 2026-04-09 11:40:50] T0 Ep 6/10 complete: Prec 0.9026 F1 0.8317 DetRec 0.8811 DetFA 0.2194 | 55.47s total (0.00s eval/55.47s train)
+[STATE 2026-04-09 11:40:50] Task 0 Epoch 7/10: entering train loop
+T0 Ep 7/10 | L 0.3364 | Train Acc 0.90 | Prec 0.91 | F1 0.84 | Det Rec 0.88 | Det FA 0.22 | Epoch Time 55.33s (Eval 0.00s, Train 55.33s)
+[STATE 2026-04-09 11:41:46] T0 Ep 7/10 complete: Prec 0.9096 F1 0.8382 DetRec 0.8822 DetFA 0.2185 | 55.33s total (0.00s eval/55.33s train)
+[STATE 2026-04-09 11:41:46] Task 0 Epoch 8/10: entering train loop
+T0 Ep 8/10 | L 0.3242 | Train Acc 0.90 | Prec 0.91 | F1 0.84 | Det Rec 0.88 | Det FA 0.22 | Epoch Time 55.46s (Eval 0.00s, Train 55.46s)
+[STATE 2026-04-09 11:42:41] T0 Ep 8/10 complete: Prec 0.9116 F1 0.8405 DetRec 0.8828 DetFA 0.2174 | 55.46s total (0.00s eval/55.46s train)
+[STATE 2026-04-09 11:42:41] Task 0 Epoch 9/10: entering train loop
+T0 Ep 9/10 | L 0.3142 | Train Acc 0.90 | Prec 0.91 | F1 0.84 | Det Rec 0.88 | Det FA 0.22 | Epoch Time 55.55s (Eval 0.00s, Train 55.55s)
+[STATE 2026-04-09 11:43:37] T0 Ep 9/10 complete: Prec 0.9143 F1 0.8433 DetRec 0.8843 DetFA 0.2153 | 55.55s total (0.00s eval/55.55s train)
+[STATE 2026-04-09 11:43:37] Task 0 Epoch 10/10: entering train loop
+T0 Ep 10/10 | L 0.3047 | Train Acc 0.91 | Prec 0.92 | F1 0.85 | Det Rec 0.88 | Det FA 0.21 | Epoch Time 676.95s (Eval 0.00s, Train 676.95s)
+[STATE 2026-04-09 11:54:54] T0 Ep 10/10 complete: Prec 0.9188 F1 0.8480 DetRec 0.8846 DetFA 0.2143 | 676.95s total (0.00s eval/676.95s train)
+[STATE 2026-04-09 11:54:54] Task 0: running final validation.
+[STATE 2026-04-09 11:54:59] Completed task 0 (1/10)
+Task 1: 51916 training samples, 17305 test samples.
+[STATE 2026-04-09 11:54:59] Task 1: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 1: rec_cls 0.0000 | prec_cls 0.0000 | f1_cls 0.0000 | det 0.5000 | pfa 1.0000 | total_f1 0.4211 ----
+[STATE 2026-04-09 11:55:10] Starting task 1 (2/10)
+[STATE 2026-04-09 11:55:10] Task 1 Epoch 1/10: entering train loop
+[STATE 2026-04-09 11:56:09] Task 1 Epoch 1/10: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.3977024283438095, 0.6844930673584665] | det_recall [0.6953165579524454, 0.5880988429760527] | det_fa [0.23587097513276323, 0.7894943938830656] ----
+T1 Ep 1/10 | L 2.2943 | Train Acc 0.50 | Prec 0.52 | F1 0.34 | Det Rec 0.52 | Det FA 0.91 | Epoch Time 70.07s (Eval 10.52s, Train 59.55s)
+[STATE 2026-04-09 11:56:20] T1 Ep 1/10 complete: Prec 0.5241 F1 0.3449 DetRec 0.5248 DetFA 0.9093 | 70.07s total (10.52s eval/59.55s train)
+[STATE 2026-04-09 11:56:20] Task 1 Epoch 2/10: entering train loop
+T1 Ep 2/10 | L 1.2887 | Train Acc 0.72 | Prec 0.75 | F1 0.58 | Det Rec 0.67 | Det FA 0.62 | Epoch Time 59.65s (Eval 0.00s, Train 59.65s)
+[STATE 2026-04-09 11:57:19] T1 Ep 2/10 complete: Prec 0.7530 F1 0.5820 DetRec 0.6720 DetFA 0.6244 | 59.65s total (0.00s eval/59.65s train)
+[STATE 2026-04-09 11:57:19] Task 1 Epoch 3/10: entering train loop
+T1 Ep 3/10 | L 1.1072 | Train Acc 0.77 | Prec 0.80 | F1 0.66 | Det Rec 0.76 | Det FA 0.46 | Epoch Time 59.66s (Eval 0.00s, Train 59.66s)
+[STATE 2026-04-09 11:58:19] T1 Ep 3/10 complete: Prec 0.8042 F1 0.6644 DetRec 0.7555 DetFA 0.4554 | 59.66s total (0.00s eval/59.66s train)
+[STATE 2026-04-09 11:58:19] Task 1 Epoch 4/10: entering train loop
+T1 Ep 4/10 | L 1.0099 | Train Acc 0.81 | Prec 0.84 | F1 0.72 | Det Rec 0.80 | Det FA 0.37 | Epoch Time 59.41s (Eval 0.00s, Train 59.41s)
+[STATE 2026-04-09 11:59:18] T1 Ep 4/10 complete: Prec 0.8390 F1 0.7155 DetRec 0.7959 DetFA 0.3690 | 59.41s total (0.00s eval/59.41s train)
+[STATE 2026-04-09 11:59:18] Task 1 Epoch 5/10: entering train loop
+T1 Ep 5/10 | L 0.9216 | Train Acc 0.82 | Prec 0.86 | F1 0.75 | Det Rec 0.82 | Det FA 0.31 | Epoch Time 59.23s (Eval 0.00s, Train 59.23s)
+[STATE 2026-04-09 12:00:18] T1 Ep 5/10 complete: Prec 0.8569 F1 0.7465 DetRec 0.8240 DetFA 0.3078 | 59.23s total (0.00s eval/59.23s train)
+[STATE 2026-04-09 12:00:18] Task 1 Epoch 6/10: entering train loop
+T1 Ep 6/10 | L 0.8760 | Train Acc 0.84 | Prec 0.87 | F1 0.77 | Det Rec 0.84 | Det FA 0.27 | Epoch Time 59.41s (Eval 0.00s, Train 59.41s)
+[STATE 2026-04-09 12:01:17] T1 Ep 6/10 complete: Prec 0.8705 F1 0.7704 DetRec 0.8433 DetFA 0.2736 | 59.41s total (0.00s eval/59.41s train)
+[STATE 2026-04-09 12:01:17] Task 1 Epoch 7/10: entering train loop
+T1 Ep 7/10 | L 0.8163 | Train Acc 0.85 | Prec 0.88 | F1 0.79 | Det Rec 0.86 | Det FA 0.24 | Epoch Time 59.49s (Eval 0.00s, Train 59.49s)
+[STATE 2026-04-09 12:02:17] T1 Ep 7/10 complete: Prec 0.8812 F1 0.7916 DetRec 0.8602 DetFA 0.2401 | 59.49s total (0.00s eval/59.49s train)
+[STATE 2026-04-09 12:02:17] Task 1 Epoch 8/10: entering train loop
+T1 Ep 8/10 | L 0.7797 | Train Acc 0.86 | Prec 0.89 | F1 0.80 | Det Rec 0.87 | Det FA 0.22 | Epoch Time 59.27s (Eval 0.00s, Train 59.27s)
+[STATE 2026-04-09 12:03:16] T1 Ep 8/10 complete: Prec 0.8862 F1 0.8024 DetRec 0.8700 DetFA 0.2215 | 59.27s total (0.00s eval/59.27s train)
+[STATE 2026-04-09 12:03:16] Task 1 Epoch 9/10: entering train loop
+T1 Ep 9/10 | L 0.7699 | Train Acc 0.86 | Prec 0.89 | F1 0.81 | Det Rec 0.88 | Det FA 0.21 | Epoch Time 59.20s (Eval 0.00s, Train 59.20s)
+[STATE 2026-04-09 12:04:15] T1 Ep 9/10 complete: Prec 0.8930 F1 0.8125 DetRec 0.8762 DetFA 0.2110 | 59.20s total (0.00s eval/59.20s train)
+[STATE 2026-04-09 12:04:15] Task 1 Epoch 10/10: entering train loop
+T1 Ep 10/10 | L 0.7394 | Train Acc 0.87 | Prec 0.90 | F1 0.82 | Det Rec 0.88 | Det FA 0.20 | Epoch Time 227.15s (Eval 0.00s, Train 227.15s)
+[STATE 2026-04-09 12:08:02] T1 Ep 10/10 complete: Prec 0.8963 F1 0.8193 DetRec 0.8813 DetFA 0.2016 | 227.15s total (0.00s eval/227.15s train)
+[STATE 2026-04-09 12:08:02] Task 1: running final validation.
+[STATE 2026-04-09 12:08:13] Completed task 1 (2/10)
+Task 2: 350028 training samples, 175014 test samples.
+[STATE 2026-04-09 12:08:13] Task 2: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 2: rec_cls 0.0000 | prec_cls 0.0000 | f1_cls 0.0000 | det 0.5000 | pfa 1.0000 | total_f1 0.3840 ----
+[STATE 2026-04-09 12:09:17] Starting task 2 (3/10)
+[STATE 2026-04-09 12:09:17] Task 2 Epoch 1/10: entering train loop
+[STATE 2026-04-09 12:16:22] Task 2 Epoch 1/10: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.19945097263879621, 0.27899390855210954, 0.4026887731947897] | det_recall [0.6260821335300547, 0.7313671515659281, 0.7837887383506534] | det_fa [0.42008600822062075, 0.02585329821479628, 0.39580992281291183] ----
+T2 Ep 1/10 | L 2.0438 | Train Acc 0.29 | Prec 0.29 | F1 0.32 | Det Rec 0.76 | Det FA 0.43 | Epoch Time 488.31s (Eval 63.27s, Train 425.04s)
+[STATE 2026-04-09 12:17:25] T2 Ep 1/10 complete: Prec 0.2871 F1 0.3203 DetRec 0.7559 DetFA 0.4269 | 488.31s total (63.27s eval/425.04s train)
+[STATE 2026-04-09 12:17:25] Task 2 Epoch 2/10: entering train loop
+T2 Ep 2/10 | L 1.5258 | Train Acc 0.52 | Prec 0.51 | F1 0.51 | Det Rec 0.79 | Det FA 0.38 | Epoch Time 418.71s (Eval 0.00s, Train 418.71s)
+[STATE 2026-04-09 12:24:24] T2 Ep 2/10 complete: Prec 0.5092 F1 0.5069 DetRec 0.7876 DetFA 0.3838 | 418.71s total (0.00s eval/418.71s train)
+[STATE 2026-04-09 12:24:24] Task 2 Epoch 3/10: entering train loop
+T2 Ep 3/10 | L 1.2603 | Train Acc 0.63 | Prec 0.64 | F1 0.61 | Det Rec 0.80 | Det FA 0.37 | Epoch Time 418.05s (Eval 0.00s, Train 418.05s)
+[STATE 2026-04-09 12:31:22] T2 Ep 3/10 complete: Prec 0.6394 F1 0.6116 DetRec 0.7989 DetFA 0.3661 | 418.05s total (0.00s eval/418.05s train)
+[STATE 2026-04-09 12:31:22] Task 2 Epoch 4/10: entering train loop
+T2 Ep 4/10 | L 1.1480 | Train Acc 0.67 | Prec 0.68 | F1 0.64 | Det Rec 0.81 | Det FA 0.34 | Epoch Time 417.91s (Eval 0.00s, Train 417.91s)
+[STATE 2026-04-09 12:38:20] T2 Ep 4/10 complete: Prec 0.6771 F1 0.6437 DetRec 0.8093 DetFA 0.3416 | 417.91s total (0.00s eval/417.91s train)
+[STATE 2026-04-09 12:38:20] Task 2 Epoch 5/10: entering train loop
+T2 Ep 5/10 | L 1.0821 | Train Acc 0.68 | Prec 0.70 | F1 0.66 | Det Rec 0.82 | Det FA 0.32 | Epoch Time 418.30s (Eval 0.00s, Train 418.30s)
+[STATE 2026-04-09 12:45:18] T2 Ep 5/10 complete: Prec 0.6963 F1 0.6616 DetRec 0.8184 DetFA 0.3210 | 418.30s total (0.00s eval/418.30s train)
+[STATE 2026-04-09 12:45:18] Task 2 Epoch 6/10: entering train loop
+T2 Ep 6/10 | L 1.0346 | Train Acc 0.70 | Prec 0.71 | F1 0.67 | Det Rec 0.83 | Det FA 0.31 | Epoch Time 418.58s (Eval 0.00s, Train 418.58s)
+[STATE 2026-04-09 12:52:17] T2 Ep 6/10 complete: Prec 0.7085 F1 0.6740 DetRec 0.8251 DetFA 0.3071 | 418.58s total (0.00s eval/418.58s train)
+[STATE 2026-04-09 12:52:17] Task 2 Epoch 7/10: entering train loop
+T2 Ep 7/10 | L 0.9976 | Train Acc 0.71 | Prec 0.72 | F1 0.68 | Det Rec 0.83 | Det FA 0.30 | Epoch Time 418.41s (Eval 0.00s, Train 418.41s)
+[STATE 2026-04-09 12:59:15] T2 Ep 7/10 complete: Prec 0.7179 F1 0.6829 DetRec 0.8294 DetFA 0.2985 | 418.41s total (0.00s eval/418.41s train)
+[STATE 2026-04-09 12:59:15] Task 2 Epoch 8/10: entering train loop
+T2 Ep 8/10 | L 0.9698 | Train Acc 0.71 | Prec 0.73 | F1 0.69 | Det Rec 0.83 | Det FA 0.29 | Epoch Time 417.44s (Eval 0.00s, Train 417.44s)
+[STATE 2026-04-09 13:06:13] T2 Ep 8/10 complete: Prec 0.7264 F1 0.6915 DetRec 0.8336 DetFA 0.2908 | 417.44s total (0.00s eval/417.44s train)
+[STATE 2026-04-09 13:06:13] Task 2 Epoch 9/10: entering train loop
+T2 Ep 9/10 | L 0.9415 | Train Acc 0.72 | Prec 0.73 | F1 0.70 | Det Rec 0.84 | Det FA 0.28 | Epoch Time 418.57s (Eval 0.00s, Train 418.57s)
+[STATE 2026-04-09 13:13:11] T2 Ep 9/10 complete: Prec 0.7329 F1 0.6983 DetRec 0.8372 DetFA 0.2830 | 418.57s total (0.00s eval/418.57s train)
+[STATE 2026-04-09 13:13:11] Task 2 Epoch 10/10: entering train loop
+Traceback (most recent call last):
+  File "/home/lunet/wsmr11/repos/La-MAML/main.py", line 1840, in <module>
+    main()
+  File "/home/lunet/wsmr11/repos/La-MAML/main.py", line 1809, in main
+    ) = life_experience(model, loader, args)
+  File "/home/lunet/wsmr11/repos/La-MAML/main.py", line 933, in life_experience
+    loss, cls_tr_rec = model.observe(Variable(v_x), v_y, task_info["task"])
+  File "/home/lunet/wsmr11/repos/La-MAML/model/icarl.py", line 453, in observe
+    feat_cdata = self.feature_forward(cdata).data.clone()
+  File "/home/lunet/wsmr11/repos/La-MAML/model/icarl.py", line 194, in feature_forward
+    return self.net.forward_features(x)
+  File "/home/lunet/wsmr11/repos/La-MAML/model/resnet1d.py", line 428, in forward_features
+    return self.forward(x, vars=vars, bn_training=bn_training, ret_feats=True)
+  File "/home/lunet/wsmr11/repos/La-MAML/model/resnet1d.py", line 407, in forward
+    out = self.model(
+  File "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/lunet/wsmr11/repos/La-MAML/model/resnet1d.py", line 327, in forward
+    x = self.layer2(x)
+  File "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/torch/nn/modules/container.py", line 244, in forward
+    input = module(input)
+  File "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/lunet/wsmr11/repos/La-MAML/model/resnet1d.py", line 52, in forward
+    out = self.bn2(out)
+  File "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/torch/nn/modules/batchnorm.py", line 193, in forward
+    return F.batch_norm(
+  File "/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/torch/nn/functional.py", line 2817, in batch_norm
+    return torch.batch_norm(
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.19 GiB. GPU 0 has a total capacity of 47.52 GiB of which 198.75 MiB is free. Including non-PyTorch memory, this process has 44.75 GiB memory in use. Process 2287864 has 2.49 GiB memory in use. Of the allocated memory 43.65 GiB is allocated by PyTorch, and 804.23 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)

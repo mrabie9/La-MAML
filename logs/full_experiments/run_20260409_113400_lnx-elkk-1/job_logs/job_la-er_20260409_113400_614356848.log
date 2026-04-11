@@ -84,3 +84,59 @@ Task 0: 50362 training samples, 16787 test samples.
 ---- Zero-shot (pre-train) task 0: rec_cls 0.1216 | prec_cls 0.1235 | f1_cls 0.0945 | det 0.4547 | pfa 0.7882 | total_f1 0.0945 ----
 [STATE 2026-04-09 11:35:15] Starting task 0 (1/10)
 [STATE 2026-04-09 11:35:15] Task 0 Epoch 1/10: entering train loop
+[STATE 2026-04-09 12:15:42] Task 0 Epoch 1/10: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.5081890515222474] | det_recall [0.8480531942605485] | det_fa [0.29693085790612395] ----
+T0 Ep 1/10 | L 1.7683 | Train Acc 0.23 | Prec 0.25 | F1 0.27 | Det Rec 0.68 | Det FA 0.25 | Epoch Time 2435.32s (Eval 8.33s, Train 2426.99s)
+[STATE 2026-04-09 12:15:50] T0 Ep 1/10 complete: Prec 0.2518 F1 0.2667 DetRec 0.6821 DetFA 0.2517 | 2435.32s total (8.33s eval/2426.99s train)
+[STATE 2026-04-09 12:15:50] Task 0 Epoch 2/10: entering train loop
+T0 Ep 2/10 | L 0.6657 | Train Acc 0.55 | Prec 0.67 | F1 0.59 | Det Rec 0.86 | Det FA 0.14 | Epoch Time 2172.09s (Eval 0.00s, Train 2172.09s)
+[STATE 2026-04-09 12:52:02] T0 Ep 2/10 complete: Prec 0.6666 F1 0.5943 DetRec 0.8612 DetFA 0.1358 | 2172.09s total (0.00s eval/2172.09s train)
+[STATE 2026-04-09 12:52:02] Task 0 Epoch 3/10: entering train loop
+T0 Ep 3/10 | L 0.4941 | Train Acc 0.65 | Prec 0.76 | F1 0.69 | Det Rec 0.88 | Det FA 0.12 | Epoch Time 1789.40s (Eval 0.00s, Train 1789.40s)
+[STATE 2026-04-09 13:21:52] T0 Ep 3/10 complete: Prec 0.7590 F1 0.6909 DetRec 0.8809 DetFA 0.1231 | 1789.40s total (0.00s eval/1789.40s train)
+[STATE 2026-04-09 13:21:52] Task 0 Epoch 4/10: entering train loop
+T0 Ep 4/10 | L 0.4496 | Train Acc 0.69 | Prec 0.80 | F1 0.72 | Det Rec 0.88 | Det FA 0.12 | Epoch Time 355.47s (Eval 0.00s, Train 355.47s)
+[STATE 2026-04-09 13:27:47] T0 Ep 4/10 complete: Prec 0.7996 F1 0.7246 DetRec 0.8845 DetFA 0.1216 | 355.47s total (0.00s eval/355.47s train)
+[STATE 2026-04-09 13:27:47] Task 0 Epoch 5/10: entering train loop
+T0 Ep 5/10 | L 0.4071 | Train Acc 0.74 | Prec 0.85 | F1 0.77 | Det Rec 0.89 | Det FA 0.12 | Epoch Time 354.97s (Eval 0.00s, Train 354.97s)
+[STATE 2026-04-09 13:33:42] T0 Ep 5/10 complete: Prec 0.8530 F1 0.7707 DetRec 0.8879 DetFA 0.1171 | 354.97s total (0.00s eval/354.97s train)
+[STATE 2026-04-09 13:33:42] Task 0 Epoch 6/10: entering train loop
+T0 Ep 6/10 | L 0.3725 | Train Acc 0.79 | Prec 0.89 | F1 0.81 | Det Rec 0.89 | Det FA 0.12 | Epoch Time 354.56s (Eval 0.00s, Train 354.56s)
+[STATE 2026-04-09 13:39:37] T0 Ep 6/10 complete: Prec 0.8890 F1 0.8095 DetRec 0.8922 DetFA 0.1160 | 354.56s total (0.00s eval/354.56s train)
+[STATE 2026-04-09 13:39:37] Task 0 Epoch 7/10: entering train loop
+T0 Ep 7/10 | L 0.3492 | Train Acc 0.81 | Prec 0.90 | F1 0.82 | Det Rec 0.89 | Det FA 0.11 | Epoch Time 353.77s (Eval 0.00s, Train 353.77s)
+[STATE 2026-04-09 13:45:30] T0 Ep 7/10 complete: Prec 0.9042 F1 0.8243 DetRec 0.8947 DetFA 0.1130 | 353.77s total (0.00s eval/353.77s train)
+[STATE 2026-04-09 13:45:30] Task 0 Epoch 8/10: entering train loop
+T0 Ep 8/10 | L 0.3330 | Train Acc 0.82 | Prec 0.91 | F1 0.83 | Det Rec 0.90 | Det FA 0.11 | Epoch Time 354.33s (Eval 0.00s, Train 354.33s)
+[STATE 2026-04-09 13:51:25] T0 Ep 8/10 complete: Prec 0.9103 F1 0.8338 DetRec 0.8971 DetFA 0.1139 | 354.33s total (0.00s eval/354.33s train)
+[STATE 2026-04-09 13:51:25] Task 0 Epoch 9/10: entering train loop
+T0 Ep 9/10 | L 0.3237 | Train Acc 0.83 | Prec 0.92 | F1 0.84 | Det Rec 0.90 | Det FA 0.11 | Epoch Time 355.17s (Eval 0.00s, Train 355.17s)
+[STATE 2026-04-09 13:57:20] T0 Ep 9/10 complete: Prec 0.9192 F1 0.8425 DetRec 0.8975 DetFA 0.1146 | 355.17s total (0.00s eval/355.17s train)
+[STATE 2026-04-09 13:57:20] Task 0 Epoch 10/10: entering train loop
+T0 Ep 10/10 | L 0.3155 | Train Acc 0.83 | Prec 0.92 | F1 0.85 | Det Rec 0.90 | Det FA 0.11 | Epoch Time 356.59s (Eval 0.00s, Train 356.59s)
+[STATE 2026-04-09 14:03:16] T0 Ep 10/10 complete: Prec 0.9203 F1 0.8456 DetRec 0.8998 DetFA 0.1103 | 356.59s total (0.00s eval/356.59s train)
+[STATE 2026-04-09 14:03:16] Task 0: running final validation.
+[STATE 2026-04-09 14:03:21] Completed task 0 (1/10)
+Task 1: 51916 training samples, 17305 test samples.
+[STATE 2026-04-09 14:03:21] Task 1: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 1: rec_cls 0.2005 | prec_cls 0.2334 | f1_cls 0.0830 | det 0.5000 | pfa 1.0000 | total_f1 0.4535 ----
+[STATE 2026-04-09 14:03:30] Starting task 1 (2/10)
+[STATE 2026-04-09 14:03:30] Task 1 Epoch 1/10: entering train loop
+Traceback (most recent call last):
+  File "/home/lunet/wsmr11/repos/La-MAML/main.py", line 1840, in <module>
+    main()
+  File "/home/lunet/wsmr11/repos/La-MAML/main.py", line 1809, in main
+    ) = life_experience(model, loader, args)
+  File "/home/lunet/wsmr11/repos/La-MAML/main.py", line 933, in life_experience
+    loss, cls_tr_rec = model.observe(Variable(v_x), v_y, task_info["task"])
+  File "/home/lunet/wsmr11/repos/La-MAML/model/eralg4.py", line 262, in observe
+    loss, cls_tr_rec = self.la_ER(x_train, y, t)
+  File "/home/lunet/wsmr11/repos/La-MAML/model/eralg4.py", line 473, in la_ER
+    bx, by, bt = self.getBatch(
+  File "/home/lunet/wsmr11/repos/La-MAML/model/eralg4.py", line 186, in getBatch
+    shuffle(order)
+  File "/home/lunet/wsmr11/.asdf/installs/python/3.10.0/lib/python3.10/random.py", line 393, in shuffle
+    j = randbelow(i + 1)
+  File "/home/lunet/wsmr11/.asdf/installs/python/3.10.0/lib/python3.10/random.py", line 248, in _randbelow_with_getrandbits
+    r = getrandbits(k)
+KeyboardInterrupt

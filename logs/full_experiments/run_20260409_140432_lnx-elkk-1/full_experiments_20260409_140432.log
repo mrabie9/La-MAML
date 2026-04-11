@@ -1,0 +1,21 @@
+[2026-04-09T14:04:32+01:00] === full_experiments.sh started ===
+[2026-04-09T14:04:32+01:00] REPO_ROOT=/home/lunet/wsmr11/repos/La-MAML
+[2026-04-09T14:04:32+01:00] LOG_FILE=/home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260409_140432_lnx-elkk-1/full_experiments_20260409_140432.log
+[2026-04-09T14:04:32+01:00] INCLUDED_ALL=ewc er_ring eralg4 gem cmaml ctn hat bcl_dual agem icarl lwf packnet rwalk si ucl la-er lamaml smaml iid2
+[2026-04-09T14:04:32+01:00] Activated la-maml_env
+[2026-04-09T14:04:32+01:00] Using SERIAL_PROBE_JSON_PATH=logs/eta_probe/eta_probe_elkk-1-algos_10-iter_avg-util-2.json
+[2026-04-09T14:04:32+01:00] Using SCHEDULE_JSON_PATH=logs/eta_probe/sub_experiments_host_schedule.json
+[2026-04-09T14:04:32+01:00] HOST_KEY=lnx-elkk-1
+[2026-04-09T14:04:32+01:00] MODEL_MODE=til
+[2026-04-09T14:04:32+01:00] Reusing existing schedule JSON.
+[2026-04-09T14:04:32+01:00] Estimated time saved (parallel vs serial): 35.657686212361334%
+[2026-04-09T14:04:32+01:00] QUEUE_HIGH count=1: icarl
+[2026-04-09T14:04:32+01:00] QUEUE_LOW  count=1: la-er
+[2026-04-09T14:04:32+01:00] === Queue phase on lnx-elkk-1 (util high/low) ===
+[2026-04-09T14:04:32+01:00] --- Dispatching: base + icarl + icarl.yaml (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260409_140432_lnx-elkk-1/job_logs/job_icarl_20260409_140432_726158257.log) ---
+[2026-04-09T14:04:32+01:00] START icarl
+[2026-04-09T14:04:32+01:00] --- Dispatching: base + la-er + la-er.yaml (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260409_140432_lnx-elkk-1/job_logs/job_la-er_20260409_140432_740952464.log) ---
+[2026-04-09T14:04:32+01:00] START la-er
+[2026-04-09T18:19:03+01:00] Completed: icarl (exit 0)
+[2026-04-10T17:44:33+01:00] Completed: la-er (exit 0)
+[2026-04-10T17:44:34+01:00] === full_experiments.sh finished: successful_runs=2 unsuccessful_runs=0 total_runtime=27:40:02 (99602s) ===

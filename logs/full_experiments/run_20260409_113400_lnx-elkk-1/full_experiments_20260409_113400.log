@@ -16,3 +16,5 @@
 [2026-04-09T11:34:00+01:00] START icarl
 [2026-04-09T11:34:00+01:00] --- Dispatching: base + la-er + la-er.yaml (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260409_113400_lnx-elkk-1/job_logs/job_la-er_20260409_113400_614356848.log) ---
 [2026-04-09T11:34:00+01:00] START la-er
+[2026-04-09T13:20:35+01:00] ERROR: icarl failed with exit code 1
+[2026-04-09T14:04:32+01:00] ERROR: la-er failed with exit code 130

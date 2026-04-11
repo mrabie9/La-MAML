@@ -34,6 +34,9 @@
 [2026-04-06T15:23:58+01:00] Completed: eralg4 (exit 0)
 [2026-04-05T02:50:42+01:00] --- Dispatching: base + iid2 (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260403_111437_lnx-elkk-1/job_logs/job_iid2_20260408_175659_865738064.log) ---
 [2026-04-05T02:50:42+01:00] --- Dispatching: base + bcl_dual (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260403_111437_lnx-elkk-1/job_logs/job_bcl_dual_20260408_171038_452407768.log) ---
+[2026-04-05T02:50:42+01:00] --- Dispatching: base + la-er (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260409_140432_lnx-elkk-1/job_logs/job_la-er_20260409_140432_740952464.log) ---
 
 [2026-04-06T15:23:58+01:00] Completed: iid2 (exit 0)
 [2026-04-06T15:23:58+01:00] Completed: bcl_dual (exit 0)
+[2026-04-06T15:23:58+01:00] Completed: la-er (exit 0)
+
