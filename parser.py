@@ -60,7 +60,9 @@ def get_parser():
         type=int,
         help=(
             "Inner optimization passes per observe call: multi-pass training (ex-glances), "
-            "CTN inner SGD steps, ANML inner updates (ex-update_steps), La-MAML inner loop length."
+            "CTN inner SGD steps, ANML inner updates (ex-update_steps). "
+            "La-MAML uses the effective total pass count (see LamamlBaseConfig: inner_steps × n_meta "
+            "from merged args for backward-compatible YAML)."
         ),
     )
     parser.add_argument(
@@ -383,7 +385,10 @@ def get_parser():
         "--n_meta",
         type=int,
         default=1,
-        help="Outer meta-update rounds (CTN, BCL-Dual, La-MAML)",
+        help=(
+            "Outer meta-update rounds for CTN and BCL-Dual. "
+            "La-MAML folds this into its single inner_steps total (inner_steps × n_meta) in LamamlBaseConfig."
+        ),
     )
     parser.add_argument(
         "--temperature", type=float, default=5, help="Temperature for CTN"

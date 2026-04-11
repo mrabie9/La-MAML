@@ -16,7 +16,7 @@ The table below lists the hyperparameters that are explicitly defined for each m
 | `hat` | `inner_steps` (1), `lr` (0.0001), `optimizer` (sgd), `gamma` (0.75), `smax` (50) | `model/hat.py` |
 | `icarl` | `memory_strength` (0.0), `n_memories` (0), `inner_steps` (1), `alpha_init` (0.001), `lr` (0.001), `n_epochs` (1) | `model/icarl.py` |
 | `iid2` | `inner_steps` (1), `lr` (0.001) | `model/iid2.py` |
-| `lamaml_base` | `alpha_init` (0.001), `opt_wt` (0.1), `opt_lr` (0.1), `inner_steps` (1), `n_meta` (1), `memories` (5120), `replay_batch_size` (20), `use_old_task_memory` (false), `learn_lr` (false), `second_order` (false), `sync_update` (false), `cifar_batches` (3) | `model/lamaml_base.py` |
+| `lamaml_base` | `alpha_init` (0.001), `opt_wt` (0.1), `opt_lr` (0.1), `inner_steps` (1; effective total passes = `inner_steps × n_meta` from merged CLI/YAML), `memories` (5120), `replay_batch_size` (20), `use_old_task_memory` (false), `learn_lr` (false), `second_order` (false), `sync_update` (false), `cifar_batches` (3) | `model/lamaml_base.py` |
 | `lwf` | `inner_steps` (1), `lr` (0.001), `optimizer` (adam), `momentum` (0.0), `weight_decay` (0.0), `clipgrad` (100.0), `temperature` (2.0), `distill_lambda` (1.0) | `model/lwf.py` |
 | `meralg1` | `alpha_init` (0.001), `lr` (0.001), `replay_batch_size` (20), `memories` (5120), `batches_per_example` (1), `beta` (1.0), `gamma` (0.0) | `model/meralg1.py` |
 | `meta-bgd` | `alpha_init` (0.001), `bgd_optimizer` (bgd), `mean_eta` (1.0), `std_init` (0.05), `train_mc_iters` (5), `optimizer_params` (<complex>), `inner_steps` (1), `memories` (5120), `replay_batch_size` (20), `use_old_task_memory` (false), `cifar_batches` (3) | `model/meta-bgd.py` |
@@ -37,5 +37,5 @@ Notes:
 3. **Constraint/regularization strengths (`memory_strength`, `memory_strength`, `lamb`, `si_c`, `ratio`)** – govern how aggressively each method preserves prior knowledge versus adapting to new tasks.
 4. **Per-parameter LR initialization (`alpha_init`)** – critical for learning-to-learn methods (La-MAML, ANML, MER, etc.) because it scales the entire fast adaptation process.
 5. **Temperature-like controls (`temperature`, `temperature`, `temperature`)** – modulate soft targets/logits and can markedly change distillation behavior or context modulation sharpness.
-6. **Meta-iteration counts (`inner_steps`, `n_meta`)** – tune how much inner-loop adaptation and outer meta rounds run before consolidation (La-MAML, CTN, BCL-Dual, etc.), influencing both accuracy and compute.
+6. **Meta-iteration counts** – `inner_steps` and `n_meta` tune inner vs outer rounds for CTN and BCL-Dual. La-MAML exposes a single effective `inner_steps` (product of those globals when loading `LamamlBaseConfig`).
 7. **Replay sampling size (`replay_batch_size`, `batches_per_example`)** – affects the gradient signal from memory and the balance between new and replayed data each update.
