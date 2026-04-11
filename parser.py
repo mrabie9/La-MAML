@@ -55,10 +55,16 @@ def get_parser():
 
     # optimizer parameters influencing all models
     parser.add_argument(
-        "--glances",
+        "--inner_steps",
         default=1,
         type=int,
-        help="Number of times the model is allowed to train over a set of samples in the single pass setting",
+        help=(
+            "Inner optimization passes per observe call: multi-pass training (ex-glances), "
+            "alternating fast/meta rounds for CTN and BCL-Dual, ANML inner updates (ex-update_steps). "
+            "La-MAML uses the effective total pass count (see LamamlBaseConfig: inner_steps × n_meta "
+            "from merged args for backward-compatible YAML). CTN/BCL-Dual fold legacy "
+            "inner_steps × n_meta from YAML into a single inner_steps count."
+        ),
     )
     parser.add_argument(
         "--n_epochs", type=int, default=1, help="Number of epochs per task"
@@ -366,12 +372,6 @@ def get_parser():
         help="number of hidden neurons in the representation layer",
     )
     parser.add_argument(
-        "--update_steps",
-        type=int,
-        default=10,
-        help="number of inner updates during training",
-    )
-    parser.add_argument(
         "--meta_lr", type=float, default=0.001, help="outer learning rate"
     )
     parser.add_argument(
@@ -383,10 +383,14 @@ def get_parser():
         "--ctx_lr", type=float, default=0.05, help="Context learning rate for CTN"
     )
     parser.add_argument(
-        "--n_meta", type=int, default=2, help="Number of meta-updates for CTN"
-    )
-    parser.add_argument(
-        "--inner_steps", type=int, default=2, help="Number of inner updates for CTN"
+        "--n_meta",
+        type=int,
+        default=1,
+        help=(
+            "La-MAML: folded into inner_steps (inner_steps × n_meta) in LamamlBaseConfig. "
+            "CTN/BCL-Dual: legacy only—multiplied with inner_steps when loading model config "
+            "to match the old nested schedule; omit or set to 1 for a single inner_steps value."
+        ),
     )
     parser.add_argument(
         "--temperature", type=float, default=5, help="Temperature for CTN"
@@ -433,6 +437,12 @@ def _apply_config_overrides(
         with path.open("r", encoding="utf-8") as handle:
             data = yaml.safe_load(handle) or {}
         for key, value in data.items():
+            if key == "glances":
+                setattr(args, "inner_steps", value)
+                continue
+            if key == "update_steps":
+                setattr(args, "inner_steps", value)
+                continue
             if hasattr(args, key):
                 setattr(args, key, value)
     return args

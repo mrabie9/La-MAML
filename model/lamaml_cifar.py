@@ -139,8 +139,13 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
     def observe(self, x, y, t):
         self.net.train()
         cls_tr_rec = []
-        for pass_itr in range(self.glances):
+        # Original batch order for this observe call; reset each pass so
+        # permutations do not compound across inner_steps.
+        x_base = x
+        y_base = y
+        for pass_itr in range(self.inner_steps):
             self.pass_itr = pass_itr
+            x, y = x_base, y_base
             perm = torch.randperm(x.size(0))
             x = x[perm]
             if isinstance(y, (list, tuple)):

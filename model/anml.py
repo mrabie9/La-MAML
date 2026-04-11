@@ -26,7 +26,7 @@ logger = logging.getLogger("experiment")
 class AnmlConfig:
     update_lr: float = 0.1
     meta_lr: float = 1e-3
-    update_steps: int = 10
+    inner_steps: int = 10
     replay_batch_size: int = 20
     memories: int = 5120
     rln: int = 7
@@ -54,7 +54,7 @@ class Net(nn.Module):
         self.cfg = AnmlConfig.from_args(args)
         self.update_lr = self.cfg.update_lr
         self.meta_lr = self.cfg.meta_lr
-        self.update_steps = self.cfg.update_steps
+        self.inner_steps = self.cfg.inner_steps
 
         # self.net = Learner(n_outputs, self.args, neuromodulation=neuromodulation)
         # self.net = Learner.Learner(config, neuromodulation)
@@ -216,7 +216,7 @@ class Net(nn.Module):
 
         cls_tr_rec = []
 
-        for pass_itr in range(self.update_steps):
+        for pass_itr in range(self.inner_steps):
             self.pass_itr = pass_itr
 
             # shuffle the data (again)
@@ -231,10 +231,10 @@ class Net(nn.Module):
                 self.M = self.M_new
                 self.current_task = t
             # create mini-batches from the main batch
-            x_spt = self.make_minibatches(x, int(self.update_steps))
-            y_spt = self.make_minibatches(y, int(self.update_steps))
+            x_spt = self.make_minibatches(x, int(self.inner_steps))
+            y_spt = self.make_minibatches(y, int(self.inner_steps))
 
-            steps = min(self.update_steps, x.size(0) // self.update_steps)
+            steps = min(self.inner_steps, x.size(0) // self.inner_steps)
             for i in range(steps):
                 fast_weights = self.inner_update(
                     x_spt[i], None, y_spt[i], t

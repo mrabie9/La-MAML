@@ -134,8 +134,6 @@ def _build_args(model_module: str) -> object:
     args.memories = 128
     args.n_memories = 128
     args.replay_batch_size = 8
-    args.glances = 1
-    args.inner_steps = 1
     args.n_meta = 1
     args.lr = 0.08
     args.optimizer = "sgd"
@@ -149,7 +147,7 @@ def _build_args(model_module: str) -> object:
     args.cifar_batches = 1
     args.bgd_optimizer = "sgd"
     args.train_mc_iters = 1
-    args.update_steps = 2
+    args.inner_steps = 1
     args.split = False
     args.class_incremental = True
     args.get_samples_per_task = lambda _task_id: 128

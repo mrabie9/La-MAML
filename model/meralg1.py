@@ -34,7 +34,7 @@ class MerAlgConfig:
     lr: float = 1e-3
     replay_batch_size: int = 20
     memories: int = 5120
-    glances: int = 1
+    inner_steps: int = 1
     beta: float = 1.0
     gamma: float = 0.0
     cuda: bool = True
@@ -94,7 +94,7 @@ class Net(nn.Module):
         self.batchSize = int(self.cfg.replay_batch_size)
 
         self.memories = self.cfg.memories
-        self.steps = int(self.cfg.glances)
+        self.steps = int(self.cfg.inner_steps)
         self.beta = self.cfg.beta
         self.gamma = self.cfg.gamma
 

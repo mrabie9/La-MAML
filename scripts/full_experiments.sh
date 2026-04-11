@@ -59,8 +59,8 @@ while [ $# -gt 0 ]; do
 done
 
 # Host-based algorithm selection (used only as a safety allowlist).
-INCLUDED_LNX_ELKK_1="ewc er_ring eralg4 gem cmaml ctn hat bcl_dual agem icarl"
-INCLUDED_LNX_ELKK_2="lwf packnet rwalk si ucl la-er lamaml smaml iid2"
+INCLUDED_LNX_ELKK_1="ewc er_ring eralg4 gem cmaml bcl_dual agem icarl"
+INCLUDED_LNX_ELKK_2="lwf rwalk si ucl la-er lamaml smaml iid2 hat packnet ctn"
 INCLUDED_ALL="$INCLUDED_LNX_ELKK_1 $INCLUDED_LNX_ELKK_2"
 
 # CONCURRENCY_OPTION:

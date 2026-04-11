@@ -36,7 +36,7 @@ from utils.class_weighted_loss import classification_cross_entropy
 @dataclass
 class GemConfig:
     memory_strength: float = 0.0  # lambda in the paper
-    glances: int = 1
+    inner_steps: int = 1
     lr: float = 1e-3
     n_memories: int = 0
     arch: str = "resnet1d"
@@ -151,7 +151,7 @@ class Net(DetectionReplayMixin, nn.Module):
         self.netforward = self.net.forward
         self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
         self.n_outputs = n_outputs
-        self.glances = self.cfg.glances
+        self.inner_steps = self.cfg.inner_steps
         self.det_lambda = float(self.cfg.det_lambda)
         self.cls_lambda = float(self.cfg.cls_lambda)
         self._init_det_replay(
@@ -328,7 +328,7 @@ class Net(DetectionReplayMixin, nn.Module):
 
     def observe(self, x, y, t):
         """
-        One optimization step on batch (x,y,t), with GEM constraints and glances.
+        One optimization step on batch (x,y,t), with GEM constraints and inner_steps.
         """
         # --- shape handling ---
         if self.is_iq:
@@ -379,7 +379,7 @@ class Net(DetectionReplayMixin, nn.Module):
 
         cls_tr_rec = []
 
-        for pass_itr in range(self.glances):
+        for pass_itr in range(self.inner_steps):
             # push current batch once per batch (not each glance)
             if pass_itr == 0:
                 task_capacity = int(self.task_memory_capacities[t])

@@ -67,8 +67,14 @@ class Net(BaseNet):
     def observe(self, x, y, t):
         self.net.train()
 
-        for pass_itr in range(self.glances):
+        # Reshuffle from the original batch each pass so order does not compound
+        # across inner_steps.
+        x_base = x
+        y_base = y
+
+        for pass_itr in range(self.inner_steps):
             self.pass_itr = pass_itr
+            x, y = x_base, y_base
 
             # shuffle the data (again)
             perm = torch.randperm(x.size(0))

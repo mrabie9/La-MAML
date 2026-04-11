@@ -36,7 +36,6 @@ class CtnConfig:
     validation: float = 0.0
     replay_batch_size: int = 20
     inner_steps: int = 2
-    n_meta: int = 2
     arch: str = "resnet1d"
     cuda: bool = True
     batch_size: int = 128
@@ -47,10 +46,24 @@ class CtnConfig:
 
     @staticmethod
     def from_args(args: object) -> "CtnConfig":
+        """Build config from CLI / merged YAML.
+
+        ``inner_steps`` is the number of alternating rounds per ``observe`` call
+        (one fast/base gradient step, then one meta/context step). For YAML that
+        still sets the deprecated pair ``inner_steps`` × ``n_meta`` (nested
+        loops), the effective count is the product so total fast updates match
+        the old schedule.
+        """
         cfg = CtnConfig()
-        for field in cfg.__dataclass_fields__:
-            if hasattr(args, field):
-                setattr(cfg, field, getattr(args, field))
+        inner_raw = int(getattr(args, "inner_steps", cfg.inner_steps) or 1)
+        legacy_n_meta = int(getattr(args, "n_meta", 1) or 1)
+        merged_rounds = max(1, inner_raw * legacy_n_meta)
+        for field_name in cfg.__dataclass_fields__:
+            if field_name == "inner_steps":
+                cfg.inner_steps = merged_rounds
+                continue
+            if hasattr(args, field_name):
+                setattr(cfg, field_name, getattr(args, field_name))
         return cfg
 
 
@@ -193,7 +206,6 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.samples_seen = 0
         self.sz = int(self.cfg.replay_batch_size)
         self.inner_steps = self.cfg.inner_steps
-        self.n_meta = self.cfg.n_meta
         self.counter = 0
 
     def on_epoch_end(self):
@@ -459,24 +471,35 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         #             param.add_(grad, alpha=-self.inner_lr)
         # else:
         if True:
-            det_loss_value = torch.zeros((), device=x_train.device, dtype=torch.float32)
+            det_loss_value = torch.zeros(
+                (), device=raw_x_train.device, dtype=torch.float32
+            )
 
-        # Rebuild canonicalized train input per meta step from raw inputs to avoid
+        # Slicing (e.g. ``raw_x_train = raw_x_train[1:]``) is a view into ``x`` and is not a
+        # leaf. After ``autograd.grad`` frees the first forward's graph, re-feeding that view
+        # into ``_canonicalize_input`` / ``adapter`` can raise "backward through the graph a
+        # second time". Detach to values-only, then opt in to gradients as a fresh leaf each
+        # outer ``observe`` (inner loop iterations then rebuild distinct graphs from it).
+        raw_x_train = raw_x_train.detach().requires_grad_(True)
+
+        # Rebuild canonicalized train input each inner SGD step from raw inputs to avoid
         # reusing a freed autograd graph while still allowing adapter gradients.
         self.zero_grad()
         cls_tr_rec = []
         context_parameters = list(self.net.context_param())
-        for _ in range(self.n_meta):
+        targets = y_work.long()
+        for _ in range(self.inner_steps):
+            # Each fast step needs a fresh canonicalized input: the first
+            # `autograd.grad(loss, base_param)` frees the graph that produced the
+            # previous `x_train` (e.g. via `input_adapter`), so reusing it on the
+            # next iteration triggers "backward through the graph a second time".
             x_train = self._canonicalize_input(raw_x_train, detach=False)
             if rotated_validation_sample_for_meta is not None:
                 x_train = torch.cat(
                     [x_train, rotated_validation_sample_for_meta], dim=0
                 )
-            loss1 = torch.tensor(0.0, device=x.device)
-
             pred = self.forward(x_train, t, cil_all_seen_upto_task=t)
             logits = pred
-            targets = y_work.long()
             signal_mask_for_metric = signal_mask_exclude_noise(y_work, self.noise_label)
             if signal_mask_for_metric.any():
                 preds = torch.argmax(logits[signal_mask_for_metric], dim=1)
@@ -489,51 +512,52 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 targets,
                 class_weighted_ce=self.class_weighted_ce,
             )
-            # tt = t + 1
-            for i in range(self.inner_steps):
-                loss2 = torch.tensor(0.0, device=x.device)
-                loss3 = torch.tensor(0.0, device=x.device)
-                if t > 0:
-                    sampled = self.memory_sampling(t)
-                    if sampled is not None:
-                        xx, yy, feat, mask, list_t, class_sizes = sampled
-                        pred_ = self.net(xx, list_t)
-                        pred = torch.gather(pred_, 1, mask)
-                        for row, size in enumerate(class_sizes):
-                            if size < pred.size(1):
-                                pred[row, size:] = -1e9
-                        loss2 = classification_cross_entropy(
-                            pred, yy, class_weighted_ce=self.class_weighted_ce
-                        )
-                        loss3 = self.reg * self.kl(
-                            F.log_softmax(pred / self.temp, dim=1), feat
-                        )
-                    loss = (
-                        self.cls_lambda * loss1
-                        + self.det_lambda * det_loss_value
-                        + loss2
-                        + loss3
+            loss2 = torch.tensor(0.0, device=x_train.device)
+            loss3 = torch.tensor(0.0, device=x_train.device)
+            if t > 0:
+                sampled = self.memory_sampling(t)
+                if sampled is not None:
+                    xx, yy, feat, mask, list_t, class_sizes = sampled
+                    pred_ = self.net(xx, list_t)
+                    replay_pred = torch.gather(pred_, 1, mask)
+                    for row, size in enumerate(class_sizes):
+                        if size < replay_pred.size(1):
+                            replay_pred[row, size:] = -1e9
+                    loss2 = classification_cross_entropy(
+                        replay_pred, yy, class_weighted_ce=self.class_weighted_ce
                     )
-                else:
-                    loss = self.cls_lambda * loss1 + self.det_lambda * det_loss_value
-
-                grads = torch.autograd.grad(
-                    loss,
-                    self.net.base_param(),
-                    create_graph=False,
-                    allow_unused=True,
+                    loss3 = self.reg * self.kl(
+                        F.log_softmax(replay_pred / self.temp, dim=1), feat
+                    )
+                loss = (
+                    self.cls_lambda * loss1
+                    + self.det_lambda * det_loss_value
+                    + loss2
+                    + loss3
                 )
+            else:
+                loss = self.cls_lambda * loss1 + self.det_lambda * det_loss_value
 
-                # SGD update only the BASE NETWORK
-                for param, grad in zip(self.net.base_param(), grads):
-                    if grad is None:
-                        continue
-                    with torch.no_grad():
-                        param.add_(grad, alpha=-self.inner_lr)
+            grads = torch.autograd.grad(
+                loss,
+                self.net.base_param(),
+                create_graph=False,
+                allow_unused=True,
+            )
 
-            # Inner-loop `autograd.grad` freed the graph built from the pre-update
-            # `logits`; re-forward after in-place base-parameter updates before
-            # differentiating w.r.t. context parameters.
+            # SGD update only the BASE NETWORK
+            for param, grad in zip(self.net.base_param(), grads):
+                if grad is None:
+                    continue
+                with torch.no_grad():
+                    param.add_(grad, alpha=-self.inner_lr)
+
+            # Fast-step `autograd.grad` freed the graph; rebuild before meta forward.
+            x_train = self._canonicalize_input(raw_x_train, detach=False)
+            if rotated_validation_sample_for_meta is not None:
+                x_train = torch.cat(
+                    [x_train, rotated_validation_sample_for_meta], dim=0
+                )
             logits = self.forward(x_train, t, cil_all_seen_upto_task=t)
 
             sampled_validation = self.memory_sampling(t + 1, valid=True)

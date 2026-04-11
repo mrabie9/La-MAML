@@ -39,7 +39,7 @@ def _make_args(n_tasks=2, classes_per_task=None):
     o.det_replay_batch = 0
     o.use_detector_arch = False
     # Optim / meta settings
-    o.glances = 1
+    o.inner_steps = 1
     o.memories = 16
     o.replay_batch_size = 8
     o.cuda = False

@@ -1,0 +1,5 @@
+# ANML defaults (inner loop count formerly from parser --update_steps default 10)
+model: anml
+loader: task_incremental_loader
+
+inner_steps: 10

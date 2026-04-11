@@ -44,7 +44,7 @@ class MetaBgdConfig:
     train_mc_iters: int = 5
     optimizer_params: Sequence[str] = field(default_factory=lambda: ["{}"])
     dataset: str = "tinyimagenet"
-    glances: int = 1
+    inner_steps: int = 1
     memories: int = 5120
     replay_batch_size: int = 20
     use_old_task_memory: bool = False
@@ -112,7 +112,7 @@ class Net(torch.nn.Module):
         self.is_cifar = (self.cfg.dataset == "cifar100") or (
             self.cfg.dataset == "tinyimagenet"
         )
-        self.glances = self.cfg.glances
+        self.inner_steps = self.cfg.inner_steps
         self.pass_itr = 0
         self.real_epoch = 0
 
@@ -339,7 +339,7 @@ class Net(torch.nn.Module):
 
         train_acc_values = []
 
-        for glance_itr in range(self.glances):
+        for glance_itr in range(self.inner_steps):
 
             mc_meta_losses = [0 for _ in range(num_of_mc_iters)]
 

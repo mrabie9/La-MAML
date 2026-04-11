@@ -16,18 +16,18 @@ SEED=0
 
 echo "n_memories changed to 1024"
 python3 -u main.py $IQ --model gem --expt_name all_gem --n_memories 1024 --batch_size 128 --n_epochs 1 \
-                    --lr 0.03 --glances 1 --memory_strength 0.5   --increment 5 \
+                    --lr 0.03 --inner_steps 1 --memory_strength 0.5   --increment 5 \
                     --log_every 3125 --class_order random --samples_per_task -1 \
                     --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3 
 
 echo "n_memories changed to 2048"
 python3 -u main.py $IQ --model gem --expt_name all_gem --n_memories 2048 --batch_size 128 --n_epochs 1 \
-                    --lr 0.03 --glances 1 --memory_strength 0.5   --increment 5 \
+                    --lr 0.03 --inner_steps 1 --memory_strength 0.5   --increment 5 \
                     --log_every 3125 --class_order random --samples_per_task -1 \
                     --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3 
 
 echo "n_memories changed to 5096"
 python3 -u main.py $IQ --model gem --expt_name all_gem --n_memories 5096 --batch_size 128 --n_epochs 1 \
-                    --lr 0.03 --glances 1 --memory_strength 0.5   --increment 5 \
+                    --lr 0.03 --inner_steps 1 --memory_strength 0.5   --increment 5 \
                     --log_every 3125 --class_order random --samples_per_task -1 \
                     --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3 

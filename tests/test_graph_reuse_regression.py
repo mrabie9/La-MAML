@@ -59,8 +59,8 @@ def build_ctn_args() -> SimpleNamespace:
     args.n_memories = 64
     args.validation = 0.2
     args.replay_batch_size = 16
-    args.inner_steps = 1
-    args.n_meta = 2
+    # Former 2×2 grid folds to four alternating rounds (see CtnConfig.from_args).
+    args.inner_steps = 4
     args.batch_size = 8
     args.det_lambda = 1.0
     args.cls_lambda = 1.0
@@ -80,7 +80,7 @@ def build_laer_args() -> SimpleNamespace:
     args.lr = 1e-2
     args.opt_lr = 1e-1
     args.learn_lr = True
-    args.glances = 1
+    args.inner_steps = 1
     args.memories = 64
     args.replay_batch_size = 16
     args.grad_clip_norm = 2.0
@@ -117,6 +117,11 @@ def run_observe_regression() -> None:
                     f"{model_name} observe() still reuses a freed autograd graph."
                 ) from exc
             raise
+
+
+def test_observe_no_double_backward() -> None:
+    """Pytest entrypoint: same checks as ``python tests/test_graph_reuse_regression.py``."""
+    run_observe_regression()
 
 
 if __name__ == "__main__":

@@ -342,6 +342,7 @@ class BayesianResNet1D(nn.Module):
 
 @dataclass
 class UCLConfig:
+    inner_steps: int = 1
     lr: float = 1e-3
     lr_rho: float = 1e-2
     beta: float = 0.0002
@@ -709,35 +710,38 @@ class Net(nn.Module):
 
         self.train()
         # Let BatchNorm update running buffers so ``model.eval()`` matches training stats.
-        outputs = self.model(x_cls, sample=True)
-        logits = outputs[t] if self.split else outputs
+        for _ in range(self.cfg.inner_steps):
+            outputs = self.model(x_cls, sample=True)
+            logits = outputs[t] if self.split else outputs
 
-        preds = torch.argmax(logits, dim=1)
-        if signal_mask.any():
-            cls_tr_rec = macro_recall(preds[signal_mask], y_cls_filtered[signal_mask])
-        else:
-            cls_tr_rec = 0.0
-        self._last_observe_task_index = int(t)
-        self._last_observe_predictions_cpu = preds.detach().cpu().long()
-        self._last_observe_labels_cpu = y_cls_filtered.detach().cpu().long()
-        self._maybe_log_training_debug(
-            task_index=t,
-            labels=y_cls_filtered,
-            predictions=preds,
-            logits=logits,
-        )
-        ce = classification_cross_entropy(
-            logits,
-            y_cls_filtered,
-            class_weighted_ce=bool(self.cfg.class_weighted_ce),
-        )
-        loss = self._apply_regularisation(ce, y_cls_filtered.size(0))
+            preds = torch.argmax(logits, dim=1)
+            if signal_mask.any():
+                cls_tr_rec = macro_recall(
+                    preds[signal_mask], y_cls_filtered[signal_mask]
+                )
+            else:
+                cls_tr_rec = 0.0
+            self._last_observe_task_index = int(t)
+            self._last_observe_predictions_cpu = preds.detach().cpu().long()
+            self._last_observe_labels_cpu = y_cls_filtered.detach().cpu().long()
+            self._maybe_log_training_debug(
+                task_index=t,
+                labels=y_cls_filtered,
+                predictions=preds,
+                logits=logits,
+            )
+            ce = classification_cross_entropy(
+                logits,
+                y_cls_filtered,
+                class_weighted_ce=bool(self.cfg.class_weighted_ce),
+            )
+            loss = self._apply_regularisation(ce, y_cls_filtered.size(0))
 
-        self.optimizer.zero_grad(set_to_none=True)
-        loss.backward()
-        if self.cfg.clipgrad > 0:
-            torch.nn.utils.clip_grad_norm_(self.parameters(), self.cfg.clipgrad)
-        self.optimizer.step()
+            self.optimizer.zero_grad(set_to_none=True)
+            loss.backward()
+            if self.cfg.clipgrad > 0:
+                torch.nn.utils.clip_grad_norm_(self.parameters(), self.cfg.clipgrad)
+            self.optimizer.step()
 
         # if y_det is not None:
         #     self.detector.train()

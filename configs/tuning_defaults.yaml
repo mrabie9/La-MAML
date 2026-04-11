@@ -24,7 +24,6 @@ tf_dir: ""
 calc_test_accuracy: false
 state_logging: false
 
-glances: 1
 n_meta: 1
 inner_steps: 1
 temperature: 5

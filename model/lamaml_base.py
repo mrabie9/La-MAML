@@ -16,7 +16,7 @@ class LamamlBaseConfig:
     alpha_init: float = 1e-3
     opt_wt: float = 1e-1
     opt_lr: float = 1e-1
-    glances: int = 1
+    inner_steps: int = 1
     memories: int = 5120
     replay_batch_size: int = 20
     cuda: bool = True
@@ -34,10 +34,23 @@ class LamamlBaseConfig:
 
     @staticmethod
     def from_args(args: object) -> "LamamlBaseConfig":
+        """Build config from CLI / merged args.
+
+        La-MAML uses a single ``inner_steps`` count (total observe passes). For
+        backward compatibility with YAML that set both ``inner_steps`` and the
+        global ``n_meta`` (formerly a separate outer loop), the effective value is
+        ``inner_steps * n_meta`` (each factor defaults to 1).
+        """
         cfg = LamamlBaseConfig()
-        for field in cfg.__dataclass_fields__:
-            if hasattr(args, field):
-                setattr(cfg, field, getattr(args, field))
+        inner = int(getattr(args, "inner_steps", 1) or 1)
+        n_meta_legacy = int(getattr(args, "n_meta", 1) or 1)
+        merged_inner = max(1, inner * n_meta_legacy)
+        for field_name in cfg.__dataclass_fields__:
+            if field_name == "inner_steps":
+                setattr(cfg, field_name, merged_inner)
+                continue
+            if hasattr(args, field_name):
+                setattr(cfg, field_name, getattr(args, field_name))
         return cfg
 
 
@@ -73,7 +86,7 @@ class BaseNet(torch.nn.Module):
         self.is_cifar = (self.cfg.dataset == "cifar100") or (
             self.cfg.dataset == "tinyimagenet"
         )
-        self.glances = self.cfg.glances
+        self.inner_steps = self.cfg.inner_steps
         self.pass_itr = 0
         self.real_epoch = 0
 

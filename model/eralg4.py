@@ -40,7 +40,7 @@ class ErAlgConfig:
     lr: float = 1e-3
     opt_lr: float = 1e-1
     learn_lr: bool = False
-    glances: int = 1
+    inner_steps: int = 1
     memories: int = 5120
     replay_batch_size: int = 20
     grad_clip_norm: Optional[float] = 2.0
@@ -91,7 +91,7 @@ class Net(DetectionReplayMixin, nn.Module):
         self.is_cifar = (self.cfg.dataset == "cifar100") or (
             self.cfg.dataset == "tinyimagenet"
         )
-        self.glances = self.cfg.glances
+        self.inner_steps = self.cfg.inner_steps
         self.det_lambda = float(self.cfg.det_lambda)
         self.cls_lambda = float(self.cfg.cls_lambda)
         self._init_det_replay(
@@ -347,7 +347,7 @@ class Net(DetectionReplayMixin, nn.Module):
 
     def ER(self, x, y, t):
         cls_tr_rec = []
-        for pass_itr in range(self.glances):
+        for pass_itr in range(self.inner_steps):
 
             self.net.zero_grad()
 
@@ -458,7 +458,7 @@ class Net(DetectionReplayMixin, nn.Module):
 
         """
         cls_tr_rec = []
-        for pass_itr in range(self.glances):
+        for pass_itr in range(self.inner_steps):
 
             perm = torch.randperm(x.size(0))
             x = x[perm]
