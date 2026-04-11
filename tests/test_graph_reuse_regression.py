@@ -59,8 +59,8 @@ def build_ctn_args() -> SimpleNamespace:
     args.n_memories = 64
     args.validation = 0.2
     args.replay_batch_size = 16
-    args.inner_steps = 2
-    args.n_meta = 2
+    # Former 2×2 grid folds to four alternating rounds (see CtnConfig.from_args).
+    args.inner_steps = 4
     args.batch_size = 8
     args.det_lambda = 1.0
     args.cls_lambda = 1.0

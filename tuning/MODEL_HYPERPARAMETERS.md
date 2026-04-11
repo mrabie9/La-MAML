@@ -7,8 +7,8 @@ The table below lists the hyperparameters that are explicitly defined for each m
 | `agem` | `lr` (0.001), `memory_strength` (0.0), `inner_steps` (1), `memories` (5120), `n_memories` (0), `alpha_init` (0.001) | `model/agem.py` |
 | `anml` | `update_lr` (0.1), `meta_lr` (0.001), `inner_steps` (10), `replay_batch_size` (20), `memories` (5120), `rln` (7), `use_old_task_memory` (false) | `model/anml.py` |
 | `anml_base` | `alpha_init` (0.001) | `model/anml_base.py` |
-| `bcl_dual` | `memory_strength` (1.0), `temperature` (2.0), `alpha_init` (0.001), `lr` (0.001), `beta` (1.0), `n_memories` (2000), `replay_batch_size` (20), `inner_steps` (5), `n_meta` (5) | `model/bcl_dual.py` |
-| `ctn` | `memory_strength` (0.5), `temperature` (5.0), `task_emb` (64), `lr` (0.01), `ctx_lr` (0.05), `n_memories` (50), `replay_batch_size` (20), `inner_steps` (2), `n_meta` (2) | `model/ctn.py` |
+| `bcl_dual` | `memory_strength` (1.0), `temperature` (2.0), `alpha_init` (0.001), `lr` (0.001), `beta` (1.0), `n_memories` (2000), `replay_batch_size` (20), `inner_steps` (5), `adapt_inner_steps` (5) | `model/bcl_dual.py` |
+| `ctn` | `memory_strength` (0.5), `temperature` (5.0), `task_emb` (64), `lr` (0.01), `ctx_lr` (0.05), `n_memories` (50), `replay_batch_size` (20), `inner_steps` (2) | `model/ctn.py` |
 | `er_ring` | `memory_strength` (1.0), `temperature` (2.0), `alpha_init` (0.001), `lr` (0.001), `n_memories` (2000), `n_memories` (0), `replay_batch_size` (20), `inner_steps` (5) | `model/er_ring.py` |
 | `eralg4` | `alpha_init` (0.001), `lr` (0.001), `opt_lr` (0.1), `learn_lr` (false), `inner_steps` (1), `memories` (5120), `replay_batch_size` (20), `second_order` (false), `cifar_batches` (3) | `model/eralg4.py` |
 | `ewc` | `inner_steps` (1), `lr` (0.03), `optimizer` (sgd), `momentum` (0.0), `weight_decay` (0.0), `lamb` (1.0), `clipgrad` (100.0) | `model/ewc.py` |
@@ -37,5 +37,5 @@ Notes:
 3. **Constraint/regularization strengths (`memory_strength`, `memory_strength`, `lamb`, `si_c`, `ratio`)** – govern how aggressively each method preserves prior knowledge versus adapting to new tasks.
 4. **Per-parameter LR initialization (`alpha_init`)** – critical for learning-to-learn methods (La-MAML, ANML, MER, etc.) because it scales the entire fast adaptation process.
 5. **Temperature-like controls (`temperature`, `temperature`, `temperature`)** – modulate soft targets/logits and can markedly change distillation behavior or context modulation sharpness.
-6. **Meta-iteration counts** – `inner_steps` and `n_meta` tune inner vs outer rounds for CTN and BCL-Dual. La-MAML exposes a single effective `inner_steps` (product of those globals when loading `LamamlBaseConfig`).
+6. **Meta-iteration counts** – `inner_steps` counts alternating fast/meta rounds per `observe` for CTN and BCL-Dual (legacy YAML may still set `inner_steps` × `n_meta`; it is folded into one `inner_steps`). BCL-Dual `adapt_inner_steps` controls SGD depth in `adapt()`. La-MAML exposes a single effective `inner_steps` (product of `inner_steps` × `n_meta` when loading `LamamlBaseConfig`).
 7. **Replay sampling size (`replay_batch_size`, `batches_per_example`)** – affects the gradient signal from memory and the balance between new and replayed data each update.

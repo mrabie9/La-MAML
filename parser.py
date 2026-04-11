@@ -60,9 +60,10 @@ def get_parser():
         type=int,
         help=(
             "Inner optimization passes per observe call: multi-pass training (ex-glances), "
-            "CTN/BCL-Dual inner SGD steps per meta round, ANML inner updates (ex-update_steps). "
+            "alternating fast/meta rounds for CTN and BCL-Dual, ANML inner updates (ex-update_steps). "
             "La-MAML uses the effective total pass count (see LamamlBaseConfig: inner_steps × n_meta "
-            "from merged args for backward-compatible YAML)."
+            "from merged args for backward-compatible YAML). CTN/BCL-Dual fold legacy "
+            "inner_steps × n_meta from YAML into a single inner_steps count."
         ),
     )
     parser.add_argument(
@@ -386,8 +387,9 @@ def get_parser():
         type=int,
         default=1,
         help=(
-            "Outer meta-update rounds for CTN and BCL-Dual (inner ``observe`` loop). "
-            "La-MAML folds this into its single inner_steps total (inner_steps × n_meta) in LamamlBaseConfig."
+            "La-MAML: folded into inner_steps (inner_steps × n_meta) in LamamlBaseConfig. "
+            "CTN/BCL-Dual: legacy only—multiplied with inner_steps when loading model config "
+            "to match the old nested schedule; omit or set to 1 for a single inner_steps value."
         ),
     )
     parser.add_argument(
