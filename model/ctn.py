@@ -537,9 +537,14 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                     with torch.no_grad():
                         param.add_(grad, alpha=-self.inner_lr)
 
-            # Inner-loop `autograd.grad` freed the graph built from the pre-update
-            # `logits`; re-forward after in-place base-parameter updates before
-            # differentiating w.r.t. context parameters.
+            # Inner-loop `autograd.grad` freed the graph built from the last
+            # `x_train`/`logits`; rebuild canonicalized input before the meta forward
+            # (reusing `x_train` would reconnect freed tensors).
+            x_train = self._canonicalize_input(raw_x_train, detach=False)
+            if rotated_validation_sample_for_meta is not None:
+                x_train = torch.cat(
+                    [x_train, rotated_validation_sample_for_meta], dim=0
+                )
             logits = self.forward(x_train, t, cil_all_seen_upto_task=t)
 
             sampled_validation = self.memory_sampling(t + 1, valid=True)

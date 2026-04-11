@@ -26,7 +26,6 @@ def _make_args() -> object:
     args.validation = 0.0
     args.inner_steps = 1
     args.n_meta = 1
-    args.inner_steps = 1
     args.cuda = False
     args.learn_lr = False
     args.second_order = False
