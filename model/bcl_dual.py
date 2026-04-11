@@ -30,8 +30,10 @@ class BclDualConfig:
     memory_strength: float = 1.0
     temperature: float = 5.0
     n_memories: int = 2000
-    inner_steps: int = 5
-    n_meta: int = 5
+    # Effective total inner ``observe`` SGD steps: legacy inner_steps × n_meta (5×5 → 25).
+    inner_steps: int = 25
+    # SGD steps in ``adapt()`` only; equals the pre-merge ``inner_steps`` factor from ``from_args``.
+    adapt_inner_steps: int = 5
 
     cuda: bool = True
     replay_batch_size: int = 20
@@ -42,10 +44,30 @@ class BclDualConfig:
 
     @staticmethod
     def from_args(args: object) -> "BclDualConfig":
+        """Build config from CLI / merged YAML.
+
+        BCL-Dual uses one effective ``inner_steps`` for the ``observe`` inner loop
+        (product of ``inner_steps`` and legacy ``n_meta``). The per-task
+        ``adapt()`` routine uses ``adapt_inner_steps``, set to the raw
+        ``inner_steps`` factor before that merge, so adaptation cost does not
+        scale with the merged count.
+
+        Returns:
+            Populated ``BclDualConfig`` instance.
+        """
         cfg = BclDualConfig()
-        for field in cfg.__dataclass_fields__:
-            if hasattr(args, field):
-                setattr(cfg, field, getattr(args, field))
+        raw_inner = int(getattr(args, "inner_steps", 5) or 5)
+        n_meta_legacy = int(getattr(args, "n_meta", 1) or 1)
+        merged_inner = max(1, raw_inner * n_meta_legacy)
+        for field_name in cfg.__dataclass_fields__:
+            if field_name == "inner_steps":
+                setattr(cfg, field_name, merged_inner)
+                continue
+            if field_name == "adapt_inner_steps":
+                setattr(cfg, field_name, raw_inner)
+                continue
+            if hasattr(args, field_name):
+                setattr(cfg, field_name, getattr(args, field_name))
         return cfg
 
 
@@ -154,7 +176,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.samples_seen = 0
         self.sz = int(self.cfg.replay_batch_size)
         self.inner_steps = self.cfg.inner_steps
-        self.n_meta = self.cfg.n_meta
+        self.adapt_inner_steps = self.cfg.adapt_inner_steps
         self.adapt_ = False  # args.adapt
         self.adapt_lr = self.cfg.lr
         self.models = {}
@@ -197,7 +219,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             xx = self.memx[t, :filled]
             yy = self.memy[t, :filled]
             opt = torch.optim.SGD(model.parameters(), self.adapt_lr, momentum=0.9)
-            for _ in range(self.inner_steps):
+            for _ in range(self.adapt_inner_steps):
                 model.zero_grad()
                 pred = model.forward(xx)
                 loss = classification_cross_entropy(
@@ -416,110 +438,107 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.zero_grad()
         tt = t + 1
         cls_tr_rec = []
-        for _ in range(self.n_meta):
-            weights_before = deepcopy(self.net.state_dict())
-            for i in range(self.inner_steps):
-                pred = self.forward(x_train, t)
-                signal_mask = signal_mask_exclude_noise(y_work, self.noise_label)
-                logits_for_loss = pred
-                if self.is_task_incremental:
-                    logits_for_loss = misc_utils.apply_task_incremental_logit_mask(
-                        pred,
-                        t,
-                        self.nc_per_task,
-                        self.n_outputs,
-                        cil_all_seen_upto_task=t,
-                        global_noise_label=self.noise_label,
-                        loader=self.incremental_loader_name,
-                    )
-                targets = y_work.long()
-                preds = torch.argmax(logits_for_loss, dim=1)
-                if signal_mask.any():
-                    cls_tr_rec.append(
-                        macro_recall(preds[signal_mask], targets[signal_mask])
-                    )
-                else:
-                    cls_tr_rec.append(0.0)
-                loss1 = classification_cross_entropy(
-                    logits_for_loss,
-                    targets,
-                    class_weighted_ce=self.class_weighted_ce,
+        weights_before = deepcopy(self.net.state_dict())
+        for _ in range(self.inner_steps):
+            pred = self.forward(x_train, t)
+            signal_mask = signal_mask_exclude_noise(y_work, self.noise_label)
+            logits_for_loss = pred
+            if self.is_task_incremental:
+                logits_for_loss = misc_utils.apply_task_incremental_logit_mask(
+                    pred,
+                    t,
+                    self.nc_per_task,
+                    self.n_outputs,
+                    cil_all_seen_upto_task=t,
+                    global_noise_label=self.noise_label,
+                    loader=self.incremental_loader_name,
                 )
-                # det_logits, _ = self.net.forward_heads(x_det)
-                # det_loss = self.det_loss(det_logits, y_det.float())
-                # det_replay = self._sample_det_memory()
-                # if det_replay is not None:
-                #     mem_x, mem_y = det_replay
-                #     mem_det_logits, _ = self.net.forward_heads(mem_x)
-                #     mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-                #     det_loss = 0.5 * (det_loss + mem_loss)
-                if t > 0:
-                    sampled = self.memory_sampling(t)
-                    if sampled is not None:
-                        xx, yy, feat, mask, list_t, class_sizes = sampled
-                        pred_ = self.net(xx)
-                        pred = torch.gather(pred_, 1, mask)
-                        for row, size in enumerate(class_sizes):
-                            if size < pred.size(1):
-                                pred[row, size:] = -1e9
-                        loss2 = classification_cross_entropy(
-                            pred, yy, class_weighted_ce=self.class_weighted_ce
-                        )
-                        loss3 = self.reg * self.kl(
-                            F.log_softmax(pred / self.temp, dim=1), feat
-                        )
-                        loss = (
-                            self.cls_lambda * loss1
-                            # + self.det_lambda * det_loss
-                            + loss2
-                            + loss3
-                        )
-                    else:
-                        loss = self.cls_lambda * loss1  # + self.det_lambda * det_loss
-                else:
-                    loss = self.cls_lambda * loss1  # + self.det_lambda * det_loss
-                loss.backward()
-                self.inner_opt.step()
-            sampled_validation = self.memory_sampling(tt, valid=True)
-            if sampled_validation is not None:
-                xval, yval, _, mask_val, list_t, class_sizes_val = sampled_validation
-                pred_ = self.net(xval)
-                pred = torch.gather(pred_, 1, mask_val)
-                for row, size in enumerate(class_sizes_val):
-                    if size < pred.size(1):
-                        pred[row, size:] = -1e9
-                outer_loss = classification_cross_entropy(
-                    pred, yval, class_weighted_ce=self.class_weighted_ce
+            targets = y_work.long()
+            preds = torch.argmax(logits_for_loss, dim=1)
+            if signal_mask.any():
+                cls_tr_rec.append(
+                    macro_recall(preds[signal_mask], targets[signal_mask])
                 )
             else:
-                pred = self.forward(x_train, t)
-                logits_outer_for_loss = pred
-                if self.is_task_incremental:
-                    logits_outer_for_loss = (
-                        misc_utils.apply_task_incremental_logit_mask(
-                            pred,
-                            t,
-                            self.nc_per_task,
-                            self.n_outputs,
-                            cil_all_seen_upto_task=t,
-                            global_noise_label=self.noise_label,
-                            loader=self.incremental_loader_name,
-                        )
+                cls_tr_rec.append(0.0)
+            loss1 = classification_cross_entropy(
+                logits_for_loss,
+                targets,
+                class_weighted_ce=self.class_weighted_ce,
+            )
+            # det_logits, _ = self.net.forward_heads(x_det)
+            # det_loss = self.det_loss(det_logits, y_det.float())
+            # det_replay = self._sample_det_memory()
+            # if det_replay is not None:
+            #     mem_x, mem_y = det_replay
+            #     mem_det_logits, _ = self.net.forward_heads(mem_x)
+            #     mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+            #     det_loss = 0.5 * (det_loss + mem_loss)
+            if t > 0:
+                sampled = self.memory_sampling(t)
+                if sampled is not None:
+                    xx, yy, feat, mask, list_t, class_sizes = sampled
+                    pred_ = self.net(xx)
+                    pred = torch.gather(pred_, 1, mask)
+                    for row, size in enumerate(class_sizes):
+                        if size < pred.size(1):
+                            pred[row, size:] = -1e9
+                    loss2 = classification_cross_entropy(
+                        pred, yy, class_weighted_ce=self.class_weighted_ce
                     )
-                outer_loss = classification_cross_entropy(
-                    logits_outer_for_loss,
-                    targets,
-                    class_weighted_ce=self.class_weighted_ce,
-                )
-            outer_loss.backward()
+                    loss3 = self.reg * self.kl(
+                        F.log_softmax(pred / self.temp, dim=1), feat
+                    )
+                    loss = (
+                        self.cls_lambda * loss1
+                        # + self.det_lambda * det_loss
+                        + loss2
+                        + loss3
+                    )
+                else:
+                    loss = self.cls_lambda * loss1  # + self.det_lambda * det_loss
+            else:
+                loss = self.cls_lambda * loss1  # + self.det_lambda * det_loss
+            loss.backward()
             self.inner_opt.step()
-            self.zero_grad()
-            weights_after = self.net.state_dict()
-            new_params = {
-                name: weights_before[name]
-                + ((weights_after[name] - weights_before[name]) * self.beta)
-                for name in weights_before.keys()
-            }
-            self.net.load_state_dict(new_params)
+        sampled_validation = self.memory_sampling(tt, valid=True)
+        if sampled_validation is not None:
+            xval, yval, _, mask_val, list_t, class_sizes_val = sampled_validation
+            pred_ = self.net(xval)
+            pred = torch.gather(pred_, 1, mask_val)
+            for row, size in enumerate(class_sizes_val):
+                if size < pred.size(1):
+                    pred[row, size:] = -1e9
+            outer_loss = classification_cross_entropy(
+                pred, yval, class_weighted_ce=self.class_weighted_ce
+            )
+        else:
+            pred = self.forward(x_train, t)
+            logits_outer_for_loss = pred
+            if self.is_task_incremental:
+                logits_outer_for_loss = misc_utils.apply_task_incremental_logit_mask(
+                    pred,
+                    t,
+                    self.nc_per_task,
+                    self.n_outputs,
+                    cil_all_seen_upto_task=t,
+                    global_noise_label=self.noise_label,
+                    loader=self.incremental_loader_name,
+                )
+            outer_loss = classification_cross_entropy(
+                logits_outer_for_loss,
+                targets,
+                class_weighted_ce=self.class_weighted_ce,
+            )
+        outer_loss.backward()
+        self.inner_opt.step()
+        self.zero_grad()
+        weights_after = self.net.state_dict()
+        new_params = {
+            name: weights_before[name]
+            + ((weights_after[name] - weights_before[name]) * self.beta)
+            for name in weights_before.keys()
+        }
+        self.net.load_state_dict(new_params)
         avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
         return outer_loss.item(), avg_cls_tr_rec

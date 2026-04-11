@@ -59,8 +59,8 @@ def build_ctn_args() -> SimpleNamespace:
     args.n_memories = 64
     args.validation = 0.2
     args.replay_batch_size = 16
-    args.inner_steps = 1
-    args.n_meta = 2
+    # Effective inner SGD steps = legacy inner_steps × n_meta (here 4 = 2×2).
+    args.inner_steps = 4
     args.batch_size = 8
     args.det_lambda = 1.0
     args.cls_lambda = 1.0
@@ -117,6 +117,11 @@ def run_observe_regression() -> None:
                     f"{model_name} observe() still reuses a freed autograd graph."
                 ) from exc
             raise
+
+
+def test_observe_no_double_backward() -> None:
+    """Pytest entrypoint: same checks as ``python tests/test_graph_reuse_regression.py``."""
+    run_observe_regression()
 
 
 if __name__ == "__main__":
