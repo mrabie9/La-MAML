@@ -479,6 +479,9 @@ class Net(nn.Module):
             or getattr(args, "nc_per_task", None),
             classes_per_task=getattr(args, "classes_per_task", None),
         )
+        self.classes_per_task = self._extend_cil_heads_with_global_noise(
+            self.classes_per_task
+        )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
 
         self.model = BayesianClassifier(
@@ -519,6 +522,41 @@ class Net(nn.Module):
         self._last_observe_labels_cpu: Optional[torch.Tensor] = None
         self.noise_label: int | None = noise_label_from_args(args)
         self.incremental_loader_name = getattr(args, "loader", None)
+
+    def _extend_cil_heads_with_global_noise(
+        self, classes_per_task: List[int]
+    ) -> List[int]:
+        """Ensure CIL concatenated heads include a slot for global noise labels.
+
+        In IQ CIL mode, `class_incremental_loader` remaps noise targets to a
+        single global class id (typically the last label). UCL uses per-task
+        heads and concatenates them when `split=False`; if head widths only sum
+        to signal classes, CE receives out-of-range noise targets.
+
+        This method adds one class slot to the final head only when needed.
+
+        Args:
+            classes_per_task: Per-task class counts used to size UCL heads.
+
+        Returns:
+            Possibly adjusted per-task class counts.
+        """
+
+        is_cil = not bool(self.cfg.split)
+        if not is_cil:
+            return classes_per_task
+
+        total_classes = int(sum(classes_per_task))
+        if total_classes >= int(self.n_outputs):
+            return classes_per_task
+
+        missing_classes = int(self.n_outputs) - total_classes
+        if missing_classes <= 0:
+            return classes_per_task
+
+        adjusted = list(classes_per_task)
+        adjusted[-1] += missing_classes
+        return adjusted
 
     @contextmanager
     def _temporarily_enable_bn_training(self):
