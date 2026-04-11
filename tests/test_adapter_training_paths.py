@@ -32,6 +32,7 @@ def _make_args(classes_per_task=None):
     o.n_memories = 32
     o.validation = 0.25
     o.inner_steps = 1
+    o.n_meta = 1
     o.cuda = False
     o.learn_lr = False
     o.second_order = False

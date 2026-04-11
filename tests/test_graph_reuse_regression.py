@@ -59,8 +59,8 @@ def build_ctn_args() -> SimpleNamespace:
     args.n_memories = 64
     args.validation = 0.2
     args.replay_batch_size = 16
-    # Effective inner SGD steps = legacy inner_steps × n_meta (here 4 = 2×2).
-    args.inner_steps = 4
+    args.inner_steps = 2
+    args.n_meta = 2
     args.batch_size = 8
     args.det_lambda = 1.0
     args.cls_lambda = 1.0
