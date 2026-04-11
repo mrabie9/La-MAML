@@ -30,7 +30,7 @@ from utils.class_weighted_loss import classification_cross_entropy
 class AgemConfig:
     ## AGEM-specific hyperparameters
     lr: float = 1e-3
-    glances: int = 1
+    inner_steps: int = 1
     memories: int = 5120
 
     ## Generic hyperparameters
@@ -152,7 +152,7 @@ class Net(DetectionReplayMixin, nn.Module):
 
         self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
         self.n_outputs = n_outputs
-        self.glances = self.cfg.glances
+        self.inner_steps = self.cfg.inner_steps
         self.det_lambda = float(self.cfg.det_lambda)
         self.cls_lambda = float(self.cfg.cls_lambda)
         self._init_det_replay(
@@ -354,7 +354,7 @@ class Net(DetectionReplayMixin, nn.Module):
             self.mem_cnt = 0
 
         cls_tr_rec = []
-        for pass_itr in range(self.glances):
+        for pass_itr in range(self.inner_steps):
             # copy x into memory with matching shape
 
             if pass_itr == 0:

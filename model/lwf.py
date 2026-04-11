@@ -34,6 +34,7 @@ from utils.class_weighted_loss import classification_cross_entropy
 class LwfConfig:
     """Hyper-parameters with sensible fallbacks pulled from ``args``."""
 
+    inner_steps: int = 1
     lr: float = 1e-3
     temperature: float = 5.0
     distill_lambda: float = 1.0
@@ -170,43 +171,44 @@ class Net(DetectionReplayMixin, nn.Module):
         # )
         # if y_det is not None and self.det_memories > 0:
         #     self._update_det_memory(x, y_det)
-        y_cls = unpack_y_to_class_labels(y)
-        cls_logits = self.net.forward_heads(x)[1]
-        signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
-        class_ids = self._update_task_classes(t, y_cls)
-        current_logits = self._select_task_logits(cls_logits, class_ids)
-        targets = self._map_labels_to_local(y_cls, t)
-        loss_ce = classification_cross_entropy(
-            current_logits, targets, class_weighted_ce=self.class_weighted_ce
-        )
-        if signal_mask.any():
-            preds = torch.argmax(current_logits[signal_mask], dim=1)
-            cls_tr_rec = macro_recall(preds, targets[signal_mask])
-        else:
-            cls_tr_rec = 0.0
+        for _ in range(self.cfg.inner_steps):
+            y_cls = unpack_y_to_class_labels(y)
+            cls_logits = self.net.forward_heads(x)[1]
+            signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
+            class_ids = self._update_task_classes(t, y_cls)
+            current_logits = self._select_task_logits(cls_logits, class_ids)
+            targets = self._map_labels_to_local(y_cls, t)
+            loss_ce = classification_cross_entropy(
+                current_logits, targets, class_weighted_ce=self.class_weighted_ce
+            )
+            if signal_mask.any():
+                preds = torch.argmax(current_logits[signal_mask], dim=1)
+                cls_tr_rec = macro_recall(preds, targets[signal_mask])
+            else:
+                cls_tr_rec = 0.0
 
-        prev_class_ids = self._collect_previous_class_ids(t)
-        distill_loss = self._distillation_loss(cls_logits, x, prev_class_ids)
+            prev_class_ids = self._collect_previous_class_ids(t)
+            distill_loss = self._distillation_loss(cls_logits, x, prev_class_ids)
 
-        # det_loss = self.det_loss(det_logits, y_det.float())
-        # det_replay = self._sample_det_memory()
-        # if det_replay is not None:
-        #     mem_x, mem_y = det_replay
-        #     mem_det_logits, _ = self.net.forward_heads(mem_x)
-        #     mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-        #     det_loss = 0.5 * (det_loss + mem_loss)
+            # det_loss = self.det_loss(det_logits, y_det.float())
+            # det_replay = self._sample_det_memory()
+            # if det_replay is not None:
+            #     mem_x, mem_y = det_replay
+            #     mem_det_logits, _ = self.net.forward_heads(mem_x)
+            #     mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+            #     det_loss = 0.5 * (det_loss + mem_loss)
 
-        loss = (
-            self.cls_lambda * loss_ce
-            # + self.det_lambda * det_loss
-            + self.distill_lambda * distill_loss
-        )
+            loss = (
+                self.cls_lambda * loss_ce
+                # + self.det_lambda * det_loss
+                + self.distill_lambda * distill_loss
+            )
 
-        self.opt.zero_grad()
-        loss.backward()
-        if self.clipgrad is not None and self.clipgrad > 0:
-            torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.clipgrad)
-        self.opt.step()
+            self.opt.zero_grad()
+            loss.backward()
+            if self.clipgrad is not None and self.clipgrad > 0:
+                torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.clipgrad)
+            self.opt.step()
 
         return float(loss.item()), cls_tr_rec
 

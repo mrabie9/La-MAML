@@ -16,7 +16,8 @@ class LamamlBaseConfig:
     alpha_init: float = 1e-3
     opt_wt: float = 1e-1
     opt_lr: float = 1e-1
-    glances: int = 1
+    inner_steps: int = 1
+    n_meta: int = 1
     memories: int = 5120
     replay_batch_size: int = 20
     cuda: bool = True
@@ -73,7 +74,8 @@ class BaseNet(torch.nn.Module):
         self.is_cifar = (self.cfg.dataset == "cifar100") or (
             self.cfg.dataset == "tinyimagenet"
         )
-        self.glances = self.cfg.glances
+        self.inner_steps = self.cfg.inner_steps
+        self.n_meta = self.cfg.n_meta
         self.pass_itr = 0
         self.real_epoch = 0
 

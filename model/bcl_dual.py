@@ -153,7 +153,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.kl = nn.KLDivLoss(reduction="batchmean")
         self.samples_seen = 0
         self.sz = int(self.cfg.replay_batch_size)
-        self.glances = self.cfg.inner_steps
+        self.inner_steps = self.cfg.inner_steps
         self.n_meta = self.cfg.n_meta
         self.adapt_ = False  # args.adapt
         self.adapt_lr = self.cfg.lr
@@ -197,7 +197,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             xx = self.memx[t, :filled]
             yy = self.memy[t, :filled]
             opt = torch.optim.SGD(model.parameters(), self.adapt_lr, momentum=0.9)
-            for _ in range(self.glances):
+            for _ in range(self.inner_steps):
                 model.zero_grad()
                 pred = model.forward(xx)
                 loss = classification_cross_entropy(
@@ -418,7 +418,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         cls_tr_rec = []
         for _ in range(self.n_meta):
             weights_before = deepcopy(self.net.state_dict())
-            for i in range(self.glances):
+            for i in range(self.inner_steps):
                 pred = self.forward(x_train, t)
                 signal_mask = signal_mask_exclude_noise(y_work, self.noise_label)
                 logits_for_loss = pred

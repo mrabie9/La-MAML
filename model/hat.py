@@ -59,6 +59,7 @@ class HatInputAdapter(nn.Module):
 
 @dataclass
 class HatConfig:
+    inner_steps: int = 1
     lr: float = 1e-4
     gamma: float = 0.75
     smax: float = 50
@@ -681,49 +682,50 @@ class Net(nn.Module):
             self.bridge.freeze_bn_stats and self.mask_pre is not None
         )
 
-        self.opt.zero_grad(set_to_none=True)
-        logits, masks = self.bridge.forward(
-            self._task_tensor(t, device), x, s, return_masks=True
-        )
-        # with torch.no_grad():
-        #     self.log_gate_stats(t, self.real_epoch, batch_idx, masks)
+        for _ in range(self.cfg.inner_steps):
+            self.opt.zero_grad(set_to_none=True)
+            logits, masks = self.bridge.forward(
+                self._task_tensor(t, device), x, s, return_masks=True
+            )
+            # with torch.no_grad():
+            #     self.log_gate_stats(t, self.real_epoch, batch_idx, masks)
 
-        # for mask in masks:
-        #     print(mask.mean(), mask.min())
-        y_cls = unpack_y_to_class_labels(y)
-        signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
-        logits_for_loss = misc_utils.apply_task_incremental_logit_mask(
-            logits,
-            t,
-            self.classes_per_task,
-            self.n_outputs,
-            cil_all_seen_upto_task=t,
-            global_noise_label=self.noise_label,
-            loader=self.incremental_loader_name,
-        )
-        targets = y_cls.long()
-        loss, _ = self._criterion(logits_for_loss, targets, masks)
-        if signal_mask.any():
-            preds = torch.argmax(logits_for_loss[signal_mask], dim=1)
-            cls_tr_rec = macro_recall(preds, targets[signal_mask])
-        else:
-            cls_tr_rec = 0.0
-        loss.backward()
+            # for mask in masks:
+            #     print(mask.mean(), mask.min())
+            y_cls = unpack_y_to_class_labels(y)
+            signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
+            logits_for_loss = misc_utils.apply_task_incremental_logit_mask(
+                logits,
+                t,
+                self.classes_per_task,
+                self.n_outputs,
+                cil_all_seen_upto_task=t,
+                global_noise_label=self.noise_label,
+                loader=self.incremental_loader_name,
+            )
+            targets = y_cls.long()
+            loss, _ = self._criterion(logits_for_loss, targets, masks)
+            if signal_mask.any():
+                preds = torch.argmax(logits_for_loss[signal_mask], dim=1)
+                cls_tr_rec = macro_recall(preds, targets[signal_mask])
+            else:
+                cls_tr_rec = 0.0
+            loss.backward()
 
-        if self.mask_back:
-            for name, param in self.bridge.named_parameters():
-                if param.grad is None:
-                    continue
-                if name in self.mask_back:
-                    param.grad.data *= self.mask_back[name]
+            if self.mask_back:
+                for name, param in self.bridge.named_parameters():
+                    if param.grad is None:
+                        continue
+                    if name in self.mask_back:
+                        param.grad.data *= self.mask_back[name]
 
-        self.bridge.compensate_embedding_grads(s, self.smax)
+            self.bridge.compensate_embedding_grads(s, self.smax)
 
-        if self.grad_clip is not None:
-            torch.nn.utils.clip_grad_norm_(self.bridge.parameters(), self.grad_clip)
+            if self.grad_clip is not None:
+                torch.nn.utils.clip_grad_norm_(self.bridge.parameters(), self.grad_clip)
 
-        self.opt.step()
-        self.bridge.clamp_embeddings()
+            self.opt.step()
+            self.bridge.clamp_embeddings()
 
         self._epoch_counts[t] += 1
         return float(loss.detach().cpu()), cls_tr_rec

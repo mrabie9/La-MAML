@@ -2,6 +2,9 @@
 model: ctn
 loader: task_incremental_loader
 
+inner_steps: 2
+n_meta: 2
+
 lr: 0.03
 ctx_lr: 0.003
 task_emb: 64

@@ -33,6 +33,7 @@ from utils.class_weighted_loss import classification_cross_entropy
 class PackNetConfig:
     """Hyper-parameters pulled from ``args`` with sensible defaults."""
 
+    inner_steps: int = 1
     lr: float = 0.01
     optimizer: str = "sgd"
     n_tasks: int = 3
@@ -143,37 +144,40 @@ class Net(nn.Module):
             self._restore_bn_stats(t)
 
         self.net.train()
-        logits = self.net(x)
-        y_cls = unpack_y_to_class_labels(y)
-        signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
-        logits_for_loss = logits
-        if self.is_task_incremental:
-            logits_for_loss = misc_utils.apply_task_incremental_logit_mask(
-                logits,
-                t,
-                self.classes_per_task,
-                self.n_outputs,
-                cil_all_seen_upto_task=t,
-                global_noise_label=self.noise_label,
-                loader=self.incremental_loader_name,
+        for _ in range(self.cfg.inner_steps):
+            logits = self.net(x)
+            y_cls = unpack_y_to_class_labels(y)
+            signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
+            logits_for_loss = logits
+            if self.is_task_incremental:
+                logits_for_loss = misc_utils.apply_task_incremental_logit_mask(
+                    logits,
+                    t,
+                    self.classes_per_task,
+                    self.n_outputs,
+                    cil_all_seen_upto_task=t,
+                    global_noise_label=self.noise_label,
+                    loader=self.incremental_loader_name,
+                )
+            targets_for_loss = y_cls.long()
+            loss = classification_cross_entropy(
+                logits_for_loss,
+                targets_for_loss,
+                class_weighted_ce=self.class_weighted_ce,
             )
-        targets_for_loss = y_cls.long()
-        loss = classification_cross_entropy(
-            logits_for_loss, targets_for_loss, class_weighted_ce=self.class_weighted_ce
-        )
-        if signal_mask.any():
-            preds = torch.argmax(logits_for_loss[signal_mask], dim=1)
-            cls_tr_rec = macro_recall(preds, y_cls[signal_mask].long())
-        else:
-            cls_tr_rec = 0.0
+            if signal_mask.any():
+                preds = torch.argmax(logits_for_loss[signal_mask], dim=1)
+                cls_tr_rec = macro_recall(preds, y_cls[signal_mask].long())
+            else:
+                cls_tr_rec = 0.0
 
-        self.opt.zero_grad()
-        loss.backward()
-        self._zero_frozen_grads()
-        if self.clipgrad is not None and self.clipgrad > 0:
-            torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.clipgrad)
-        self.opt.step()
-        self._restore_frozen_weights()
+            self.opt.zero_grad()
+            loss.backward()
+            self._zero_frozen_grads()
+            if self.clipgrad is not None and self.clipgrad > 0:
+                torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.clipgrad)
+            self.opt.step()
+            self._restore_frozen_weights()
 
         return float(loss.item()), cls_tr_rec
 

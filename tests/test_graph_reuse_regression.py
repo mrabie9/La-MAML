@@ -80,7 +80,7 @@ def build_laer_args() -> SimpleNamespace:
     args.lr = 1e-2
     args.opt_lr = 1e-1
     args.learn_lr = True
-    args.glances = 1
+    args.inner_steps = 1
     args.memories = 64
     args.replay_batch_size = 16
     args.grad_clip_norm = 2.0

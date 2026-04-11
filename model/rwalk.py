@@ -31,6 +31,7 @@ from utils.class_weighted_loss import classification_cross_entropy
 class RWalkConfig:
     """Hyper-parameters harvested from ``args`` with safe fallbacks."""
 
+    inner_steps: int = 1
     lr: float = 0.001
     lamb: float = 1.0
     alpha: float = 0.9
@@ -140,60 +141,63 @@ class Net(DetectionReplayMixin, nn.Module):
             self.current_task = t
 
         self.net.train()
-        self.opt.zero_grad()
 
         # class_counts = getattr(self, "classes_per_task", None)
         # noise_label = None
         # if class_counts is not None:
         #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
         #     noise_label = offset2 - 1
-        y_cls = unpack_y_to_class_labels(y)
-        cls_logits = self.net.forward_heads(x)[1]
-        signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
-        logits_for_loss = cls_logits
-        if self.is_task_incremental:
-            logits_for_loss = misc_utils.apply_task_incremental_logit_mask(
-                cls_logits,
-                t,
-                self.classes_per_task,
-                self.n_outputs,
-                cil_all_seen_upto_task=t,
-                global_noise_label=self.noise_label,
-                loader=self.incremental_loader_name,
+        for _ in range(self.cfg.inner_steps):
+            self.opt.zero_grad()
+            y_cls = unpack_y_to_class_labels(y)
+            cls_logits = self.net.forward_heads(x)[1]
+            signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
+            logits_for_loss = cls_logits
+            if self.is_task_incremental:
+                logits_for_loss = misc_utils.apply_task_incremental_logit_mask(
+                    cls_logits,
+                    t,
+                    self.classes_per_task,
+                    self.n_outputs,
+                    cil_all_seen_upto_task=t,
+                    global_noise_label=self.noise_label,
+                    loader=self.incremental_loader_name,
+                )
+            targets_for_loss = y_cls.long()
+            loss_ce = classification_cross_entropy(
+                logits_for_loss,
+                targets_for_loss,
+                class_weighted_ce=self.class_weighted_ce,
             )
-        targets_for_loss = y_cls.long()
-        loss_ce = classification_cross_entropy(
-            logits_for_loss, targets_for_loss, class_weighted_ce=self.class_weighted_ce
-        )
 
-        if signal_mask.any():
-            preds = torch.argmax(logits_for_loss[signal_mask], dim=1)
-            cls_tr_rec = macro_recall(preds, y_cls[signal_mask].long())
-        else:
-            cls_tr_rec = 0.0
-        # else:
-        #     loss_ce = cls_logits.new_zeros(1)
-        #     cls_tr_rec = 0.0
+            if signal_mask.any():
+                preds = torch.argmax(logits_for_loss[signal_mask], dim=1)
+                cls_tr_rec = macro_recall(preds, y_cls[signal_mask].long())
+            else:
+                cls_tr_rec = 0.0
+            # else:
+            #     loss_ce = cls_logits.new_zeros(1)
+            #     cls_tr_rec = 0.0
 
-        # det_loss = self.det_loss(det_logits, y_det.float())
-        # det_replay = self._sample_det_memory()
-        # if det_replay is not None:
-        #     mem_x, mem_y = det_replay
-        #     mem_det_logits, _ = self.net.forward_heads(mem_x)
-        #     mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-        #     det_loss = 0.5 * (det_loss + mem_loss)
+            # det_loss = self.det_loss(det_logits, y_det.float())
+            # det_replay = self._sample_det_memory()
+            # if det_replay is not None:
+            #     mem_x, mem_y = det_replay
+            #     mem_det_logits, _ = self.net.forward_heads(mem_x)
+            #     mem_loss = self.det_loss(mem_det_logits, mem_y.float())
+            #     det_loss = 0.5 * (det_loss + mem_loss)
 
-        loss = (
-            self.cls_lambda * loss_ce
-            # + self.det_lambda * det_loss
-            + self.lamb * self._regulariser()
-        )
-        loss.backward()
+            loss = (
+                self.cls_lambda * loss_ce
+                # + self.det_lambda * det_loss
+                + self.lamb * self._regulariser()
+            )
+            loss.backward()
 
-        if self.clipgrad is not None:
-            torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.clipgrad)
-        self.opt.step()
-        self._update_running_statistics()
+            if self.clipgrad is not None:
+                torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.clipgrad)
+            self.opt.step()
+            self._update_running_statistics()
 
         return float(loss.item()), cls_tr_rec
 

@@ -37,7 +37,7 @@ class IcarlConfig:
     lr: float = 1e-3
     memory_strength: float = 0.5
     n_memories: int = 5120
-    glances: int = 1
+    inner_steps: int = 1
 
     grad_clip_norm: Optional[float] = 100.0
     arch: str = "resnet1d"
@@ -88,7 +88,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             assert self.samples_per_task > 0, "Samples per task is <= 0"
         self.examples_seen = 0
 
-        self.glances = self.cfg.glances
+        self.inner_steps = self.cfg.inner_steps
         # setup network
 
         # --- IQ mode toggle ---
@@ -327,7 +327,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
 
         cls_tr_rec = []
 
-        for pass_itr in range(self.glances):
+        for pass_itr in range(self.inner_steps):
 
             # only make changes like pushing to buffer once per batch and not for every glance
             if pass_itr == 0:

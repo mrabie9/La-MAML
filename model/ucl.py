@@ -101,6 +101,7 @@ class BayesianLinear(nn.Module):
 
 @dataclass
 class UCLConfig:
+    inner_steps: int = 1
     lr: float = 1e-3
     lr_rho: float = 1e-2
     beta: float = 0.0002
@@ -274,21 +275,22 @@ class Net(nn.Module):
                 module.track_running_stats = False
 
         # offset1, offset2 = self.compute_offsets(t)
-        outputs = self.model(x, sample=True)
-        logits = outputs[t] if self.split else outputs
+        for _ in range(self.cfg.inner_steps):
+            outputs = self.model(x, sample=True)
+            logits = outputs[t] if self.split else outputs
 
-        preds = torch.argmax(logits, dim=1)
-        cls_tr_rec = macro_recall(preds, y)
-        loss = classification_cross_entropy(
-            logits, y, class_weighted_ce=bool(self.cfg.class_weighted_ce)
-        )
-        loss = self._apply_regularisation(loss, y.size(0))
+            preds = torch.argmax(logits, dim=1)
+            cls_tr_rec = macro_recall(preds, y)
+            loss = classification_cross_entropy(
+                logits, y, class_weighted_ce=bool(self.cfg.class_weighted_ce)
+            )
+            loss = self._apply_regularisation(loss, y.size(0))
 
-        self.optimizer.zero_grad(set_to_none=True)
-        loss.backward()
-        if self.cfg.clipgrad > 0:
-            torch.nn.utils.clip_grad_norm_(self.parameters(), self.cfg.clipgrad)
-        self.optimizer.step()
+            self.optimizer.zero_grad(set_to_none=True)
+            loss.backward()
+            if self.cfg.clipgrad > 0:
+                torch.nn.utils.clip_grad_norm_(self.parameters(), self.cfg.clipgrad)
+            self.optimizer.step()
 
         return float(loss.detach().cpu()), cls_tr_rec
 

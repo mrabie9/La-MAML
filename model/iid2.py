@@ -36,6 +36,7 @@ class IidConfig:
     """
 
     arch: str = "resnet1d"
+    inner_steps: int = 1
     lr: float = 1e-3
     cuda: bool = True
 
@@ -147,28 +148,29 @@ class Net(torch.nn.Module):
         del t
 
         self.train()
-        self.opt.zero_grad()
+        for _ in range(self.cfg.inner_steps):
+            self.opt.zero_grad()
 
-        logits = self.net(x)
-        targets = unpack_y_to_class_labels(y).long()
-        signal_mask = signal_mask_exclude_noise(targets, self.noise_label)
-        loss_tensor = classification_cross_entropy(
-            logits,
-            targets,
-            class_weighted_ce=self.class_weighted_ce,
-        )
-        loss_tensor.backward()
-        self.opt.step()
+            logits = self.net(x)
+            targets = unpack_y_to_class_labels(y).long()
+            signal_mask = signal_mask_exclude_noise(targets, self.noise_label)
+            loss_tensor = classification_cross_entropy(
+                logits,
+                targets,
+                class_weighted_ce=self.class_weighted_ce,
+            )
+            loss_tensor.backward()
+            self.opt.step()
 
-        with torch.no_grad():
-            preds = torch.argmax(logits, dim=1)
-            if signal_mask.any():
-                cls_tr_rec = macro_recall(
-                    preds[signal_mask].detach().cpu(),
-                    targets[signal_mask].detach().cpu(),
-                )
-            else:
-                cls_tr_rec = 0.0
+            with torch.no_grad():
+                preds = torch.argmax(logits, dim=1)
+                if signal_mask.any():
+                    cls_tr_rec = macro_recall(
+                        preds[signal_mask].detach().cpu(),
+                        targets[signal_mask].detach().cpu(),
+                    )
+                else:
+                    cls_tr_rec = 0.0
 
         return float(loss_tensor.item()), float(cls_tr_rec)
 

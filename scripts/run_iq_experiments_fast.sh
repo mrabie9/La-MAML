@@ -37,25 +37,25 @@ echo "Logging quick IQ experiment suite to $LOG_FILE"
 
 # # ##### AGEM #####
 # python3 -u main.py $IQ --model agem --expt_name all_agem --n_memories 5192 --batch_size 128 --n_epochs $N_EPOCHS \
-#                     --lr 0.03 --glances 1 --memory_strength 0.5 --increment 5 \
+#                     --lr 0.03 --inner_steps 1 --memory_strength 0.5 --increment 5 \
 #                     --log_every 3125 --class_order random \
 #                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 256
 
 # # ##### ER #####
 # python3 -u main.py $IQ --model eralg4 --expt_name all_eralg4 --memories 5192 --batch_size 128 --n_epochs $N_EPOCHS --replay_batch_size 64 \
-#                     --lr 0.03 --glances 1 --increment 5 \
+#                     --lr 0.03 --inner_steps 1 --increment 5 \
 #                     --log_every 3125 --class_order random \
 #                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 256
 
 # # ##### iCaRL #####
 # python3 -u main.py $IQ --model icarl --expt_name all_icarl --n_memories 5192 --batch_size 128 --n_epochs $N_EPOCHS \
-#                     --lr 0.03 --glances 1 --memory_strength 1.0 --increment 5 \
+#                     --lr 0.03 --inner_steps 1 --memory_strength 1.0 --increment 5 \
 #                     --log_every 3125 --class_order random \
 #                     --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3 --samples_per_task 256
 
 # ##### GEM #####
 # python3 -u main.py $IQ --model gem --expt_name all_gem --n_memories 512 --batch_size 128 --n_epochs $N_EPOCHS \
-#                     --lr 0.03 --glances 1 --memory_strength 0.5 --increment 5 \
+#                     --lr 0.03 --inner_steps 1 --memory_strength 0.5 --increment 5 \
 #                     --log_every 3125 --class_order random \
 #                     --seed $SEED --grad_clip_norm 5.0 --calc_test_accuracy --validation 0.3 --samples_per_task 256
 
@@ -117,19 +117,19 @@ echo "Logging quick IQ experiment suite to $LOG_FILE"
 
 # # ##### La-MAML #####
 # python3 -u main.py $IQ --model lamaml_cifar --expt_name all_lamaml --memories 5192 --batch_size 128 --replay_batch_size 64 --n_epochs $N_EPOCHS \
-#                     --opt_lr 0.25 --alpha_init 0.1 --opt_wt 0.1 --glances 1 --increment 5 \
+#                     --opt_lr 0.25 --alpha_init 0.1 --opt_wt 0.1 --inner_steps 1 --increment 5 \
 #                     --cifar_batches 5 --learn_lr --log_every 3125 --second_order --class_order random \
 #                     --seed $SEED --grad_clip_norm 1.0 --calc_test_accuracy --validation 0.3 --samples_per_task 256
 
 # # ##### sync #####
 # python3 -u main.py $IQ --model lamaml_cifar --expt_name all_lamaml_sync --memories 1024 --batch_size 128 --replay_batch_size 64 --n_epochs $N_EPOCHS \
-#                     --opt_lr 0.35 --alpha_init 0.1 --opt_wt 0.1 --glances 1 --increment 5 \
+#                     --opt_lr 0.35 --alpha_init 0.1 --opt_wt 0.1 --inner_steps 1 --increment 5 \
 #                     --cifar_batches 5 --learn_lr --sync_update --log_every 3125 --second_order --class_order random \
 #                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 256
 
 # # ##### C-MAML #####
 # python3 -u main.py $IQ --model lamaml_cifar --expt_name all_cmaml --memories 1024 --batch_size 128 --replay_batch_size 64 --n_epochs $N_EPOCHS \
-#                     --opt_lr 0.35 --alpha_init 0.075 --opt_wt 0.075 --glances 1 --increment 5 \
+#                     --opt_lr 0.35 --alpha_init 0.075 --opt_wt 0.075 --inner_steps 1 --increment 5 \
 #                     --cifar_batches 5 --sync_update --log_every 3125 --second_order --class_order random \
 #                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 256
 
@@ -141,13 +141,13 @@ python3 -u main.py $IQ --model meralg1 --expt_name all_meralg1 --batch_size 128 
 
 # # ##### Meta BGD #####
 # python3 -u main.py $IQ --model meta-bgd --expt_name all_meta-bgd --memories 5192 --batch_size 128 --replay_batch_size 64 --n_epochs $N_EPOCHS \
-#                     --alpha_init 0.1 --glances 1 --increment 5 \
+#                     --alpha_init 0.1 --inner_steps 1 --increment 5 \
 #                     --cifar_batches 3 --log_every 3125 --second_order --class_order random \
 #                     --seed $SEED --calc_test_accuracy --validation 0.3 --samples_per_task 256 --xav_init --std_init 0.02 --mean_eta 50. --train_mc_iters 2
 
 # ##### BCL-Dual #####
 # python3 -u main.py $IQ --model dual --expt_name basic_test --data_path data/rff/rfmls \
-#                     --n_layers 2 --n_hiddens 100 --xav_init --glances 1 --n_epochs 1 \
+#                     --n_layers 2 --n_hiddens 100 --xav_init --inner_steps 1 --n_epochs 1 \
 #                     --batch_size 64 --replay_batch_size 10 --memories 400 --lr 0.03 \
 #                     --increment 5 --log_every 3125 --class_order random \
 #                     --seed $SEED --validation 0.2 --samples_per_task 256 --classes_per_it 6 \
@@ -156,5 +156,5 @@ python3 -u main.py $IQ --model meralg1 --expt_name all_meralg1 --batch_size 128 
 #                     --opt_lr 0.1 --opt_wt 0.1 --alpha_init 0.1 --cifar_batches 3 --grad_clip_norm 5.0 \
 #                     --second_order --n_memories 2000 --memory_strength 1.0 --temperature 2.0 \
 #                     --inner_steps 5 --n_meta 5 --train_mc_iters 2 \
-#                     --std_init 0.02 --mean_eta 50.0 --fisher_gamma 0.95 --rln 7 --update_steps 10 \
+#                     --std_init 0.02 --mean_eta 50.0 --fisher_gamma 0.95 --rln 7 --inner_steps 10 \
 #                     --meta_lr 0.001 --update_lr 0.1

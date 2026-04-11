@@ -67,88 +67,91 @@ class Net(BaseNet):
     def observe(self, x, y, t):
         self.net.train()
 
-        for pass_itr in range(self.glances):
-            self.pass_itr = pass_itr
+        for meta_itr in range(self.n_meta):
+            for pass_itr in range(self.inner_steps):
+                self.pass_itr = meta_itr * self.inner_steps + pass_itr
 
-            # shuffle the data (again)
-            perm = torch.randperm(x.size(0))
-            x = x[perm]
-            y = y[perm]
+                # shuffle the data (again)
+                perm = torch.randperm(x.size(0))
+                x = x[perm]
+                y = y[perm]
 
-            self.epoch += 1
-            self.zero_grads()
+                self.epoch += 1
+                self.zero_grads()
 
-            if t != self.current_task:
-                self.M = self.M_new
-                self.current_task = t
+                if t != self.current_task:
+                    self.M = self.M_new
+                    self.current_task = t
 
-            batch_sz = x.shape[0]
-            meta_losses = [0 for _ in range(batch_sz)]
-            cls_tr_rec = []
+                batch_sz = x.shape[0]
+                meta_losses = [0 for _ in range(batch_sz)]
+                cls_tr_rec = []
 
-            bx, by, bt = self.getBatch(x.cpu().numpy(), y.cpu().numpy(), t)
-            fast_weights = None
+                bx, by, bt = self.getBatch(x.cpu().numpy(), y.cpu().numpy(), t)
+                fast_weights = None
 
-            self.zero_grads()
-            for i in range(0, batch_sz):
-                batch_x = x[i].unsqueeze(0)
-                batch_y = y[i].unsqueeze(0)
+                self.zero_grads()
+                for i in range(0, batch_sz):
+                    batch_x = x[i].unsqueeze(0)
+                    batch_y = y[i].unsqueeze(0)
 
-                fast_weights = self.inner_update(
-                    batch_x, fast_weights, batch_y, t
-                )  # Update task-specific fast weights
-                # if(self.real_epoch == 0):
-                #     self.push_to_mem(batch_x, batch_y, torch.tensor(t))
+                    fast_weights = self.inner_update(
+                        batch_x, fast_weights, batch_y, t
+                    )  # Update task-specific fast weights
+                    # if(self.real_epoch == 0):
+                    #     self.push_to_mem(batch_x, batch_y, torch.tensor(t))
 
-                if self.real_epoch == 0:  # always true
+                    if self.real_epoch == 0:  # always true
+                        with torch.no_grad():
+                            self.push_to_mem(
+                                batch_x.detach().cpu(),
+                                batch_y.detach().cpu(),
+                                torch.tensor(t),
+                            )
+
+                    meta_loss, logits = self.meta_loss(
+                        bx, fast_weights, by, t
+                    )  # loss on the meta batch
+                    pb = torch.argmax(logits, dim=1)
+                    cls_tr_rec.append(macro_recall(pb, by))
+                    meta_losses[i] += meta_loss / batch_sz
+                    assert (
+                        meta_loss.requires_grad
+                    ), "meta_loss has no grad path to alpha"
+                    meta_losses[i].backward()
+
+                # Taking the meta gradient step (will update the learning rates)
+                # self.zero_grads()
+
+                # meta_loss = sum(meta_losses)/len(meta_losses)
+
+                # meta_loss.backward()
+
+                if self.cfg.grad_clip_norm:
+                    torch.nn.utils.clip_grad_norm_(
+                        self.net.parameters(), self.cfg.grad_clip_norm
+                    )
+                    torch.nn.utils.clip_grad_norm_(
+                        self.net.alpha_lr.parameters(), self.cfg.grad_clip_norm
+                    )
+
+                if self.cfg.learn_lr:
+                    self.opt_lr.step()
+
+                if self.cfg.sync_update:
+                    self.opt_wt.step()
+                else:
                     with torch.no_grad():
-                        self.push_to_mem(
-                            batch_x.detach().cpu(),
-                            batch_y.detach().cpu(),
-                            torch.tensor(t),
-                        )
+                        for i, p in enumerate(self.net.parameters()):
+                            g = p.grad
+                            if g is None:
+                                continue  # <-- skip params without grads
+                            lr_i = torch.relu(self.net.alpha_lr[i])
+                            p.add_(-lr_i * g)  # inplace, safe under no_grad
 
-                meta_loss, logits = self.meta_loss(
-                    bx, fast_weights, by, t
-                )  # loss on the meta batch
-                pb = torch.argmax(logits, dim=1)
-                cls_tr_rec.append(macro_recall(pb, by))
-                meta_losses[i] += meta_loss / batch_sz
-                assert meta_loss.requires_grad, "meta_loss has no grad path to alpha"
-                meta_losses[i].backward()
-
-            # Taking the meta gradient step (will update the learning rates)
-            # self.zero_grads()
-
-            # meta_loss = sum(meta_losses)/len(meta_losses)
-
-            # meta_loss.backward()
-
-            if self.cfg.grad_clip_norm:
-                torch.nn.utils.clip_grad_norm_(
-                    self.net.parameters(), self.cfg.grad_clip_norm
-                )
-                torch.nn.utils.clip_grad_norm_(
-                    self.net.alpha_lr.parameters(), self.cfg.grad_clip_norm
-                )
-
-            if self.cfg.learn_lr:
-                self.opt_lr.step()
-
-            if self.cfg.sync_update:
-                self.opt_wt.step()
-            else:
-                with torch.no_grad():
-                    for i, p in enumerate(self.net.parameters()):
-                        g = p.grad
-                        if g is None:
-                            continue  # <-- skip params without grads
-                        lr_i = torch.relu(self.net.alpha_lr[i])
-                        p.add_(-lr_i * g)  # inplace, safe under no_grad
-
-            # better zeroing (lower mem)
-            self.net.zero_grad(set_to_none=True)
-            self.net.alpha_lr.zero_grad(set_to_none=True)
+                # better zeroing (lower mem)
+                self.net.zero_grad(set_to_none=True)
+                self.net.alpha_lr.zero_grad(set_to_none=True)
 
         avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
         return meta_loss.mean().item(), avg_cls_tr_rec
