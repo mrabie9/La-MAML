@@ -2,9 +2,6 @@
 model: ctn
 loader: task_incremental_loader
 
-# Alternating fast/meta rounds per observe (replaces former n_meta × inner_steps grid).
-inner_steps: 4
-
 lr: 0.03
 ctx_lr: 0.003
 task_emb: 64
