@@ -3,4 +3,4 @@ model: eralg4
 loader: class_incremental_loader
 learn_lr: false
 
-lr: 0.003
+lr: 0.01

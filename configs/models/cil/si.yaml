@@ -2,5 +2,5 @@
 model: si
 loader: class_incremental_loader
 
-lr: 0.003
-si_c: 0.4
+lr: 0.001
+si_c: 0.9

@@ -2,6 +2,6 @@
 model: rwalk
 loader: class_incremental_loader
 
-lr: 0.01
-lamb: 1.0
-alpha: 0.9
+lr: 0.001
+lamb: 1000
+alpha: 0.3

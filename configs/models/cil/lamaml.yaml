@@ -6,5 +6,5 @@ sync_update: false
 use_old_task_memory: false
 second_order: true
 
-opt_lr: 0.1 # n
+opt_lr: 0.01 # n
 alpha_init: 0.1 # alpha

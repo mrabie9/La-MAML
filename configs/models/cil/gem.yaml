@@ -2,5 +2,5 @@
 model: gem
 loader: class_incremental_loader
 
-lr: 0.03
+lr: 0.0003
 memory_strength: 1.0

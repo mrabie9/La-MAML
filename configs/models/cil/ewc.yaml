@@ -2,5 +2,5 @@
 model: ewc
 loader: class_incremental_loader
 
-lr: 0.003
+lr: 0.001
 lamb: 1
