@@ -503,8 +503,8 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 targets,
                 class_weighted_ce=self.class_weighted_ce,
             )
-            loss2 = torch.tensor(0.0, device=x.device)
-            loss3 = torch.tensor(0.0, device=x.device)
+            loss2 = torch.tensor(0.0, device=x_train.device)
+            loss3 = torch.tensor(0.0, device=x_train.device)
             if t > 0:
                 sampled = self.memory_sampling(t)
                 if sampled is not None:
