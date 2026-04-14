@@ -7,6 +7,10 @@ untrained setting (zero-shot only) and writes a combined JSON baseline file.
 Usage:
     python scripts/collect_zero_shot_baselines_all_models.py \
         --output logs/full_experiments/run_20260403_111437_lnx-elkk-1/zs_baseline.json
+
+    python scripts/collect_zero_shot_baselines_all_models.py \
+        --mode cil \
+        --output logs/full_experiments/run_20260403_111437_lnx-elkk-1/zs_baseline_cil.json
 """
 
 from __future__ import annotations
@@ -52,10 +56,22 @@ def _parse_args() -> argparse.Namespace:
         help="Base YAML config applied to every model.",
     )
     parser.add_argument(
+        "--mode",
+        choices=("til", "cil"),
+        default="til",
+        help=(
+            "Experiment mode used to select model configs when --models-dir is not "
+            "provided explicitly."
+        ),
+    )
+    parser.add_argument(
         "--models-dir",
         type=Path,
-        default=Path("configs/models/til"),
-        help="Directory containing per-model YAML files.",
+        default=None,
+        help=(
+            "Directory containing per-model YAML files. Defaults to "
+            "configs/models/<mode>."
+        ),
     )
     parser.add_argument(
         "--models",
@@ -140,6 +156,22 @@ def _selected_model_config_paths(
     return paths
 
 
+def _resolve_models_dir(mode: str, models_dir_override: Path | None) -> Path:
+    """Resolve model config directory from mode and optional explicit override.
+
+    Args:
+        mode: Experiment mode, either ``"til"`` or ``"cil"``.
+        models_dir_override: Optional explicit model directory path from CLI.
+
+    Returns:
+        Directory path that should be scanned for ``*.yaml`` model configs.
+
+    """
+    if models_dir_override is not None:
+        return models_dir_override
+    return Path("configs/models") / mode
+
+
 def _load_args_for_model(base_config: Path, model_config: Path) -> argparse.Namespace:
     """Load and merge YAML parse args for one model (base + model overlay).
 
@@ -208,13 +240,23 @@ def main() -> None:
                 --models cmaml,iid2 \\
                 --output logs/my_run/zs_baseline.json
 
+        Run against CIL model configs::
+
+            python scripts/collect_zero_shot_baselines_all_models.py \\
+                --mode cil \\
+                --output logs/my_run/zs_baseline_cil.json
+
     """
     args = _parse_args()
     if not args.base_config.is_file():
         raise FileNotFoundError(f"Base config not found: {args.base_config}")
+    resolved_models_dir = _resolve_models_dir(
+        mode=args.mode,
+        models_dir_override=args.models_dir,
+    )
 
     model_config_paths = _selected_model_config_paths(
-        args.models_dir,
+        resolved_models_dir,
         args.models,
         include_iid2=args.include_iid2,
     )
