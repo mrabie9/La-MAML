@@ -237,14 +237,14 @@ def _load_args_for_base_config(base_config: Path) -> argparse.Namespace:
 
 def _build_shared_loader(
     base_config: Path,
-) -> tuple[Any, tuple[int, int, int]]:
+) -> tuple[Any, tuple[int, int, int], str]:
     """Build one shared loader and return dataset shape metadata.
 
     Args:
         base_config: Shared base YAML path.
 
     Returns:
-        Tuple of ``(shared_loader, (n_inputs, n_outputs, n_tasks))``.
+        Tuple of ``(shared_loader, (n_inputs, n_outputs, n_tasks), loader_name)``.
 
     """
     base_args = _load_args_for_base_config(base_config)
@@ -252,7 +252,7 @@ def _build_shared_loader(
     loader_module = importlib.import_module(f"dataloaders.{base_args.loader}")
     shared_loader = loader_module.IncrementalLoader(base_args, seed=base_args.seed)
     dataset_info = shared_loader.get_dataset_info()
-    return shared_loader, dataset_info
+    return shared_loader, dataset_info, str(base_args.loader)
 
 
 def _cache_loader_tasks(shared_loader: Any) -> tuple[List[Dict[str, Any]], List[Any]]:
@@ -307,6 +307,7 @@ def _collect_one_model(
     cached_task_infos: Sequence[Dict[str, Any]],
     cached_test_loaders: Sequence[Any],
     shared_dataset_info: tuple[int, int, int],
+    shared_loader_name: str,
 ) -> List[Row]:
     """Run untrained zero-shot evaluation for a single model config file.
 
@@ -322,6 +323,8 @@ def _collect_one_model(
     """
     run_args = _load_args_for_model(base_config, model_config)
     _apply_device_override(run_args, device_choice)
+    # Evaluator type must match how cached tasks were produced.
+    run_args.loader = shared_loader_name
     model = _build_model_from_shared_dataset_info(run_args, shared_dataset_info)
     loader = _CachedTaskLoader(cached_task_infos, cached_test_loaders)
     rows, _matrix_rows = _collect_untrained_zero_shot(
@@ -373,7 +376,9 @@ def main() -> None:
     )
     if not model_config_paths:
         raise SystemExit("No model configs found to evaluate.")
-    shared_loader, shared_dataset_info = _build_shared_loader(args.base_config)
+    shared_loader, shared_dataset_info, shared_loader_name = _build_shared_loader(
+        args.base_config
+    )
     cached_task_infos, cached_test_loaders = _cache_loader_tasks(shared_loader)
 
     all_rows: List[Row] = []
@@ -390,6 +395,7 @@ def main() -> None:
                 cached_task_infos=cached_task_infos,
                 cached_test_loaders=cached_test_loaders,
                 shared_dataset_info=shared_dataset_info,
+                shared_loader_name=shared_loader_name,
             )
             all_rows.extend(rows)
             print(f"[baseline] {model_name}: collected {len(rows)} task rows")
