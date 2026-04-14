@@ -3,33 +3,39 @@
     "lnx-elkk-1": {
       "slot_high": [
         "agem",
-        "hat"
+        "ewc",
+        "si"
       ],
       "slot_low": [
-        "ewc",
-        "bcl_dual",
-        "eralg4"
+        "smaml",
+        "gem",
+        "cmaml"
       ],
-      "estimated_host_wall_seconds": 269.0
+      "estimated_host_wall_seconds": 8635.0
     },
     "lnx-elkk-2": {
       "slot_high": [
-        "er_ring",
-        "gem",
-        "ctn"
+        "bcl_dual",
+        "icarl",
+        "lwf",
+        "rwalk",
+        "ucl"
       ],
       "slot_low": [
-        "cmaml"
+        "lamaml",
+        "eralg4",
+        "la-er",
+        "er_ring"
       ],
-      "estimated_host_wall_seconds": 416.0
+      "estimated_host_wall_seconds": 8653.0
     }
   },
   "stats": {
-    "serial_total_eta_sum_seconds": 955.0,
-    "parallel_makespan_estimated_seconds": 416.0,
-    "percent_time_saved_parallel_vs_serial": 56.43979057591623,
-    "high_count": 5,
-    "low_count": 4
+    "serial_total_eta_sum_seconds": 18132.0,
+    "parallel_makespan_estimated_seconds": 8653.0,
+    "percent_time_saved_parallel_vs_serial": 52.27774101036841,
+    "high_count": 8,
+    "low_count": 7
   },
   "mode": "util_high_low_queue_schedule"
 }
