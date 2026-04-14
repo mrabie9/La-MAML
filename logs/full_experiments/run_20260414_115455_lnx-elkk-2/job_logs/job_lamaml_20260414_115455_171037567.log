@@ -83,3 +83,46 @@ Model device: cuda:0
 ---- Zero-shot (pre-train) task 0: rec_cls 0.0002 | prec_cls 0.0061 | f1_cls 0.1062 | det 0.4988 | pfa 0.0663 | total_f1 0.1062 ----
 [STATE 2026-04-14 11:56:17] Starting task 0 (1/10)
 [STATE 2026-04-14 11:56:17] Task 0 Epoch 1/1: entering train loop
+[STATE 2026-04-14 12:33:55] Task 0 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.6813063456587335] | det_recall [0.5163658820030789] | det_fa [0.8928322984947621] ----
+T0 Ep 1/1 | L 0.6817 | Train Acc 0.40 | Prec 0.48 | F1 0.24 | Det Rec 0.52 | Det FA 0.94 | Epoch Time 2266.99s (Eval 9.56s, Train 2257.43s)
+[STATE 2026-04-14 12:34:04] T0 Ep 1/1 complete: Prec 0.4829 F1 0.2428 DetRec 0.5213 DetFA 0.9375 | 2266.99s total (9.56s eval/2257.43s train)
+[STATE 2026-04-14 12:34:04] Task 0: running final validation.
+[STATE 2026-04-14 12:34:14] Completed task 0 (1/10)
+[STATE 2026-04-14 12:34:14] Task 1: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 1: rec_cls 0.3143 | prec_cls 0.2229 | f1_cls 0.2113 | det 0.5056 | pfa 0.8928 | total_f1 0.3631 ----
+[STATE 2026-04-14 12:34:43] Starting task 1 (2/10)
+[STATE 2026-04-14 12:34:43] Task 1 Epoch 1/1: entering train loop
+[STATE 2026-04-14 13:16:02] Task 1 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.4025081161081682, 0.34015193230669394] | det_recall [0.7565992410636154, 0.8086562870508562] | det_fa [0.0022235724324848613, 0.0185203911521897] ----
+T1 Ep 1/1 | L 0.8879 | Train Acc 0.44 | Prec 0.52 | F1 0.36 | Det Rec 0.62 | Det FA 0.68 | Epoch Time 2498.58s (Eval 19.06s, Train 2479.52s)
+[STATE 2026-04-14 13:16:21] T1 Ep 1/1 complete: Prec 0.5182 F1 0.3585 DetRec 0.6240 DetFA 0.6760 | 2498.58s total (19.06s eval/2479.52s train)
+[STATE 2026-04-14 13:16:21] Task 1: running final validation.
+[STATE 2026-04-14 13:16:40] Completed task 1 (2/10)
+Note: Unified mixed IQ test tensors to (N, 3, L) via ADC0 I/Q + zero-padded ADC1/2 (IID2-style) for cumulative CIL.
+[STATE 2026-04-14 13:16:41] Task 2: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 2: rec_cls 0.0156 | prec_cls 0.0148 | f1_cls 0.0360 | det 0.5536 | pfa 0.2849 | total_f1 0.3122 ----
+[STATE 2026-04-14 13:18:19] Starting task 2 (3/10)
+[STATE 2026-04-14 13:18:19] Task 2 Epoch 1/1: entering train loop
+[STATE 2026-04-14 15:32:58] Task 2 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.08036579407457003, 0.13201674275451386, 0.08229304593956313] | det_recall [0.557670295693715, 0.6742661311035525, 0.6338241138527569] | det_fa [0.00041518929968297055, 0.021997588912828315, 0.5938937290658383] ----
+T2 Ep 1/1 | L 0.8181 | Train Acc 0.36 | Prec 0.59 | F1 0.45 | Det Rec 0.83 | Det FA 0.24 | Epoch Time 8225.27s (Eval 146.57s, Train 8078.70s)
+[STATE 2026-04-14 15:35:24] T2 Ep 1/1 complete: Prec 0.5894 F1 0.4486 DetRec 0.8275 DetFA 0.2370 | 8225.27s total (146.57s eval/8078.70s train)
+[STATE 2026-04-14 15:35:24] Task 2: running final validation.
+[STATE 2026-04-14 15:37:48] Completed task 2 (3/10)
+Note: Unified mixed IQ test tensors to (N, 3, L) via ADC0 I/Q + zero-padded ADC1/2 (IID2-style) for cumulative CIL.
+[STATE 2026-04-14 15:37:49] Task 3: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 3: rec_cls 0.0583 | prec_cls 0.0624 | f1_cls 0.0689 | det 0.5937 | pfa 0.6520 | total_f1 0.1460 ----
+[STATE 2026-04-14 15:41:49] Starting task 3 (4/10)
+[STATE 2026-04-14 15:41:49] Task 3 Epoch 1/1: entering train loop
+[STATE 2026-04-14 15:51:01] Task 3 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.13050001118255322, 0.18874498696037564, 0.08306613149071551, 0.10326301480641834] | det_recall [0.5891669962338829, 0.6730752265617093, 0.702536831875291, 0.640203941949075] | det_fa [0.006028996441426068, 0.005717981873746549, 0.3566371747491467, 0.5331094177651972] ----
+T3 Ep 1/1 | L 0.8694 | Train Acc 0.25 | Prec 0.38 | F1 0.36 | Det Rec 0.91 | Det FA 0.10 | Epoch Time 731.63s (Eval 179.57s, Train 552.06s)
+[STATE 2026-04-14 15:54:00] T3 Ep 1/1 complete: Prec 0.3823 F1 0.3608 DetRec 0.9116 DetFA 0.1005 | 731.63s total (179.57s eval/552.06s train)
+[STATE 2026-04-14 15:54:00] Task 3: running final validation.
+[STATE 2026-04-14 15:57:01] Completed task 3 (4/10)
+Note: Unified mixed IQ test tensors to (N, 3, L) via ADC0 I/Q + zero-padded ADC1/2 (IID2-style) for cumulative CIL.
+[STATE 2026-04-14 15:57:01] Task 4: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 4: rec_cls 0.0758 | prec_cls 0.0635 | f1_cls 0.0581 | det 0.6085 | pfa 0.5890 | total_f1 0.1579 ----
+[STATE 2026-04-14 16:01:21] Starting task 4 (5/10)
+[STATE 2026-04-14 16:01:21] Task 4 Epoch 1/1: entering train loop

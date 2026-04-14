@@ -16,3 +16,6 @@
 [2026-04-14T11:54:55+01:00] START icarl
 [2026-04-14T11:54:55+01:00] --- Dispatching: base + lamaml + lamaml.yaml (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260414_115455_lnx-elkk-2/job_logs/job_lamaml_20260414_115455_171037567.log) ---
 [2026-04-14T11:54:55+01:00] START lamaml
+[2026-04-14T15:16:35+01:00] Completed: icarl (exit 0)
+[2026-04-14T15:16:35+01:00] --- Dispatching: base + lwf + lwf.yaml (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260414_115455_lnx-elkk-2/job_logs/job_lwf_20260414_151635_946268874.log) ---
+[2026-04-14T15:16:35+01:00] START lwf
