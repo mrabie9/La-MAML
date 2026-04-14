@@ -48,6 +48,37 @@ import plot_multi_algorithms as plot_multi  # noqa: E402
 TaskMetrics = Dict[str, Any]
 
 
+def _extract_algo_name_from_job_filename(log_path: Path) -> str | None:
+    """Extract algorithm/config stem from a job log filename.
+
+    Expected patterns include ``job_<algo>.log`` and
+    ``job_<algo>_<timestamp>_<id>.log``.
+
+    Args:
+        log_path: Path to a single ``job_*.log`` file.
+
+    Returns:
+        Algorithm/config stem, or ``None`` when the filename cannot be parsed.
+
+    Usage:
+        >>> isinstance(_extract_algo_name_from_job_filename, object)
+        True
+    """
+    filename_stem = log_path.stem
+    if not filename_stem.startswith("job_"):
+        return None
+    stem_without_prefix = filename_stem[len("job_") :]
+    if not stem_without_prefix:
+        return None
+    timestamp_suffix_match = re.match(
+        r"^(?P<algo>.+)_\d{8}_\d{6}_\d+$",
+        stem_without_prefix,
+    )
+    if timestamp_suffix_match:
+        return timestamp_suffix_match.group("algo")
+    return stem_without_prefix
+
+
 def _extract_model_name_from_log_header(log_path: Path) -> str | None:
     """Extract model name from a job log header.
 
@@ -146,9 +177,11 @@ def _discover_runs_from_run_dir(run_dir: Path) -> tuple[List[str], List[Path]]:
 
     discovered_by_model: Dict[str, Path] = {}
     for job_log in sorted(job_logs_dir.glob("job_*.log")):
-        model_name = _extract_model_name_from_log_header(job_log)
+        algorithm_name = _extract_algo_name_from_job_filename(job_log)
+        if algorithm_name is None:
+            algorithm_name = _extract_model_name_from_log_header(job_log)
         logged_output_dir = _extract_logged_output_dir_from_log(job_log)
-        if model_name is None or logged_output_dir is None:
+        if algorithm_name is None or logged_output_dir is None:
             continue
 
         normalized_logged_output_dir = Path(str(logged_output_dir).replace("//", "/"))
@@ -161,7 +194,7 @@ def _discover_runs_from_run_dir(run_dir: Path) -> tuple[List[str], List[Path]]:
             continue
         if not any(metrics_dir.glob("task*.npz")):
             continue
-        discovered_by_model[model_name] = metrics_dir
+        discovered_by_model[algorithm_name] = metrics_dir
 
     if not discovered_by_model:
         raise SystemExit(
