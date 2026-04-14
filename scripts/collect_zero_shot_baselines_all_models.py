@@ -218,25 +218,54 @@ def _load_args_for_model(base_config: Path, model_config: Path) -> argparse.Name
     return run_args
 
 
-def _load_args_for_base_config(base_config: Path) -> argparse.Namespace:
-    """Load parse args from base YAML only.
+def _load_shared_loader_args(
+    base_config: Path, model_config_paths: Sequence[Path]
+) -> argparse.Namespace:
+    """Load parse args used to build the shared cached task loader.
+
+    The shared loader must match the selected mode/model configs. We infer loader
+    type from model configs and require that all selected models agree on it.
 
     Args:
         base_config: Path to shared base YAML.
+        model_config_paths: Selected model YAML paths.
 
     Returns:
         Parsed namespace used to construct the shared dataloader.
 
+    Raises:
+        ValueError: If selected model configs resolve to mixed loader types.
+
     """
-    base_args = file_parser.parse_args_from_yaml([str(base_config)])
-    base_args.lr = misc_utils.scale_learning_rate_for_batch_size(
-        base_args.lr, base_args.batch_size
+    if not model_config_paths:
+        raise ValueError("At least one model config is required for loader setup.")
+
+    loader_names: set[str] = set()
+    for model_config_path in model_config_paths:
+        model_args = file_parser.parse_args_from_yaml(
+            [str(base_config), str(model_config_path)]
+        )
+        loader_names.add(str(model_args.loader))
+
+    if len(loader_names) != 1:
+        sorted_loader_names = ", ".join(sorted(loader_names))
+        raise ValueError(
+            "Selected models resolve to multiple loader types "
+            f"({sorted_loader_names}). Evaluate homogeneous loaders together."
+        )
+
+    shared_loader_args = file_parser.parse_args_from_yaml(
+        [str(base_config), str(model_config_paths[0])]
     )
-    return base_args
+    shared_loader_args.lr = misc_utils.scale_learning_rate_for_batch_size(
+        shared_loader_args.lr, shared_loader_args.batch_size
+    )
+    return shared_loader_args
 
 
 def _build_shared_loader(
     base_config: Path,
+    model_config_paths: Sequence[Path],
 ) -> tuple[Any, tuple[int, int, int], str]:
     """Build one shared loader and return dataset shape metadata.
 
@@ -247,12 +276,14 @@ def _build_shared_loader(
         Tuple of ``(shared_loader, (n_inputs, n_outputs, n_tasks), loader_name)``.
 
     """
-    base_args = _load_args_for_base_config(base_config)
-    misc_utils.init_seed(base_args.seed)
-    loader_module = importlib.import_module(f"dataloaders.{base_args.loader}")
-    shared_loader = loader_module.IncrementalLoader(base_args, seed=base_args.seed)
+    shared_loader_args = _load_shared_loader_args(base_config, model_config_paths)
+    misc_utils.init_seed(shared_loader_args.seed)
+    loader_module = importlib.import_module(f"dataloaders.{shared_loader_args.loader}")
+    shared_loader = loader_module.IncrementalLoader(
+        shared_loader_args, seed=shared_loader_args.seed
+    )
     dataset_info = shared_loader.get_dataset_info()
-    return shared_loader, dataset_info, str(base_args.loader)
+    return shared_loader, dataset_info, str(shared_loader_args.loader)
 
 
 def _cache_loader_tasks(shared_loader: Any) -> tuple[List[Dict[str, Any]], List[Any]]:
@@ -377,7 +408,7 @@ def main() -> None:
     if not model_config_paths:
         raise SystemExit("No model configs found to evaluate.")
     shared_loader, shared_dataset_info, shared_loader_name = _build_shared_loader(
-        args.base_config
+        args.base_config, model_config_paths
     )
     cached_task_infos, cached_test_loaders = _cache_loader_tasks(shared_loader)
 
