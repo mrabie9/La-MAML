@@ -665,40 +665,47 @@ def main() -> None:
         )
     )
 
-    for row in scalar_rows:
-        baseline_value = baseline_lookup.get(
-            (str(row["algo"]).strip().lower(), int(row["task_index"])),
-            float("nan"),
-        )
-        row["baseline_total_f1_zs"] = baseline_value
-        row["forward_transfer_total_f1_zs"] = (
-            _safe_float(row["zero_shot_total_f1_zs"]) - baseline_value
-            if not math.isnan(baseline_value)
-            else float("nan")
-        )
+    include_baseline_columns = bool(baseline_lookup)
+    if include_baseline_columns:
+        for row in scalar_rows:
+            baseline_value = baseline_lookup.get(
+                (str(row["algo"]).strip().lower(), int(row["task_index"])),
+                float("nan"),
+            )
+            row["baseline_total_f1_zs"] = baseline_value
+            row["forward_transfer_total_f1_zs"] = (
+                _safe_float(row["zero_shot_total_f1_zs"]) - baseline_value
+                if not math.isnan(baseline_value)
+                else float("nan")
+            )
 
     header = (
         f"{'algo':<12} {'task':>4} {'f1_cls':>10} {'rec_cls':>10} "
-        f"{'prec_cls':>10} {'det':>10} {'pfa':>10} {'total_f1_zs':>12} "
-        f"{'baseline':>10} {'fwt':>10}"
+        f"{'prec_cls':>10} {'det':>10} {'pfa':>10} {'total_f1_zs':>12}"
     )
+    if include_baseline_columns:
+        header += f" {'baseline':>10} {'fwt':>10}"
     print(header)
     print("-" * len(header))
     for row in scalar_rows:
-        print(
+        line = (
             f"{row['algo']:<12} {row['task_index']:4d} "
             f"{row['zero_shot_f1_cls']:10.6f} "
             f"{row['zero_shot_rec_cls']:10.6f} {row['zero_shot_prec_cls']:10.6f} "
             f"{row['zero_shot_det']:10.6f} {row['zero_shot_pfa']:10.6f} "
-            f"{row['zero_shot_total_f1_zs']:12.6f} "
-            f"{row['baseline_total_f1_zs']:10.6f} "
-            f"{row['forward_transfer_total_f1_zs']:10.6f}"
+            f"{row['zero_shot_total_f1_zs']:12.6f}"
         )
+        if include_baseline_columns:
+            line += (
+                f" {row['baseline_total_f1_zs']:10.6f} "
+                f"{row['forward_transfer_total_f1_zs']:10.6f}"
+            )
+        print(line)
     print(
         "\nNote: f1_cls is recomputed from rec_cls/prec_cls as 2PR/(P+R). "
         "total_f1_zs is the raw stored zero_shot_f1_cls from logs."
     )
-    if baseline_lookup:
+    if include_baseline_columns:
         print(
             "Forward transfer (fwt) is computed as total_f1_zs - baseline_total_f1_zs; "
             "positive means validation is above baseline."
