@@ -471,16 +471,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         #             param.add_(grad, alpha=-self.inner_lr)
         # else:
         if True:
-            det_loss_value = torch.zeros(
-                (), device=raw_x_train.device, dtype=torch.float32
-            )
-
-        # Slicing (e.g. ``raw_x_train = raw_x_train[1:]``) is a view into ``x`` and is not a
-        # leaf. After ``autograd.grad`` frees the first forward's graph, re-feeding that view
-        # into ``_canonicalize_input`` / ``adapter`` can raise "backward through the graph a
-        # second time". Detach to values-only, then opt in to gradients as a fresh leaf each
-        # outer ``observe`` (inner loop iterations then rebuild distinct graphs from it).
-        raw_x_train = raw_x_train.detach().requires_grad_(True)
+            det_loss_value = torch.zeros((), device=x_train.device, dtype=torch.float32)
 
         # Rebuild canonicalized train input each inner SGD step from raw inputs to avoid
         # reusing a freed autograd graph while still allowing adapter gradients.
