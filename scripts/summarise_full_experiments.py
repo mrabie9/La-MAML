@@ -37,6 +37,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import numpy as np
+
 
 @dataclass
 class AlgoSummary:
@@ -94,6 +96,8 @@ SUMMARY_TE_RE = re.compile(
 )
 MODEL_SIZE_RE = re.compile(r"Model size:\s+(?P<gb>[0-9.]+)\s+GB")
 LOG_TIMESTAMP_RE = re.compile(r"^\[(?P<stamp>\d{4}-\d{2}-\d{2}T[^]]+)\]")
+LOGGING_TO_RE = re.compile(r"Logging to\s+(?P<path>\S+)")
+RESULTS_DICT_RE = re.compile(r"'log_dir':\s*'(?P<path>[^']+)'")
 
 
 def _find_default_log() -> str:
@@ -310,6 +314,185 @@ def parse_job_log(path: str, algo_name: Optional[str] = None) -> Dict[str, AlgoS
     return summaries
 
 
+def _to_float_or_none(raw_value: object) -> Optional[float]:
+    """Convert an NP value/array to the latest finite float.
+
+    Args:
+        raw_value: Raw object loaded from an NPZ entry.
+
+    Returns:
+        Last finite numeric value if available, otherwise None.
+    """
+    array = np.asarray(raw_value)
+    if array.size == 0:
+        return None
+    flattened_values = array.astype(float).reshape(-1)
+    finite_values = flattened_values[np.isfinite(flattened_values)]
+    if finite_values.size == 0:
+        return None
+    return float(finite_values[-1])
+
+
+def _extract_log_dir_from_job_log(job_log_path: str) -> Optional[str]:
+    """Extract the per-run logging directory from a job log.
+
+    Args:
+        job_log_path: Path to a single algorithm job log.
+
+    Returns:
+        Reported run directory path if found, else None.
+    """
+    extracted_log_dir: Optional[str] = None
+    with open(job_log_path, "r", encoding="utf-8") as file_handle:
+        for line in file_handle:
+            logging_match = LOGGING_TO_RE.search(line)
+            if logging_match:
+                extracted_log_dir = logging_match.group("path").strip()
+            results_match = RESULTS_DICT_RE.search(line)
+            if results_match:
+                extracted_log_dir = results_match.group("path").strip()
+    return extracted_log_dir
+
+
+def _resolve_existing_log_dir(job_log_path: str, raw_log_dir: str) -> Optional[Path]:
+    """Resolve a raw run directory string to an existing path.
+
+    Args:
+        job_log_path: Path to the job log containing the directory hint.
+        raw_log_dir: Directory string parsed from that job log.
+
+    Returns:
+        Existing directory path if found, otherwise None.
+    """
+    cleaned_relative_path = raw_log_dir.strip().replace("//", "/").lstrip("./")
+    candidate_paths: List[Path] = []
+    parsed_path = Path(cleaned_relative_path)
+    if parsed_path.is_absolute():
+        candidate_paths.append(parsed_path)
+    else:
+        candidate_paths.append(Path.cwd() / parsed_path)
+        candidate_paths.append(Path(job_log_path).resolve().parent / parsed_path)
+    for candidate_path in candidate_paths:
+        if candidate_path.exists():
+            return candidate_path
+    return None
+
+
+def _fill_missing_metrics_from_npz(
+    summary: AlgoSummary, metrics_file_path: Path
+) -> None:
+    """Populate missing summary metrics from a task metrics NPZ.
+
+    Args:
+        summary: Algorithm summary object to augment in-place.
+        metrics_file_path: Path to the selected task metrics file.
+
+    Returns:
+        None.
+    """
+    with np.load(metrics_file_path, allow_pickle=False) as metrics_data:
+        train_recall = (
+            _to_float_or_none(metrics_data["train_cls_rec"])
+            if "train_cls_rec" in metrics_data
+            else None
+        )
+        train_precision = (
+            _to_float_or_none(metrics_data["train_cls_prec"])
+            if "train_cls_prec" in metrics_data
+            else None
+        )
+        train_f1 = (
+            _to_float_or_none(metrics_data["train_f1"])
+            if "train_f1" in metrics_data
+            else None
+        )
+        train_detection = (
+            _to_float_or_none(metrics_data["train_det_rec"])
+            if "train_det_rec" in metrics_data
+            else None
+        )
+        train_false_alarm = (
+            _to_float_or_none(metrics_data["train_det_pfa"])
+            if "train_det_pfa" in metrics_data
+            else None
+        )
+
+        validation_recall = (
+            _to_float_or_none(metrics_data["val_cls_rec"])
+            if "val_cls_rec" in metrics_data
+            else None
+        )
+        validation_precision = (
+            _to_float_or_none(metrics_data["val_cls_prec"])
+            if "val_cls_prec" in metrics_data
+            else None
+        )
+        validation_f1 = (
+            _to_float_or_none(metrics_data["val_f1"])
+            if "val_f1" in metrics_data
+            else None
+        )
+        validation_detection = (
+            _to_float_or_none(metrics_data["val_det_rec"])
+            if "val_det_rec" in metrics_data
+            else None
+        )
+        validation_false_alarm = None
+        if "val_det_pfa" in metrics_data:
+            validation_false_alarm = _to_float_or_none(metrics_data["val_det_pfa"])
+        elif "val_det_fa" in metrics_data:
+            validation_false_alarm = _to_float_or_none(metrics_data["val_det_fa"])
+
+    if summary.cls_rec_tr is None:
+        summary.cls_rec_tr = train_recall
+    if summary.cls_prec_tr is None:
+        summary.cls_prec_tr = train_precision
+    if summary.cls_f1_tr is None:
+        summary.cls_f1_tr = train_f1
+    if summary.det_tr is None:
+        summary.det_tr = train_detection
+    if summary.fa_tr is None:
+        summary.fa_tr = train_false_alarm
+
+    if summary.cls_rec_te is None:
+        summary.cls_rec_te = validation_recall
+    if summary.cls_prec_te is None:
+        summary.cls_prec_te = validation_precision
+    if summary.cls_f1_te is None:
+        summary.cls_f1_te = validation_f1
+    if summary.det_te is None:
+        summary.det_te = validation_detection
+    if summary.fa_te is None:
+        summary.fa_te = validation_false_alarm
+
+
+def _apply_metrics_fallback_from_job_log(
+    summary: AlgoSummary, job_log_path: str
+) -> None:
+    """Use task metrics NPZ files when terminal log metrics are missing.
+
+    Args:
+        summary: Algorithm summary object to augment in-place.
+        job_log_path: Path to the algorithm job log.
+
+    Returns:
+        None.
+    """
+    raw_log_directory = _extract_log_dir_from_job_log(job_log_path)
+    if not raw_log_directory:
+        return
+    resolved_log_directory = _resolve_existing_log_dir(job_log_path, raw_log_directory)
+    if resolved_log_directory is None:
+        return
+    task_metric_paths = sorted(
+        resolved_log_directory.glob("metrics/task*.npz"),
+        key=lambda path: int(path.stem.replace("task", "")),
+    )
+    if not task_metric_paths:
+        return
+    _fill_missing_metrics_from_npz(summary, task_metric_paths[-1])
+
+
 def _merge_summary(into: AlgoSummary, source: AlgoSummary) -> None:
     for field_name in (
         "cls_rec_tr",
@@ -368,6 +551,7 @@ def parse_run_directory(path: str) -> Dict[str, AlgoSummary]:
         if algo_name in job_summaries:
             summary = summaries.setdefault(algo_name, AlgoSummary(name=algo_name))
             _merge_summary(summary, job_summaries[algo_name])
+            _apply_metrics_fallback_from_job_log(summary, job_log_path)
 
     return summaries
 
