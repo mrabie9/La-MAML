@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Sequence, Tuple
@@ -45,6 +46,149 @@ if str(_SCRIPT_DIR) not in sys.path:
 import plot_multi_algorithms as plot_multi  # noqa: E402
 
 TaskMetrics = Dict[str, Any]
+
+
+def _extract_algo_name_from_job_filename(log_path: Path) -> str | None:
+    """Extract algorithm/config stem from a job log filename.
+
+    Args:
+        log_path: Path to a single ``job_*.log`` file.
+
+    Returns:
+        Algorithm/config stem, or ``None`` when parsing fails.
+
+    Usage:
+        >>> isinstance(_extract_algo_name_from_job_filename, object)
+        True
+    """
+    filename_stem = log_path.stem
+    if not filename_stem.startswith("job_"):
+        return None
+    stem_without_prefix = filename_stem[len("job_") :]
+    if not stem_without_prefix:
+        return None
+    timestamp_suffix_match = re.match(
+        r"^(?P<algo>.+)_\d{8}_\d{6}_\d+$",
+        stem_without_prefix,
+    )
+    if timestamp_suffix_match:
+        return timestamp_suffix_match.group("algo")
+    return stem_without_prefix
+
+
+def _extract_model_name_from_log_header(log_path: Path) -> str | None:
+    """Extract model name from the beginning of a job log.
+
+    Args:
+        log_path: Path to a single ``job_*.log`` file.
+
+    Returns:
+        Parsed runtime model name, or ``None`` when unavailable.
+
+    Usage:
+        >>> isinstance(_extract_model_name_from_log_header, object)
+        True
+    """
+    max_lines_to_scan = 40
+    with log_path.open("r", encoding="utf-8", errors="replace") as log_file:
+        for line_index, line_text in enumerate(log_file):
+            if line_index >= max_lines_to_scan:
+                break
+            model_match = re.search(r"Running model:\s*([A-Za-z0-9_.-]+)", line_text)
+            if model_match:
+                return model_match.group(1).strip()
+    return None
+
+
+def _extract_logged_output_dir_from_log(log_path: Path) -> Path | None:
+    """Extract experiment output directory from a job log.
+
+    Args:
+        log_path: Path to a single ``job_*.log`` file.
+
+    Returns:
+        Relative or absolute output directory path, or ``None`` when not found.
+
+    Usage:
+        >>> isinstance(_extract_logged_output_dir_from_log, object)
+        True
+    """
+    max_lines_to_scan = 80
+    with log_path.open("r", encoding="utf-8", errors="replace") as log_file:
+        for line_index, line_text in enumerate(log_file):
+            if line_index >= max_lines_to_scan:
+                break
+            logging_to_match = re.search(r"Logging to\s+(.+?)\s*$", line_text)
+            if logging_to_match:
+                return Path(logging_to_match.group(1).strip())
+            terminal_log_match = re.search(
+                r"Enabling terminal logging to\s+(.+?)/terminal\.log\s*$",
+                line_text,
+            )
+            if terminal_log_match:
+                return Path(terminal_log_match.group(1).strip())
+    return None
+
+
+def _resolve_output_dir_to_metrics_dir(output_dir: Path) -> Path:
+    """Resolve an experiment output directory to its metrics subdirectory."""
+    return output_dir / "metrics"
+
+
+def _discover_runs_from_run_dir(run_dir: Path) -> tuple[List[str], List[Path]]:
+    """Discover algorithm names and metrics directories from a run folder.
+
+    Args:
+        run_dir: Full run directory containing ``job_logs``.
+
+    Returns:
+        Tuple ``(algorithm_names, metrics_dirs)`` sorted by algorithm name.
+
+    Raises:
+        SystemExit: If run dir is invalid or no usable metrics dirs are found.
+
+    Usage:
+        >>> isinstance(_discover_runs_from_run_dir, object)
+        True
+    """
+    if not run_dir.is_dir():
+        raise SystemExit(f"--run-dir is not a directory: {run_dir}")
+
+    job_logs_dir = run_dir / "job_logs"
+    if not job_logs_dir.is_dir():
+        raise SystemExit(f"--run-dir does not contain job_logs/: {run_dir}")
+
+    discovered_by_algo: Dict[str, Path] = {}
+    for job_log in sorted(job_logs_dir.glob("job_*.log")):
+        algorithm_name = _extract_algo_name_from_job_filename(job_log)
+        if algorithm_name is None:
+            algorithm_name = _extract_model_name_from_log_header(job_log)
+        logged_output_dir = _extract_logged_output_dir_from_log(job_log)
+        if algorithm_name is None or logged_output_dir is None:
+            continue
+
+        normalized_output_dir = Path(str(logged_output_dir).replace("//", "/"))
+        if normalized_output_dir.is_absolute():
+            output_dir = normalized_output_dir
+        else:
+            output_dir = (_SCRIPT_DIR.parent / normalized_output_dir).resolve()
+        metrics_dir = _resolve_output_dir_to_metrics_dir(output_dir).resolve()
+        if not metrics_dir.is_dir():
+            continue
+        if not any(metrics_dir.glob("task*.npz")):
+            continue
+        discovered_by_algo[algorithm_name] = metrics_dir
+
+    if not discovered_by_algo:
+        raise SystemExit(
+            "No metrics directories discovered from job logs under "
+            f"{job_logs_dir}. Ensure the run has completed and wrote task*.npz files."
+        )
+
+    sorted_algorithms = sorted(discovered_by_algo.keys())
+    algorithm_names = [name for name in sorted_algorithms]
+    metrics_dirs = [discovered_by_algo[name] for name in sorted_algorithms]
+    return algorithm_names, metrics_dirs
 
 
 def _comma_separated_list(argument_value: str) -> List[str]:
@@ -167,10 +311,20 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--algo",
         type=str,
-        required=True,
+        required=False,
         help=(
             "Comma-separated algorithm names (e.g. 'cmaml,hat') or a single "
-            "name. Whitespace around commas is ignored."
+            "name. Optional when --run-dir is provided."
+        ),
+    )
+    parser.add_argument(
+        "--run-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Run directory containing job_logs (for example a full_experiments "
+            "run folder). When provided, models are auto-discovered from job logs "
+            "and metrics directories are resolved automatically."
         ),
     )
     parser.add_argument(
@@ -220,17 +374,26 @@ def _parse_args() -> argparse.Namespace:
 def main() -> None:
     """Load metrics per algorithm and print final forgetting and BWT."""
     args = _parse_args()
-    algorithm_names = _comma_separated_list(args.algo)
-    if not algorithm_names:
-        raise SystemExit("--algo must contain at least one algorithm name.")
-
-    metrics_dirs_list: List[Path] | None
-    if args.metrics_dir is None:
-        metrics_dirs_list = None
+    if args.run_dir is not None:
+        if args.algo is not None:
+            raise SystemExit("Use either --run-dir or --algo/--metrics-dir, not both.")
+        if args.metrics_dir is not None:
+            raise SystemExit("Use either --run-dir or --metrics-dir, not both.")
+        algorithm_names, metrics_dirs_list = _discover_runs_from_run_dir(args.run_dir)
     else:
-        metrics_dirs_list = [
-            Path(part) for part in _comma_separated_list(args.metrics_dir)
-        ]
+        if args.algo is None:
+            raise SystemExit("Provide --algo (or use --run-dir for auto-discovery).")
+        algorithm_names = _comma_separated_list(args.algo)
+        if not algorithm_names:
+            raise SystemExit("--algo must contain at least one algorithm name.")
+
+        metrics_dirs_list: List[Path] | None
+        if args.metrics_dir is None:
+            metrics_dirs_list = None
+        else:
+            metrics_dirs_list = [
+                Path(part) for part in _comma_separated_list(args.metrics_dir)
+            ]
 
     runs = _prepare_runs(
         algos=algorithm_names,
