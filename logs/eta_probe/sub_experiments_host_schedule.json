@@ -2,29 +2,34 @@
   "hosts": {
     "lnx-elkk-1": {
       "slot_high": [
-        "icarl"
+        "si",
+        "iid2",
+        "ucl"
       ],
       "slot_low": [
         "la-er"
       ],
-      "estimated_host_wall_seconds": 406.0
+      "estimated_host_wall_seconds": 8635.0
     },
     "lnx-elkk-2": {
       "slot_high": [
-        
+        "icarl",
+        "lwf",
+        "rwalk"
       ],
       "slot_low": [
-        "ctn"
+        "lamaml",
+        "smaml"
       ],
-      "estimated_host_wall_seconds": 69.0
+      "estimated_host_wall_seconds": 8653.0
     }
   },
   "stats": {
-    "serial_total_eta_sum_seconds": 631.0,
-    "parallel_makespan_estimated_seconds": 406.0,
-    "percent_time_saved_parallel_vs_serial": 35.657686212361334,
-    "high_count": 3,
-    "low_count": 3
+    "serial_total_eta_sum_seconds": 18132.0,
+    "parallel_makespan_estimated_seconds": 8653.0,
+    "percent_time_saved_parallel_vs_serial": 52.27774101036841,
+    "high_count": 8,
+    "low_count": 7
   },
   "mode": "util_high_low_queue_schedule"
 }
