@@ -511,6 +511,16 @@ def _parse_args() -> argparse.Namespace:
         help="Optional JSON output path for per-task scalar zero-shot rows.",
     )
     parser.add_argument(
+        "--baseline-json",
+        type=Path,
+        default=None,
+        help=(
+            "Optional baseline JSON (e.g., zs_baselines.json). When provided, "
+            "prints baseline total_f1_zs and forward transfer "
+            "(zero_shot_total_f1_zs - baseline_total_f1_zs)."
+        ),
+    )
+    parser.add_argument(
         "--include-per-task",
         action="store_true",
         help=(
@@ -571,6 +581,34 @@ def _nan_to_none(value: Any) -> Any:
     return value
 
 
+def _build_baseline_lookup(
+    baseline_rows: Sequence[Dict[str, Any]],
+) -> Dict[tuple[str, int], float]:
+    """Build ``(algo, task) -> baseline total_f1_zs`` lookup map.
+
+    Args:
+        baseline_rows: Parsed baseline rows from JSON.
+
+    Returns:
+        Lookup keyed by normalized algorithm name and task index.
+
+    Usage:
+        >>> isinstance(_build_baseline_lookup, object)
+        True
+    """
+    baseline_lookup: Dict[tuple[str, int], float] = {}
+    for row in baseline_rows:
+        algo_name = str(row.get("algo", "")).strip().lower()
+        if not algo_name:
+            continue
+        try:
+            task_index = int(row.get("task"))
+        except (TypeError, ValueError):
+            continue
+        baseline_lookup[(algo_name, task_index)] = _safe_float(row.get("total_f1_zs"))
+    return baseline_lookup
+
+
 def main() -> None:
     """Collect and print zero-shot validation metrics across task checkpoints."""
     args = _parse_args()
@@ -601,6 +639,15 @@ def main() -> None:
         logs_root=args.logs_root,
         run_index=args.run_index,
     )
+    baseline_lookup: Dict[tuple[str, int], float] = {}
+    if args.baseline_json is not None:
+        if not args.baseline_json.is_file():
+            raise SystemExit(f"--baseline-json file not found: {args.baseline_json}")
+        with args.baseline_json.open("r", encoding="utf-8") as baseline_file:
+            baseline_payload = json.load(baseline_file)
+        if not isinstance(baseline_payload, list):
+            raise SystemExit("--baseline-json must contain a JSON list of rows.")
+        baseline_lookup = _build_baseline_lookup(baseline_payload)
 
     scalar_rows: List[Dict[str, Any]] = []
     matrix_rows: List[Dict[str, Any]] = []
@@ -618,9 +665,22 @@ def main() -> None:
         )
     )
 
+    for row in scalar_rows:
+        baseline_value = baseline_lookup.get(
+            (str(row["algo"]).strip().lower(), int(row["task_index"])),
+            float("nan"),
+        )
+        row["baseline_total_f1_zs"] = baseline_value
+        row["forward_transfer_total_f1_zs"] = (
+            _safe_float(row["zero_shot_total_f1_zs"]) - baseline_value
+            if not math.isnan(baseline_value)
+            else float("nan")
+        )
+
     header = (
         f"{'algo':<12} {'task':>4} {'f1_cls':>10} {'rec_cls':>10} "
-        f"{'prec_cls':>10} {'det':>10} {'pfa':>10} {'total_f1_zs':>12}"
+        f"{'prec_cls':>10} {'det':>10} {'pfa':>10} {'total_f1_zs':>12} "
+        f"{'baseline':>10} {'fwt':>10}"
     )
     print(header)
     print("-" * len(header))
@@ -630,12 +690,44 @@ def main() -> None:
             f"{row['zero_shot_f1_cls']:10.6f} "
             f"{row['zero_shot_rec_cls']:10.6f} {row['zero_shot_prec_cls']:10.6f} "
             f"{row['zero_shot_det']:10.6f} {row['zero_shot_pfa']:10.6f} "
-            f"{row['zero_shot_total_f1_zs']:12.6f}"
+            f"{row['zero_shot_total_f1_zs']:12.6f} "
+            f"{row['baseline_total_f1_zs']:10.6f} "
+            f"{row['forward_transfer_total_f1_zs']:10.6f}"
         )
     print(
         "\nNote: f1_cls is recomputed from rec_cls/prec_cls as 2PR/(P+R). "
         "total_f1_zs is the raw stored zero_shot_f1_cls from logs."
     )
+    if baseline_lookup:
+        print(
+            "Forward transfer (fwt) is computed as total_f1_zs - baseline_total_f1_zs; "
+            "positive means validation is above baseline."
+        )
+        average_fwt_by_algo: Dict[str, List[float]] = {}
+        for row in scalar_rows:
+            algorithm_name = str(row["algo"])
+            task_index = int(row["task_index"])
+            forward_transfer_value = _safe_float(row["forward_transfer_total_f1_zs"])
+            if task_index > 9 or math.isnan(forward_transfer_value):
+                continue
+            average_fwt_by_algo.setdefault(algorithm_name, []).append(
+                forward_transfer_value
+            )
+
+        print("\nAverage FWT after task 9 (per algo):")
+        for algorithm_name in sorted({str(row["algo"]) for row in scalar_rows}):
+            algo_task_indices = {
+                int(row["task_index"])
+                for row in scalar_rows
+                if str(row["algo"]) == algorithm_name
+            }
+            if 9 not in algo_task_indices:
+                continue
+            algo_values = average_fwt_by_algo.get(algorithm_name, [])
+            if not algo_values:
+                print(f"- {algorithm_name}: NaN")
+                continue
+            print(f"- {algorithm_name}: {float(np.mean(algo_values)):.6f}")
 
     if args.csv is not None:
         _write_csv(scalar_rows, args.csv)
