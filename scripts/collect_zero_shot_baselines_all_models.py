@@ -128,6 +128,14 @@ def _parse_args() -> argparse.Namespace:
         help="Output JSON path for aggregated baseline rows.",
     )
     parser.add_argument(
+        "--append-output",
+        action="store_true",
+        help=(
+            "Append newly collected rows to an existing output JSON list instead "
+            "of overwriting the file."
+        ),
+    )
+    parser.add_argument(
         "--fail-fast",
         action="store_true",
         help="Stop immediately if one model evaluation fails.",
@@ -216,6 +224,32 @@ def _load_args_for_model(base_config: Path, model_config: Path) -> argparse.Name
         run_args.lr, run_args.batch_size
     )
     return run_args
+
+
+def _apply_model_runtime_overrides(run_args: argparse.Namespace) -> None:
+    """Apply defensive per-model runtime overrides before evaluation.
+
+    Args:
+        run_args: Parsed model runtime args produced from YAML chain.
+
+    """
+    model_name = str(getattr(run_args, "model", "")).lower()
+    if model_name != "icarl":
+        return
+
+    configured_samples_per_task = int(getattr(run_args, "samples_per_task", -1))
+    if configured_samples_per_task > 0:
+        return
+
+    n_tasks = max(int(getattr(run_args, "n_tasks", 1)), 1)
+    n_memories = max(int(getattr(run_args, "n_memories", 1)), 1)
+    inferred_samples_per_task = max(n_memories // n_tasks, 1)
+    run_args.samples_per_task = inferred_samples_per_task
+    print(
+        "[baseline] icarl: samples_per_task was <= 0; "
+        f"using inferred value {inferred_samples_per_task} "
+        f"from n_memories={n_memories}, n_tasks={n_tasks}"
+    )
 
 
 def _load_shared_loader_args(
@@ -353,6 +387,7 @@ def _collect_one_model(
 
     """
     run_args = _load_args_for_model(base_config, model_config)
+    _apply_model_runtime_overrides(run_args)
     _apply_device_override(run_args, device_choice)
     # Evaluator type must match how cached tasks were produced.
     run_args.loader = shared_loader_name
@@ -365,6 +400,31 @@ def _collect_one_model(
         include_cumulative_matrix=False,
     )
     return rows
+
+
+def _load_existing_rows_for_append(output_path: Path) -> List[Row]:
+    """Load existing output rows when --append-output is enabled.
+
+    Args:
+        output_path: Output JSON path potentially containing prior rows.
+
+    Returns:
+        Existing row list, or an empty list if the file does not exist.
+
+    Raises:
+        ValueError: If output JSON exists but is not a list.
+
+    """
+    if not output_path.is_file():
+        return []
+
+    with output_path.open("r", encoding="utf-8") as output_file:
+        existing_payload = json.load(output_file)
+    if not isinstance(existing_payload, list):
+        raise ValueError(
+            f"Existing output JSON must be a list to append: {output_path}"
+        )
+    return list(existing_payload)
 
 
 def main() -> None:
@@ -436,6 +496,15 @@ def main() -> None:
             print(f"[baseline] FAILED {message}")
             if args.fail_fast:
                 raise
+
+    if args.append_output:
+        existing_rows = _load_existing_rows_for_append(args.output)
+        if existing_rows:
+            print(
+                f"[baseline] appending {len(all_rows)} rows to "
+                f"{len(existing_rows)} existing rows in {args.output}"
+            )
+        all_rows = existing_rows + all_rows
 
     all_rows.sort(key=lambda row: (str(row.get("algo", "")), int(row.get("task", -1))))
     args.output.parent.mkdir(parents=True, exist_ok=True)
