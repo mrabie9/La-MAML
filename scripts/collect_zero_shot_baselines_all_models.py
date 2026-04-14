@@ -16,10 +16,11 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Sequence, Tuple
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
@@ -30,12 +31,36 @@ from utils import misc_utils  # noqa: E402
 
 from evaluate_zero_shot_untrained import (  # noqa: E402
     _apply_device_override,
-    _build_model_and_loader,
     _collect_untrained_zero_shot,
     _nan_to_none,
 )
 
 Row = Dict[str, Any]
+
+
+class _CachedTaskLoader:
+    """Replay precomputed test tasks via the IncrementalLoader interface.
+
+    This adapter lets each model evaluation iterate over the exact same task
+    sequence without rebuilding the underlying dataset loader.
+    """
+
+    def __init__(
+        self, task_infos: Sequence[Dict[str, Any]], test_loaders: Sequence[Any]
+    ):
+        self._task_infos = [dict(task_info) for task_info in task_infos]
+        self._test_loaders = list(test_loaders)
+        self.n_tasks = len(self._test_loaders)
+        self._current_task = 0
+
+    def new_task(self) -> Tuple[Dict[str, Any], None, None, Any]:
+        """Return the next cached task tuple expected by evaluators."""
+        if self._current_task >= self.n_tasks:
+            raise Exception("No more tasks available.")
+        task_info = dict(self._task_infos[self._current_task])
+        test_loader = self._test_loaders[self._current_task]
+        self._current_task += 1
+        return task_info, None, None, test_loader
 
 
 def _parse_args() -> argparse.Namespace:
@@ -193,10 +218,95 @@ def _load_args_for_model(base_config: Path, model_config: Path) -> argparse.Name
     return run_args
 
 
+def _load_args_for_base_config(base_config: Path) -> argparse.Namespace:
+    """Load parse args from base YAML only.
+
+    Args:
+        base_config: Path to shared base YAML.
+
+    Returns:
+        Parsed namespace used to construct the shared dataloader.
+
+    """
+    base_args = file_parser.parse_args_from_yaml([str(base_config)])
+    base_args.lr = misc_utils.scale_learning_rate_for_batch_size(
+        base_args.lr, base_args.batch_size
+    )
+    return base_args
+
+
+def _build_shared_loader(
+    base_config: Path,
+) -> tuple[Any, tuple[int, int, int]]:
+    """Build one shared loader and return dataset shape metadata.
+
+    Args:
+        base_config: Shared base YAML path.
+
+    Returns:
+        Tuple of ``(shared_loader, (n_inputs, n_outputs, n_tasks))``.
+
+    """
+    base_args = _load_args_for_base_config(base_config)
+    misc_utils.init_seed(base_args.seed)
+    loader_module = importlib.import_module(f"dataloaders.{base_args.loader}")
+    shared_loader = loader_module.IncrementalLoader(base_args, seed=base_args.seed)
+    dataset_info = shared_loader.get_dataset_info()
+    return shared_loader, dataset_info
+
+
+def _cache_loader_tasks(shared_loader: Any) -> tuple[List[Dict[str, Any]], List[Any]]:
+    """Extract and cache per-task metadata and test loaders once.
+
+    Args:
+        shared_loader: Loader built from ``configs/base.yaml``.
+
+    Returns:
+        Pair ``(task_infos, test_loaders)`` suitable for replay.
+
+    """
+    task_infos: List[Dict[str, Any]] = []
+    test_loaders: List[Any] = []
+    for _ in range(shared_loader.n_tasks):
+        task_info, _train_loader, _val_loader, test_loader = shared_loader.new_task()
+        task_infos.append(dict(task_info))
+        test_loaders.append(test_loader)
+    return task_infos, test_loaders
+
+
+def _build_model_from_shared_dataset_info(
+    run_args: argparse.Namespace,
+    dataset_info: tuple[int, int, int],
+) -> Any:
+    """Instantiate an untrained model using shared loader dataset dimensions.
+
+    Args:
+        run_args: Model runtime args (base + model config).
+        dataset_info: Tuple ``(n_inputs, n_outputs, n_tasks)``.
+
+    Returns:
+        Untrained model instance on the chosen device.
+
+    """
+    n_inputs, n_outputs, n_tasks = dataset_info
+    model_module = importlib.import_module(f"model.{run_args.model}")
+    model = model_module.Net(n_inputs, n_outputs, n_tasks, run_args)
+    if run_args.cuda:
+        try:
+            model.cuda()
+        except RuntimeError:
+            run_args.cuda = False
+            model.cpu()
+    return model
+
+
 def _collect_one_model(
     base_config: Path,
     model_config: Path,
     device_choice: str,
+    cached_task_infos: Sequence[Dict[str, Any]],
+    cached_test_loaders: Sequence[Any],
+    shared_dataset_info: tuple[int, int, int],
 ) -> List[Row]:
     """Run untrained zero-shot evaluation for a single model config file.
 
@@ -212,7 +322,8 @@ def _collect_one_model(
     """
     run_args = _load_args_for_model(base_config, model_config)
     _apply_device_override(run_args, device_choice)
-    model, loader = _build_model_and_loader(run_args)
+    model = _build_model_from_shared_dataset_info(run_args, shared_dataset_info)
+    loader = _CachedTaskLoader(cached_task_infos, cached_test_loaders)
     rows, _matrix_rows = _collect_untrained_zero_shot(
         model=model,
         loader=loader,
@@ -262,6 +373,8 @@ def main() -> None:
     )
     if not model_config_paths:
         raise SystemExit("No model configs found to evaluate.")
+    shared_loader, shared_dataset_info = _build_shared_loader(args.base_config)
+    cached_task_infos, cached_test_loaders = _cache_loader_tasks(shared_loader)
 
     all_rows: List[Row] = []
     failures: List[str] = []
@@ -274,6 +387,9 @@ def main() -> None:
                 base_config=args.base_config,
                 model_config=model_config_path,
                 device_choice=args.device,
+                cached_task_infos=cached_task_infos,
+                cached_test_loaders=cached_test_loaders,
+                shared_dataset_info=shared_dataset_info,
             )
             all_rows.extend(rows)
             print(f"[baseline] {model_name}: collected {len(rows)} task rows")
