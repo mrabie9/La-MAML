@@ -180,8 +180,26 @@ def _build_label_colors(
     if not labels:
         return {}
 
+    qualitative_palette: List[Any] = []
+    for cmap_name in ("tab20", "tab20b", "tab20c"):
+        cmap = plt.get_cmap(cmap_name)
+        cmap_colors = getattr(cmap, "colors", None)
+        if cmap_colors is None:
+            continue
+        qualitative_palette.extend(list(cmap_colors))
+
+    def _color_for_label_position(label_position: int, total_labels: int) -> Any:
+        if label_position < len(qualitative_palette):
+            return qualitative_palette[label_position]
+        if total_labels <= 1:
+            return plt.get_cmap("hsv")(0.0)
+        return plt.get_cmap("hsv")(label_position / float(total_labels))
+
     if grouping_keywords is None or len(grouping_keywords) == 0:
-        return {label: f"C{idx % 10}" for idx, label in enumerate(labels)}
+        return {
+            label: _color_for_label_position(idx, len(labels))
+            for idx, label in enumerate(labels)
+        }
 
     normalized_keywords = [keyword.strip().lower() for keyword in grouping_keywords]
     grouped_label_positions: Dict[int, List[int]] = {
@@ -228,8 +246,10 @@ def _build_label_colors(
                 _shade(position_in_group, len(positions))
             )
 
-    for unmatched_order, label_position in enumerate(unmatched_label_positions):
-        label_colors[labels[label_position]] = f"C{unmatched_order % 10}"
+    for label_position in unmatched_label_positions:
+        label_colors[labels[label_position]] = _color_for_label_position(
+            label_position, len(labels)
+        )
 
     return label_colors
 
@@ -537,6 +557,47 @@ def _discover_runs_from_run_dir(run_dir: Path) -> tuple[List[str], List[Path]]:
     sorted_models = sorted(discovered_by_model.keys())
     algorithm_names = [model_name for model_name in sorted_models]
     metrics_dirs = [discovered_by_model[model_name] for model_name in sorted_models]
+    return algorithm_names, metrics_dirs
+
+
+def _discover_runs_from_algorithm_root(
+    algorithms_root_dir: Path,
+) -> tuple[List[str], List[Path]]:
+    """Discover latest metrics directory for each algorithm under a root dir.
+
+    Expected layout resembles:
+    ``<algorithms_root_dir>/<algo>/<run...>/0/metrics/task*.npz``.
+    """
+    if not algorithms_root_dir.is_dir():
+        raise SystemExit(f"--runs-dir is not a directory: {algorithms_root_dir}")
+
+    discovered_by_algo: Dict[str, Path] = {}
+    for algo_dir in sorted(algorithms_root_dir.iterdir()):
+        if not algo_dir.is_dir():
+            continue
+        candidate_metrics_dirs: List[Tuple[float, Path]] = []
+        for metrics_dir in algo_dir.rglob("metrics"):
+            if not metrics_dir.is_dir():
+                continue
+            if not any(metrics_dir.glob("task*.npz")):
+                continue
+            candidate_metrics_dirs.append(
+                (metrics_dir.stat().st_mtime, metrics_dir.resolve())
+            )
+        if not candidate_metrics_dirs:
+            continue
+        candidate_metrics_dirs.sort(key=lambda x: x[0], reverse=True)
+        discovered_by_algo[algo_dir.name] = candidate_metrics_dirs[0][1]
+
+    if not discovered_by_algo:
+        raise SystemExit(
+            "No algorithm metrics directories found under --runs-dir: "
+            f"{algorithms_root_dir}"
+        )
+
+    sorted_algos = sorted(discovered_by_algo.keys())
+    algorithm_names = [algo_name for algo_name in sorted_algos]
+    metrics_dirs = [discovered_by_algo[algo_name] for algo_name in sorted_algos]
     return algorithm_names, metrics_dirs
 
 
@@ -1374,6 +1435,16 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--runs-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Directory containing either run folders with job_logs/ or "
+            "algorithm folders with per-algorithm runs (for example "
+            "logs/00_sync/full-til_10epochs_w-zs)."
+        ),
+    )
+    parser.add_argument(
         "--metrics-dir",
         type=Path,
         action="append",
@@ -1468,15 +1539,29 @@ def main() -> None:
 
     metrics_dirs: List[Path] | None
     algorithm_names: List[str]
-    if args.run_dir is not None:
+    run_source_dir: Path | None = (
+        args.runs_dir if args.runs_dir is not None else args.run_dir
+    )
+    if run_source_dir is not None:
         if args.algos is not None:
-            raise SystemExit("Use either --run-dir or --algo/--metrics-dir, not both.")
+            raise SystemExit(
+                "Use either --runs-dir/--run-dir or --algo/--metrics-dir, not both."
+            )
         if args.metrics_dirs is not None:
-            raise SystemExit("Use either --run-dir or --metrics-dir, not both.")
-        algorithm_names, metrics_dirs = _discover_runs_from_run_dir(args.run_dir)
+            raise SystemExit(
+                "Use either --runs-dir/--run-dir or --metrics-dir, not both."
+            )
+        if (run_source_dir / "job_logs").is_dir():
+            algorithm_names, metrics_dirs = _discover_runs_from_run_dir(run_source_dir)
+        else:
+            algorithm_names, metrics_dirs = _discover_runs_from_algorithm_root(
+                run_source_dir
+            )
     else:
         if args.algos is None:
-            raise SystemExit("Provide --algo (or use --run-dir for auto-discovery).")
+            raise SystemExit(
+                "Provide --algo (or use --run-dir/--runs-dir for auto-discovery)."
+            )
         algorithm_names = list(args.algos)
         if args.metrics_dirs is None:
             metrics_dirs = None
