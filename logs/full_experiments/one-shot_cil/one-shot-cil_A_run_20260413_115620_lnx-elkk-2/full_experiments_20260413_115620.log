@@ -20,6 +20,20 @@
 [2026-04-13T15:13:38+01:00] --- Dispatching: base + gem + gem.yaml (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260413_115620_lnx-elkk-2/job_logs/job_gem_20260413_151338_730735336.log) ---
 [2026-04-13T15:13:38+01:00] START gem
 [2026-04-13T19:36:28+01:00] Completed: gem (exit 0)
-[2026-04-13T19:36:29+01:00] ERROR: Missing model config for 'ctn'. Checked: configs/models/ctn.yaml, configs/models/cil/ctn.yaml
 [2026-04-13T20:46:26+01:00] Completed: cmaml (exit 0)
 [2026-04-13T20:46:27+01:00] === full_experiments.sh finished: successful_runs=3 unsuccessful_runs=1 total_runtime=08:50:07 (31807s) ===
+[2026-04-14T11:54:55+01:00] --- Dispatching: base + icarl + icarl.yaml (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/one-shot_cil/one-shot-cil_A_run_20260413_115620_lnx-elkk-2/job_logs/job_icarl_20260414_115455_165171400.log) ---
+[2026-04-14T11:54:55+01:00] START icarl
+[2026-04-14T11:54:55+01:00] --- Dispatching: base + lamaml + lamaml.yaml (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/one-shot_cil/one-shot-cil_A_run_20260413_115620_lnx-elkk-2/job_logs/job_lamaml_20260414_115455_171037567.log) ---
+[2026-04-14T11:54:55+01:00] START lamaml
+[2026-04-14T15:16:35+01:00] Completed: icarl (exit 0)
+[2026-04-14T15:16:35+01:00] --- Dispatching: base + lwf + lwf.yaml (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/one-shot_cil/one-shot-cil_A_run_20260413_115620_lnx-elkk-2/job_logs/job_lwf_20260414_151635_946268874.log) ---
+[2026-04-14T15:16:35+01:00] START lwf
+[2026-04-14T18:57:52+01:00] Completed: lwf (exit 0)
+[2026-04-14T18:57:52+01:00] --- Dispatching: base + rwalk + rwalk.yaml (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/one-shot_cil/one-shot-cil_A_run_20260413_115620_lnx-elkk-2/job_logs/job_rwalk_20260414_185752_373380463.log) ---
+[2026-04-14T18:57:52+01:00] START rwalk
+[2026-04-14T22:30:40+01:00] Completed: rwalk (exit 0)
+[2026-04-14T22:58:46+01:00] Completed: lamaml (exit 0)
+[2026-04-14T22:58:46+01:00] --- Dispatching: base + smaml + smaml.yaml (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/one-shot_cil/one-shot-cil_A_run_20260413_115620_lnx-elkk-2/job_logs/job_smaml_20260414_225846_598746222.log) ---
+[2026-04-14T22:58:46+01:00] START smaml
+[2026-04-15T04:10:53+01:00] Completed: smaml (exit 0)
