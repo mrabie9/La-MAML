@@ -715,13 +715,13 @@ def main() -> None:
             algorithm_name = str(row["algo"])
             task_index = int(row["task_index"])
             forward_transfer_value = _safe_float(row["forward_transfer_total_f1_zs"])
-            if task_index > 9 or math.isnan(forward_transfer_value):
+            if task_index < 1 or task_index > 9 or math.isnan(forward_transfer_value):
                 continue
             average_fwt_by_algo.setdefault(algorithm_name, []).append(
                 forward_transfer_value
             )
 
-        print("\nAverage FWT after task 9 (per algo):")
+        print("\nAverage FWT for tasks 1-9 (per algo; task 0 excluded):")
         for algorithm_name in sorted({str(row["algo"]) for row in scalar_rows}):
             algo_task_indices = {
                 int(row["task_index"])

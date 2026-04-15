@@ -369,10 +369,6 @@ def _collect_one_model(
     base_config: Path,
     model_config: Path,
     device_choice: str,
-    cached_task_infos: Sequence[Dict[str, Any]],
-    cached_test_loaders: Sequence[Any],
-    shared_dataset_info: tuple[int, int, int],
-    shared_loader_name: str,
 ) -> List[Row]:
     """Run untrained zero-shot evaluation for a single model config file.
 
@@ -383,15 +379,22 @@ def _collect_one_model(
 
     Returns:
         List of per-task metric rows (same schema as
-        ``evaluate_zero_shot_untrained``).
+        ``evaluate_zero_shot_untrained``) with ``algo`` normalized to the
+        config stem (for example ``rwalk`` from ``rwalk.yaml``).
 
     """
     run_args = _load_args_for_model(base_config, model_config)
     _apply_model_runtime_overrides(run_args)
     _apply_device_override(run_args, device_choice)
-    # Evaluator type must match how cached tasks were produced.
-    run_args.loader = shared_loader_name
-    model = _build_model_from_shared_dataset_info(run_args, shared_dataset_info)
+
+    # Reseed per-model so untrained initializations are stable and independent
+    # of evaluation order.
+    misc_utils.init_seed(run_args.seed)
+    loader_module = importlib.import_module(f"dataloaders.{run_args.loader}")
+    model_loader = loader_module.IncrementalLoader(run_args, seed=run_args.seed)
+    dataset_info = model_loader.get_dataset_info()
+    model = _build_model_from_shared_dataset_info(run_args, dataset_info)
+    cached_task_infos, cached_test_loaders = _cache_loader_tasks(model_loader)
     loader = _CachedTaskLoader(cached_task_infos, cached_test_loaders)
     rows, _matrix_rows = _collect_untrained_zero_shot(
         model=model,
@@ -399,6 +402,9 @@ def _collect_one_model(
         run_args=run_args,
         include_cumulative_matrix=False,
     )
+    algo_name_from_config = model_config.stem
+    for row in rows:
+        row["algo"] = algo_name_from_config
     return rows
 
 
@@ -467,10 +473,6 @@ def main() -> None:
     )
     if not model_config_paths:
         raise SystemExit("No model configs found to evaluate.")
-    shared_loader, shared_dataset_info, shared_loader_name = _build_shared_loader(
-        args.base_config, model_config_paths
-    )
-    cached_task_infos, cached_test_loaders = _cache_loader_tasks(shared_loader)
 
     all_rows: List[Row] = []
     failures: List[str] = []
@@ -483,10 +485,6 @@ def main() -> None:
                 base_config=args.base_config,
                 model_config=model_config_path,
                 device_choice=args.device,
-                cached_task_infos=cached_task_infos,
-                cached_test_loaders=cached_test_loaders,
-                shared_dataset_info=shared_dataset_info,
-                shared_loader_name=shared_loader_name,
             )
             all_rows.extend(rows)
             print(f"[baseline] {model_name}: collected {len(rows)} task rows")
