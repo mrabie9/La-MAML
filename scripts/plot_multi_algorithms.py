@@ -23,6 +23,16 @@ Usage:
         --algo cmaml --metrics-dir logs/cmaml/runA/0/metrics \\
         --algo hat   --metrics-dir logs/hat/runB/0/metrics \\
         -o plots/
+
+    # Auto-discover all algorithms from a full_experiments run folder
+    python scripts/plot_multi_algorithms.py \\
+        --run-dir logs/full_experiments/full-til_10epochs_w-zs/full-til_A_run_20260403_111257_lnx-elkk-2 \\
+        --plot-layout separate -o plots/
+
+    # Plot all discovered algorithms in one combined row
+    python scripts/plot_multi_algorithms.py \\
+        --run-dir logs/full_experiments/full-til_10epochs_w-zs/full-til_A_run_20260403_111257_lnx-elkk-2 \\
+        --plot-layout together -o plots/
 """
 
 from __future__ import annotations
@@ -48,6 +58,7 @@ import numpy as np  # noqa: E402
 from matplotlib.ticker import MultipleLocator  # noqa: E402
 
 TaskMetrics = Dict[str, Any]
+_SCRIPT_DIR = Path(__file__).resolve().parent
 
 
 @dataclass
@@ -405,6 +416,130 @@ def find_metrics_dir_for_algo(
     return candidate_dirs[run_index][1]
 
 
+def _extract_algo_name_from_job_filename(log_path: Path) -> str | None:
+    """Extract algorithm/config stem from a job log filename.
+
+    Args:
+        log_path: Path to a single ``job_*.log`` file.
+
+    Returns:
+        Algorithm/config stem, or ``None`` when the filename cannot be parsed.
+    """
+    filename_stem = log_path.stem
+    if not filename_stem.startswith("job_"):
+        return None
+    stem_without_prefix = filename_stem[len("job_") :]
+    if not stem_without_prefix:
+        return None
+    timestamp_suffix_match = re.match(
+        r"^(?P<algo>.+)_\d{8}_\d{6}_\d+$",
+        stem_without_prefix,
+    )
+    if timestamp_suffix_match:
+        return timestamp_suffix_match.group("algo")
+    return stem_without_prefix
+
+
+def _extract_model_name_from_log_header(log_path: Path) -> str | None:
+    """Extract model name from a job log header.
+
+    Args:
+        log_path: Path to a single ``job_*.log`` file.
+
+    Returns:
+        Parsed model name, or ``None`` when unavailable.
+    """
+    max_lines_to_scan = 40
+    with log_path.open("r", encoding="utf-8", errors="replace") as log_file:
+        for line_index, line_text in enumerate(log_file):
+            if line_index >= max_lines_to_scan:
+                break
+            model_match = re.search(r"Running model:\s*([A-Za-z0-9_.-]+)", line_text)
+            if model_match:
+                return model_match.group(1).strip()
+    return None
+
+
+def _extract_logged_output_dir_from_log(log_path: Path) -> Path | None:
+    """Extract experiment output directory from a job log.
+
+    Args:
+        log_path: Path to a single ``job_*.log`` file.
+
+    Returns:
+        Relative or absolute output directory path, or ``None`` when not found.
+    """
+    max_lines_to_scan = 80
+    with log_path.open("r", encoding="utf-8", errors="replace") as log_file:
+        for line_index, line_text in enumerate(log_file):
+            if line_index >= max_lines_to_scan:
+                break
+            logging_to_match = re.search(r"Logging to\s+(.+?)\s*$", line_text)
+            if logging_to_match:
+                return Path(logging_to_match.group(1).strip())
+            terminal_log_match = re.search(
+                r"Enabling terminal logging to\s+(.+?)/terminal\.log\s*$",
+                line_text,
+            )
+            if terminal_log_match:
+                return Path(terminal_log_match.group(1).strip())
+    return None
+
+
+def _resolve_output_dir_to_metrics_dir(output_dir: Path) -> Path:
+    """Resolve an experiment output directory to its metrics subdirectory."""
+    return output_dir / "metrics"
+
+
+def _discover_runs_from_run_dir(run_dir: Path) -> tuple[List[str], List[Path]]:
+    """Discover model names and metrics dirs from a run folder.
+
+    Args:
+        run_dir: Full run directory containing ``job_logs``.
+
+    Returns:
+        Tuple ``(algorithm_names, metrics_dirs)`` sorted by algorithm name.
+    """
+    if not run_dir.is_dir():
+        raise SystemExit(f"--run-dir is not a directory: {run_dir}")
+
+    job_logs_dir = run_dir / "job_logs"
+    if not job_logs_dir.is_dir():
+        raise SystemExit(f"--run-dir does not contain job_logs/: {run_dir}")
+
+    discovered_by_model: Dict[str, Path] = {}
+    for job_log in sorted(job_logs_dir.glob("job_*.log")):
+        algorithm_name = _extract_algo_name_from_job_filename(job_log)
+        if algorithm_name is None:
+            algorithm_name = _extract_model_name_from_log_header(job_log)
+        logged_output_dir = _extract_logged_output_dir_from_log(job_log)
+        if algorithm_name is None or logged_output_dir is None:
+            continue
+
+        normalized_output_dir = Path(str(logged_output_dir).replace("//", "/"))
+        if normalized_output_dir.is_absolute():
+            output_dir = normalized_output_dir
+        else:
+            output_dir = (_SCRIPT_DIR.parent / normalized_output_dir).resolve()
+        metrics_dir = _resolve_output_dir_to_metrics_dir(output_dir).resolve()
+        if not metrics_dir.is_dir():
+            continue
+        if not any(metrics_dir.glob("task*.npz")):
+            continue
+        discovered_by_model[algorithm_name] = metrics_dir
+
+    if not discovered_by_model:
+        raise SystemExit(
+            "No metrics directories discovered from job logs under "
+            f"{job_logs_dir}. Ensure the run has completed and wrote task*.npz files."
+        )
+
+    sorted_models = sorted(discovered_by_model.keys())
+    algorithm_names = [model_name for model_name in sorted_models]
+    metrics_dirs = [discovered_by_model[model_name] for model_name in sorted_models]
+    return algorithm_names, metrics_dirs
+
+
 def _resolve_algo_name(metrics_dir: Path, explicit_name: str | None) -> str:
     """Resolve the algorithm name for a metrics directory.
 
@@ -530,14 +665,20 @@ def _plot_train_metric_vs_steps(
     if not tasks:
         return
     y_label: str | None = None
+    x_axis_label = "Step"
     for task_idx, task in enumerate(tasks):
         metric_values, metric_label = _resolve_train_metric_for_task(
             task, train_metric_choice
         )
         y_label = metric_label
-        steps = np.arange(len(metric_values))
+        if train_metric_choice == "total_f1":
+            x_values = np.arange(1, len(metric_values) + 1)
+            x_axis_label = "Epoch"
+        else:
+            x_values = np.arange(len(metric_values))
+            x_axis_label = "Step"
         ax.plot(
-            steps,
+            x_values,
             metric_values,
             color=get_task_color(task_idx, task_names),
             alpha=0.8,
@@ -545,6 +686,7 @@ def _plot_train_metric_vs_steps(
         )
     if y_label is not None:
         ax.set_ylabel(y_label)
+    ax.set_xlabel(x_axis_label)
     ax.grid(True, alpha=0.3)
 
 
@@ -634,6 +776,47 @@ def _plot_average_forgetting(
     ax.set_xlabel("After training up to task")
     ax.set_ylabel(f"Avg forgetting ({val_metric_label})")
     ax.grid(True, alpha=0.3)
+
+
+def _compute_mean_val_metric_over_tasks(
+    tasks: Sequence[TaskMetrics],
+    val_metric_key: str,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compute mean validation metric over seen tasks at each checkpoint.
+
+    Args:
+        tasks: Sequence of per-task metric dictionaries.
+        val_metric_key: Validation metric key to aggregate.
+
+    Returns:
+        Tuple ``(x, mean_values)`` where ``x`` is checkpoint index
+        (1..num_tasks) and ``mean_values`` is the mean metric over tasks 0..k
+        at each checkpoint ``k``.
+    """
+    n_tasks = len(tasks)
+    if n_tasks == 0:
+        return np.array([]), np.array([])
+
+    x = np.arange(1, n_tasks + 1, dtype=float)
+    mean_values: List[float] = []
+    for checkpoint_index in range(n_tasks):
+        metric_values = tasks[checkpoint_index].get(val_metric_key)
+        if metric_values is None:
+            mean_values.append(float("nan"))
+            continue
+        metric_array = np.asarray(metric_values, dtype=float).reshape(-1)
+        valid_values: List[float] = []
+        for task_index in range(checkpoint_index + 1):
+            if task_index >= metric_array.size:
+                continue
+            value = float(metric_array[task_index])
+            if np.isnan(value):
+                continue
+            valid_values.append(value)
+        mean_values.append(
+            float(np.mean(valid_values)) if valid_values else float("nan")
+        )
+    return x, np.asarray(mean_values, dtype=float)
 
 
 def _plot_final_validation_metrics(
@@ -778,6 +961,11 @@ def _concat_train_metric_for_run(
     return np.concatenate(per_task_series, axis=0), metric_label
 
 
+def _resolve_train_x_axis_label(train_metric_choice: str) -> str:
+    """Resolve x-axis label for the first panel train metric plot."""
+    return "Epoch" if train_metric_choice == "total_f1" else "Step"
+
+
 def plot_multi_algorithms(
     runs: Sequence[AlgoRun],
     output_dir: Path | None,
@@ -786,6 +974,7 @@ def plot_multi_algorithms(
     train_metric_choice: str = "cls_recall",
     labels: Sequence[str] | None = None,
     labels_grouping: Sequence[str] | None = None,
+    plot_layout: str = "separate",
 ) -> None:
     """Create the multi-row, multi-column figure for all algorithms.
 
@@ -802,11 +991,12 @@ def plot_multi_algorithms(
     # Special-case: IID oracle baseline. These runs each contain a single task
     # and it is more natural to compare multiple IID runs within a single row.
     iid2_mode = all(run.name.lower() == "iid2" for run in runs)
+    combined_mode = plot_layout == "together" or iid2_mode
 
     n_algos = len(runs)
-    if iid2_mode:
+    if combined_mode:
         n_rows = 1
-        n_cols = 3  # train recall, final val metrics, val over tasks
+        n_cols = 4
     else:
         n_rows = n_algos
         n_cols = 4
@@ -819,22 +1009,18 @@ def plot_multi_algorithms(
         col_width, row_height = 4.0, 3.0
         dpi = 200
 
-    if iid2_mode:
-        # For IID2, the third column (val over runs) is much narrower and the
-        # overall figure width is reduced since there is only a single row.
+    if combined_mode:
+        # For combined layout use balanced widths across four panels.
         if output_dir is not None:
-            fig_width = col_width * 2.0  # slightly narrower than 3 full columns
+            fig_width = col_width * n_cols
         else:
-            fig_width = col_width * 2.8
+            fig_width = col_width * n_cols
         fig, axes = plt.subplots(
             n_rows,
             n_cols,
             figsize=(fig_width, row_height * n_rows),
             squeeze=False,
             dpi=dpi,
-            # Make the first subplot slightly less wide while keeping the third
-            # one narrow for the val-over-runs summary.
-            gridspec_kw={"width_ratios": [0.5, 0.5, 0.2]},
         )
     else:
         fig, axes = plt.subplots(
@@ -862,7 +1048,7 @@ def plot_multi_algorithms(
     # Resolve label for column titles from the first run.
     first_key, first_label = _resolve_val_metric_for_run(val_metric_choice, runs[0])
 
-    if iid2_mode:
+    if combined_mode:
         # Optional custom labels for IID2 runs; fall back to run names.
         label_list: list[str] = []
         for idx, run in enumerate(runs):
@@ -886,15 +1072,19 @@ def plot_multi_algorithms(
             )
             if train_series is None:
                 continue
-            steps = np.arange(len(train_series))
+            if train_metric_choice == "total_f1":
+                x_values = np.arange(1, len(train_series) + 1)
+            else:
+                x_values = np.arange(len(train_series))
             row_axes[0].plot(
-                steps,
+                x_values,
                 train_series,
                 label=run_label,
                 color=label_colors.get(run_label, f"C{run_idx % 10}"),
                 alpha=0.9,
             )
         row_axes[0].set_ylabel(train_metric_label)
+        row_axes[0].set_xlabel(_resolve_train_x_axis_label(train_metric_choice))
         row_axes[0].grid(True, alpha=0.3)
 
         # Final validation metrics: bars grouped by run, using the last task.
@@ -952,32 +1142,48 @@ def plot_multi_algorithms(
         row_axes[1].yaxis.set_major_locator(MultipleLocator(0.1))
         row_axes[1].grid(True, alpha=0.3, axis="y")
 
-        # Validation metric over runs: for IID2, there is a single task per
-        # run. Plot all points at the same x-position and hide the x axis.
+        # Mean validation metric over tasks: one line per run.
         for run_idx, run in enumerate(runs):
-            if not run.tasks:
+            x_vals, y_vals = _compute_mean_val_metric_over_tasks(run.tasks, first_key)
+            if x_vals.size == 0:
                 continue
-            metrics = run.tasks[-1]
-            y_val = _mean_final_metric_for_run(metrics, first_key, len(run.tasks))
-            if y_val is None:
-                continue
-            row_axes[2].scatter(
-                0.0,
-                y_val,
+            row_axes[2].plot(
+                x_vals,
+                y_vals,
+                "o-",
                 label=label_list[run_idx],
                 color=label_colors.get(label_list[run_idx], f"C{run_idx % 10}"),
                 alpha=0.9,
             )
-        row_axes[2].set_xlim(-0.5, 0.5)
-        row_axes[2].set_xticks([])
-        row_axes[2].set_xlabel("")
+        row_axes[2].set_xlabel("After training up to task")
         row_axes[2].set_ylabel(f"Val {first_label}")
         row_axes[2].grid(True, alpha=0.3)
 
-        # Column titles on the single IID2 row.
-        axes[0][0].set_title(f"{train_metric_label} vs step")
+        # Average forgetting over tasks: one line per run.
+        for run_idx, run in enumerate(runs):
+            val_metric_key, _ = _resolve_val_metric_for_run(val_metric_choice, run)
+            x_vals, y_vals = compute_average_forgetting(run.tasks, val_metric_key)
+            if x_vals.size == 0:
+                continue
+            row_axes[3].plot(
+                x_vals + 1,
+                y_vals,
+                "o-",
+                label=label_list[run_idx],
+                color=label_colors.get(label_list[run_idx], f"C{run_idx % 10}"),
+                alpha=0.9,
+            )
+        row_axes[3].set_xlabel("After training up to task")
+        row_axes[3].set_ylabel(f"Avg forgetting ({first_label})")
+        row_axes[3].grid(True, alpha=0.3)
+
+        # Column titles on the single combined row.
+        axes[0][0].set_title(
+            f"{train_metric_label} vs {_resolve_train_x_axis_label(train_metric_choice).lower()}"
+        )
         axes[0][1].set_title("Final validation metrics")
-        axes[0][2].set_title(f"Val {first_label} over runs")
+        axes[0][2].set_title(f"Mean val {first_label} over tasks")
+        axes[0][3].set_title(f"Average forgetting ({first_label})")
 
         # Legend for IID2 mode: keep only the "Final validation metrics"
         # legend in its panel. All other panels use the shared row legend.
@@ -990,6 +1196,22 @@ def plot_multi_algorithms(
         if handles_train and labels_train:
             legend_ncol = len(labels_train) if len(labels_train) <= 4 else 2
             axes[0][0].legend(
+                ncol=legend_ncol,
+                fontsize=8,
+                loc="lower center",
+                bbox_to_anchor=(0.5, 0.02),
+                frameon=True,
+                borderaxespad=0.2,
+            )
+            axes[0][2].legend(
+                ncol=legend_ncol,
+                fontsize=8,
+                loc="lower center",
+                bbox_to_anchor=(0.5, 0.02),
+                frameon=True,
+                borderaxespad=0.2,
+            )
+            axes[0][3].legend(
                 ncol=legend_ncol,
                 fontsize=8,
                 loc="lower center",
@@ -1057,7 +1279,10 @@ def plot_multi_algorithms(
                 )
 
         # Column titles on the top row (non-IID2 mode).
-        axes[0][0].set_title(f"{axes[0][0].get_ylabel().splitlines()[-1]} vs step")
+        axes[0][0].set_title(
+            f"{axes[0][0].get_ylabel().splitlines()[-1]} vs "
+            f"{_resolve_train_x_axis_label(train_metric_choice).lower()}"
+        )
         axes[0][1].set_title("Final validation metrics")
         axes[0][2].set_title(f"Val {first_label} over tasks")
         axes[0][3].set_title(f"Average forgetting ({first_label})")
@@ -1069,7 +1294,7 @@ def plot_multi_algorithms(
 
     # Optionally enforce the same y-axis limits across rows for each column so
     # that comparisons between algorithms are visually consistent.
-    if same_y_limits and not iid2_mode:
+    if same_y_limits and not combined_mode:
         for col_idx in range(n_cols):
             y_mins: List[float] = []
             y_maxs: List[float] = []
@@ -1135,8 +1360,18 @@ def _parse_args() -> argparse.Namespace:
         type=str,
         action="append",
         dest="algos",
-        required=True,
+        required=False,
         help="Algorithm name to include (can be specified multiple times).",
+    )
+    parser.add_argument(
+        "--run-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Run directory containing job_logs (for example a full_experiments "
+            "run folder). When provided, models are auto-discovered from job logs "
+            "and their metrics directories are resolved automatically."
+        ),
     )
     parser.add_argument(
         "--metrics-dir",
@@ -1214,6 +1449,16 @@ def _parse_args() -> argparse.Namespace:
             "color family (e.g. 'baseline,cross,pwr')."
         ),
     )
+    parser.add_argument(
+        "--plot-layout",
+        type=str,
+        choices=("separate", "together"),
+        default="separate",
+        help=(
+            "Plot algorithms in separate rows (default) or together in a single "
+            "combined row."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -1222,13 +1467,24 @@ def main() -> None:
     args = _parse_args()
 
     metrics_dirs: List[Path] | None
-    if args.metrics_dirs is None:
-        metrics_dirs = None
+    algorithm_names: List[str]
+    if args.run_dir is not None:
+        if args.algos is not None:
+            raise SystemExit("Use either --run-dir or --algo/--metrics-dir, not both.")
+        if args.metrics_dirs is not None:
+            raise SystemExit("Use either --run-dir or --metrics-dir, not both.")
+        algorithm_names, metrics_dirs = _discover_runs_from_run_dir(args.run_dir)
     else:
-        metrics_dirs = list(args.metrics_dirs)
+        if args.algos is None:
+            raise SystemExit("Provide --algo (or use --run-dir for auto-discovery).")
+        algorithm_names = list(args.algos)
+        if args.metrics_dirs is None:
+            metrics_dirs = None
+        else:
+            metrics_dirs = list(args.metrics_dirs)
 
     runs = _prepare_algo_runs(
-        algos=list(args.algos),
+        algos=algorithm_names,
         metrics_dirs=metrics_dirs,
         logs_root=args.logs_root,
         run_index=args.run_index,
@@ -1256,6 +1512,7 @@ def main() -> None:
         train_metric_choice=args.train_metric,
         labels=label_list,
         labels_grouping=labels_grouping_list,
+        plot_layout=args.plot_layout,
     )
 
 
