@@ -56,6 +56,7 @@ if _pre_args.output_dir is not None:
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from matplotlib.ticker import MultipleLocator  # noqa: E402
+from matplotlib.transforms import Bbox  # noqa: E402
 
 TaskMetrics = Dict[str, Any]
 _SCRIPT_DIR = Path(__file__).resolve().parent
@@ -180,8 +181,26 @@ def _build_label_colors(
     if not labels:
         return {}
 
+    qualitative_palette: List[Any] = []
+    for cmap_name in ("tab20", "tab20b", "tab20c"):
+        cmap = plt.get_cmap(cmap_name)
+        cmap_colors = getattr(cmap, "colors", None)
+        if cmap_colors is None:
+            continue
+        qualitative_palette.extend(list(cmap_colors))
+
+    def _color_for_label_position(label_position: int, total_labels: int) -> Any:
+        if label_position < len(qualitative_palette):
+            return qualitative_palette[label_position]
+        if total_labels <= 1:
+            return plt.get_cmap("hsv")(0.0)
+        return plt.get_cmap("hsv")(label_position / float(total_labels))
+
     if grouping_keywords is None or len(grouping_keywords) == 0:
-        return {label: f"C{idx % 10}" for idx, label in enumerate(labels)}
+        return {
+            label: _color_for_label_position(idx, len(labels))
+            for idx, label in enumerate(labels)
+        }
 
     normalized_keywords = [keyword.strip().lower() for keyword in grouping_keywords]
     grouped_label_positions: Dict[int, List[int]] = {
@@ -228,8 +247,10 @@ def _build_label_colors(
                 _shade(position_in_group, len(positions))
             )
 
-    for unmatched_order, label_position in enumerate(unmatched_label_positions):
-        label_colors[labels[label_position]] = f"C{unmatched_order % 10}"
+    for label_position in unmatched_label_positions:
+        label_colors[labels[label_position]] = _color_for_label_position(
+            label_position, len(labels)
+        )
 
     return label_colors
 
@@ -305,8 +326,9 @@ def compute_average_forgetting(
     For each task ``t``, peak metric is taken as ``tasks[t][val_metric_key][t]``
     after training task ``t``. After training task ``K > t``, the metric on
     task ``t`` is ``tasks[K][val_metric_key][t]``. Forgetting for task ``t`` at
-    ``K`` is ``max(0, peak[t] - current_metric)`` and the average forgetting at
-    ``K`` is the mean over all previous tasks.
+    ``K`` is ``peak[t] - current_metric`` (not clamped), and the average at
+    ``K`` is the mean over all previous tasks. This allows negative values,
+    which indicate backward transfer.
 
     Args:
         tasks: Sequence of per-task metric dictionaries.
@@ -347,7 +369,7 @@ def compute_average_forgetting(
             if metric_vals_k is None or len(metric_vals_k) <= t:
                 continue
             current_metric = float(metric_vals_k[t])
-            forgets.append(max(0.0, float(peak_vals_arr[t] - current_metric)))
+            forgets.append(float(peak_vals_arr[t] - current_metric))
         avg_forgetting[k] = float(np.mean(forgets)) if forgets else 0.0
 
     return np.arange(n_tasks), avg_forgetting
@@ -537,6 +559,57 @@ def _discover_runs_from_run_dir(run_dir: Path) -> tuple[List[str], List[Path]]:
     sorted_models = sorted(discovered_by_model.keys())
     algorithm_names = [model_name for model_name in sorted_models]
     metrics_dirs = [discovered_by_model[model_name] for model_name in sorted_models]
+    return algorithm_names, metrics_dirs
+
+
+def _discover_runs_from_algorithm_root(
+    algorithms_root_dir: Path,
+) -> tuple[List[str], List[Path]]:
+    """Discover latest metrics directory for each algorithm under a root dir.
+
+    Expected layout resembles:
+    ``<algorithms_root_dir>/<algo>/<run...>/0/metrics/task*.npz``.
+    """
+    if not algorithms_root_dir.is_dir():
+        raise SystemExit(f"--runs-dir is not a directory: {algorithms_root_dir}")
+
+    discovered_by_algo: Dict[str, Tuple[float, Path]] = {}
+    wrapper_dir_names = {"saved_models", "models"}
+    skipped_root_dir_names = {"plots", "figures"}
+    for metrics_dir in algorithms_root_dir.rglob("metrics"):
+        if not metrics_dir.is_dir():
+            continue
+        if not any(metrics_dir.glob("task*.npz")):
+            continue
+        try:
+            relative_parts = metrics_dir.relative_to(algorithms_root_dir).parts
+        except ValueError:
+            continue
+        if not relative_parts:
+            continue
+
+        root_name = relative_parts[0]
+        if root_name in skipped_root_dir_names:
+            continue
+        if root_name in wrapper_dir_names and len(relative_parts) >= 2:
+            algorithm_name = relative_parts[1]
+        else:
+            algorithm_name = root_name
+
+        metrics_mtime = metrics_dir.stat().st_mtime
+        existing = discovered_by_algo.get(algorithm_name)
+        if existing is None or metrics_mtime > existing[0]:
+            discovered_by_algo[algorithm_name] = (metrics_mtime, metrics_dir.resolve())
+
+    if not discovered_by_algo:
+        raise SystemExit(
+            "No algorithm metrics directories found under --runs-dir: "
+            f"{algorithms_root_dir}"
+        )
+
+    sorted_algos = sorted(discovered_by_algo.keys())
+    algorithm_names = [algo_name for algo_name in sorted_algos]
+    metrics_dirs = [discovered_by_algo[algo_name][1] for algo_name in sorted_algos]
     return algorithm_names, metrics_dirs
 
 
@@ -966,6 +1039,41 @@ def _resolve_train_x_axis_label(train_metric_choice: str) -> str:
     return "Epoch" if train_metric_choice == "total_f1" else "Step"
 
 
+def _build_axis_only_export_bbox(
+    axis: plt.Axes,
+    renderer: Any,
+    pad_pixels: float,
+) -> Bbox:
+    """Build an export bbox using only artists that belong to one axis."""
+    bbox_parts: List[Bbox] = [axis.get_window_extent(renderer)]
+
+    axis_title = axis.title
+    if axis_title.get_text():
+        bbox_parts.append(axis_title.get_window_extent(renderer))
+    x_label = axis.xaxis.label
+    if x_label.get_text():
+        bbox_parts.append(x_label.get_window_extent(renderer))
+    y_label = axis.yaxis.label
+    if y_label.get_text():
+        bbox_parts.append(y_label.get_window_extent(renderer))
+
+    for tick_label in axis.get_xticklabels() + axis.get_yticklabels():
+        if tick_label.get_visible() and tick_label.get_text():
+            bbox_parts.append(tick_label.get_window_extent(renderer))
+
+    legend = axis.get_legend()
+    if legend is not None and legend.get_visible():
+        bbox_parts.append(legend.get_window_extent(renderer))
+
+    combined_bbox = Bbox.union(bbox_parts)
+    return Bbox.from_extents(
+        combined_bbox.x0 - pad_pixels,
+        combined_bbox.y0 - pad_pixels,
+        combined_bbox.x1 + pad_pixels,
+        combined_bbox.y1 + pad_pixels,
+    )
+
+
 def plot_multi_algorithms(
     runs: Sequence[AlgoRun],
     output_dir: Path | None,
@@ -975,6 +1083,7 @@ def plot_multi_algorithms(
     labels: Sequence[str] | None = None,
     labels_grouping: Sequence[str] | None = None,
     plot_layout: str = "separate",
+    save_subplots: bool = False,
 ) -> None:
     """Create the multi-row, multi-column figure for all algorithms.
 
@@ -1004,7 +1113,7 @@ def plot_multi_algorithms(
     # Use a larger figure when saving to file to allow detailed zooming.
     if output_dir is not None:
         col_width, row_height = 9, 4.5
-        dpi = 600
+        dpi = 550
     else:
         col_width, row_height = 4.0, 3.0
         dpi = 200
@@ -1314,10 +1423,114 @@ def plot_multi_algorithms(
     if output_dir is not None:
         output_dir.mkdir(parents=True, exist_ok=True)
         out_path = output_dir / "multi_algorithms_metrics.png"
-        fig.savefig(out_path, dpi=200, bbox_inches="tight")
+        fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
         print(f"Saved figure to {out_path}")
+        if save_subplots:
+            subplot_dpi = max(300, dpi)
+            subplot_pad_pixels = 8.0
+            fixed_subplot_height_pixels = 1000.0
+            subplot_left = 0.1
+            subplot_right = 0.9
+            subplot_bottom = 0.2
+            subplot_top = 0.8
+            subplot_figure_width_inches = 8.0
+            subplot_figure_height_inches = 6.0
+            original_figure_size_inches = fig.get_size_inches().copy()
+            all_axes: List[plt.Axes] = [ax for row in axes for ax in row]
+            for axis in all_axes:
+                axis.xaxis.label.set_size(16)
+                axis.yaxis.label.set_size(16)
+                axis.tick_params(axis="both", labelsize=13)
+                legend = axis.get_legend()
+                if legend is not None:
+                    for legend_text in legend.get_texts():
+                        legend_text.set_fontsize(12)
+
+            original_titles: Dict[plt.Axes, str] = {
+                axis: axis.get_title() for axis in all_axes
+            }
+
+            for row_idx in range(n_rows):
+                for col_idx in range(n_cols):
+                    axis = axes[row_idx][col_idx]
+                    fig.set_size_inches(
+                        subplot_figure_width_inches,
+                        subplot_figure_height_inches,
+                        forward=True,
+                    )
+                    original_position = axis.get_position().frozen()
+                    axis.set_position(
+                        [
+                            subplot_left,
+                            subplot_bottom,
+                            max(subplot_right - subplot_left, 1e-3),
+                            max(subplot_top - subplot_bottom, 1e-3),
+                        ]
+                    )
+                    axis.set_anchor("W")
+                    if axis.lines:
+                        axis.margins(x=0.0)
+                    subplot_title = axis.get_title().strip()
+                    if subplot_title:
+                        title_stem = re.sub(r"[^A-Za-z0-9]+", "_", subplot_title).strip(
+                            "_"
+                        )
+                        if not title_stem:
+                            title_stem = "subplot"
+                    else:
+                        title_stem = "subplot"
+                    axis.set_title("")
+
+                    for other_axis in all_axes:
+                        if other_axis is not axis:
+                            other_axis.set_visible(False)
+                    fig.canvas.draw()
+
+                    renderer = fig.canvas.get_renderer()
+                    axis_bbox_pixels = _build_axis_only_export_bbox(
+                        axis=axis,
+                        renderer=renderer,
+                        pad_pixels=subplot_pad_pixels,
+                    )
+                    bbox = axis_bbox_pixels.transformed(fig.dpi_scale_trans.inverted())
+                    bbox_height_inches = max(float(bbox.height), 1e-6)
+                    height_fixed_dpi = fixed_subplot_height_pixels / bbox_height_inches
+                    export_dpi = min(subplot_dpi, height_fixed_dpi)
+                    export_dpi = max(72.0, export_dpi)
+                    subplot_path = (
+                        output_dir
+                        / f"{title_stem.lower()}_r{row_idx + 1}_c{col_idx + 1}.png"
+                    )
+                    fig.savefig(
+                        subplot_path,
+                        dpi=export_dpi,
+                        bbox_inches=bbox,
+                    )
+                    print(f"Saved subplot to {subplot_path}")
+                    axis.set_position(original_position)
+                    axis.set_anchor("C")
+
+                    for other_axis in all_axes:
+                        if other_axis is not axis:
+                            other_axis.set_visible(True)
+
+            for axis in all_axes:
+                axis.set_title(original_titles[axis])
+            fig.set_size_inches(
+                float(original_figure_size_inches[0]),
+                float(original_figure_size_inches[1]),
+                forward=True,
+            )
+            fig.canvas.draw()
     else:
-        plt.show()
+        backend_name = plt.get_backend().lower()
+        if "agg" in backend_name:
+            print(
+                "Skipping interactive display because Matplotlib backend is "
+                f"non-interactive ({plt.get_backend()})."
+            )
+        else:
+            plt.show()
 
     plt.close(fig)
 
@@ -1371,6 +1584,16 @@ def _parse_args() -> argparse.Namespace:
             "Run directory containing job_logs (for example a full_experiments "
             "run folder). When provided, models are auto-discovered from job logs "
             "and their metrics directories are resolved automatically."
+        ),
+    )
+    parser.add_argument(
+        "--runs-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Directory containing either run folders with job_logs/ or "
+            "algorithm folders with per-algorithm runs (for example "
+            "logs/00_sync/full-til_10epochs_w-zs)."
         ),
     )
     parser.add_argument(
@@ -1459,6 +1682,22 @@ def _parse_args() -> argparse.Namespace:
             "combined row."
         ),
     )
+    parser.add_argument(
+        "--include-iid2",
+        action="store_true",
+        help=(
+            "Include iid2 in plots. By default iid2 is ignored to reduce "
+            "clutter in multi-algorithm comparisons."
+        ),
+    )
+    parser.add_argument(
+        "--save-subplots",
+        action="store_true",
+        help=(
+            "When saving to --output-dir, also export each subplot panel as "
+            "a separate PNG using paper-ready export settings (>=600 DPI)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -1468,15 +1707,29 @@ def main() -> None:
 
     metrics_dirs: List[Path] | None
     algorithm_names: List[str]
-    if args.run_dir is not None:
+    run_source_dir: Path | None = (
+        args.runs_dir if args.runs_dir is not None else args.run_dir
+    )
+    if run_source_dir is not None:
         if args.algos is not None:
-            raise SystemExit("Use either --run-dir or --algo/--metrics-dir, not both.")
+            raise SystemExit(
+                "Use either --runs-dir/--run-dir or --algo/--metrics-dir, not both."
+            )
         if args.metrics_dirs is not None:
-            raise SystemExit("Use either --run-dir or --metrics-dir, not both.")
-        algorithm_names, metrics_dirs = _discover_runs_from_run_dir(args.run_dir)
+            raise SystemExit(
+                "Use either --runs-dir/--run-dir or --metrics-dir, not both."
+            )
+        if (run_source_dir / "job_logs").is_dir():
+            algorithm_names, metrics_dirs = _discover_runs_from_run_dir(run_source_dir)
+        else:
+            algorithm_names, metrics_dirs = _discover_runs_from_algorithm_root(
+                run_source_dir
+            )
     else:
         if args.algos is None:
-            raise SystemExit("Provide --algo (or use --run-dir for auto-discovery).")
+            raise SystemExit(
+                "Provide --algo (or use --run-dir/--runs-dir for auto-discovery)."
+            )
         algorithm_names = list(args.algos)
         if args.metrics_dirs is None:
             metrics_dirs = None
@@ -1489,6 +1742,12 @@ def main() -> None:
         logs_root=args.logs_root,
         run_index=args.run_index,
     )
+    if not args.include_iid2:
+        runs = [run for run in runs if run.name.strip().lower() != "iid2"]
+        if not runs:
+            raise SystemExit(
+                "No runs left after filtering iid2. Pass --include-iid2 to include it."
+            )
     print("Algorithms and metrics directories:")
     for run in runs:
         print(f"  {run.name}: {run.metrics_dir}")
@@ -1513,6 +1772,7 @@ def main() -> None:
         labels=label_list,
         labels_grouping=labels_grouping_list,
         plot_layout=args.plot_layout,
+        save_subplots=args.save_subplots,
     )
 
 
