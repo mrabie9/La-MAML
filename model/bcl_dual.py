@@ -366,7 +366,8 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         #     return float(det_loss.item()), 0.0
         # x = x[signal_mask]
         # y = y_cls[signal_mask]
-        x_train = self._canonicalize_input(x, detach=False)
+        raw_x_train = x.detach().requires_grad_(True)
+        x_train = self._canonicalize_input(raw_x_train, detach=False)
         x_for_storage = self._input_for_replay(x)
         y_work = unpack_y_to_class_labels(y).long()
         if t != self.current_task:
@@ -386,17 +387,22 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         # Validation set (ring buffer per task); store adapted input in val buffer
         n_val_taken = 0
         n_rotated_in = 0  # old val sample cat'd back into batch; not in x_for_storage
+        rotated_validation_sample_for_meta = None
         task_val_capacity = int(self.task_val_capacities[t])
         if task_val_capacity > 0 and x_train.size(0) > 0:
             n_val_taken = 1
             _, valy = x_train[0], y_work[0]
+            raw_x_train = raw_x_train[1:]
             x_train, y_work = x_train[1:], y_work[1:]
             val_write = int(self.task_val_ptr[t].item())
             # Only rotate in when we're overwriting a slot that has valid data (buffer full)
             val_filled = int(self.task_val_filled[t].item())
             if val_filled >= task_val_capacity:
                 n_rotated_in = 1
-                x_train = torch.cat([x_train, self.valx[t, val_write].unsqueeze(0)])
+                rotated_validation_sample_for_meta = self.valx[t, val_write].unsqueeze(
+                    0
+                )
+                x_train = torch.cat([x_train, rotated_validation_sample_for_meta])
                 y_work = torch.cat([y_work, self.valy[t, val_write].unsqueeze(0)])
             self.valx[t, val_write].copy_(x_for_storage[0])
             self.valy[t, val_write].copy_(valy)
@@ -439,6 +445,11 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         tt = t + 1
         cls_tr_rec = []
         for _ in range(self.inner_steps):
+            x_train = self._canonicalize_input(raw_x_train, detach=False)
+            if rotated_validation_sample_for_meta is not None:
+                x_train = torch.cat(
+                    [x_train, rotated_validation_sample_for_meta], dim=0
+                )
             weights_before = deepcopy(self.net.state_dict())
             pred = self.forward(x_train, t)
             signal_mask = signal_mask_exclude_noise(y_work, self.noise_label)
@@ -500,6 +511,11 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                     pred, yval, class_weighted_ce=self.class_weighted_ce
                 )
             else:
+                x_train = self._canonicalize_input(raw_x_train, detach=False)
+                if rotated_validation_sample_for_meta is not None:
+                    x_train = torch.cat(
+                        [x_train, rotated_validation_sample_for_meta], dim=0
+                    )
                 pred = self.forward(x_train, t)
                 logits_outer_for_loss = pred
                 if self.is_task_incremental:

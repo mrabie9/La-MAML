@@ -250,8 +250,9 @@ class Net(DetectionReplayMixin, nn.Module):
 
         # x = x[signal_mask]
         # y = y_cls[signal_mask]
-        # Train with differentiable canonicalized inputs; use detached tensors for replay writes.
-        x_train = self._canonicalize_input(x, detach=False)
+        # Keep a detached leaf copy so each inner/meta step can rebuild a fresh
+        # canonicalized graph for 3-channel adapter inputs.
+        raw_x_train = x.detach().requires_grad_(True)
         x_for_storage = self._input_for_replay(x)
         xi = x_for_storage.data.cpu().numpy()
         y_work = unpack_y_to_class_labels(y).long()
@@ -261,7 +262,7 @@ class Net(DetectionReplayMixin, nn.Module):
             self.current_task = t
 
         if self.cfg.learn_lr:
-            loss, cls_tr_rec = self.la_ER(x_train, y, t)
+            loss, cls_tr_rec = self.la_ER(raw_x_train, y, t)
         else:
             loss, cls_tr_rec = self.ER(xi, yi, t)
 
@@ -450,7 +451,7 @@ class Net(DetectionReplayMixin, nn.Module):
         fast_weights = updated_fast_weights
         return fast_weights, loss.item()
 
-    def la_ER(self, x, y, t):
+    def la_ER(self, raw_x, y, t):
         """
         this ablation tests whether it suffices to just do the learning rate modulation
         guided by gradient alignment + clipping (that La-MAML does implciitly through autodiff)
@@ -459,6 +460,9 @@ class Net(DetectionReplayMixin, nn.Module):
         """
         cls_tr_rec = []
         for pass_itr in range(self.inner_steps):
+            # Rebuild a fresh canonicalized tensor each round; previous
+            # autograd.grad/backward calls free the old graph.
+            x = self._canonicalize_input(raw_x, detach=False)
 
             perm = torch.randperm(x.size(0))
             x = x[perm]

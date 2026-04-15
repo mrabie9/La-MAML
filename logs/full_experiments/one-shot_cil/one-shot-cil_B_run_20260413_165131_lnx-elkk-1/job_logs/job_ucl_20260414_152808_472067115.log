@@ -1,0 +1,216 @@
+[STATE 2026-04-14 15:28:10] Enabling terminal logging to logs//ucl/full-tasks-2_all-10epochs_weighted-loss-2026-04-14_15-28-10-1839/0/terminal.log
+New Experiment Starting...
+Running model:  ucl_bresnet
+[STATE 2026-04-14 15:28:10] Experiment 'full-tasks-2_all-10epochs_weighted-loss' starting with model 'ucl_bresnet' (seed 0)
+Set seed 0
+t2-rcn.npz train: x=(50362, 1024), y=(50362, 2)
+t2-rcn.npz test: x=(16787, 1024), y=(16787, 2)
+t2-rcn.npz: applied data scaling mode 'normalize'.
+Loaded t2-rcn.npz: Unique train labels: UniqueCountsResult(values=array([-1,  3,  5, 10, 12, 15]), counts=array([24209,  5770,  3030,  2320,  7509,  7524]))
+Noise labels ratio in t2-rcn.npz train: 0.24, test: 0.24
+Loaded t2-rcn.npz: Remapped labels: [-1  0  1  2  3  4]. Size: 50362)
+t0-rcn.npz train: x=(51916, 1024), y=(51916, 2)
+t0-rcn.npz test: x=(17305, 1024), y=(17305, 2)
+t0-rcn.npz: applied data scaling mode 'normalize'.
+Loaded t0-rcn.npz: Unique train labels: UniqueCountsResult(values=array([-1,  1,  8,  9, 11, 13, 14]), counts=array([24225,  4268,  2495,  2943,  3015,  7464,  7506]))
+Noise labels ratio in t0-rcn.npz train: 0.23, test: 0.23
+Loaded t0-rcn.npz: Remapped labels: [-1  5  6  7  8  9 10]. Size: 51916)
+t2-uclresm-25noise.npz train: moved sample axis (3, 350028, 1024) -> (350028, 3, 1024)
+t2-uclresm-25noise.npz test: moved sample axis (3, 233351, 1024) -> (233351, 3, 1024)
+t2-uclresm-25noise.npz train: x=(350028, 3, 1024), y=(350028,)
+t2-uclresm-25noise.npz test: x=(233351, 3, 1024), y=(233351,)
+t2-uclresm-25noise.npz: applied data scaling mode 'normalize'.
+Loaded t2-uclresm-25noise.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([87441, 27347, 71754, 64298, 36005, 63183]))
+Noise labels ratio in t2-uclresm-25noise.npz train: 0.25, test: 0.25
+Loaded t2-uclresm-25noise.npz: Remapped labels: [-1 11 12 13 14 15]. Size: 350028)
+t0-deeprad.npz train: x=(24480, 1024), y=(24480, 2)
+t0-deeprad.npz test: x=(8160, 1024), y=(8160, 2)
+t0-deeprad.npz: applied data scaling mode 'normalize'.
+Loaded t0-deeprad.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4,  5]), counts=array([12240,  2029,  1983,  2043,  2154,  2015,  2016]))
+Noise labels ratio in t0-deeprad.npz train: 0.25, test: 0.25
+Loaded t0-deeprad.npz: Remapped labels: [-1 16 17 18 19 20 21]. Size: 24480)
+t1-deeprad.npz train: x=(24480, 1024), y=(24480, 2)
+t1-deeprad.npz test: x=(8160, 1024), y=(8160, 2)
+t1-deeprad.npz: applied data scaling mode 'normalize'.
+Loaded t1-deeprad.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4,  5]), counts=array([12240,  1988,  2029,  2054,  1988,  2053,  2128]))
+Noise labels ratio in t1-deeprad.npz train: 0.25, test: 0.25
+Loaded t1-deeprad.npz: Remapped labels: [-1 22 23 24 25 26 27]. Size: 24480)
+t1-uclresm-25noise.npz train: moved sample axis (3, 201410, 1024) -> (201410, 3, 1024)
+t1-uclresm-25noise.npz test: moved sample axis (3, 116291, 1024) -> (116291, 3, 1024)
+t1-uclresm-25noise.npz train: x=(201410, 3, 1024), y=(201410,)
+t1-uclresm-25noise.npz test: x=(116291, 3, 1024), y=(116291,)
+t1-uclresm-25noise.npz: applied data scaling mode 'normalize'.
+Loaded t1-uclresm-25noise.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([43668, 18021, 17838, 18087, 31870, 71926]))
+Noise labels ratio in t1-uclresm-25noise.npz train: 0.22, test: 0.25
+Loaded t1-uclresm-25noise.npz: Remapped labels: [-1 28 29 30 31 32]. Size: 201410)
+t3-deeprad.npz train: x=(17340, 1024), y=(17340, 2)
+t3-deeprad.npz test: x=(6800, 1024), y=(6800, 2)
+t3-deeprad.npz: applied data scaling mode 'normalize'.
+Loaded t3-deeprad.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([8670, 1693, 1677, 1794, 1716, 1790]))
+Noise labels ratio in t3-deeprad.npz train: 0.25, test: 0.25
+Loaded t3-deeprad.npz: Remapped labels: [-1 33 34 35 36 37]. Size: 17340)
+t0-uclresm-25noise.npz train: moved sample axis (3, 188050, 1024) -> (188050, 3, 1024)
+t0-uclresm-25noise.npz test: moved sample axis (3, 107348, 1024) -> (107348, 3, 1024)
+t0-uclresm-25noise.npz train: x=(188050, 3, 1024), y=(188050,)
+t0-uclresm-25noise.npz test: x=(107348, 3, 1024), y=(107348,)
+t0-uclresm-25noise.npz: applied data scaling mode 'normalize'.
+Loaded t0-uclresm-25noise.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([40144, 32109, 17978, 17979, 18098, 61742]))
+Noise labels ratio in t0-uclresm-25noise.npz train: 0.21, test: 0.25
+Loaded t0-uclresm-25noise.npz: Remapped labels: [-1 38 39 40 41 42]. Size: 188050)
+t1-rcn.npz train: x=(36658, 1024), y=(36658, 2)
+t1-rcn.npz test: x=(12220, 1024), y=(12220, 2)
+t1-rcn.npz: applied data scaling mode 'normalize'.
+Loaded t1-rcn.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  2,  4,  6,  7, 16]), counts=array([20595,   824,  2087,  2606,  2396,  1716,  6434]))
+Noise labels ratio in t1-rcn.npz train: 0.28, test: 0.28
+Loaded t1-rcn.npz: Remapped labels: [-1 43 44 45 46 47 48]. Size: 36658)
+t2-deeprad.npz train: x=(17340, 1024), y=(17340, 2)
+t2-deeprad.npz test: x=(6800, 1024), y=(6800, 2)
+t2-deeprad.npz: applied data scaling mode 'normalize'.
+Loaded t2-deeprad.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([8670, 1774, 1675, 1777, 1694, 1750]))
+Noise labels ratio in t2-deeprad.npz train: 0.25, test: 0.25
+Loaded t2-deeprad.npz: Remapped labels: [-1 49 50 51 52 53]. Size: 17340)
+Built IQ classes_per_task (increments): [5, 6, 5, 6, 6, 5, 5, 5, 6, 5]
+Classes per task: [5, 6, 5, 6, 6, 5, 5, 5, 6, 5]
+[STATE 2026-04-14 15:29:18] Loader 'class_incremental_loader' ready: 1024 inputs, 55 outputs, 10 tasks
+n_outputs: 55 	n_tasks: 10
+[STATE 2026-04-14 15:29:18] Logging to logs//ucl/full-tasks-2_all-10epochs_weighted-loss-2026-04-14_15-28-10-1839/0
+True
+Model device: cuda:0
+[STATE 2026-04-14 15:29:19] Model initialized on device cuda:0
+[STATE 2026-04-14 15:29:19] Invoking continual life experience flow
+[STATE 2026-04-14 15:29:19] Life experience start: 10 tasks queued
+[STATE 2026-04-14 15:29:19] Task 0: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 0: rec_cls 0.2000 | prec_cls 0.0229 | f1_cls 0.0186 | det 0.5000 | pfa 1.0000 | total_f1 0.0186 ----
+[STATE 2026-04-14 15:29:24] Starting task 0 (1/10)
+[STATE 2026-04-14 15:29:24] Task 0 Epoch 1/1: entering train loop
+[STATE 2026-04-14 15:30:09] Task 0 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.2109075596670009] | det_recall [0.5065183283140314] | det_fa [0.982126748301609] ----
+T0 Ep 1/1 | L 1.0640 | Train Acc 0.61 | Prec 0.63 | F1 0.57 | Det Rec 0.83 | Det FA 0.28 | Epoch Time 50.30s (Eval 5.47s, Train 44.83s)
+[STATE 2026-04-14 15:30:15] T0 Ep 1/1 complete: Prec 0.6331 F1 0.5727 DetRec 0.8312 DetFA 0.2780 | 50.30s total (5.47s eval/44.83s train)
+[STATE 2026-04-14 15:30:15] Task 0: running final validation.
+[STATE 2026-04-14 15:30:20] Completed task 0 (1/10)
+[STATE 2026-04-14 15:30:20] Task 1: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 1: rec_cls 0.0694 | prec_cls 0.0270 | f1_cls 0.0153 | det 0.5000 | pfa 1.0000 | total_f1 0.0420 ----
+[STATE 2026-04-14 15:30:36] Starting task 1 (2/10)
+[STATE 2026-04-14 15:30:36] Task 1 Epoch 1/1: entering train loop
+[STATE 2026-04-14 15:31:26] Task 1 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.09041881314928332, 0.0] | det_recall [0.5647043656713944, 0.5] | det_fa [0.0, 1.0] ----
+T1 Ep 1/1 | L 1.3527 | Train Acc 0.58 | Prec 0.63 | F1 0.44 | Det Rec 0.63 | Det FA 0.66 | Epoch Time 65.49s (Eval 16.17s, Train 49.32s)
+[STATE 2026-04-14 15:31:42] T1 Ep 1/1 complete: Prec 0.6263 F1 0.4438 DetRec 0.6283 DetFA 0.6565 | 65.49s total (16.17s eval/49.32s train)
+[STATE 2026-04-14 15:31:42] Task 1: running final validation.
+[STATE 2026-04-14 15:31:58] Completed task 1 (2/10)
+Note: Unified mixed IQ test tensors to (N, 3, L) via ADC0 I/Q + zero-padded ADC1/2 (IID2-style) for cumulative CIL.
+[STATE 2026-04-14 15:31:59] Task 2: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 2: rec_cls 0.0000 | prec_cls 0.0000 | f1_cls 0.0000 | det 0.5000 | pfa 1.0000 | total_f1 0.0722 ----
+[STATE 2026-04-14 15:33:18] Starting task 2 (3/10)
+[STATE 2026-04-14 15:33:18] Task 2 Epoch 1/1: entering train loop
+[STATE 2026-04-14 15:38:54] Task 2 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.0, 0.0, 0.0] | det_recall [0.5, 0.5, 0.5] | det_fa [0.0, 1.0, 1.0] ----
+T2 Ep 1/1 | L 1.3645 | Train Acc 0.41 | Prec 0.44 | F1 0.42 | Det Rec 0.78 | Det FA 0.38 | Epoch Time 415.64s (Eval 78.91s, Train 336.73s)
+[STATE 2026-04-14 15:40:13] T2 Ep 1/1 complete: Prec 0.4446 F1 0.4230 DetRec 0.7820 DetFA 0.3806 | 415.64s total (78.91s eval/336.73s train)
+[STATE 2026-04-14 15:40:13] Task 2: running final validation.
+[STATE 2026-04-14 15:41:32] Completed task 2 (3/10)
+Note: Unified mixed IQ test tensors to (N, 3, L) via ADC0 I/Q + zero-padded ADC1/2 (IID2-style) for cumulative CIL.
+[STATE 2026-04-14 15:41:33] Task 3: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 3: rec_cls 0.0000 | prec_cls 0.0000 | f1_cls 0.0000 | det 0.5000 | pfa 1.0000 | total_f1 0.0271 ----
+[STATE 2026-04-14 15:43:57] Starting task 3 (4/10)
+[STATE 2026-04-14 15:43:57] Task 3 Epoch 1/1: entering train loop
+[STATE 2026-04-14 15:44:22] Task 3 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.0, 0.0, 0.0, 0.0] | det_recall [0.5, 0.5, 0.5, 0.499996685998343] | det_fa [0.0, 1.0, 1.0, 1.0] ----
+T3 Ep 1/1 | L 1.5545 | Train Acc 0.46 | Prec 0.44 | F1 0.50 | Det Rec 0.99 | Det FA 0.01 | Epoch Time 168.46s (Eval 144.28s, Train 24.17s)
+[STATE 2026-04-14 15:46:46] T3 Ep 1/1 complete: Prec 0.4431 F1 0.4985 DetRec 0.9883 DetFA 0.0126 | 168.46s total (144.28s eval/24.17s train)
+[STATE 2026-04-14 15:46:46] Task 3: running final validation.
+[STATE 2026-04-14 15:49:10] Completed task 3 (4/10)
+Note: Unified mixed IQ test tensors to (N, 3, L) via ADC0 I/Q + zero-padded ADC1/2 (IID2-style) for cumulative CIL.
+[STATE 2026-04-14 15:49:11] Task 4: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 4: rec_cls 0.0000 | prec_cls 0.0000 | f1_cls 0.0000 | det 0.5000 | pfa 1.0000 | total_f1 0.0217 ----
+[STATE 2026-04-14 15:52:43] Starting task 4 (5/10)
+[STATE 2026-04-14 15:52:43] Task 4 Epoch 1/1: entering train loop
+[STATE 2026-04-14 15:53:07] Task 4 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.0, 0.0, 0.0, 0.0, 0.0] | det_recall [0.5, 0.5, 0.5, 0.5, 0.5] | det_fa [0.0, 1.0, 1.0, 1.0, 1.0] ----
+T4 Ep 1/1 | L 2.1261 | Train Acc 0.26 | Prec 0.16 | F1 0.28 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 235.33s (Eval 211.93s, Train 23.39s)
+[STATE 2026-04-14 15:56:39] T4 Ep 1/1 complete: Prec 0.1613 F1 0.2838 DetRec 0.9998 DetFA 0.0000 | 235.33s total (211.93s eval/23.39s train)
+[STATE 2026-04-14 15:56:39] Task 4: running final validation.
+[STATE 2026-04-14 16:00:11] Completed task 4 (5/10)
+Note: Unified mixed IQ test tensors to (N, 3, L) via ADC0 I/Q + zero-padded ADC1/2 (IID2-style) for cumulative CIL.
+[STATE 2026-04-14 16:00:12] Task 5: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 5: rec_cls 0.0000 | prec_cls 0.0000 | f1_cls 0.0000 | det 0.5000 | pfa 1.0000 | total_f1 0.0181 ----
+[STATE 2026-04-14 16:05:22] Starting task 5 (6/10)
+[STATE 2026-04-14 16:05:22] Task 5 Epoch 1/1: entering train loop
+[STATE 2026-04-14 16:08:37] Task 5 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] | det_recall [0.5, 0.5, 0.5, 0.5, 0.5, 0.5] | det_fa [0.0, 1.0, 1.0, 1.0, 1.0, 1.0] ----
+T5 Ep 1/1 | L 1.1148 | Train Acc 0.57 | Prec 0.59 | F1 0.56 | Det Rec 0.80 | Det FA 0.35 | Epoch Time 551.90s (Eval 356.12s, Train 195.78s)
+[STATE 2026-04-14 16:14:34] T5 Ep 1/1 complete: Prec 0.5945 F1 0.5568 DetRec 0.8014 DetFA 0.3459 | 551.90s total (356.12s eval/195.78s train)
+[STATE 2026-04-14 16:14:34] Task 5: running final validation.
+[STATE 2026-04-14 16:22:13] Completed task 5 (6/10)
+Note: Unified mixed IQ test tensors to (N, 3, L) via ADC0 I/Q + zero-padded ADC1/2 (IID2-style) for cumulative CIL.
+[STATE 2026-04-14 16:22:14] Task 6: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 6: rec_cls 0.0000 | prec_cls 0.0000 | f1_cls 0.0000 | det 0.5000 | pfa 1.0000 | total_f1 0.0155 ----
+[STATE 2026-04-14 16:29:04] Starting task 6 (7/10)
+[STATE 2026-04-14 16:29:04] Task 6 Epoch 1/1: entering train loop
+[STATE 2026-04-14 16:29:21] Task 6 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] | det_recall [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5] | det_fa [0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0] ----
+T6 Ep 1/1 | L 2.3429 | Train Acc 0.30 | Prec 0.28 | F1 0.37 | Det Rec 0.96 | Det FA 0.07 | Epoch Time 473.43s (Eval 456.46s, Train 16.97s)
+[STATE 2026-04-14 16:36:58] T6 Ep 1/1 complete: Prec 0.2791 F1 0.3686 DetRec 0.9619 DetFA 0.0715 | 473.43s total (456.46s eval/16.97s train)
+[STATE 2026-04-14 16:36:58] Task 6: running final validation.
+[STATE 2026-04-14 16:48:13] Completed task 6 (7/10)
+Note: Unified mixed IQ test tensors to (N, 3, L) via ADC0 I/Q + zero-padded ADC1/2 (IID2-style) for cumulative CIL.
+[STATE 2026-04-14 16:48:16] Task 7: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 7: rec_cls 0.0000 | prec_cls 0.0000 | f1_cls 0.0000 | det 0.5000 | pfa 1.0000 | total_f1 0.0136 ----
+[STATE 2026-04-14 16:57:26] Starting task 7 (8/10)
+[STATE 2026-04-14 16:57:26] Task 7 Epoch 1/1: entering train loop
+[STATE 2026-04-14 17:00:29] Task 7 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] | det_recall [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5] | det_fa [0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0] ----
+T7 Ep 1/1 | L 1.1579 | Train Acc 0.56 | Prec 0.60 | F1 0.55 | Det Rec 0.78 | Det FA 0.36 | Epoch Time 998.07s (Eval 814.96s, Train 183.11s)
+[STATE 2026-04-14 17:14:04] T7 Ep 1/1 complete: Prec 0.6001 F1 0.5478 DetRec 0.7843 DetFA 0.3620 | 998.07s total (814.96s eval/183.11s train)
+[STATE 2026-04-14 17:14:04] Task 7: running final validation.
+[STATE 2026-04-14 17:26:30] Completed task 7 (8/10)
+Note: Unified mixed IQ test tensors to (N, 3, L) via ADC0 I/Q + zero-padded ADC1/2 (IID2-style) for cumulative CIL.
+[STATE 2026-04-14 17:26:38] Task 8: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 8: rec_cls 0.0000 | prec_cls 0.0000 | f1_cls 0.0000 | det 0.5000 | pfa 1.0000 | total_f1 0.0121 ----
+[STATE 2026-04-14 17:37:46] Starting task 8 (9/10)
+[STATE 2026-04-14 17:37:46] Task 8 Epoch 1/1: entering train loop
+[STATE 2026-04-14 17:38:22] Task 8 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.12888955028138713, 0.0025816984511233287, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] | det_recall [0.29589967861772987, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5] | det_fa [0.6403169303160201, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0] ----
+T8 Ep 1/1 | L 2.5072 | Train Acc 0.41 | Prec 0.43 | F1 0.36 | Det Rec 0.75 | Det FA 0.38 | Epoch Time 704.13s (Eval 667.55s, Train 36.58s)
+[STATE 2026-04-14 17:49:30] T8 Ep 1/1 complete: Prec 0.4293 F1 0.3569 DetRec 0.7509 DetFA 0.3801 | 704.13s total (667.55s eval/36.58s train)
+[STATE 2026-04-14 17:49:30] Task 8: running final validation.
+[STATE 2026-04-14 18:00:37] Completed task 8 (9/10)
+Note: Unified mixed IQ test tensors to (N, 3, L) via ADC0 I/Q + zero-padded ADC1/2 (IID2-style) for cumulative CIL.
+[STATE 2026-04-14 18:00:45] Task 9: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 9: rec_cls 0.0000 | prec_cls 0.0000 | f1_cls 0.0000 | det 0.5000 | pfa 1.0000 | total_f1 0.0175 ----
+[STATE 2026-04-14 18:14:06] Starting task 9 (10/10)
+[STATE 2026-04-14 18:14:06] Task 9 Epoch 1/1: entering train loop
+[STATE 2026-04-14 18:14:22] Task 9 Epoch 1/1: running validation (end of epoch)
+/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/sklearn/metrics/_classification.py:98: UserWarning: The number of unique classes is greater than 50% of the number of samples. `y` could represent a regression problem, not a classification problem.
+  type_true = type_of_target(y_true, input_name="y_true")
+/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/sklearn/utils/multiclass.py:79: UserWarning: The number of unique classes is greater than 50% of the number of samples. `y` could represent a regression problem, not a classification problem.
+  ys_types = set(type_of_target(x) for x in ys)
+/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/sklearn/metrics/_classification.py:98: UserWarning: The number of unique classes is greater than 50% of the number of samples. `y` could represent a regression problem, not a classification problem.
+  type_true = type_of_target(y_true, input_name="y_true")
+/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/sklearn/utils/multiclass.py:79: UserWarning: The number of unique classes is greater than 50% of the number of samples. `y` could represent a regression problem, not a classification problem.
+  ys_types = set(type_of_target(x) for x in ys)
+---- Eval at Epoch 0: cls [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] | det_recall [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5] | det_fa [0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0] ----
+T9 Ep 1/1 | L 2.9615 | Train Acc 0.21 | Prec 0.14 | F1 0.28 | Det Rec 0.98 | Det FA 0.03 | Epoch Time 818.31s (Eval 801.49s, Train 16.82s)
+[STATE 2026-04-14 18:27:44] T9 Ep 1/1 complete: Prec 0.1377 F1 0.2779 DetRec 0.9833 DetFA 0.0294 | 818.31s total (801.49s eval/16.82s train)
+[STATE 2026-04-14 18:27:44] Task 9: running final validation.
+[STATE 2026-04-14 18:41:05] Completed task 9 (10/10)
+####Final Validation Accuracy####
+Final Results:- 
+ Total Recall: 0.0 
+ Individual Recall: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+Final Detection Results:- 
+ Total Detection: 0.5 
+ Individual Detection: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+Final Detection False Alarm:- 
+ Total False Alarm: 0.9 
+ Individual False Alarm: [0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+SUMMARY_TR cls_rec=0.2055 cls_prec=0.1377 cls_f1=0.2779 det=0.5000 fa=0.9000
+SUMMARY_TE cls_rec=0.0000 cls_prec=0.0000 cls_f1=0.0108 det=0.5000 fa=0.9000
+[STATE 2026-04-14 18:41:06] Saving results to logs//ucl/full-tasks-2_all-10epochs_weighted-loss-2026-04-14_15-28-10-1839/0/results
+Model size: 0.0863 GB
+Memory buffer size: 0.0000 GB
+logs//ucl/full-tasks-2_all-10epochs_weighted-loss-2026-04-14_15-28-10-1839/0/results: {'expt_name': 'full-tasks-2_all-10epochs_weighted-loss', 'model': 'ucl_bresnet', 'arch': 'resnet1d', 'n_hiddens': 100, 'n_layers': 2, 'xav_init': False, 'debug': False, 'use_detector_arch': False, 'inner_steps': 2, 'n_epochs': 1, 'batch_size': 256, 'replay_batch_size': 128, 'memories': 5120, 'lr': 0.0003, 'optimizer': 'sgd', 'class_weighted_ce': True, 'cuda': True, 'seed': 0, 'log_every': 10, 'log_dir': 'logs//ucl/full-tasks-2_all-10epochs_weighted-loss-2026-04-14_15-28-10-1839/0', 'tf_dir': 'logs//ucl/full-tasks-2_all-10epochs_weighted-loss-2026-04-14_15-28-10-1839/0/tfdir', 'calc_test_accuracy': False, 'state_logging': True, 'data_path': 'data/rff/radar/full', 'task_order_files': 't2-rcn,t0-rcn,t2-uclresm-25noise,t0-deeprad,t1-deeprad,t1-uclresm-25noise,t3-deeprad,t0-uclresm-25noise,t1-rcn,t2-deeprad', 'loader': 'class_incremental_loader', 'samples_per_task': -1, 'shuffle_tasks': False, 'classes_per_it': 6, 'iterations': 5000, 'dataset': 'iq', 'workers': 0, 'validation': 0.5, 'data_scaling': 'normalize', 'use_iq_aug_features': False, 'iq_aug_feature_type': 'power', 'class_order': 'random', 'increment': 5, 'test_batch_size': 512, 'nc_per_task': None, 'nc_per_task_list': '', 'val_rate': 1000, 'opt_lr': 0.1, 'opt_wt': 0.1, 'alpha_init': 0.001, 'learn_lr': False, 'sync_update': False, 'grad_clip_norm': 5.0, 'meta_batches': 3, 'use_old_task_memory': False, 'second_order': False, 'n_memories': 5120, 'memory_strength': 0, 'steps_per_sample': 1, 'bgd_optimizer': 'sgd', 'optimizer_params': '{}', 'train_mc_iters': 5, 'std_init': 0.05, 'mean_eta': 1, 'fisher_gamma': 0.95, 'rln': 7, 'meta_lr': 0.001, 'update_lr': 0.1, 'ctx_lr': 0.05, 'n_meta': 1, 'temperature': 5.0, 'task_emb': 64, 'noise_label': 54, 'classes_per_task': [5, 6, 5, 6, 6, 5, 5, 5, 6, 5], 'get_samples_per_task': <bound method IncrementalLoader.get_samples_per_task of <dataloaders.class_incremental_loader.IncrementalLoader object at 0x7a364568c940>>} # val: 0.021 0.000 -0.021 0.000 # sizes: model_gb=0.0863 mem_gb=0.0000 # 11506.71257686615
+[STATE 2026-04-14 18:41:06] results.pt components (approx): state_dict 88.5 MB, result_val_t 0.1 KB, result_val_a 0.8 KB
+[STATE 2026-04-14 18:41:06] Results saved; total runtime 3.20h
+Total runtime: 3.20 hours
