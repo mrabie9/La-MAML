@@ -149,6 +149,58 @@ def _resolve_output_dir_to_metrics_dir(output_dir: Path) -> Path:
     return output_dir / "metrics"
 
 
+def _candidate_metrics_dirs_for_logged_output(
+    logged_output_dir: Path,
+    algorithm_name: str,
+) -> List[Path]:
+    """Build candidate metrics dirs from a logged output path.
+
+    This supports both the original training location and synchronized/moved
+    artifacts under ``logs/00_sync/one-shot_CIL/saved_models``.
+
+    Args:
+        logged_output_dir: Path extracted from a job log's ``Logging to ...`` line.
+        algorithm_name: Algorithm name parsed from the job log filename/header.
+
+    Returns:
+        Candidate metrics directories ordered by preference.
+
+    Usage:
+        >>> isinstance(_candidate_metrics_dirs_for_logged_output, object)
+        True
+    """
+    normalized_logged_output_dir = Path(str(logged_output_dir).replace("//", "/"))
+    if normalized_logged_output_dir.is_absolute():
+        resolved_output_dir = normalized_logged_output_dir
+    else:
+        resolved_output_dir = (
+            _SCRIPT_DIR.parent / normalized_logged_output_dir
+        ).resolve()
+
+    candidate_metrics_dirs: List[Path] = [
+        _resolve_output_dir_to_metrics_dir(resolved_output_dir).resolve()
+    ]
+
+    relative_parts = normalized_logged_output_dir.parts
+    if len(relative_parts) >= 3 and relative_parts[0] == "logs":
+        run_subpath = Path(*relative_parts[2:])
+        one_shot_sync_base = (
+            _SCRIPT_DIR.parent
+            / "logs"
+            / "00_sync"
+            / "one-shot_CIL"
+            / "saved_models"
+            / algorithm_name
+        )
+        candidate_metrics_dirs.append(
+            _resolve_output_dir_to_metrics_dir(
+                (one_shot_sync_base / run_subpath).resolve()
+            )
+        )
+
+    return candidate_metrics_dirs
+
+
 def _discover_runs_from_run_dir(run_dir: Path) -> tuple[List[str], List[Path]]:
     """Discover model names and metrics dirs from a run folder.
 
@@ -184,17 +236,21 @@ def _discover_runs_from_run_dir(run_dir: Path) -> tuple[List[str], List[Path]]:
         if algorithm_name is None or logged_output_dir is None:
             continue
 
-        normalized_logged_output_dir = Path(str(logged_output_dir).replace("//", "/"))
-        if normalized_logged_output_dir.is_absolute():
-            output_dir = normalized_logged_output_dir
-        else:
-            output_dir = (_SCRIPT_DIR.parent / normalized_logged_output_dir).resolve()
-        metrics_dir = _resolve_output_dir_to_metrics_dir(output_dir).resolve()
-        if not metrics_dir.is_dir():
+        candidate_metrics_dirs = _candidate_metrics_dirs_for_logged_output(
+            logged_output_dir=logged_output_dir,
+            algorithm_name=algorithm_name,
+        )
+        selected_metrics_dir: Path | None = None
+        for metrics_dir in candidate_metrics_dirs:
+            if not metrics_dir.is_dir():
+                continue
+            if not any(metrics_dir.glob("task*.npz")):
+                continue
+            selected_metrics_dir = metrics_dir
+            break
+        if selected_metrics_dir is None:
             continue
-        if not any(metrics_dir.glob("task*.npz")):
-            continue
-        discovered_by_model[algorithm_name] = metrics_dir
+        discovered_by_model[algorithm_name] = selected_metrics_dir
 
     if not discovered_by_model:
         raise SystemExit(
