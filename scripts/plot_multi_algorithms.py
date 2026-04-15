@@ -325,8 +325,9 @@ def compute_average_forgetting(
     For each task ``t``, peak metric is taken as ``tasks[t][val_metric_key][t]``
     after training task ``t``. After training task ``K > t``, the metric on
     task ``t`` is ``tasks[K][val_metric_key][t]``. Forgetting for task ``t`` at
-    ``K`` is ``max(0, peak[t] - current_metric)`` and the average forgetting at
-    ``K`` is the mean over all previous tasks.
+    ``K`` is ``peak[t] - current_metric`` (not clamped), and the average at
+    ``K`` is the mean over all previous tasks. This allows negative values,
+    which indicate backward transfer.
 
     Args:
         tasks: Sequence of per-task metric dictionaries.
@@ -367,7 +368,7 @@ def compute_average_forgetting(
             if metric_vals_k is None or len(metric_vals_k) <= t:
                 continue
             current_metric = float(metric_vals_k[t])
-            forgets.append(max(0.0, float(peak_vals_arr[t] - current_metric)))
+            forgets.append(float(peak_vals_arr[t] - current_metric))
         avg_forgetting[k] = float(np.mean(forgets)) if forgets else 0.0
 
     return np.arange(n_tasks), avg_forgetting
@@ -1065,7 +1066,7 @@ def plot_multi_algorithms(
     # Use a larger figure when saving to file to allow detailed zooming.
     if output_dir is not None:
         col_width, row_height = 9, 4.5
-        dpi = 600
+        dpi = 550
     else:
         col_width, row_height = 4.0, 3.0
         dpi = 200
@@ -1375,7 +1376,7 @@ def plot_multi_algorithms(
     if output_dir is not None:
         output_dir.mkdir(parents=True, exist_ok=True)
         out_path = output_dir / "multi_algorithms_metrics.png"
-        fig.savefig(out_path, dpi=200, bbox_inches="tight")
+        fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
         print(f"Saved figure to {out_path}")
     else:
         plt.show()
@@ -1530,6 +1531,14 @@ def _parse_args() -> argparse.Namespace:
             "combined row."
         ),
     )
+    parser.add_argument(
+        "--include-iid2",
+        action="store_true",
+        help=(
+            "Include iid2 in plots. By default iid2 is ignored to reduce "
+            "clutter in multi-algorithm comparisons."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -1574,6 +1583,12 @@ def main() -> None:
         logs_root=args.logs_root,
         run_index=args.run_index,
     )
+    if not args.include_iid2:
+        runs = [run for run in runs if run.name.strip().lower() != "iid2"]
+        if not runs:
+            raise SystemExit(
+                "No runs left after filtering iid2. Pass --include-iid2 to include it."
+            )
     print("Algorithms and metrics directories:")
     for run in runs:
         print(f"  {run.name}: {run.metrics_dir}")
