@@ -301,16 +301,18 @@ def plot_series(
             if task_index not in task_index_to_dataset_name:
                 task_name_parts = task_name.split("-", 1)
                 if len(task_name_parts) == 2 and task_name_parts[1]:
+                    original_task_number = task_name_parts[0].lstrip("t")
                     dataset_name = task_name_parts[1]
                 else:
+                    original_task_number = "?"
                     dataset_name = task_name
                 dataset_name_lower = dataset_name.lower()
                 if "uclresm" in dataset_name_lower:
-                    dataset_name = "(RML)"
+                    dataset_name = f"(RML-{original_task_number})"
                 elif "deeprad" in dataset_name_lower:
-                    dataset_name = "(DR)"
+                    dataset_name = f"(DR-{original_task_number})"
                 elif "rcn" in dataset_name_lower:
-                    dataset_name = "(RCN)"
+                    dataset_name = f"(RCN-{original_task_number})"
                 task_index_to_dataset_name[task_index] = dataset_name
 
         axis.plot(
