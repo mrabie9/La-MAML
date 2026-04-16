@@ -49,9 +49,9 @@ PLOT_STYLES_BY_EXPERIMENT: Dict[str, PlotStyle] = {
         "ylim": None,
         "legend_kwargs": {
             "loc": "best",
-            "ncol": 5,
+            "ncol": 3,
             "fontsize": 10,
-            "columnspacing": 1,
+            "columnspacing": 0.9,
             "labelspacing": 0.3,
             "framealpha": 0.5,
             "borderaxespad": 0.1,
@@ -65,13 +65,34 @@ PLOT_STYLES_BY_EXPERIMENT: Dict[str, PlotStyle] = {
             "loc": "best",
             "ncol": 6,
             "fontsize": 10,
-            "columnspacing": 1.2,
+            "columnspacing": 1,
             "labelspacing": 0.3,
             "framealpha": 0.5,
             "borderaxespad": 0.1,
             "borderpad": 0.2,
         },
     },
+}
+ALGORITHM_DISPLAY_NAMES: Dict[str, str] = {
+    "agem": "A-GEM",
+    "bcl_dual": "BCL-Dual",
+    "cmaml": "C-MAML",
+    "ctn": "CTN",
+    "eralg4": "ER-Res",
+    "er_ring": "ER-Ring",
+    "ewc": "EWC",
+    "gem": "GEM",
+    "hat": "HAT",
+    "icarl": "iCaRL",
+    "iid2": "IID2",
+    "la-er": "La-ER",
+    "lamaml": "La-MAML",
+    "lwf": "LwF",
+    "packnet": "PackNet",
+    "rwalk": "RWalk",
+    "si": "SI",
+    "smaml": "S-MAML",
+    "ucl": "UCL",
 }
 
 
@@ -204,6 +225,8 @@ def build_series_by_algo(
     series_by_algorithm: Dict[str, List[SeriesPoint]] = {}
     for record in records:
         algorithm_name = str(record.get("algo", "unknown"))
+        if algorithm_name.strip().lower() == "iid2":
+            continue
         task_index = int(record.get("task_index", -1))
         task_name = str(record.get("task_name", f"task_{task_index}"))
         raw_metric_value = record.get(metric_name, None)
@@ -269,7 +292,7 @@ def plot_series(
             marker="o",
             linewidth=2.0,
             alpha=0.9,
-            label=algorithm_name,
+            label=ALGORITHM_DISPLAY_NAMES.get(algorithm_name, algorithm_name),
             color=label_colors.get(algorithm_name),
         )
 
