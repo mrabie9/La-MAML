@@ -225,13 +225,37 @@ def resolve_default_output_path(json_path: Path, metric_name: str) -> Path:
         suffix_parts = list(json_parts[logs_index + 1 : -1])
         if suffix_parts:
             suffix_parts[0] = "00_sync"
-            return (
-                Path(*json_parts[:logs_index])
-                / "logs"
-                / Path(*suffix_parts)
-                / "plots"
-                / f"{json_path.stem}_{metric_name}_plot.png"
-            )
+
+            def resolve_child_dir_case_insensitive(
+                parent_dir: Path, desired_child_dir_name: str
+            ) -> Path:
+                """Resolve a child dir name with case-insensitive matching.
+
+                This helps when input paths use `one-shot_TIL` vs `one-shot_til`
+                (or similar for `cil`) on a case-sensitive filesystem.
+                """
+                direct_child = parent_dir / desired_child_dir_name
+                if direct_child.exists():
+                    return direct_child
+
+                if not parent_dir.exists():
+                    return direct_child
+
+                desired_lower = desired_child_dir_name.lower()
+                for child in parent_dir.iterdir():
+                    if child.is_dir() and child.name.lower() == desired_lower:
+                        return child
+
+                return direct_child
+
+            current_dir = Path(*json_parts[:logs_index]) / "logs" / suffix_parts[0]
+            for part in suffix_parts[1:]:
+                if "til" in part.lower() or "cil" in part.lower():
+                    current_dir = resolve_child_dir_case_insensitive(current_dir, part)
+                else:
+                    current_dir = current_dir / part
+
+            return current_dir / "plots" / f"{json_path.stem}_{metric_name}_plot.png"
 
     return json_path.parent / "plots" / f"{json_path.stem}_{metric_name}_plot.png"
 
