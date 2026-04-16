@@ -203,12 +203,27 @@ def plot_series(
     sorted_algorithm_names = sorted(series_by_algorithm.keys())
     label_colors = build_label_colors(sorted_algorithm_names)
     all_task_indices = set()
+    task_index_to_dataset_name: Dict[int, str] = {}
     for algorithm_name in sorted_algorithm_names:
         series = series_by_algorithm[algorithm_name]
         x_positions = [point[0] for point in series]
         y_values = [point[1] for point in series]
-        for task_index, _, _ in series:
+        for task_index, _, task_name in series:
             all_task_indices.add(task_index)
+            if task_index not in task_index_to_dataset_name:
+                task_name_parts = task_name.split("-", 1)
+                if len(task_name_parts) == 2 and task_name_parts[1]:
+                    dataset_name = task_name_parts[1]
+                else:
+                    dataset_name = task_name
+                dataset_name_lower = dataset_name.lower()
+                if "uclresm" in dataset_name_lower:
+                    dataset_name = "RML"
+                elif "deeprad" in dataset_name_lower:
+                    dataset_name = "DR"
+                elif "rcn" in dataset_name_lower:
+                    dataset_name = "RCN"
+                task_index_to_dataset_name[task_index] = dataset_name
 
         axis.plot(
             x_positions,
@@ -222,13 +237,28 @@ def plot_series(
 
     sorted_task_indices = sorted(all_task_indices)
     axis.set_xticks(sorted_task_indices)
-    axis.set_xticklabels([str(task_index) for task_index in sorted_task_indices])
+    axis.set_xticklabels(
+        [
+            f"{task_index}\n{task_index_to_dataset_name.get(task_index, 'unknown')}"
+            for task_index in sorted_task_indices
+        ]
+    )
     axis.axhline(0.0, color="black", linewidth=1.0, linestyle="--", alpha=0.7)
     axis.set_xlabel("Task", fontsize=16)
     axis.set_ylabel("Forward Transfer", fontsize=16)
     # axis.set_title(title or f"{metric_name} by task and algorithm")
+    # axis.set_ylim(-0.08, 0.2)
     axis.grid(True, linestyle="--", alpha=0.3)
-    axis.legend(loc="best", ncol=4, fontsize=10, columnspacing=0.5, labelspacing=0.3,framealpha=0.5, borderaxespad=0.2)
+    axis.legend(
+        loc="best",
+        ncol=5,
+        fontsize=10,
+        columnspacing=1,
+        labelspacing=0.3,
+        framealpha=0.5,
+        borderaxespad=0.1,
+        borderpad=0.2,
+    )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     figure.tight_layout(pad=0.1)
