@@ -24,6 +24,7 @@ import matplotlib.pyplot as plt
 
 MetricRecord = Dict[str, Any]
 SeriesPoint = Tuple[int, Optional[float], str]
+PlotStyle = Dict[str, Any]
 DEFAULT_ALGORITHM_COLOR_ORDER = [
     "agem",
     "bcl_dual",
@@ -42,6 +43,36 @@ DEFAULT_ALGORITHM_COLOR_ORDER = [
     "rwalk",
     "smaml",
 ]
+PLOT_STYLES_BY_EXPERIMENT: Dict[str, PlotStyle] = {
+    "default": {
+        "figsize": (6, 3),
+        "ylim": None,
+        "legend_kwargs": {
+            "loc": "best",
+            "ncol": 5,
+            "fontsize": 10,
+            "columnspacing": 1,
+            "labelspacing": 0.3,
+            "framealpha": 0.5,
+            "borderaxespad": 0.1,
+            "borderpad": 0.2,
+        },
+    },
+    "til": {
+        "figsize": (7, 3.5),
+        "ylim": (-0.08, 0.2),
+        "legend_kwargs": {
+            "loc": "best",
+            "ncol": 6,
+            "fontsize": 10,
+            "columnspacing": 1.2,
+            "labelspacing": 0.3,
+            "framealpha": 0.5,
+            "borderaxespad": 0.1,
+            "borderpad": 0.2,
+        },
+    },
+}
 
 
 def build_label_colors(labels: List[str]) -> Dict[str, Any]:
@@ -69,23 +100,29 @@ def build_label_colors(labels: List[str]) -> Dict[str, Any]:
         return plt.get_cmap("hsv")(label_position / float(total_labels))
 
     colors_by_label: Dict[str, Any] = {}
-    palette_cursor = 0
+    known_algorithm_to_palette_index = {
+        algorithm_name: index
+        for index, algorithm_name in enumerate(DEFAULT_ALGORITHM_COLOR_ORDER)
+    }
 
-    # First assign fixed colors to known algorithms so they remain stable
-    # even when some algorithms are filtered in/out of a plot.
-    for algorithm_name in DEFAULT_ALGORITHM_COLOR_ORDER:
-        if algorithm_name in labels:
-            colors_by_label[algorithm_name] = color_for_position(
-                palette_cursor, len(labels)
+    # Use fixed palette positions per known algorithm so color remains stable
+    # across plots even when some algorithms are absent.
+    for label in labels:
+        if label in known_algorithm_to_palette_index:
+            colors_by_label[label] = color_for_position(
+                known_algorithm_to_palette_index[label],
+                len(DEFAULT_ALGORITHM_COLOR_ORDER),
             )
-            palette_cursor += 1
 
-    # Then assign deterministic colors to any unseen labels by sorted order.
+    # Assign deterministic colors to unknown labels after the known block.
+    next_palette_index = len(DEFAULT_ALGORITHM_COLOR_ORDER)
     for label in sorted(labels):
         if label in colors_by_label:
             continue
-        colors_by_label[label] = color_for_position(palette_cursor, len(labels))
-        palette_cursor += 1
+        colors_by_label[label] = color_for_position(
+            next_palette_index, next_palette_index + 1
+        )
+        next_palette_index += 1
 
     return colors_by_label
 
@@ -185,6 +222,7 @@ def plot_series(
     series_by_algorithm: Dict[str, List[SeriesPoint]],
     metric_name: str,
     output_path: Path,
+    plot_style: PlotStyle,
     title: Optional[str] = None,
 ) -> None:
     """Create and save the metric line plot.
@@ -198,7 +236,7 @@ def plot_series(
     Usage:
         >>> plot_series({"algo": [(0, 0.1, "t0")]}, "metric", Path("out.png"))
     """
-    figure, axis = plt.subplots(figsize=(6, 3))
+    figure, axis = plt.subplots(figsize=plot_style["figsize"])
 
     sorted_algorithm_names = sorted(series_by_algorithm.keys())
     label_colors = build_label_colors(sorted_algorithm_names)
@@ -218,11 +256,11 @@ def plot_series(
                     dataset_name = task_name
                 dataset_name_lower = dataset_name.lower()
                 if "uclresm" in dataset_name_lower:
-                    dataset_name = "RML"
+                    dataset_name = "(RML)"
                 elif "deeprad" in dataset_name_lower:
-                    dataset_name = "DR"
+                    dataset_name = "(DR)"
                 elif "rcn" in dataset_name_lower:
-                    dataset_name = "RCN"
+                    dataset_name = "(RCN)"
                 task_index_to_dataset_name[task_index] = dataset_name
 
         axis.plot(
@@ -247,18 +285,10 @@ def plot_series(
     axis.set_xlabel("Task", fontsize=16)
     axis.set_ylabel("Forward Transfer", fontsize=16)
     # axis.set_title(title or f"{metric_name} by task and algorithm")
-    # axis.set_ylim(-0.08, 0.2)
+    if plot_style["ylim"] is not None:
+        axis.set_ylim(*plot_style["ylim"])
     axis.grid(True, linestyle="--", alpha=0.3)
-    axis.legend(
-        loc="best",
-        ncol=5,
-        fontsize=10,
-        columnspacing=1,
-        labelspacing=0.3,
-        framealpha=0.5,
-        borderaxespad=0.1,
-        borderpad=0.2,
-    )
+    axis.legend(**plot_style["legend_kwargs"])
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     figure.tight_layout(pad=0.1)
@@ -277,10 +307,14 @@ def main() -> None:
 
     records = load_metrics(arguments.json_path)
     series_by_algorithm = build_series_by_algo(records, arguments.metric)
+    experiment_path_text = str(arguments.json_path).lower()
+    style_key = "til" if "til" in experiment_path_text else "default"
+    selected_plot_style = PLOT_STYLES_BY_EXPERIMENT[style_key]
     plot_series(
         series_by_algorithm=series_by_algorithm,
         metric_name=arguments.metric,
         output_path=output_path,
+        plot_style=selected_plot_style,
         title=arguments.title,
     )
     print(f"Saved plot to: {output_path}")
