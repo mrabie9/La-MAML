@@ -156,7 +156,7 @@ def _candidate_metrics_dirs_for_logged_output(
     """Build candidate metrics dirs from a logged output path.
 
     This supports both the original training location and synchronized/moved
-    artifacts under ``logs/00_sync/one-shot_CIL/saved_models``.
+    artifacts under ``logs/00_sync/*/saved_models``.
 
     Args:
         logged_output_dir: Path extracted from a job log's ``Logging to ...`` line.
@@ -184,21 +184,31 @@ def _candidate_metrics_dirs_for_logged_output(
     relative_parts = normalized_logged_output_dir.parts
     if len(relative_parts) >= 3 and relative_parts[0] == "logs":
         run_subpath = Path(*relative_parts[2:])
-        one_shot_sync_base = (
-            _SCRIPT_DIR.parent
-            / "logs"
-            / "00_sync"
-            / "one-shot_CIL"
-            / "saved_models"
-            / algorithm_name
-        )
-        candidate_metrics_dirs.append(
-            _resolve_output_dir_to_metrics_dir(
-                (one_shot_sync_base / run_subpath).resolve()
+        for sync_dir_name in (
+            "one-shot_CIL",
+            "one-shot_TIL",
+            "full-til_10epochs_w-zs",
+        ):
+            sync_base = (
+                _SCRIPT_DIR.parent
+                / "logs"
+                / "00_sync"
+                / sync_dir_name
+                / "saved_models"
+                / algorithm_name
             )
-        )
+            candidate_metrics_dirs.append(
+                _resolve_output_dir_to_metrics_dir((sync_base / run_subpath).resolve())
+            )
 
-    return candidate_metrics_dirs
+    deduplicated_candidates: List[Path] = []
+    seen_candidate_dirs: set[Path] = set()
+    for candidate_metrics_dir in candidate_metrics_dirs:
+        if candidate_metrics_dir in seen_candidate_dirs:
+            continue
+        deduplicated_candidates.append(candidate_metrics_dir)
+        seen_candidate_dirs.add(candidate_metrics_dir)
+    return deduplicated_candidates
 
 
 def _discover_runs_from_run_dir(run_dir: Path) -> tuple[List[str], List[Path]]:
