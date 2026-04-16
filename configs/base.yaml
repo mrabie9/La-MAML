@@ -1,5 +1,5 @@
 # Shared experiment defaults
-expt_name: full-tasks-2_all-10epochs_weighted-loss
+expt_name: full-tasks_CIL_all
 arch: resnet1d
 loader: task_incremental_loader
 data_path: data/rff/radar/full

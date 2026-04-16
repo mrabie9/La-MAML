@@ -37,7 +37,7 @@ class PackNetConfig:
     lr: float = 0.01
     optimizer: str = "sgd"
     n_tasks: int = 3
-    prune_perc: float = 0.5  # fraction of currently used weights to prune
+    prune_perc: float = 0.75  # fraction of currently used weights to prune
     clipgrad: Optional[float] = 100.0
 
     @staticmethod
@@ -82,7 +82,7 @@ class Net(nn.Module):
         self.incremental_loader_name = getattr(args, "loader", None)
         self.opt = self._build_optimizer()
         self.clipgrad = self.cfg.clipgrad
-        self.prune_perc = float(1 / self.cfg.n_tasks)
+        self.prune_perc = self.cfg.prune_perc #float(1 / self.n_tasks)
         print(
             f"PackNet will prune {self.prune_perc*100:.1f}% of currently used weights after each task."
         )

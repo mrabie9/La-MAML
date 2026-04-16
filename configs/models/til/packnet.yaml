@@ -2,3 +2,4 @@
 model: packnet
 loader: task_incremental_loader
 lr: 0.03
+prune_perc: 0.75

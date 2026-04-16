@@ -1,0 +1,787 @@
+(la-maml_env) wsmr11@lnx-elkk-2:~/repos/La-MAML$ python3 tuning/Alpha/tune_icarl.py --config configs/models/icarl.yaml --hierarchical
+Set seed 0
+task0.npz train: x=(2448, 1024), y=(2448, 2)
+task0.npz test: x=(612, 1024), y=(612, 2)
+task0.npz: applied data scaling mode 'normalize'.
+Loaded task0.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1248,  227,  256,  243,  246,  228]))
+Noise labels ratio in task0.npz train: 0.25, test: 0.23
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 2448)
+task1.npz train: x=(6470, 1024), y=(6470, 2)
+task1.npz test: x=(2156, 1024), y=(2156, 2)
+task1.npz: applied data scaling mode 'normalize'.
+Loaded task1.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  2,  4,  6,  7, 16]), counts=array([3663,  157,  373,  443,  440,  329, 1065]))
+Noise labels ratio in task1.npz train: 0.28, test: 0.28
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11 12]. Size: 6470)
+task2.npz train: x=(2448, 1024), y=(2448, 2)
+task2.npz test: x=(612, 1024), y=(612, 2)
+task2.npz: applied data scaling mode 'normalize'.
+Loaded task2.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1229,  244,  228,  244,  260,  243]))
+Noise labels ratio in task2.npz train: 0.25, test: 0.25
+Loaded task2.npz: Remapped labels: [13 14 15 16 17 18]. Size: 2448)
+Task 0: 2448 training samples, using 2448 samples for training and testing.
+Task 1: 6470 training samples, using 6470 samples for training and testing.
+Task 2: 2448 training samples, using 2448 samples for training and testing.
+Built classes_per_task: [6, 7, 6]
+5120 1.0 1.0 -1
+Task 0: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.2] | det_recall [0.5] | det_fa [1.0] ----
+Task: 0 | Epoch: 1/5 | Loss: 0.701 | Acc: Task_avg: 0.2 Tr: 0.41984 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.24it/s]
+Task: 0 | Epoch: 2/5 | Loss: 0.588 | Acc: Task_avg: 0.2 Tr: 0.45563 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.92it/s]
+Task: 0 | Epoch: 3/5 | Loss: 0.556 | Acc: Task_avg: 0.2 Tr: 0.50794 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.92it/s]
+Task: 0 | Epoch: 4/5 | Loss: 0.474 | Acc: Task_avg: 0.2 Tr: 0.56739 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.99it/s]
+Task: 0 | Epoch: 5/5 | Loss: 0.462 | Acc: Task_avg: 0.2 Tr: 0.48788 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:50<00:00,  5.02s/it]
+Task 1: 6470 training samples, 1941 test samples.
+ 0/26 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.0013333333333333335, 0.15625] | det_recall [0.002817460317460317, 0.5] | det_fa [1.0, 1.0] ----
+Task: 1 | Epoch: 1/5 | Loss: 5.339 | Acc: Task_avg: 0.07879 Tr: 0.16446 Val: 0.15625 : 100%|███████████████████| 26/26 [00:07<00:00,  3.33it/s]
+Task: 1 | Epoch: 2/5 | Loss: 5.313 | Acc: Task_avg: 0.07879 Tr: 0.16098 Val: 0.15625 : 100%|███████████████████| 26/26 [00:05<00:00,  4.74it/s]
+Task: 1 | Epoch: 3/5 | Loss: 14.797 | Acc: Task_avg: 0.07879 Tr: 0.14286 Val: 0.15625 : 100%|██████████████████| 26/26 [00:05<00:00,  4.65it/s]
+Task: 1 | Epoch: 4/5 | Loss: 8.769 | Acc: Task_avg: 0.07879 Tr: 0.17944 Val: 0.15625 : 100%|███████████████████| 26/26 [00:05<00:00,  4.65it/s]
+Task: 1 | Epoch: 5/5 | Loss: 7.138 | Acc: Task_avg: 0.07879 Tr: 0.16516 Val: 0.15625 : 100%|███████████████████| 26/26 [00:35<00:00,  1.38s/it]
+Task 2: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.09248958448958448, 0.07163524109941263, 0.2] | det_recall [0.3956559619984278, 0.4797970895173404, 0.5] | det_fa [1.0, 0.5611587010938546, 1.0] ----
+Task: 2 | Epoch: 1/5 | Loss: 3.188 | Acc: Task_avg: 0.12137 Tr: 0.36762 Val: 0.2 : 100%|███████████████████████| 10/10 [00:09<00:00,  1.01it/s]
+Task: 2 | Epoch: 2/5 | Loss: 4.651 | Acc: Task_avg: 0.12137 Tr: 0.39031 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  4.30it/s]
+Task: 2 | Epoch: 3/5 | Loss: 2.815 | Acc: Task_avg: 0.12137 Tr: 0.49793 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  4.24it/s]
+Task: 2 | Epoch: 4/5 | Loss: 1.932 | Acc: Task_avg: 0.12137 Tr: 0.57705 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  4.32it/s]
+Task: 2 | Epoch: 5/5 | Loss: 2.169 | Acc: Task_avg: 0.12137 Tr: 0.58256 Val: 0.2 : 100%|███████████████████████| 10/10 [00:58<00:00,  5.83s/it]
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.06138364258373441 
+ Individual Accuracy: [0.05581060606060606, 0.09336557421584968, 0.03497474747474748]
+Final Detection Results:- 
+ Total Detection: 0.30582324719570503 
+ Individual Detection: [0.2407767073109539, 0.4804112647379021, 0.19628176953825913]
+Final Detection False Alarm:- 
+ Total False Alarm: 0.886221587088501 
+ Individual False Alarm: [1.0, 0.6586647612655031, 1.0]
+[lr] Trial 0 finished | score=0.0021 | params={'lr': 0.03}
+Set seed 0
+task0.npz train: x=(2448, 1024), y=(2448, 2)
+task0.npz test: x=(612, 1024), y=(612, 2)
+task0.npz: applied data scaling mode 'normalize'.
+Loaded task0.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1248,  227,  256,  243,  246,  228]))
+Noise labels ratio in task0.npz train: 0.25, test: 0.23
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 2448)
+task1.npz train: x=(6470, 1024), y=(6470, 2)
+task1.npz test: x=(2156, 1024), y=(2156, 2)
+task1.npz: applied data scaling mode 'normalize'.
+Loaded task1.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  2,  4,  6,  7, 16]), counts=array([3663,  157,  373,  443,  440,  329, 1065]))
+Noise labels ratio in task1.npz train: 0.28, test: 0.28
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11 12]. Size: 6470)
+task2.npz train: x=(2448, 1024), y=(2448, 2)
+task2.npz test: x=(612, 1024), y=(612, 2)
+task2.npz: applied data scaling mode 'normalize'.
+Loaded task2.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1229,  244,  228,  244,  260,  243]))
+Noise labels ratio in task2.npz train: 0.25, test: 0.25
+Loaded task2.npz: Remapped labels: [13 14 15 16 17 18]. Size: 2448)
+Task 0: 2448 training samples, using 2448 samples for training and testing.
+Task 1: 6470 training samples, using 6470 samples for training and testing.
+Task 2: 2448 training samples, using 2448 samples for training and testing.
+Built classes_per_task: [6, 7, 6]
+5120 1.0 1.0 -1
+Task 0: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.2] | det_recall [0.5] | det_fa [1.0] ----
+Task: 0 | Epoch: 1/5 | Loss: 0.738 | Acc: Task_avg: 0.2 Tr: 0.44697 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.69it/s]
+Task: 0 | Epoch: 2/5 | Loss: 0.526 | Acc: Task_avg: 0.2 Tr: 0.53629 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.73it/s]
+Task: 0 | Epoch: 3/5 | Loss: 0.519 | Acc: Task_avg: 0.2 Tr: 0.44567 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.76it/s]
+Task: 0 | Epoch: 4/5 | Loss: 0.495 | Acc: Task_avg: 0.2 Tr: 0.48117 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.79it/s]
+Task: 0 | Epoch: 5/5 | Loss: 0.481 | Acc: Task_avg: 0.2 Tr: 0.47251 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:51<00:00,  5.11s/it]
+Task 1: 6470 training samples, 1941 test samples.
+ 0/26 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.09929100529100529, 0.15625] | det_recall [0.36009885928379076, 0.5] | det_fa [1.0, 1.0] ----
+Task: 1 | Epoch: 1/5 | Loss: 3.345 | Acc: Task_avg: 0.12777 Tr: 0.14286 Val: 0.15625 : 100%|███████████████████| 26/26 [00:09<00:00,  2.76it/s]
+Task: 1 | Epoch: 2/5 | Loss: 3.138 | Acc: Task_avg: 0.12777 Tr: 0.15714 Val: 0.15625 : 100%|███████████████████| 26/26 [00:05<00:00,  4.45it/s]
+Task: 1 | Epoch: 3/5 | Loss: 3.26 | Acc: Task_avg: 0.12777 Tr: 0.14286 Val: 0.15625 : 100%|████████████████████| 26/26 [00:05<00:00,  4.49it/s]
+Task: 1 | Epoch: 4/5 | Loss: 2.427 | Acc: Task_avg: 0.12777 Tr: 0.17875 Val: 0.15625 : 100%|███████████████████| 26/26 [00:05<00:00,  4.47it/s]
+Task: 1 | Epoch: 5/5 | Loss: 8.077 | Acc: Task_avg: 0.12777 Tr: 0.19303 Val: 0.15625 : 100%|███████████████████| 26/26 [00:37<00:00,  1.42s/it]
+Task 2: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.13084249084249083, 0.16358826052259604, 0.2] | det_recall [0.36375283924598995, 0.4931849255570025, 0.5] | det_fa [1.0, 0.9360281316309692, 1.0] ----
+Task: 2 | Epoch: 1/5 | Loss: 1.347 | Acc: Task_avg: 0.16481 Tr: 0.42696 Val: 0.2 : 100%|███████████████████████| 10/10 [00:09<00:00,  1.02it/s]
+Task: 2 | Epoch: 2/5 | Loss: 1.492 | Acc: Task_avg: 0.16481 Tr: 0.52082 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  4.31it/s]
+Task: 2 | Epoch: 3/5 | Loss: 1.492 | Acc: Task_avg: 0.16481 Tr: 0.55125 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  4.29it/s]
+Task: 2 | Epoch: 4/5 | Loss: 1.458 | Acc: Task_avg: 0.16481 Tr: 0.55711 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  4.33it/s]
+Task: 2 | Epoch: 5/5 | Loss: 3.526 | Acc: Task_avg: 0.16481 Tr: 0.55837 Val: 0.2 : 100%|███████████████████████| 10/10 [00:58<00:00,  5.81s/it]
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.10357420227952897 
+ Individual Accuracy: [0.1266506734006734, 0.1061446755106556, 0.07792725792725792]
+Final Detection Results:- 
+ Total Detection: 0.34745890344917735 
+ Individual Detection: [0.4310754846371284, 0.46464031466691913, 0.14666091104348453]
+Final Detection False Alarm:- 
+ Total False Alarm: 0.9763876241234183 
+ Individual False Alarm: [1.0, 0.9291628723702552, 1.0]
+[lr] Trial 1 finished | score=0.0008 | params={'lr': 0.01}
+Set seed 0
+task0.npz train: x=(2448, 1024), y=(2448, 2)
+task0.npz test: x=(612, 1024), y=(612, 2)
+task0.npz: applied data scaling mode 'normalize'.
+Loaded task0.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1248,  227,  256,  243,  246,  228]))
+Noise labels ratio in task0.npz train: 0.25, test: 0.23
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 2448)
+task1.npz train: x=(6470, 1024), y=(6470, 2)
+task1.npz test: x=(2156, 1024), y=(2156, 2)
+task1.npz: applied data scaling mode 'normalize'.
+Loaded task1.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  2,  4,  6,  7, 16]), counts=array([3663,  157,  373,  443,  440,  329, 1065]))
+Noise labels ratio in task1.npz train: 0.28, test: 0.28
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11 12]. Size: 6470)
+task2.npz train: x=(2448, 1024), y=(2448, 2)
+task2.npz test: x=(612, 1024), y=(612, 2)
+task2.npz: applied data scaling mode 'normalize'.
+Loaded task2.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1229,  244,  228,  244,  260,  243]))
+Noise labels ratio in task2.npz train: 0.25, test: 0.25
+Loaded task2.npz: Remapped labels: [13 14 15 16 17 18]. Size: 2448)
+Task 0: 2448 training samples, using 2448 samples for training and testing.
+Task 1: 6470 training samples, using 6470 samples for training and testing.
+Task 2: 2448 training samples, using 2448 samples for training and testing.
+Built classes_per_task: [6, 7, 6]
+5120 1.0 1.0 -1
+Task 0: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.2] | det_recall [0.5] | det_fa [1.0] ----
+Task: 0 | Epoch: 1/5 | Loss: 0.891 | Acc: Task_avg: 0.2 Tr: 0.32778 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.75it/s]
+Task: 0 | Epoch: 2/5 | Loss: 0.723 | Acc: Task_avg: 0.2 Tr: 0.39747 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.82it/s]
+Task: 0 | Epoch: 3/5 | Loss: 0.635 | Acc: Task_avg: 0.2 Tr: 0.46999 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.77it/s]
+Task: 0 | Epoch: 4/5 | Loss: 0.524 | Acc: Task_avg: 0.2 Tr: 0.51039 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.83it/s]
+Task: 0 | Epoch: 5/5 | Loss: 0.492 | Acc: Task_avg: 0.2 Tr: 0.48687 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:51<00:00,  5.17s/it]
+Task 1: 6470 training samples, 1941 test samples.
+ 0/26 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.04266788766788766, 0.15625] | det_recall [0.18186206031411511, 0.5] | det_fa [1.0, 1.0] ----
+Task: 1 | Epoch: 1/5 | Loss: 4.202 | Acc: Task_avg: 0.09946 Tr: 0.15714 Val: 0.15625 : 100%|███████████████████| 26/26 [00:08<00:00,  2.90it/s]
+Task: 1 | Epoch: 2/5 | Loss: 3.635 | Acc: Task_avg: 0.09946 Tr: 0.17143 Val: 0.15625 : 100%|███████████████████| 26/26 [00:05<00:00,  4.47it/s]
+Task: 1 | Epoch: 3/5 | Loss: 3.794 | Acc: Task_avg: 0.09946 Tr: 0.13937 Val: 0.15625 : 100%|███████████████████| 26/26 [00:05<00:00,  4.38it/s]
+Task: 1 | Epoch: 4/5 | Loss: 2.781 | Acc: Task_avg: 0.09946 Tr: 0.15714 Val: 0.15625 : 100%|███████████████████| 26/26 [00:05<00:00,  4.37it/s]
+Task: 1 | Epoch: 5/5 | Loss: 2.611 | Acc: Task_avg: 0.09946 Tr: 0.13937 Val: 0.15625 : 100%|███████████████████| 26/26 [00:37<00:00,  1.44s/it]
+Task 2: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.10965238465238465, 0.11681112456733274, 0.2] | det_recall [0.3761253198855939, 0.48459093387591423, 0.5] | det_fa [1.0, 0.9080868466978107, 1.0] ----
+Task: 2 | Epoch: 1/5 | Loss: 2.055 | Acc: Task_avg: 0.14215 Tr: 0.26408 Val: 0.2 : 100%|███████████████████████| 10/10 [00:10<00:00,  1.01s/it]
+Task: 2 | Epoch: 2/5 | Loss: 1.393 | Acc: Task_avg: 0.14215 Tr: 0.45811 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  4.33it/s]
+Task: 2 | Epoch: 3/5 | Loss: 1.328 | Acc: Task_avg: 0.14215 Tr: 0.45581 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  4.19it/s]
+Task: 2 | Epoch: 4/5 | Loss: 1.436 | Acc: Task_avg: 0.14215 Tr: 0.43136 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  4.28it/s]
+Task: 2 | Epoch: 5/5 | Loss: 1.394 | Acc: Task_avg: 0.14215 Tr: 0.48051 Val: 0.2 : 100%|███████████████████████| 10/10 [00:58<00:00,  5.82s/it]
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.08821459431281962 
+ Individual Accuracy: [0.11586209161209163, 0.1143077856024615, 0.034473905723905726]
+Final Detection Results:- 
+ Total Detection: 0.31322747232998727 
+ Individual Detection: [0.3563185475103283, 0.49565512183394456, 0.08770874764568895]
+Final Detection False Alarm:- 
+ Total False Alarm: 0.9713422052095444 
+ Individual False Alarm: [1.0, 0.9140266156286333, 1.0]
+[lr] Trial 2 finished | score=0.0008 | params={'lr': 0.003}
+Set seed 0
+task0.npz train: x=(2448, 1024), y=(2448, 2)
+task0.npz test: x=(612, 1024), y=(612, 2)
+task0.npz: applied data scaling mode 'normalize'.
+Loaded task0.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1248,  227,  256,  243,  246,  228]))
+Noise labels ratio in task0.npz train: 0.25, test: 0.23
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 2448)
+task1.npz train: x=(6470, 1024), y=(6470, 2)
+task1.npz test: x=(2156, 1024), y=(2156, 2)
+task1.npz: applied data scaling mode 'normalize'.
+Loaded task1.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  2,  4,  6,  7, 16]), counts=array([3663,  157,  373,  443,  440,  329, 1065]))
+Noise labels ratio in task1.npz train: 0.28, test: 0.28
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11 12]. Size: 6470)
+task2.npz train: x=(2448, 1024), y=(2448, 2)
+task2.npz test: x=(612, 1024), y=(612, 2)
+task2.npz: applied data scaling mode 'normalize'.
+Loaded task2.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1229,  244,  228,  244,  260,  243]))
+Noise labels ratio in task2.npz train: 0.25, test: 0.25
+Loaded task2.npz: Remapped labels: [13 14 15 16 17 18]. Size: 2448)
+Task 0: 2448 training samples, using 2448 samples for training and testing.
+Task 1: 6470 training samples, using 6470 samples for training and testing.
+Task 2: 2448 training samples, using 2448 samples for training and testing.
+Built classes_per_task: [6, 7, 6]
+5120 1.0 1.0 -1
+Task 0: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.2] | det_recall [0.5] | det_fa [1.0] ----
+Task: 0 | Epoch: 1/5 | Loss: 1.374 | Acc: Task_avg: 0.2 Tr: 0.35635 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.66it/s]
+Task: 0 | Epoch: 2/5 | Loss: 0.872 | Acc: Task_avg: 0.2 Tr: 0.30476 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.80it/s]
+Task: 0 | Epoch: 3/5 | Loss: 0.771 | Acc: Task_avg: 0.2 Tr: 0.41342 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.80it/s]
+Task: 0 | Epoch: 4/5 | Loss: 0.69 | Acc: Task_avg: 0.2 Tr: 0.48629 Val: 0.2 : 100%|████████████████████████████| 10/10 [00:02<00:00,  4.80it/s]
+Task: 0 | Epoch: 5/5 | Loss: 0.662 | Acc: Task_avg: 0.2 Tr: 0.47785 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:52<00:00,  5.22s/it]
+Task 1: 6470 training samples, 1941 test samples.
+ 0/26 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.02235042735042735, 0.15625] | det_recall [0.10457043337180323, 0.5] | det_fa [1.0, 1.0] ----
+Task: 1 | Epoch: 1/5 | Loss: 2.373 | Acc: Task_avg: 0.0893 Tr: 0.20151 Val: 0.15625 : 100%|████████████████████| 26/26 [00:08<00:00,  3.11it/s]
+Task: 1 | Epoch: 2/5 | Loss: 1.785 | Acc: Task_avg: 0.0893 Tr: 0.14286 Val: 0.15625 : 100%|████████████████████| 26/26 [00:05<00:00,  4.38it/s]
+Task: 1 | Epoch: 3/5 | Loss: 3.532 | Acc: Task_avg: 0.0893 Tr: 0.15366 Val: 0.15625 : 100%|████████████████████| 26/26 [00:05<00:00,  4.38it/s]
+Task: 1 | Epoch: 4/5 | Loss: 2.99 | Acc: Task_avg: 0.0893 Tr: 0.15714 Val: 0.15625 : 100%|█████████████████████| 26/26 [00:05<00:00,  4.42it/s]
+Task: 1 | Epoch: 5/5 | Loss: 1.802 | Acc: Task_avg: 0.0893 Tr: 0.14286 Val: 0.15625 : 100%|████████████████████| 26/26 [00:37<00:00,  1.43s/it]
+Task 2: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.13879695304695305, 0.14620841074239496, 0.2] | det_recall [0.4557125686993424, 0.5096307696831341, 0.5] | det_fa [0.9579458128078817, 0.906185863143224, 1.0] ----
+Task: 2 | Epoch: 1/5 | Loss: 1.991 | Acc: Task_avg: 0.16167 Tr: 0.16667 Val: 0.2 : 100%|███████████████████████| 10/10 [00:09<00:00,  1.01it/s]
+Task: 2 | Epoch: 2/5 | Loss: 1.514 | Acc: Task_avg: 0.16167 Tr: 0.21886 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  4.28it/s]
+Task: 2 | Epoch: 3/5 | Loss: 1.523 | Acc: Task_avg: 0.16167 Tr: 0.31669 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  4.27it/s]
+Task: 2 | Epoch: 4/5 | Loss: 1.47 | Acc: Task_avg: 0.16167 Tr: 0.36742 Val: 0.2 : 100%|████████████████████████| 10/10 [00:02<00:00,  4.29it/s]
+Task: 2 | Epoch: 5/5 | Loss: 1.27 | Acc: Task_avg: 0.16167 Tr: 0.33732 Val: 0.2 : 100%|████████████████████████| 10/10 [00:58<00:00,  5.83s/it]
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.09028590739516211 
+ Individual Accuracy: [0.10896274096274097, 0.10200390008166423, 0.05989108114108114]
+Final Detection Results:- 
+ Total Detection: 0.3523612565155862 
+ Individual Detection: [0.3711963553949855, 0.5000513013515699, 0.185836112800203]
+Final Detection False Alarm:- 
+ Total False Alarm: 0.9685566040319457 
+ Individual False Alarm: [0.9964285714285713, 0.9092412406672654, 1.0]
+[lr] Trial 3 finished | score=0.0010 | params={'lr': 0.001}
+Set seed 0
+task0.npz train: x=(2448, 1024), y=(2448, 2)
+task0.npz test: x=(612, 1024), y=(612, 2)
+task0.npz: applied data scaling mode 'normalize'.
+Loaded task0.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1248,  227,  256,  243,  246,  228]))
+Noise labels ratio in task0.npz train: 0.25, test: 0.23
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 2448)
+task1.npz train: x=(6470, 1024), y=(6470, 2)
+task1.npz test: x=(2156, 1024), y=(2156, 2)
+task1.npz: applied data scaling mode 'normalize'.
+Loaded task1.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  2,  4,  6,  7, 16]), counts=array([3663,  157,  373,  443,  440,  329, 1065]))
+Noise labels ratio in task1.npz train: 0.28, test: 0.28
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11 12]. Size: 6470)
+task2.npz train: x=(2448, 1024), y=(2448, 2)
+task2.npz test: x=(612, 1024), y=(612, 2)
+task2.npz: applied data scaling mode 'normalize'.
+Loaded task2.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1229,  244,  228,  244,  260,  243]))
+Noise labels ratio in task2.npz train: 0.25, test: 0.25
+Loaded task2.npz: Remapped labels: [13 14 15 16 17 18]. Size: 2448)
+Task 0: 2448 training samples, using 2448 samples for training and testing.
+Task 1: 6470 training samples, using 6470 samples for training and testing.
+Task 2: 2448 training samples, using 2448 samples for training and testing.
+Built classes_per_task: [6, 7, 6]
+5120 1.0 1.0 -1
+Task 0: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.2] | det_recall [0.5] | det_fa [1.0] ----
+Task: 0 | Epoch: 1/5 | Loss: 1.773 | Acc: Task_avg: 0.2 Tr: 0.30169 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.56it/s]
+Task: 0 | Epoch: 2/5 | Loss: 1.411 | Acc: Task_avg: 0.2 Tr: 0.3228 Val: 0.2 : 100%|████████████████████████████| 10/10 [00:02<00:00,  4.74it/s]
+Task: 0 | Epoch: 3/5 | Loss: 1.118 | Acc: Task_avg: 0.2 Tr: 0.24784 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.69it/s]
+Task: 0 | Epoch: 4/5 | Loss: 0.931 | Acc: Task_avg: 0.2 Tr: 0.34394 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.74it/s]
+Task: 0 | Epoch: 5/5 | Loss: 0.848 | Acc: Task_avg: 0.2 Tr: 0.33608 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:52<00:00,  5.25s/it]
+Task 1: 6470 training samples, 1941 test samples.
+ 0/26 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.08870867095867097, 0.15625] | det_recall [0.20203698128355665, 0.5] | det_fa [1.0, 1.0] ----
+Task: 1 | Epoch: 1/5 | Loss: 3.179 | Acc: Task_avg: 0.12248 Tr: 0.15238 Val: 0.15625 : 100%|███████████████████| 26/26 [00:08<00:00,  3.17it/s]
+Task: 1 | Epoch: 2/5 | Loss: 2.187 | Acc: Task_avg: 0.12248 Tr: 0.19443 Val: 0.15625 : 100%|███████████████████| 26/26 [00:05<00:00,  4.45it/s]
+Task: 1 | Epoch: 3/5 | Loss: 2.239 | Acc: Task_avg: 0.12248 Tr: 0.13937 Val: 0.15625 : 100%|███████████████████| 26/26 [00:05<00:00,  4.40it/s]
+Task: 1 | Epoch: 4/5 | Loss: 2.271 | Acc: Task_avg: 0.12248 Tr: 0.14286 Val: 0.15625 : 100%|███████████████████| 26/26 [00:05<00:00,  4.38it/s]
+Task: 1 | Epoch: 5/5 | Loss: 1.971 | Acc: Task_avg: 0.12248 Tr: 0.13937 Val: 0.15625 : 100%|███████████████████| 26/26 [00:37<00:00,  1.46s/it]
+Task 2: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.11988347763347765, 0.14430895376520808, 0.2] | det_recall [0.3864844949570977, 0.5008638850562904, 0.5] | det_fa [1.0, 0.9417963228523416, 1.0] ----
+Task: 2 | Epoch: 1/5 | Loss: 2.131 | Acc: Task_avg: 0.15473 Tr: 0.1453 Val: 0.2 : 100%|████████████████████████| 10/10 [00:09<00:00,  1.01it/s]
+Task: 2 | Epoch: 2/5 | Loss: 1.929 | Acc: Task_avg: 0.15473 Tr: 0.17949 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  4.12it/s]
+Task: 2 | Epoch: 3/5 | Loss: 1.716 | Acc: Task_avg: 0.15473 Tr: 0.22012 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  4.27it/s]
+Task: 2 | Epoch: 4/5 | Loss: 1.827 | Acc: Task_avg: 0.15473 Tr: 0.26894 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  4.31it/s]
+Task: 2 | Epoch: 5/5 | Loss: 1.634 | Acc: Task_avg: 0.15473 Tr: 0.27357 Val: 0.2 : 100%|███████████████████████| 10/10 [00:58<00:00,  5.81s/it]
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.12648393213041187 
+ Individual Accuracy: [0.13960873385873387, 0.12594427613371534, 0.1138987863987864]
+Final Detection Results:- 
+ Total Detection: 0.37452381866698453 
+ Individual Detection: [0.3733531453325974, 0.49325522069372046, 0.2569630899746356]
+Final Detection False Alarm:- 
+ Total False Alarm: 0.9839997514066322 
+ Individual False Alarm: [1.0, 0.9519992542198966, 1.0]
+[lr] Trial 4 finished | score=0.0008 | params={'lr': 0.0003}
+Set seed 0
+task0.npz train: x=(2448, 1024), y=(2448, 2)
+task0.npz test: x=(612, 1024), y=(612, 2)
+task0.npz: applied data scaling mode 'normalize'.
+Loaded task0.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1248,  227,  256,  243,  246,  228]))
+Noise labels ratio in task0.npz train: 0.25, test: 0.23
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 2448)
+task1.npz train: x=(6470, 1024), y=(6470, 2)
+task1.npz test: x=(2156, 1024), y=(2156, 2)
+task1.npz: applied data scaling mode 'normalize'.
+Loaded task1.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  2,  4,  6,  7, 16]), counts=array([3663,  157,  373,  443,  440,  329, 1065]))
+Noise labels ratio in task1.npz train: 0.28, test: 0.28
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11 12]. Size: 6470)
+task2.npz train: x=(2448, 1024), y=(2448, 2)
+task2.npz test: x=(612, 1024), y=(612, 2)
+task2.npz: applied data scaling mode 'normalize'.
+Loaded task2.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1229,  244,  228,  244,  260,  243]))
+Noise labels ratio in task2.npz train: 0.25, test: 0.25
+Loaded task2.npz: Remapped labels: [13 14 15 16 17 18]. Size: 2448)
+Task 0: 2448 training samples, using 2448 samples for training and testing.
+Task 1: 6470 training samples, using 6470 samples for training and testing.
+Task 2: 2448 training samples, using 2448 samples for training and testing.
+Built classes_per_task: [6, 7, 6]
+5120 1.0 1.0 -1
+Task 0: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.2] | det_recall [0.5] | det_fa [1.0] ----
+Task: 0 | Epoch: 1/5 | Loss: 1.912 | Acc: Task_avg: 0.2 Tr: 0.18143 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.69it/s]
+Task: 0 | Epoch: 2/5 | Loss: 1.783 | Acc: Task_avg: 0.2 Tr: 0.2998 Val: 0.2 : 100%|████████████████████████████| 10/10 [00:02<00:00,  4.73it/s]
+Task: 0 | Epoch: 3/5 | Loss: 1.621 | Acc: Task_avg: 0.2 Tr: 0.33333 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.83it/s]
+Task: 0 | Epoch: 4/5 | Loss: 1.452 | Acc: Task_avg: 0.2 Tr: 0.31494 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.73it/s]
+Task: 0 | Epoch: 5/5 | Loss: 1.327 | Acc: Task_avg: 0.2 Tr: 0.34336 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:52<00:00,  5.27s/it]
+Task 1: 6470 training samples, 1941 test samples.
+ 0/26 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.1152836237836238, 0.15625] | det_recall [0.27464759061334404, 0.5] | det_fa [1.0, 1.0] ----
+Task: 1 | Epoch: 1/5 | Loss: 2.27 | Acc: Task_avg: 0.13577 Tr: 0.15238 Val: 0.15625 : 100%|████████████████████| 26/26 [00:08<00:00,  3.17it/s]
+Task: 1 | Epoch: 2/5 | Loss: 1.983 | Acc: Task_avg: 0.13577 Tr: 0.14983 Val: 0.15625 : 100%|███████████████████| 26/26 [00:05<00:00,  4.56it/s]
+Task: 1 | Epoch: 3/5 | Loss: 1.996 | Acc: Task_avg: 0.13577 Tr: 0.16934 Val: 0.15625 : 100%|███████████████████| 26/26 [00:05<00:00,  4.49it/s]
+Task: 1 | Epoch: 4/5 | Loss: 1.74 | Acc: Task_avg: 0.13577 Tr: 0.15366 Val: 0.15625 : 100%|████████████████████| 26/26 [00:05<00:00,  4.49it/s]
+Task: 1 | Epoch: 5/5 | Loss: 1.829 | Acc: Task_avg: 0.13577 Tr: 0.13589 Val: 0.15625 : 100%|███████████████████| 26/26 [00:37<00:00,  1.43s/it]
+Task 2: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.11336483886483886, 0.1336544695039127, 0.2] | det_recall [0.32786248682824026, 0.4988099846204554, 0.5] | det_fa [1.0, 0.9336819806663053, 1.0] ----
+Task: 2 | Epoch: 1/5 | Loss: 2.303 | Acc: Task_avg: 0.14901 Tr: 0.1047 Val: 0.2 : 100%|████████████████████████| 10/10 [00:10<00:00,  1.01s/it]
+Task: 2 | Epoch: 2/5 | Loss: 2.102 | Acc: Task_avg: 0.14901 Tr: 0.14957 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  4.31it/s]
+Task: 2 | Epoch: 3/5 | Loss: 1.973 | Acc: Task_avg: 0.14901 Tr: 0.16453 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  4.27it/s]
+Task: 2 | Epoch: 4/5 | Loss: 1.997 | Acc: Task_avg: 0.14901 Tr: 0.17593 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  3.98it/s]
+Task: 2 | Epoch: 5/5 | Loss: 1.803 | Acc: Task_avg: 0.14901 Tr: 0.19697 Val: 0.2 : 100%|███████████████████████| 10/10 [00:57<00:00,  5.75s/it]
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.11228528544092149 
+ Individual Accuracy: [0.09352816627816628, 0.13360449657140475, 0.10972319347319348]
+Final Detection Results:- 
+ Total Detection: 0.3612629147068503 
+ Individual Detection: [0.3365656915382943, 0.5000402173881966, 0.24718283519406]
+Final Detection False Alarm:- 
+ Total False Alarm: 0.9769410095258652 
+ Individual False Alarm: [0.9968253968253968, 0.9339976317521985, 1.0]
+[lr] Trial 5 finished | score=0.0009 | params={'lr': 0.0001}
+Set seed 0
+task0.npz train: x=(2448, 1024), y=(2448, 2)
+task0.npz test: x=(612, 1024), y=(612, 2)
+task0.npz: applied data scaling mode 'normalize'.
+Loaded task0.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1248,  227,  256,  243,  246,  228]))
+Noise labels ratio in task0.npz train: 0.25, test: 0.23
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 2448)
+task1.npz train: x=(6470, 1024), y=(6470, 2)
+task1.npz test: x=(2156, 1024), y=(2156, 2)
+task1.npz: applied data scaling mode 'normalize'.
+Loaded task1.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  2,  4,  6,  7, 16]), counts=array([3663,  157,  373,  443,  440,  329, 1065]))
+Noise labels ratio in task1.npz train: 0.28, test: 0.28
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11 12]. Size: 6470)
+task2.npz train: x=(2448, 1024), y=(2448, 2)
+task2.npz test: x=(612, 1024), y=(612, 2)
+task2.npz: applied data scaling mode 'normalize'.
+Loaded task2.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1229,  244,  228,  244,  260,  243]))
+Noise labels ratio in task2.npz train: 0.25, test: 0.25
+Loaded task2.npz: Remapped labels: [13 14 15 16 17 18]. Size: 2448)
+Task 0: 2448 training samples, using 2448 samples for training and testing.
+Task 1: 6470 training samples, using 6470 samples for training and testing.
+Task 2: 2448 training samples, using 2448 samples for training and testing.
+Built classes_per_task: [6, 7, 6]
+5120 1.0 1.0 -1
+Task 0: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.2] | det_recall [0.5] | det_fa [1.0] ----
+Task: 0 | Epoch: 1/5 | Loss: 1.962 | Acc: Task_avg: 0.2 Tr: 0.16878 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.76it/s]
+Task: 0 | Epoch: 2/5 | Loss: 1.938 | Acc: Task_avg: 0.2 Tr: 0.17819 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.77it/s]
+Task: 0 | Epoch: 3/5 | Loss: 1.886 | Acc: Task_avg: 0.2 Tr: 0.20464 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.85it/s]
+Task: 0 | Epoch: 4/5 | Loss: 1.812 | Acc: Task_avg: 0.2 Tr: 0.26333 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.89it/s]
+Task: 0 | Epoch: 5/5 | Loss: 1.773 | Acc: Task_avg: 0.2 Tr: 0.3157 Val: 0.2 : 100%|████████████████████████████| 10/10 [00:52<00:00,  5.28s/it]
+Task 1: 6470 training samples, 1941 test samples.
+ 0/26 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.12030453805453804, 0.15625] | det_recall [0.27190756351715256, 0.5] | det_fa [1.0, 1.0] ----
+Task: 1 | Epoch: 1/5 | Loss: 2.245 | Acc: Task_avg: 0.13828 Tr: 0.15238 Val: 0.15625 : 100%|███████████████████| 26/26 [00:08<00:00,  3.16it/s]
+Task: 1 | Epoch: 2/5 | Loss: 2.163 | Acc: Task_avg: 0.13828 Tr: 0.16667 Val: 0.15625 : 100%|███████████████████| 26/26 [00:05<00:00,  4.44it/s]
+Task: 1 | Epoch: 3/5 | Loss: 2.175 | Acc: Task_avg: 0.13828 Tr: 0.13206 Val: 0.15625 : 100%|███████████████████| 26/26 [00:05<00:00,  4.56it/s]
+Task: 1 | Epoch: 4/5 | Loss: 2.115 | Acc: Task_avg: 0.13828 Tr: 0.12857 Val: 0.15625 : 100%|███████████████████| 26/26 [00:05<00:00,  4.50it/s]
+Task: 1 | Epoch: 5/5 | Loss: 2.154 | Acc: Task_avg: 0.13828 Tr: 0.14506 Val: 0.15625 : 100%|███████████████████| 26/26 [00:37<00:00,  1.44s/it]
+Task 2: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.09651756576756576, 0.15422856904132623, 0.2] | det_recall [0.31044073126264904, 0.5100125365722319, 0.5] | det_fa [1.0, 0.9219843644069214, 1.0] ----
+Task: 2 | Epoch: 1/5 | Loss: 2.526 | Acc: Task_avg: 0.15025 Tr: 0.04274 Val: 0.2 : 100%|███████████████████████| 10/10 [00:10<00:00,  1.04s/it]
+Task: 2 | Epoch: 2/5 | Loss: 2.21 | Acc: Task_avg: 0.15025 Tr: 0.0641 Val: 0.2 : 100%|█████████████████████████| 10/10 [00:02<00:00,  4.30it/s]
+Task: 2 | Epoch: 3/5 | Loss: 2.249 | Acc: Task_avg: 0.15025 Tr: 0.0812 Val: 0.2 : 100%|████████████████████████| 10/10 [00:02<00:00,  3.76it/s]
+Task: 2 | Epoch: 4/5 | Loss: 2.223 | Acc: Task_avg: 0.15025 Tr: 0.1047 Val: 0.2 : 100%|████████████████████████| 10/10 [00:02<00:00,  3.67it/s]
+Task: 2 | Epoch: 5/5 | Loss: 2.129 | Acc: Task_avg: 0.15025 Tr: 0.11966 Val: 0.2 : 100%|███████████████████████| 10/10 [00:57<00:00,  5.74s/it]
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.10953047620581165 
+ Individual Accuracy: [0.11226638176638178, 0.11616640919241551, 0.10015863765863767]
+Final Detection Results:- 
+ Total Detection: 0.35918435643833724 
+ Individual Detection: [0.32362918360178633, 0.5001584432332642, 0.25376544247996113]
+Final Detection False Alarm:- 
+ Total False Alarm: 0.9749777225723877 
+ Individual False Alarm: [1.0, 0.9249331677171628, 1.0]
+[lr] Trial 6 finished | score=0.0010 | params={'lr': 3e-05}
+Set seed 0
+task0.npz train: x=(2448, 1024), y=(2448, 2)
+task0.npz test: x=(612, 1024), y=(612, 2)
+task0.npz: applied data scaling mode 'normalize'.
+Loaded task0.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1248,  227,  256,  243,  246,  228]))
+Noise labels ratio in task0.npz train: 0.25, test: 0.23
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 2448)
+task1.npz train: x=(6470, 1024), y=(6470, 2)
+task1.npz test: x=(2156, 1024), y=(2156, 2)
+task1.npz: applied data scaling mode 'normalize'.
+Loaded task1.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  2,  4,  6,  7, 16]), counts=array([3663,  157,  373,  443,  440,  329, 1065]))
+Noise labels ratio in task1.npz train: 0.28, test: 0.28
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11 12]. Size: 6470)
+task2.npz train: x=(2448, 1024), y=(2448, 2)
+task2.npz test: x=(612, 1024), y=(612, 2)
+task2.npz: applied data scaling mode 'normalize'.
+Loaded task2.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1229,  244,  228,  244,  260,  243]))
+Noise labels ratio in task2.npz train: 0.25, test: 0.25
+Loaded task2.npz: Remapped labels: [13 14 15 16 17 18]. Size: 2448)
+Task 0: 2448 training samples, using 2448 samples for training and testing.
+Task 1: 6470 training samples, using 6470 samples for training and testing.
+Task 2: 2448 training samples, using 2448 samples for training and testing.
+Built classes_per_task: [6, 7, 6]
+5120 1.0 1.0 -1
+Task 0: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.2] | det_recall [0.5] | det_fa [1.0] ----
+Task: 0 | Epoch: 1/5 | Loss: 1.977 | Acc: Task_avg: 0.2 Tr: 0.16667 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.78it/s]
+Task: 0 | Epoch: 2/5 | Loss: 1.984 | Acc: Task_avg: 0.2 Tr: 0.16553 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.68it/s]
+Task: 0 | Epoch: 3/5 | Loss: 1.97 | Acc: Task_avg: 0.2 Tr: 0.17511 Val: 0.2 : 100%|████████████████████████████| 10/10 [00:02<00:00,  4.77it/s]
+Task: 0 | Epoch: 4/5 | Loss: 1.933 | Acc: Task_avg: 0.2 Tr: 0.1849 Val: 0.2 : 100%|████████████████████████████| 10/10 [00:02<00:00,  4.78it/s]
+Task: 0 | Epoch: 5/5 | Loss: 1.933 | Acc: Task_avg: 0.2 Tr: 0.18279 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:52<00:00,  5.23s/it]
+Task 1: 6470 training samples, 1941 test samples.
+ 0/26 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.11799163799163799, 0.15625] | det_recall [0.2703819308545336, 0.5] | det_fa [1.0, 1.0] ----
+Task: 1 | Epoch: 1/5 | Loss: 2.28 | Acc: Task_avg: 0.13712 Tr: 0.15238 Val: 0.15625 : 100%|████████████████████| 26/26 [00:08<00:00,  3.22it/s]
+Task: 1 | Epoch: 2/5 | Loss: 2.266 | Acc: Task_avg: 0.13712 Tr: 0.15238 Val: 0.15625 : 100%|███████████████████| 26/26 [00:05<00:00,  4.47it/s]
+Task: 1 | Epoch: 3/5 | Loss: 2.378 | Acc: Task_avg: 0.13712 Tr: 0.12857 Val: 0.15625 : 100%|███████████████████| 26/26 [00:05<00:00,  4.43it/s]
+Task: 1 | Epoch: 4/5 | Loss: 2.184 | Acc: Task_avg: 0.13712 Tr: 0.12857 Val: 0.15625 : 100%|███████████████████| 26/26 [00:05<00:00,  4.47it/s]
+Task: 1 | Epoch: 5/5 | Loss: 2.38 | Acc: Task_avg: 0.13712 Tr: 0.14762 Val: 0.15625 : 100%|████████████████████| 26/26 [00:37<00:00,  1.45s/it]
+Task 2: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.10774953749953749, 0.16638635787894304, 0.2] | det_recall [0.29744317326509107, 0.5075095330001597, 0.5] | det_fa [1.0, 0.9165867802803015, 1.0] ----
+Task: 2 | Epoch: 1/5 | Loss: 2.37 | Acc: Task_avg: 0.15805 Tr: 0.03205 Val: 0.2 : 100%|████████████████████████| 10/10 [00:10<00:00,  1.01s/it]
+Task: 2 | Epoch: 2/5 | Loss: 2.279 | Acc: Task_avg: 0.15805 Tr: 0.02991 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  3.71it/s]
+Task: 2 | Epoch: 3/5 | Loss: 2.375 | Acc: Task_avg: 0.15805 Tr: 0.02991 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  3.72it/s]
+Task: 2 | Epoch: 4/5 | Loss: 2.345 | Acc: Task_avg: 0.15805 Tr: 0.0406 Val: 0.2 : 100%|████████████████████████| 10/10 [00:02<00:00,  3.74it/s]
+Task: 2 | Epoch: 5/5 | Loss: 2.232 | Acc: Task_avg: 0.15805 Tr: 0.02991 Val: 0.2 : 100%|███████████████████████| 10/10 [00:56<00:00,  5.67s/it]
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.10706250209313854 
+ Individual Accuracy: [0.08365525215525216, 0.12037362571553507, 0.11715862840862841]
+Final Detection Results:- 
+ Total Detection: 0.36906876080692547 
+ Individual Detection: [0.3411397711877164, 0.5088946808198771, 0.25717183041318303]
+Final Detection False Alarm:- 
+ Total False Alarm: 0.9699539163511014 
+ Individual False Alarm: [0.9968253968253968, 0.9130363522279074, 1.0]
+[lr] Trial 7 finished | score=0.0012 | params={'lr': 1e-05}
+Set seed 0
+task0.npz train: x=(2448, 1024), y=(2448, 2)
+task0.npz test: x=(612, 1024), y=(612, 2)
+task0.npz: applied data scaling mode 'normalize'.
+Loaded task0.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1248,  227,  256,  243,  246,  228]))
+Noise labels ratio in task0.npz train: 0.25, test: 0.23
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 2448)
+task1.npz train: x=(6470, 1024), y=(6470, 2)
+task1.npz test: x=(2156, 1024), y=(2156, 2)
+task1.npz: applied data scaling mode 'normalize'.
+Loaded task1.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  2,  4,  6,  7, 16]), counts=array([3663,  157,  373,  443,  440,  329, 1065]))
+Noise labels ratio in task1.npz train: 0.28, test: 0.28
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11 12]. Size: 6470)
+task2.npz train: x=(2448, 1024), y=(2448, 2)
+task2.npz test: x=(612, 1024), y=(612, 2)
+task2.npz: applied data scaling mode 'normalize'.
+Loaded task2.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1229,  244,  228,  244,  260,  243]))
+Noise labels ratio in task2.npz train: 0.25, test: 0.25
+Loaded task2.npz: Remapped labels: [13 14 15 16 17 18]. Size: 2448)
+Task 0: 2448 training samples, using 2448 samples for training and testing.
+Task 1: 6470 training samples, using 6470 samples for training and testing.
+Task 2: 2448 training samples, using 2448 samples for training and testing.
+Built classes_per_task: [6, 7, 6]
+5120 0.1 1.0 -1
+Task 0: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.2] | det_recall [0.5] | det_fa [1.0] ----
+Task: 0 | Epoch: 1/5 | Loss: 0.701 | Acc: Task_avg: 0.2 Tr: 0.41984 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.89it/s]
+Task: 0 | Epoch: 2/5 | Loss: 0.588 | Acc: Task_avg: 0.2 Tr: 0.45563 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.75it/s]
+Task: 0 | Epoch: 3/5 | Loss: 0.556 | Acc: Task_avg: 0.2 Tr: 0.50794 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.83it/s]
+Task: 0 | Epoch: 4/5 | Loss: 0.474 | Acc: Task_avg: 0.2 Tr: 0.56739 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.63it/s]
+Task: 0 | Epoch: 5/5 | Loss: 0.462 | Acc: Task_avg: 0.2 Tr: 0.48788 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:52<00:00,  5.24s/it]
+Task 1: 6470 training samples, 1941 test samples.
+ 0/26 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.0013333333333333335, 0.15625] | det_recall [0.002817460317460317, 0.5] | det_fa [1.0, 1.0] ----
+Task: 1 | Epoch: 1/5 | Loss: 1.539 | Acc: Task_avg: 0.07879 Tr: 0.18641 Val: 0.15625 : 100%|███████████████████| 26/26 [00:08<00:00,  3.14it/s]
+Task: 1 | Epoch: 2/5 | Loss: 1.652 | Acc: Task_avg: 0.07879 Tr: 0.30488 Val: 0.15625 : 100%|███████████████████| 26/26 [00:05<00:00,  4.40it/s]
+Task: 1 | Epoch: 3/5 | Loss: 1.895 | Acc: Task_avg: 0.07879 Tr: 0.3029 Val: 0.15625 : 100%|████████████████████| 26/26 [00:05<00:00,  4.41it/s]
+Task: 1 | Epoch: 4/5 | Loss: 1.704 | Acc: Task_avg: 0.07879 Tr: 0.37875 Val: 0.15625 : 100%|███████████████████| 26/26 [00:06<00:00,  4.17it/s]
+Task: 1 | Epoch: 5/5 | Loss: 1.043 | Acc: Task_avg: 0.07879 Tr: 0.34321 Val: 0.15625 : 100%|███████████████████| 26/26 [00:37<00:00,  1.44s/it]
+Task 2: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.18575314500314496, 0.0723292259448617, 0.2] | det_recall [0.45970369812835565, 0.40211922195291094, 0.5] | det_fa [1.0, 0.8244227416149831, 1.0] ----
+Task: 2 | Epoch: 1/5 | Loss: 0.925 | Acc: Task_avg: 0.15269 Tr: 0.5607 Val: 0.2 : 100%|████████████████████████| 10/10 [00:11<00:00,  1.18s/it]
+Task: 2 | Epoch: 2/5 | Loss: 1.219 | Acc: Task_avg: 0.15269 Tr: 0.57207 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  3.73it/s]
+Task: 2 | Epoch: 3/5 | Loss: 1.055 | Acc: Task_avg: 0.15269 Tr: 0.63371 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  3.75it/s]
+Task: 2 | Epoch: 4/5 | Loss: 1.14 | Acc: Task_avg: 0.15269 Tr: 0.60256 Val: 0.2 : 100%|████████████████████████| 10/10 [00:02<00:00,  3.74it/s]
+Task: 2 | Epoch: 5/5 | Loss: 0.703 | Acc: Task_avg: 0.15269 Tr: 0.65242 Val: 0.2 : 100%|███████████████████████| 10/10 [00:55<00:00,  5.59s/it]
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.09579368774084424 
+ Individual Accuracy: [0.11730026455026454, 0.10305097664244613, 0.06702982202982202]
+Final Detection Results:- 
+ Total Detection: 0.3646101795384659 
+ Individual Detection: [0.3521938046732567, 0.4497439772818119, 0.2918927566603291]
+Final Detection False Alarm:- 
+ Total False Alarm: 0.9487239396048991 
+ Individual False Alarm: [1.0, 0.8461718188146975, 1.0]
+[memory_strength] Trial 8 finished | score=0.0018 | params={'memory_strength': 0.1}
+Set seed 0
+task0.npz train: x=(2448, 1024), y=(2448, 2)
+task0.npz test: x=(612, 1024), y=(612, 2)
+task0.npz: applied data scaling mode 'normalize'.
+Loaded task0.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1248,  227,  256,  243,  246,  228]))
+Noise labels ratio in task0.npz train: 0.25, test: 0.23
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 2448)
+task1.npz train: x=(6470, 1024), y=(6470, 2)
+task1.npz test: x=(2156, 1024), y=(2156, 2)
+task1.npz: applied data scaling mode 'normalize'.
+Loaded task1.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  2,  4,  6,  7, 16]), counts=array([3663,  157,  373,  443,  440,  329, 1065]))
+Noise labels ratio in task1.npz train: 0.28, test: 0.28
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11 12]. Size: 6470)
+task2.npz train: x=(2448, 1024), y=(2448, 2)
+task2.npz test: x=(612, 1024), y=(612, 2)
+task2.npz: applied data scaling mode 'normalize'.
+Loaded task2.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1229,  244,  228,  244,  260,  243]))
+Noise labels ratio in task2.npz train: 0.25, test: 0.25
+Loaded task2.npz: Remapped labels: [13 14 15 16 17 18]. Size: 2448)
+Task 0: 2448 training samples, using 2448 samples for training and testing.
+Task 1: 6470 training samples, using 6470 samples for training and testing.
+Task 2: 2448 training samples, using 2448 samples for training and testing.
+Built classes_per_task: [6, 7, 6]
+5120 0.5 1.0 -1
+Task 0: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.2] | det_recall [0.5] | det_fa [1.0] ----
+Task: 0 | Epoch: 1/5 | Loss: 0.701 | Acc: Task_avg: 0.2 Tr: 0.41984 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.77it/s]
+Task: 0 | Epoch: 2/5 | Loss: 0.588 | Acc: Task_avg: 0.2 Tr: 0.45563 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.81it/s]
+Task: 0 | Epoch: 3/5 | Loss: 0.556 | Acc: Task_avg: 0.2 Tr: 0.50794 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.73it/s]
+Task: 0 | Epoch: 4/5 | Loss: 0.474 | Acc: Task_avg: 0.2 Tr: 0.56739 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.75it/s]
+Task: 0 | Epoch: 5/5 | Loss: 0.462 | Acc: Task_avg: 0.2 Tr: 0.48788 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:52<00:00,  5.22s/it]
+Task 1: 6470 training samples, 1941 test samples.
+ 0/26 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.0013333333333333335, 0.15625] | det_recall [0.002817460317460317, 0.5] | det_fa [1.0, 1.0] ----
+Task: 1 | Epoch: 1/5 | Loss: 3.34 | Acc: Task_avg: 0.07879 Tr: 0.15017 Val: 0.15625 : 100%|████████████████████| 26/26 [00:08<00:00,  3.19it/s]
+Task: 1 | Epoch: 2/5 | Loss: 3.553 | Acc: Task_avg: 0.07879 Tr: 0.17596 Val: 0.15625 : 100%|███████████████████| 26/26 [00:05<00:00,  4.45it/s]
+Task: 1 | Epoch: 3/5 | Loss: 6.709 | Acc: Task_avg: 0.07879 Tr: 0.15366 Val: 0.15625 : 100%|███████████████████| 26/26 [00:06<00:00,  4.18it/s]
+Task: 1 | Epoch: 4/5 | Loss: 6.325 | Acc: Task_avg: 0.07879 Tr: 0.18293 Val: 0.15625 : 100%|███████████████████| 26/26 [00:06<00:00,  3.84it/s]
+Task: 1 | Epoch: 5/5 | Loss: 3.103 | Acc: Task_avg: 0.07879 Tr: 0.1331 Val: 0.15625 : 100%|████████████████████| 26/26 [00:36<00:00,  1.40s/it]
+Task 2: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.20491281311281312, 0.10276265871054273, 0.2] | det_recall [0.4809893120578052, 0.5744221273974864, 0.5] | det_fa [1.0, 0.7456536379144043, 1.0] ----
+Task: 2 | Epoch: 1/5 | Loss: 3.956 | Acc: Task_avg: 0.16923 Tr: 0.33123 Val: 0.2 : 100%|███████████████████████| 10/10 [00:12<00:00,  1.22s/it]
+Task: 2 | Epoch: 2/5 | Loss: 3.719 | Acc: Task_avg: 0.16923 Tr: 0.46973 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  3.68it/s]
+Task: 2 | Epoch: 3/5 | Loss: 2.418 | Acc: Task_avg: 0.16923 Tr: 0.57365 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  3.76it/s]
+Task: 2 | Epoch: 4/5 | Loss: 1.482 | Acc: Task_avg: 0.16923 Tr: 0.5564 Val: 0.2 : 100%|████████████████████████| 10/10 [00:02<00:00,  3.84it/s]
+Task: 2 | Epoch: 5/5 | Loss: 2.378 | Acc: Task_avg: 0.16923 Tr: 0.56566 Val: 0.2 : 100%|███████████████████████| 10/10 [00:55<00:00,  5.54s/it]
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.15183628954095632 
+ Individual Accuracy: [0.13097878787878786, 0.11043758990159018, 0.21409249084249088]
+Final Detection Results:- 
+ Total Detection: 0.5353646382407461 
+ Individual Detection: [0.6358867243867243, 0.4967162714123961, 0.47349091892311784]
+Final Detection False Alarm:- 
+ Total False Alarm: 0.9004798102057183 
+ Individual False Alarm: [0.7282265512265512, 0.9732128793906036, 1.0]
+[memory_strength] Trial 9 finished | score=0.0081 | params={'memory_strength': 0.5}
+Set seed 0
+task0.npz train: x=(2448, 1024), y=(2448, 2)
+task0.npz test: x=(612, 1024), y=(612, 2)
+task0.npz: applied data scaling mode 'normalize'.
+Loaded task0.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1248,  227,  256,  243,  246,  228]))
+Noise labels ratio in task0.npz train: 0.25, test: 0.23
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 2448)
+task1.npz train: x=(6470, 1024), y=(6470, 2)
+task1.npz test: x=(2156, 1024), y=(2156, 2)
+task1.npz: applied data scaling mode 'normalize'.
+Loaded task1.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  2,  4,  6,  7, 16]), counts=array([3663,  157,  373,  443,  440,  329, 1065]))
+Noise labels ratio in task1.npz train: 0.28, test: 0.28
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11 12]. Size: 6470)
+task2.npz train: x=(2448, 1024), y=(2448, 2)
+task2.npz test: x=(612, 1024), y=(612, 2)
+task2.npz: applied data scaling mode 'normalize'.
+Loaded task2.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1229,  244,  228,  244,  260,  243]))
+Noise labels ratio in task2.npz train: 0.25, test: 0.25
+Loaded task2.npz: Remapped labels: [13 14 15 16 17 18]. Size: 2448)
+Task 0: 2448 training samples, using 2448 samples for training and testing.
+Task 1: 6470 training samples, using 6470 samples for training and testing.
+Task 2: 2448 training samples, using 2448 samples for training and testing.
+Built classes_per_task: [6, 7, 6]
+5120 1 1.0 -1
+Task 0: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.2] | det_recall [0.5] | det_fa [1.0] ----
+Task: 0 | Epoch: 1/5 | Loss: 0.701 | Acc: Task_avg: 0.2 Tr: 0.41984 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.79it/s]
+Task: 0 | Epoch: 2/5 | Loss: 0.588 | Acc: Task_avg: 0.2 Tr: 0.45563 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.83it/s]
+Task: 0 | Epoch: 3/5 | Loss: 0.556 | Acc: Task_avg: 0.2 Tr: 0.50794 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.80it/s]
+Task: 0 | Epoch: 4/5 | Loss: 0.474 | Acc: Task_avg: 0.2 Tr: 0.56739 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.78it/s]
+Task: 0 | Epoch: 5/5 | Loss: 0.462 | Acc: Task_avg: 0.2 Tr: 0.48788 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:51<00:00,  5.16s/it]
+Task 1: 6470 training samples, 1941 test samples.
+ 0/26 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.0013333333333333335, 0.15625] | det_recall [0.002817460317460317, 0.5] | det_fa [1.0, 1.0] ----
+Task: 1 | Epoch: 1/5 | Loss: 5.339 | Acc: Task_avg: 0.07879 Tr: 0.16446 Val: 0.15625 : 100%|███████████████████| 26/26 [00:07<00:00,  3.26it/s]
+Task: 1 | Epoch: 2/5 | Loss: 5.313 | Acc: Task_avg: 0.07879 Tr: 0.16098 Val: 0.15625 : 100%|███████████████████| 26/26 [00:06<00:00,  4.10it/s]
+Task: 1 | Epoch: 3/5 | Loss: 14.797 | Acc: Task_avg: 0.07879 Tr: 0.14286 Val: 0.15625 : 100%|██████████████████| 26/26 [00:06<00:00,  3.79it/s]
+Task: 1 | Epoch: 4/5 | Loss: 8.769 | Acc: Task_avg: 0.07879 Tr: 0.17944 Val: 0.15625 : 100%|███████████████████| 26/26 [00:06<00:00,  4.01it/s]
+Task: 1 | Epoch: 5/5 | Loss: 7.138 | Acc: Task_avg: 0.07879 Tr: 0.16516 Val: 0.15625 : 100%|███████████████████| 26/26 [00:36<00:00,  1.42s/it]
+Task 2: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.09248958448958448, 0.07163524109941263, 0.2] | det_recall [0.3956559619984278, 0.4797970895173404, 0.5] | det_fa [1.0, 0.5611587010938546, 1.0] ----
+Task: 2 | Epoch: 1/5 | Loss: 3.188 | Acc: Task_avg: 0.12137 Tr: 0.36762 Val: 0.2 : 100%|███████████████████████| 10/10 [00:11<00:00,  1.19s/it]
+Task: 2 | Epoch: 2/5 | Loss: 4.651 | Acc: Task_avg: 0.12137 Tr: 0.39031 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  3.74it/s]
+Task: 2 | Epoch: 3/5 | Loss: 2.815 | Acc: Task_avg: 0.12137 Tr: 0.49793 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  3.77it/s]
+Task: 2 | Epoch: 4/5 | Loss: 1.932 | Acc: Task_avg: 0.12137 Tr: 0.57705 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  3.76it/s]
+Task: 2 | Epoch: 5/5 | Loss: 2.169 | Acc: Task_avg: 0.12137 Tr: 0.58256 Val: 0.2 : 100%|███████████████████████| 10/10 [00:55<00:00,  5.53s/it]
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.06138364258373441 
+ Individual Accuracy: [0.05581060606060606, 0.09336557421584968, 0.03497474747474748]
+Final Detection Results:- 
+ Total Detection: 0.30582324719570503 
+ Individual Detection: [0.2407767073109539, 0.4804112647379021, 0.19628176953825913]
+Final Detection False Alarm:- 
+ Total False Alarm: 0.886221587088501 
+ Individual False Alarm: [1.0, 0.6586647612655031, 1.0]
+[memory_strength] Trial 10 finished | score=0.0021 | params={'memory_strength': 1}
+Set seed 0
+task0.npz train: x=(2448, 1024), y=(2448, 2)
+task0.npz test: x=(612, 1024), y=(612, 2)
+task0.npz: applied data scaling mode 'normalize'.
+Loaded task0.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1248,  227,  256,  243,  246,  228]))
+Noise labels ratio in task0.npz train: 0.25, test: 0.23
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 2448)
+task1.npz train: x=(6470, 1024), y=(6470, 2)
+task1.npz test: x=(2156, 1024), y=(2156, 2)
+task1.npz: applied data scaling mode 'normalize'.
+Loaded task1.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  2,  4,  6,  7, 16]), counts=array([3663,  157,  373,  443,  440,  329, 1065]))
+Noise labels ratio in task1.npz train: 0.28, test: 0.28
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11 12]. Size: 6470)
+task2.npz train: x=(2448, 1024), y=(2448, 2)
+task2.npz test: x=(612, 1024), y=(612, 2)
+task2.npz: applied data scaling mode 'normalize'.
+Loaded task2.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1229,  244,  228,  244,  260,  243]))
+Noise labels ratio in task2.npz train: 0.25, test: 0.25
+Loaded task2.npz: Remapped labels: [13 14 15 16 17 18]. Size: 2448)
+Task 0: 2448 training samples, using 2448 samples for training and testing.
+Task 1: 6470 training samples, using 6470 samples for training and testing.
+Task 2: 2448 training samples, using 2448 samples for training and testing.
+Built classes_per_task: [6, 7, 6]
+5120 5 1.0 -1
+Task 0: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.2] | det_recall [0.5] | det_fa [1.0] ----
+Task: 0 | Epoch: 1/5 | Loss: 0.701 | Acc: Task_avg: 0.2 Tr: 0.41984 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.73it/s]
+Task: 0 | Epoch: 2/5 | Loss: 0.588 | Acc: Task_avg: 0.2 Tr: 0.45563 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.81it/s]
+Task: 0 | Epoch: 3/5 | Loss: 0.556 | Acc: Task_avg: 0.2 Tr: 0.50794 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.78it/s]
+Task: 0 | Epoch: 4/5 | Loss: 0.474 | Acc: Task_avg: 0.2 Tr: 0.56739 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.40it/s]
+Task: 0 | Epoch: 5/5 | Loss: 0.462 | Acc: Task_avg: 0.2 Tr: 0.48788 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:52<00:00,  5.21s/it]
+Task 1: 6470 training samples, 1941 test samples.
+ 0/26 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.0013333333333333335, 0.15625] | det_recall [0.002817460317460317, 0.5] | det_fa [1.0, 1.0] ----
+Task: 1 | Epoch: 1/5 | Loss: 21.925 | Acc: Task_avg: 0.07879 Tr: 0.15714 Val: 0.15625 : 100%|██████████████████| 26/26 [00:08<00:00,  2.89it/s]
+Task: 1 | Epoch: 2/5 | Loss: 34.651 | Acc: Task_avg: 0.07879 Tr: 0.14669 Val: 0.15625 : 100%|██████████████████| 26/26 [00:06<00:00,  3.80it/s]
+Task: 1 | Epoch: 3/5 | Loss: 41.159 | Acc: Task_avg: 0.07879 Tr: 0.15714 Val: 0.15625 : 100%|██████████████████| 26/26 [00:06<00:00,  4.21it/s]
+Task: 1 | Epoch: 4/5 | Loss: 51.945 | Acc: Task_avg: 0.07879 Tr: 0.14286 Val: 0.15625 : 100%|██████████████████| 26/26 [00:05<00:00,  4.36it/s]
+Task: 1 | Epoch: 5/5 | Loss: 25.503 | Acc: Task_avg: 0.07879 Tr: 0.14286 Val: 0.15625 : 100%|██████████████████| 26/26 [00:37<00:00,  1.43s/it]
+Task 2: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.162239084989085, 0.17698340084492686, 0.2] | det_recall [0.45611435596367106, 0.49602612066142615, 0.5] | det_fa [1.0, 0.9430383673599159, 1.0] ----
+Task: 2 | Epoch: 1/5 | Loss: 7.993 | Acc: Task_avg: 0.17974 Tr: 0.17593 Val: 0.2 : 100%|███████████████████████| 10/10 [00:12<00:00,  1.21s/it]
+Task: 2 | Epoch: 2/5 | Loss: 8.399 | Acc: Task_avg: 0.17974 Tr: 0.23653 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  3.75it/s]
+Task: 2 | Epoch: 3/5 | Loss: 7.174 | Acc: Task_avg: 0.17974 Tr: 0.22475 Val: 0.2 : 100%|███████████████████████| 10/10 [00:02<00:00,  3.75it/s]
+Task: 2 | Epoch: 4/5 | Loss: 20.604 | Acc: Task_avg: 0.17974 Tr: 0.22138 Val: 0.2 : 100%|██████████████████████| 10/10 [00:02<00:00,  3.80it/s]
+Task: 2 | Epoch: 5/5 | Loss: 7.057 | Acc: Task_avg: 0.17974 Tr: 0.29545 Val: 0.2 : 100%|███████████████████████| 10/10 [00:53<00:00,  5.37s/it]
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.07337049972322346 
+ Individual Accuracy: [0.03219949494949495, 0.15249112879930002, 0.03542087542087542]
+Final Detection Results:- 
+ Total Detection: 0.34692001262869193 
+ Individual Detection: [0.25411672018214293, 0.5112269048070653, 0.2754164128968676]
+Final Detection False Alarm:- 
+ Total False Alarm: 0.8534186468021113 
+ Individual False Alarm: [0.785316863213415, 0.9692709224747121, 0.8056681547182067]
+[memory_strength] Trial 11 finished | score=0.0037 | params={'memory_strength': 5}
+Set seed 0
+task0.npz train: x=(2448, 1024), y=(2448, 2)
+task0.npz test: x=(612, 1024), y=(612, 2)
+task0.npz: applied data scaling mode 'normalize'.
+Loaded task0.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1248,  227,  256,  243,  246,  228]))
+Noise labels ratio in task0.npz train: 0.25, test: 0.23
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 2448)
+task1.npz train: x=(6470, 1024), y=(6470, 2)
+task1.npz test: x=(2156, 1024), y=(2156, 2)
+task1.npz: applied data scaling mode 'normalize'.
+Loaded task1.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  2,  4,  6,  7, 16]), counts=array([3663,  157,  373,  443,  440,  329, 1065]))
+Noise labels ratio in task1.npz train: 0.28, test: 0.28
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11 12]. Size: 6470)
+task2.npz train: x=(2448, 1024), y=(2448, 2)
+task2.npz test: x=(612, 1024), y=(612, 2)
+task2.npz: applied data scaling mode 'normalize'.
+Loaded task2.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1229,  244,  228,  244,  260,  243]))
+Noise labels ratio in task2.npz train: 0.25, test: 0.25
+Loaded task2.npz: Remapped labels: [13 14 15 16 17 18]. Size: 2448)
+Task 0: 2448 training samples, using 2448 samples for training and testing.
+Task 1: 6470 training samples, using 6470 samples for training and testing.
+Task 2: 2448 training samples, using 2448 samples for training and testing.
+Built classes_per_task: [6, 7, 6]
+5120 10 1.0 -1
+Task 0: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.2] | det_recall [0.5] | det_fa [1.0] ----
+Task: 0 | Epoch: 1/5 | Loss: 0.701 | Acc: Task_avg: 0.2 Tr: 0.41984 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.14it/s]
+Task: 0 | Epoch: 2/5 | Loss: 0.588 | Acc: Task_avg: 0.2 Tr: 0.45563 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.19it/s]
+Task: 0 | Epoch: 3/5 | Loss: 0.556 | Acc: Task_avg: 0.2 Tr: 0.50794 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.19it/s]
+Task: 0 | Epoch: 4/5 | Loss: 0.474 | Acc: Task_avg: 0.2 Tr: 0.56739 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.20it/s]
+Task: 0 | Epoch: 5/5 | Loss: 0.462 | Acc: Task_avg: 0.2 Tr: 0.48788 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:50<00:00,  5.08s/it]
+Task 1: 6470 training samples, 1941 test samples.
+ 0/26 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.0013333333333333335, 0.15625] | det_recall [0.002817460317460317, 0.5] | det_fa [1.0, 1.0] ----
+Task: 1 | Epoch: 1/5 | Loss: 44.651 | Acc: Task_avg: 0.07879 Tr: 0.17526 Val: 0.15625 : 100%|██████████████████| 26/26 [00:09<00:00,  2.70it/s]
+Task: 1 | Epoch: 2/5 | Loss: 58.815 | Acc: Task_avg: 0.07879 Tr: 0.14286 Val: 0.15625 : 100%|██████████████████| 26/26 [00:05<00:00,  4.36it/s]
+Task: 1 | Epoch: 3/5 | Loss: 121.623 | Acc: Task_avg: 0.07879 Tr: 0.14286 Val: 0.15625 : 100%|█████████████████| 26/26 [00:05<00:00,  4.41it/s]
+Task: 1 | Epoch: 4/5 | Loss: 42.787 | Acc: Task_avg: 0.07879 Tr: 0.14286 Val: 0.15625 : 100%|██████████████████| 26/26 [00:05<00:00,  4.42it/s]
+Task: 1 | Epoch: 5/5 | Loss: 74.168 | Acc: Task_avg: 0.07879 Tr: 0.14286 Val: 0.15625 : 100%|██████████████████| 26/26 [00:38<00:00,  1.49s/it]
+Task 2: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.12967087542087544, 0.09087478339755853, 0.2] | det_recall [0.39319015003261576, 0.5100749343329257, 0.5] | det_fa [1.0, 0.6827065940684011, 1.0] ----
+Task: 2 | Epoch: 1/5 | Loss: 7.371 | Acc: Task_avg: 0.14018 Tr: 0.24113 Val: 0.2 : 100%|███████████████████████| 10/10 [00:11<00:00,  1.20s/it]
+Task: 2 | Epoch: 2/5 | Loss: 14.004 | Acc: Task_avg: 0.14018 Tr: 0.19444 Val: 0.2 : 100%|██████████████████████| 10/10 [00:02<00:00,  4.23it/s]
+Task: 2 | Epoch: 3/5 | Loss: 13.269 | Acc: Task_avg: 0.14018 Tr: 0.21549 Val: 0.2 : 100%|██████████████████████| 10/10 [00:02<00:00,  4.38it/s]
+Task: 2 | Epoch: 4/5 | Loss: 21.359 | Acc: Task_avg: 0.14018 Tr: 0.28976 Val: 0.2 : 100%|██████████████████████| 10/10 [00:02<00:00,  4.37it/s]
+Task: 2 | Epoch: 5/5 | Loss: 17.673 | Acc: Task_avg: 0.14018 Tr: 0.32573 Val: 0.2 : 100%|██████████████████████| 10/10 [00:53<00:00,  5.34s/it]
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.1272214445361836 
+ Individual Accuracy: [0.17192111592111592, 0.08281819826241542, 0.1269250194250194]
+Final Detection Results:- 
+ Total Detection: 0.45802892253976396 
+ Individual Detection: [0.4780363122417917, 0.4519828651536547, 0.44406759022384545]
+Final Detection False Alarm:- 
+ Total False Alarm: 0.931118535799507 
+ Individual False Alarm: [1.0, 0.7933556073985207, 1.0]
+[memory_strength] Trial 12 finished | score=0.0040 | params={'memory_strength': 10}
+Set seed 0
+task0.npz train: x=(2448, 1024), y=(2448, 2)
+task0.npz test: x=(612, 1024), y=(612, 2)
+task0.npz: applied data scaling mode 'normalize'.
+Loaded task0.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1248,  227,  256,  243,  246,  228]))
+Noise labels ratio in task0.npz train: 0.25, test: 0.23
+Loaded task0.npz: Remapped labels: [0 1 2 3 4 5]. Size: 2448)
+task1.npz train: x=(6470, 1024), y=(6470, 2)
+task1.npz test: x=(2156, 1024), y=(2156, 2)
+task1.npz: applied data scaling mode 'normalize'.
+Loaded task1.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  2,  4,  6,  7, 16]), counts=array([3663,  157,  373,  443,  440,  329, 1065]))
+Noise labels ratio in task1.npz train: 0.28, test: 0.28
+Loaded task1.npz: Remapped labels: [ 6  7  8  9 10 11 12]. Size: 6470)
+task2.npz train: x=(2448, 1024), y=(2448, 2)
+task2.npz test: x=(612, 1024), y=(612, 2)
+task2.npz: applied data scaling mode 'normalize'.
+Loaded task2.npz: Unique train labels: UniqueCountsResult(values=array([-1,  0,  1,  2,  3,  4]), counts=array([1229,  244,  228,  244,  260,  243]))
+Noise labels ratio in task2.npz train: 0.25, test: 0.25
+Loaded task2.npz: Remapped labels: [13 14 15 16 17 18]. Size: 2448)
+Task 0: 2448 training samples, using 2448 samples for training and testing.
+Task 1: 6470 training samples, using 6470 samples for training and testing.
+Task 2: 2448 training samples, using 2448 samples for training and testing.
+Built classes_per_task: [6, 7, 6]
+5120 50 1.0 -1
+Task 0: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.2] | det_recall [0.5] | det_fa [1.0] ----
+Task: 0 | Epoch: 1/5 | Loss: 0.701 | Acc: Task_avg: 0.2 Tr: 0.41984 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.15it/s]
+Task: 0 | Epoch: 2/5 | Loss: 0.588 | Acc: Task_avg: 0.2 Tr: 0.45563 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.26it/s]
+Task: 0 | Epoch: 3/5 | Loss: 0.556 | Acc: Task_avg: 0.2 Tr: 0.50794 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.29it/s]
+Task: 0 | Epoch: 4/5 | Loss: 0.474 | Acc: Task_avg: 0.2 Tr: 0.56739 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:02<00:00,  4.71it/s]
+Task: 0 | Epoch: 5/5 | Loss: 0.462 | Acc: Task_avg: 0.2 Tr: 0.48788 Val: 0.2 : 100%|███████████████████████████| 10/10 [00:52<00:00,  5.29s/it]
+Task 1: 6470 training samples, 1941 test samples.
+ 0/26 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.0013333333333333335, 0.15625] | det_recall [0.002817460317460317, 0.5] | det_fa [1.0, 1.0] ----
+Task: 1 | Epoch: 1/5 | Loss: 211.854 | Acc: Task_avg: 0.07879 Tr: 0.07143 Val: 0.15625 : 100%|█████████████████| 26/26 [00:08<00:00,  3.21it/s]
+Task: 1 | Epoch: 2/5 | Loss: 348.224 | Acc: Task_avg: 0.07879 Tr: 0.15087 Val: 0.15625 : 100%|█████████████████| 26/26 [00:05<00:00,  4.47it/s]
+Task: 1 | Epoch: 3/5 | Loss: 459.395 | Acc: Task_avg: 0.07879 Tr: 0.14286 Val: 0.15625 : 100%|█████████████████| 26/26 [00:05<00:00,  4.44it/s]
+Task: 1 | Epoch: 4/5 | Loss: 519.1 | Acc: Task_avg: 0.07879 Tr: 0.15017 Val: 0.15625 : 100%|███████████████████| 26/26 [00:05<00:00,  4.38it/s]
+Task: 1 | Epoch: 5/5 | Loss: 207.789 | Acc: Task_avg: 0.07879 Tr: 0.14286 Val: 0.15625 : 100%|█████████████████| 26/26 [00:39<00:00,  1.52s/it]
+Task 2: 2448 training samples, 612 test samples.
+ 0/10 [00:00<?, ?it/s]---- Eval at Epoch 0: cls [0.1498013468013468, 0.12292777251383005, 0.2] | det_recall [0.43005655911820295, 0.5086646673569251, 0.5] | det_fa [1.0, 0.9150593462274617, 1.0] ----
+Task: 2 | Epoch: 1/5 | Loss: 79.848 | Acc: Task_avg: 0.15758 Tr: 0.05342 Val: 0.2 : 100%|██████████████████████| 10/10 [00:10<00:00,  1.00s/it]
+Task: 2 | Epoch: 2/5 | Loss: 128.466 | Acc: Task_avg: 0.15758 Tr: 0.15385 Val: 0.2 : 100%|█████████████████████| 10/10 [00:02<00:00,  4.34it/s]
+Task: 2 | Epoch: 3/5 | Loss: 59.684 | Acc: Task_avg: 0.15758 Tr: 0.16667 Val: 0.2 : 100%|██████████████████████| 10/10 [00:02<00:00,  4.38it/s]
+Task: 2 | Epoch: 4/5 | Loss: 235.518 | Acc: Task_avg: 0.15758 Tr: 0.16667 Val: 0.2 : 100%|█████████████████████| 10/10 [00:02<00:00,  4.38it/s]
+Task: 2 | Epoch: 5/5 | Loss: 77.235 | Acc: Task_avg: 0.15758 Tr: 0.16667 Val: 0.2 : 100%|██████████████████████| 10/10 [00:54<00:00,  5.49s/it]
+####Final Validation Accuracy####
+Final Results:- 
+ Total Accuracy: 0.0799816758302627 
+ Individual Accuracy: [0.03621813371813372, 0.16630265134841193, 0.03742424242424243]
+Final Detection Results:- 
+ Total Detection: 0.30070834909635713 
+ Individual Detection: [0.2187944308617431, 0.5016702204979009, 0.18166039592942745]
+Final Detection False Alarm:- 
+ Total False Alarm: 0.9873475987398028 
+ Individual False Alarm: [0.9742068965517241, 0.9878358996676843, 1.0]
+[memory_strength] Trial 13 finished | score=0.0003 | params={'memory_strength': 50}
+Best trial #9 | score=0.0081 | params={'memory_strength': 0.5}
+Logs stored in: logs/tuning/icarl/2026-03-02_11-45-37-3413/runs/icarl/tuning_sweep_tune_009_memory_strength-5em01-2026-03-02_11-45-37-3413-trial009/0
