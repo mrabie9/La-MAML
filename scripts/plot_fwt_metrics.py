@@ -65,7 +65,7 @@ PLOT_STYLES_BY_EXPERIMENT: Dict[str, PlotStyle] = {
             "loc": "best",
             "ncol": 6,
             "fontsize": 10,
-            "columnspacing": 1,
+            "columnspacing": 0.7,
             "labelspacing": 0.3,
             "framealpha": 0.5,
             "borderaxespad": 0.1,
@@ -173,7 +173,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Path to save the figure. "
-            "Defaults to '<json_stem>_<metric>.png' next to the JSON file."
+            "Defaults to '<repo>/logs/00_sync/<experiment>/plots/<json_stem>_<metric>_plot.png'."
         ),
     )
     parser.add_argument(
@@ -207,6 +207,33 @@ def load_metrics(json_path: Path) -> List[MetricRecord]:
     if not isinstance(loaded, list):
         raise ValueError("Expected JSON root to be a list of metric records.")
     return loaded
+
+
+def resolve_default_output_path(json_path: Path, metric_name: str) -> Path:
+    """Resolve the default PNG output path under logs/00_sync.
+
+    Args:
+        json_path: Input metrics JSON path.
+        metric_name: Metric key used in the generated filename.
+
+    Returns:
+        Default destination path for the output plot.
+    """
+    json_parts = json_path.parts
+    if "logs" in json_parts:
+        logs_index = json_parts.index("logs")
+        suffix_parts = list(json_parts[logs_index + 1 : -1])
+        if suffix_parts:
+            suffix_parts[0] = "00_sync"
+            return (
+                Path(*json_parts[:logs_index])
+                / "logs"
+                / Path(*suffix_parts)
+                / "plots"
+                / f"{json_path.stem}_{metric_name}_plot.png"
+            )
+
+    return json_path.parent / "plots" / f"{json_path.stem}_{metric_name}_plot.png"
 
 
 def build_series_by_algo(
@@ -289,9 +316,9 @@ def plot_series(
         axis.plot(
             x_positions,
             y_values,
-            marker="o",
+            marker=".",
             linewidth=2.0,
-            alpha=0.9,
+            alpha=0.8,
             label=ALGORITHM_DISPLAY_NAMES.get(algorithm_name, algorithm_name),
             color=label_colors.get(algorithm_name),
         )
@@ -322,9 +349,9 @@ def plot_series(
 def main() -> None:
     """Run the plotting pipeline."""
     arguments = parse_args()
-    default_output_path = (
-        arguments.json_path.parent
-        / f"{arguments.json_path.stem}_{arguments.metric}_plot.png"
+    default_output_path = resolve_default_output_path(
+        json_path=arguments.json_path,
+        metric_name=arguments.metric,
     )
     output_path = arguments.output_path or default_output_path
 
