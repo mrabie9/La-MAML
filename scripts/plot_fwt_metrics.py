@@ -24,6 +24,70 @@ import matplotlib.pyplot as plt
 
 MetricRecord = Dict[str, Any]
 SeriesPoint = Tuple[int, Optional[float], str]
+DEFAULT_ALGORITHM_COLOR_ORDER = [
+    "agem",
+    "bcl_dual",
+    "eralg4",
+    "ewc",
+    "iid2",
+    "la-er",
+    "si",
+    "ucl",
+    "cmaml",
+    "er_ring",
+    "gem",
+    "icarl",
+    "lamaml",
+    "lwf",
+    "rwalk",
+    "smaml",
+]
+
+
+def build_label_colors(labels: List[str]) -> Dict[str, Any]:
+    """Build distinct colors for labels using the combined-layout palette.
+
+    This mirrors the color-selection approach from
+    ``scripts/plot_multi_algorithms.py`` used by ``--plot-layout together``.
+    """
+    if not labels:
+        return {}
+
+    qualitative_palette: List[Any] = []
+    for cmap_name in ("tab20", "tab20b", "tab20c"):
+        cmap = plt.get_cmap(cmap_name)
+        cmap_colors = getattr(cmap, "colors", None)
+        if cmap_colors is None:
+            continue
+        qualitative_palette.extend(list(cmap_colors))
+
+    def color_for_position(label_position: int, total_labels: int) -> Any:
+        if label_position < len(qualitative_palette):
+            return qualitative_palette[label_position]
+        if total_labels <= 1:
+            return plt.get_cmap("hsv")(0.0)
+        return plt.get_cmap("hsv")(label_position / float(total_labels))
+
+    colors_by_label: Dict[str, Any] = {}
+    palette_cursor = 0
+
+    # First assign fixed colors to known algorithms so they remain stable
+    # even when some algorithms are filtered in/out of a plot.
+    for algorithm_name in DEFAULT_ALGORITHM_COLOR_ORDER:
+        if algorithm_name in labels:
+            colors_by_label[algorithm_name] = color_for_position(
+                palette_cursor, len(labels)
+            )
+            palette_cursor += 1
+
+    # Then assign deterministic colors to any unseen labels by sorted order.
+    for label in sorted(labels):
+        if label in colors_by_label:
+            continue
+        colors_by_label[label] = color_for_position(palette_cursor, len(labels))
+        palette_cursor += 1
+
+    return colors_by_label
 
 
 def parse_args() -> argparse.Namespace:
@@ -134,10 +198,12 @@ def plot_series(
     Usage:
         >>> plot_series({"algo": [(0, 0.1, "t0")]}, "metric", Path("out.png"))
     """
-    figure, axis = plt.subplots(figsize=(8, 4))
+    figure, axis = plt.subplots(figsize=(6, 3))
 
+    sorted_algorithm_names = sorted(series_by_algorithm.keys())
+    label_colors = build_label_colors(sorted_algorithm_names)
     all_task_indices = set()
-    for algorithm_name in sorted(series_by_algorithm.keys()):
+    for algorithm_name in sorted_algorithm_names:
         series = series_by_algorithm[algorithm_name]
         x_positions = [point[0] for point in series]
         y_values = [point[1] for point in series]
@@ -151,20 +217,21 @@ def plot_series(
             linewidth=2.0,
             alpha=0.9,
             label=algorithm_name,
+            color=label_colors.get(algorithm_name),
         )
 
     sorted_task_indices = sorted(all_task_indices)
     axis.set_xticks(sorted_task_indices)
     axis.set_xticklabels([str(task_index) for task_index in sorted_task_indices])
     axis.axhline(0.0, color="black", linewidth=1.0, linestyle="--", alpha=0.7)
-    axis.set_xlabel("Task", fontsize=14)
-    axis.set_ylabel("Forward Transfer", fontsize=14)
+    axis.set_xlabel("Task", fontsize=16)
+    axis.set_ylabel("Forward Transfer", fontsize=16)
     # axis.set_title(title or f"{metric_name} by task and algorithm")
     axis.grid(True, linestyle="--", alpha=0.3)
-    axis.legend(loc="best", ncol=2, fontsize=9)
+    axis.legend(loc="best", ncol=4, fontsize=10, columnspacing=0.5, labelspacing=0.3,framealpha=0.5, borderaxespad=0.2)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    figure.tight_layout()
+    figure.tight_layout(pad=0.1)
     figure.savefig(output_path, dpi=600)
     plt.close(figure)
 
