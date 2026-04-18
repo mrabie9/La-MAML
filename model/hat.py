@@ -64,6 +64,7 @@ class HatConfig:
     gamma: float = 0.75
     smax: float = 50
     grad_clip_norm: float = 10.0
+    anneal_schedule: str = "linear"  # "linear" or "geometric" (original paper)
 
     cuda: bool = True
     optimizer: str = "sgd"
@@ -586,11 +587,13 @@ class Net(nn.Module):
     def _schedule_s(self, batch_idx: int, total_batches: int) -> float:
         if self.smax <= 0:
             return 1.0
-        if total_batches <= 1:
-            progress = 0.0
-        else:
-            progress = batch_idx / max(1, total_batches - 1)
+        progress = 0.0 if total_batches <= 1 else batch_idx / max(1, total_batches - 1)
         progress = float(max(0.0, min(1.0, progress)))
+        if self.cfg.anneal_schedule == "geometric":
+            # Original paper schedule: log-linear from 1/smax to smax.
+            # s = smax^(2*progress - 1), passing through 1 at the midpoint.
+            return self.smax ** (2.0 * progress - 1.0)
+        # Default: linear interpolation from 1/smax to smax.
         base = 1.0 / self.smax
         return base + progress * (self.smax - base)
 
