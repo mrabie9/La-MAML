@@ -473,6 +473,11 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         if True:
             det_loss_value = torch.zeros((), device=x_train.device, dtype=torch.float32)
 
+        # Slicing (e.g. `raw_x_train = raw_x_train[1:]`) creates a non-leaf view.
+        # After inner-loop autograd calls free graphs, reuse of that view can hit
+        # "backward through the graph a second time". Re-leaf once per observe.
+        raw_x_train = raw_x_train.detach().requires_grad_(True)
+
         # Rebuild canonicalized train input each inner SGD step from raw inputs to avoid
         # reusing a freed autograd graph while still allowing adapter gradients.
         self.zero_grad()
