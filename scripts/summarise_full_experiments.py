@@ -412,35 +412,31 @@ def _fill_missing_metrics_from_npz(
     """
     with np.load(metrics_file_path, allow_pickle=False) as metrics_data:
         train_recall = _extract_latest_metric(
-            metrics_data, ["train_cls_rec", "train_rec", "cls_tr_rec", "rec"]
+            metrics_data, ["train_cls_rec", "train_rec", "cls_tr_rec"]
         )
         train_precision = _extract_latest_metric(
-            metrics_data, ["train_cls_prec", "train_prec", "prec"]
+            metrics_data, ["train_cls_prec", "train_prec"]
         )
-        train_f1 = _extract_latest_metric(
-            metrics_data, ["train_f1", "train_f1_c", "f1_c", "f1_cls"]
-        )
+        train_f1 = _extract_latest_metric(metrics_data, ["train_f1", "train_f1_c"])
         train_detection = _extract_latest_metric(
-            metrics_data, ["train_det_rec", "train_det", "det"]
+            metrics_data, ["train_det_rec", "train_det"]
         )
         train_false_alarm = _extract_latest_metric(
-            metrics_data, ["train_det_pfa", "train_det_fa", "train_fa", "fa"]
+            metrics_data, ["train_det_pfa", "train_det_fa", "train_fa"]
         )
 
         validation_recall = _extract_latest_metric(
-            metrics_data, ["val_cls_rec", "val_rec", "val_acc", "rec"]
+            metrics_data, ["val_cls_rec", "val_rec", "val_acc"]
         )
         validation_precision = _extract_latest_metric(
-            metrics_data, ["val_cls_prec", "val_prec", "prec"]
+            metrics_data, ["val_cls_prec", "val_prec"]
         )
-        validation_f1 = _extract_latest_metric(
-            metrics_data, ["val_f1", "val_f1_c", "f1_c", "f1_cls"]
-        )
+        validation_f1 = _extract_latest_metric(metrics_data, ["val_f1", "val_f1_c"])
         validation_detection = _extract_latest_metric(
-            metrics_data, ["val_det_rec", "val_det_acc", "val_det", "det"]
+            metrics_data, ["val_det_rec", "val_det_acc", "val_det"]
         )
         validation_false_alarm = _extract_latest_metric(
-            metrics_data, ["val_det_pfa", "val_det_fa", "val_fa", "fa"]
+            metrics_data, ["val_det_pfa", "val_det_fa", "val_fa"]
         )
 
     if summary.cls_rec_tr is None:
@@ -583,7 +579,7 @@ def _classification_f1_from_recall_precision(
         return None
     denominator = recall_value + precision_value
     if denominator == 0:
-        return None
+        return 0.0
     return 2 * (recall_value * precision_value) / denominator
 
 
