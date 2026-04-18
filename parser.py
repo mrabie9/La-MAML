@@ -98,6 +98,24 @@ def get_parser():
         help="optimizer name for models that support switching",
     )
     parser.add_argument(
+        "--prune_perc",
+        type=float,
+        default=0.75,
+        help=(
+            "PackNet: fraction of currently free (unowned) weights to drop after each task; "
+            "the complement is kept and assigned to the completed task."
+        ),
+    )
+    parser.add_argument(
+        "--post_prune_epochs",
+        type=int,
+        default=0,
+        help=(
+            "PackNet: full passes over the task train loader after packing for optional finetune; "
+            "gradients only on weights newly assigned to that task. 0 disables."
+        ),
+    )
+    parser.add_argument(
         "--no_class_weighted_ce",
         dest="class_weighted_ce",
         action="store_false",
