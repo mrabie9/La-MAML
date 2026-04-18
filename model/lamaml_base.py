@@ -24,6 +24,7 @@ class LamamlBaseConfig:
     learn_lr: bool = False
     second_order: bool = False
     sync_update: bool = False
+    momentum: float = 0.0
     meta_batches: int = 3
     arch: str = "resnet1d"
     dataset: str = "tinyimagenet"
@@ -97,6 +98,8 @@ class BaseNet(torch.nn.Module):
         self.use_cuda = self.cfg.cuda
         if self.use_cuda:
             self.net = self.net.cuda()
+
+        self._reset_velocity()
 
         self.n_outputs = n_outputs
         self.classes_per_task = misc_utils.build_task_class_list(
@@ -203,6 +206,32 @@ class BaseNet(torch.nn.Module):
         # mapping from classes [1-100] to their idx within a task
         offset1, offset2 = misc_utils.compute_offsets(task, self.classes_per_task)
         return int(offset1), int(offset2)
+
+    def _reset_velocity(self) -> None:
+        n = sum(1 for _ in self.net.parameters())
+        self._velocity: list = [None] * n
+
+    def _async_weight_update(self) -> None:
+        """Apply the La-MAML per-parameter weight update with optional momentum.
+
+        Each parameter is updated as:
+            v_j <- momentum * v_j + g_j
+            theta_j <- theta_j - relu(alpha_j) * v_j
+        where g_j is the current gradient and v_j is the running velocity.
+        When momentum is 0 this reduces to the plain gradient step.
+        """
+        mu = self.cfg.momentum
+        with torch.no_grad():
+            for i, p in enumerate(self.net.parameters()):
+                g = p.grad
+                if g is None:
+                    continue
+                if mu > 0.0:
+                    v = self._velocity[i]
+                    self._velocity[i] = g if v is None else v.mul_(mu).add_(g)
+                    g = self._velocity[i]
+                lr_i = torch.relu(self.net.alpha_lr[i])
+                p.add_(-lr_i * g)
 
     def zero_grads(self):
         if self.cfg.learn_lr:

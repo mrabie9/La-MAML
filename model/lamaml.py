@@ -87,6 +87,7 @@ class Net(BaseNet):
             if t != self.current_task:
                 self.M = self.M_new
                 self.current_task = t
+                self._reset_velocity()
 
             batch_sz = x.shape[0]
             meta_losses = [0 for _ in range(batch_sz)]
@@ -144,13 +145,7 @@ class Net(BaseNet):
             if self.cfg.sync_update:
                 self.opt_wt.step()
             else:
-                with torch.no_grad():
-                    for i, p in enumerate(self.net.parameters()):
-                        g = p.grad
-                        if g is None:
-                            continue  # <-- skip params without grads
-                        lr_i = torch.relu(self.net.alpha_lr[i])
-                        p.add_(-lr_i * g)  # inplace, safe under no_grad
+                self._async_weight_update()
 
             # better zeroing (lower mem)
             self.net.zero_grad(set_to_none=True)

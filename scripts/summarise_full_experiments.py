@@ -333,6 +333,26 @@ def _to_float_or_none(raw_value: object) -> Optional[float]:
     return float(finite_values[-1])
 
 
+def _extract_latest_metric(
+    metrics_data: np.lib.npyio.NpzFile, candidate_keys: List[str]
+) -> Optional[float]:
+    """Return the latest finite value from the first present metric key.
+
+    Args:
+        metrics_data: Opened task NPZ payload.
+        candidate_keys: Ordered keys to try.
+
+    Returns:
+        Latest finite float from the first matching key, otherwise None.
+    """
+    for metric_key in candidate_keys:
+        if metric_key in metrics_data:
+            metric_value = _to_float_or_none(metrics_data[metric_key])
+            if metric_value is not None:
+                return metric_value
+    return None
+
+
 def _extract_log_dir_from_job_log(job_log_path: str) -> Optional[str]:
     """Extract the per-run logging directory from a job log.
 
@@ -391,57 +411,37 @@ def _fill_missing_metrics_from_npz(
         None.
     """
     with np.load(metrics_file_path, allow_pickle=False) as metrics_data:
-        train_recall = (
-            _to_float_or_none(metrics_data["train_cls_rec"])
-            if "train_cls_rec" in metrics_data
-            else None
+        train_recall = _extract_latest_metric(
+            metrics_data, ["train_cls_rec", "train_rec", "cls_tr_rec", "rec"]
         )
-        train_precision = (
-            _to_float_or_none(metrics_data["train_cls_prec"])
-            if "train_cls_prec" in metrics_data
-            else None
+        train_precision = _extract_latest_metric(
+            metrics_data, ["train_cls_prec", "train_prec", "prec"]
         )
-        train_f1 = (
-            _to_float_or_none(metrics_data["train_f1"])
-            if "train_f1" in metrics_data
-            else None
+        train_f1 = _extract_latest_metric(
+            metrics_data, ["train_f1", "train_f1_c", "f1_c", "f1_cls"]
         )
-        train_detection = (
-            _to_float_or_none(metrics_data["train_det_rec"])
-            if "train_det_rec" in metrics_data
-            else None
+        train_detection = _extract_latest_metric(
+            metrics_data, ["train_det_rec", "train_det", "det"]
         )
-        train_false_alarm = (
-            _to_float_or_none(metrics_data["train_det_pfa"])
-            if "train_det_pfa" in metrics_data
-            else None
+        train_false_alarm = _extract_latest_metric(
+            metrics_data, ["train_det_pfa", "train_det_fa", "train_fa", "fa"]
         )
 
-        validation_recall = (
-            _to_float_or_none(metrics_data["val_cls_rec"])
-            if "val_cls_rec" in metrics_data
-            else None
+        validation_recall = _extract_latest_metric(
+            metrics_data, ["val_cls_rec", "val_rec", "val_acc", "rec"]
         )
-        validation_precision = (
-            _to_float_or_none(metrics_data["val_cls_prec"])
-            if "val_cls_prec" in metrics_data
-            else None
+        validation_precision = _extract_latest_metric(
+            metrics_data, ["val_cls_prec", "val_prec", "prec"]
         )
-        validation_f1 = (
-            _to_float_or_none(metrics_data["val_f1"])
-            if "val_f1" in metrics_data
-            else None
+        validation_f1 = _extract_latest_metric(
+            metrics_data, ["val_f1", "val_f1_c", "f1_c", "f1_cls"]
         )
-        validation_detection = (
-            _to_float_or_none(metrics_data["val_det_rec"])
-            if "val_det_rec" in metrics_data
-            else None
+        validation_detection = _extract_latest_metric(
+            metrics_data, ["val_det_rec", "val_det_acc", "val_det", "det"]
         )
-        validation_false_alarm = None
-        if "val_det_pfa" in metrics_data:
-            validation_false_alarm = _to_float_or_none(metrics_data["val_det_pfa"])
-        elif "val_det_fa" in metrics_data:
-            validation_false_alarm = _to_float_or_none(metrics_data["val_det_fa"])
+        validation_false_alarm = _extract_latest_metric(
+            metrics_data, ["val_det_pfa", "val_det_fa", "val_fa", "fa"]
+        )
 
     if summary.cls_rec_tr is None:
         summary.cls_rec_tr = train_recall

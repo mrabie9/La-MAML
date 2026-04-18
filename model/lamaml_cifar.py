@@ -201,6 +201,7 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
             if t != self.current_task:
                 self.M = self.M_new.copy()
                 self.current_task = t
+                self._reset_velocity()
 
             batch_sz = x.shape[0]
             n_batches = self.cfg.meta_batches
@@ -271,11 +272,7 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
             if self.cfg.sync_update:
                 self.opt_wt.step()
             else:
-                for i, p in enumerate(self.net.parameters()):
-                    # using relu on updated LRs to avoid negative values
-                    if p.grad is None:
-                        continue
-                    p.data = p.data - p.grad * nn.functional.relu(self.net.alpha_lr[i])
+                self._async_weight_update()
 
             # Ensure the input adapter is explicitly optimized on the current
             # differentiable 3-ADC batch.
