@@ -58,6 +58,49 @@ import numpy as np  # noqa: E402
 from matplotlib.ticker import MultipleLocator  # noqa: E402
 from matplotlib.transforms import Bbox  # noqa: E402
 
+try:
+    # Reuse the same plot styling config (til/cil sizing & legend layout)
+    # to keep exported paper-ready subplots consistent across scripts.
+    from scripts.plot_fwt_metrics import PLOT_STYLES_BY_EXPERIMENT  # type: ignore
+except Exception:  # pragma: no cover - best-effort import
+    PLOT_STYLES_BY_EXPERIMENT: dict[str, dict[str, Any]] = {
+        "default": {"figsize": (6, 3), "ylim": None, "legend_kwargs": {}},
+        "til": {"figsize": (7, 3.5), "ylim": (-0.08, 0.2), "legend_kwargs": {}},
+    }
+
+try:
+    from scripts.plot_style_overrides import resolve_legend_kwargs  # type: ignore
+except Exception:  # pragma: no cover - best-effort import
+
+    def resolve_legend_kwargs(  # type: ignore[misc]
+        *,
+        style_key: str,
+        panel_key: str,
+        base_legend_kwargs: dict[str, Any] | None,
+        run_count: int,
+    ) -> dict[str, Any]:
+        _ = style_key, panel_key, run_count
+        return dict(base_legend_kwargs or {})
+
+
+try:
+    from scripts.plot_algorithm_group_styles import (  # type: ignore
+        build_group_color_map,
+        group_sort_key,
+    )
+except Exception:  # pragma: no cover - best-effort import
+
+    def build_group_color_map(  # type: ignore[misc]
+        algorithm_names: Sequence[str],
+        fallback_colors: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        _ = algorithm_names
+        return dict(fallback_colors or {})
+
+    def group_sort_key(algorithm_name: str) -> tuple[int, str]:  # type: ignore[misc]
+        return (0, algorithm_name.lower())
+
+
 TaskMetrics = Dict[str, Any]
 _SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -830,7 +873,7 @@ def _plot_val_acc_over_tasks(
         label=f"Mean {val_metric_label}",
     )
 
-    ax.set_xlabel("After training up to task")
+    ax.set_xlabel("Task")
     ax.set_ylabel(f"Val {val_metric_label}")
     ax.grid(True, alpha=0.3)
 
@@ -846,7 +889,7 @@ def _plot_average_forgetting(
     if x.size == 0:
         return
     ax.plot(x, avg_forgetting, "o-", color="C3")
-    ax.set_xlabel("After training up to task")
+    ax.set_xlabel("Task")
     ax.set_ylabel(f"Avg forgetting ({val_metric_label})")
     ax.grid(True, alpha=0.3)
 
@@ -1166,6 +1209,14 @@ def plot_multi_algorithms(
             else:
                 label_list.append(run.name)
         label_colors = _build_label_colors(label_list, labels_grouping)
+        fallback_colors_by_algorithm = {
+            run.name: label_colors.get(label_list[run_idx], f"C{run_idx % 10}")
+            for run_idx, run in enumerate(runs)
+        }
+        group_colors_by_algorithm = build_group_color_map(
+            [run.name for run in runs],
+            fallback_colors=fallback_colors_by_algorithm,
+        )
 
         row_axes = axes[0]
 
@@ -1174,6 +1225,9 @@ def plot_multi_algorithms(
         train_metric_label = "Train recall"
         for run_idx, run in enumerate(runs):
             run_label = label_list[run_idx]
+            run_color = group_colors_by_algorithm.get(
+                run.name, label_colors.get(run_label, f"C{run_idx % 10}")
+            )
             if not run.tasks:
                 continue
             train_series, train_metric_label = _concat_train_metric_for_run(
@@ -1188,8 +1242,9 @@ def plot_multi_algorithms(
             row_axes[0].plot(
                 x_values,
                 train_series,
+                ".-",
                 label=run_label,
-                color=label_colors.get(run_label, f"C{run_idx % 10}"),
+                color=run_color,
                 alpha=0.9,
             )
         row_axes[0].set_ylabel(train_metric_label)
@@ -1198,6 +1253,9 @@ def plot_multi_algorithms(
 
         # Final validation metrics: bars grouped by run, using the last task.
         for run_idx, run in enumerate(runs):
+            run_color = group_colors_by_algorithm.get(
+                run.name, label_colors.get(label_list[run_idx], f"C{run_idx % 10}")
+            )
             if not run.tasks:
                 continue
             last = run.tasks[-1]
@@ -1219,7 +1277,7 @@ def plot_multi_algorithms(
                     mean_pfa,
                     width=width,
                     label="Pfa" if run_idx == 0 else None,
-                    color=label_colors.get(label_list[run_idx], f"C{run_idx % 10}"),
+                    color=run_color,
                     hatch="//",
                     alpha=0.8,
                 )
@@ -1229,7 +1287,7 @@ def plot_multi_algorithms(
                     mean_det,
                     width=width,
                     label="Det recall" if run_idx == 0 else None,
-                    color=label_colors.get(label_list[run_idx], f"C{run_idx % 10}"),
+                    color=run_color,
                     hatch="..",
                     alpha=0.8,
                 )
@@ -1239,7 +1297,7 @@ def plot_multi_algorithms(
                     mean_cls,
                     width=width,
                     label="Cls recall" if run_idx == 0 else None,
-                    color=label_colors.get(label_list[run_idx], f"C{run_idx % 10}"),
+                    color=run_color,
                     alpha=0.8,
                 )
         row_axes[1].set_ylabel("Metric value")
@@ -1253,23 +1311,29 @@ def plot_multi_algorithms(
 
         # Mean validation metric over tasks: one line per run.
         for run_idx, run in enumerate(runs):
+            run_color = group_colors_by_algorithm.get(
+                run.name, label_colors.get(label_list[run_idx], f"C{run_idx % 10}")
+            )
             x_vals, y_vals = _compute_mean_val_metric_over_tasks(run.tasks, first_key)
             if x_vals.size == 0:
                 continue
             row_axes[2].plot(
                 x_vals,
                 y_vals,
-                "o-",
+                ".-",
                 label=label_list[run_idx],
-                color=label_colors.get(label_list[run_idx], f"C{run_idx % 10}"),
+                color=run_color,
                 alpha=0.9,
             )
-        row_axes[2].set_xlabel("After training up to task")
+        row_axes[2].set_xlabel("Task")
         row_axes[2].set_ylabel(f"Val {first_label}")
         row_axes[2].grid(True, alpha=0.3)
 
         # Average forgetting over tasks: one line per run.
         for run_idx, run in enumerate(runs):
+            run_color = group_colors_by_algorithm.get(
+                run.name, label_colors.get(label_list[run_idx], f"C{run_idx % 10}")
+            )
             val_metric_key, _ = _resolve_val_metric_for_run(val_metric_choice, run)
             x_vals, y_vals = compute_average_forgetting(run.tasks, val_metric_key)
             if x_vals.size == 0:
@@ -1277,12 +1341,12 @@ def plot_multi_algorithms(
             row_axes[3].plot(
                 x_vals + 1,
                 y_vals,
-                "o-",
+                ".-",
                 label=label_list[run_idx],
-                color=label_colors.get(label_list[run_idx], f"C{run_idx % 10}"),
+                color=run_color,
                 alpha=0.9,
             )
-        row_axes[3].set_xlabel("After training up to task")
+        row_axes[3].set_xlabel("Task")
         row_axes[3].set_ylabel(f"Avg forgetting ({first_label})")
         row_axes[3].grid(True, alpha=0.3)
 
@@ -1433,8 +1497,34 @@ def plot_multi_algorithms(
             subplot_right = 0.9
             subplot_bottom = 0.2
             subplot_top = 0.8
+            fwt_plot_style: dict[str, Any] | None = None
+            fwt_style_key = "default"
+            legend_fontsize = 12.0
             subplot_figure_width_inches = 8.0
             subplot_figure_height_inches = 6.0
+
+            # In combined mode with paper-ready exports, match the same plot
+            # configuration used by plot_fwt_metrics.py.
+            if plot_layout == "together":
+                experiment_path_text = " ".join(
+                    [str(run.metrics_dir) for run in runs] + [run.name for run in runs]
+                ).lower()
+                style_key = "til" if "til" in experiment_path_text else "default"
+                fwt_style_key = style_key
+                fwt_plot_style = (
+                    PLOT_STYLES_BY_EXPERIMENT.get(style_key)
+                    or PLOT_STYLES_BY_EXPERIMENT["default"]
+                )
+                subplot_figure_width_inches, subplot_figure_height_inches = map(
+                    float,
+                    fwt_plot_style.get(
+                        "figsize",
+                        (subplot_figure_width_inches, subplot_figure_height_inches),
+                    ),
+                )
+                legend_kwargs = fwt_plot_style.get("legend_kwargs", {}) or {}
+                legend_fontsize = float(legend_kwargs.get("fontsize", legend_fontsize))
+
             original_figure_size_inches = fig.get_size_inches().copy()
             all_axes: List[plt.Axes] = [ax for row in axes for ax in row]
             for axis in all_axes:
@@ -1444,7 +1534,7 @@ def plot_multi_algorithms(
                 legend = axis.get_legend()
                 if legend is not None:
                     for legend_text in legend.get_texts():
-                        legend_text.set_fontsize(12)
+                        legend_text.set_fontsize(legend_fontsize)
 
             original_titles: Dict[plt.Axes, str] = {
                 axis: axis.get_title() for axis in all_axes
@@ -1470,6 +1560,35 @@ def plot_multi_algorithms(
                     axis.set_anchor("W")
                     if axis.lines:
                         axis.margins(x=0.0)
+
+                    if fwt_plot_style is not None:
+                        fwt_ylim = fwt_plot_style.get("ylim")
+                        if (
+                            fwt_ylim is not None
+                            and "Avg forgetting" in axis.get_ylabel()
+                        ):
+                            axis.set_ylim(*fwt_ylim)
+
+                        fwt_legend_kwargs = (
+                            fwt_plot_style.get("legend_kwargs", {}) or {}
+                        )
+                        handles, labels = axis.get_legend_handles_labels()
+                        if handles and labels and fwt_legend_kwargs:
+                            panel_key = "train"
+                            if col_idx == 1:
+                                panel_key = "final_validation"
+                            elif "Avg forgetting" in axis.get_ylabel():
+                                panel_key = "average_forgetting"
+                            elif "Val " in axis.get_ylabel():
+                                panel_key = "mean_val"
+                            fwt_legend_kwargs = resolve_legend_kwargs(
+                                style_key=fwt_style_key,
+                                panel_key=panel_key,
+                                base_legend_kwargs=fwt_legend_kwargs,
+                                run_count=len(runs),
+                            )
+                            axis.legend(handles, labels, **fwt_legend_kwargs)
+
                     subplot_title = axis.get_title().strip()
                     if subplot_title:
                         title_stem = re.sub(r"[^A-Za-z0-9]+", "_", subplot_title).strip(
@@ -1748,6 +1867,7 @@ def main() -> None:
             raise SystemExit(
                 "No runs left after filtering iid2. Pass --include-iid2 to include it."
             )
+    runs = sorted(runs, key=lambda run: group_sort_key(run.name))
     print("Algorithms and metrics directories:")
     for run in runs:
         print(f"  {run.name}: {run.metrics_dir}")

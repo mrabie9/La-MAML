@@ -14,18 +14,43 @@ Typical usage:
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.transforms import Bbox
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 PlotStyle = Dict[str, Any]
+
+# Manual plot controls (set values to ``None`` to keep auto behavior).
+# Keys: train, final_validation, mean_val, average_forgetting
+PANEL_YLIM_OVERRIDES: Dict[str, tuple[float, float] | None] = {
+    "train": None,
+    "final_validation": None,
+    "mean_val": (0, 0.9),
+    "average_forgetting": (-0.8, 0.2),
+}
+
+# Manual legend ncol controls (set values to ``None`` to keep auto behavior).
+# Keys: train, final_validation, mean_val, average_forgetting
+PANEL_LEGEND_NCOL_OVERRIDES: Dict[str, int | None] = {
+    "train": None,
+    "final_validation": None,
+    "mean_val": 6,
+    "average_forgetting": 6,
+}
+
+# Global x-axis label spacing (distance from axis to xlabel text).
+X_LABEL_PAD: float = 4.0
+# Global tick-label font size (applies to both x and y axes).
+TICK_LABEL_FONT_SIZE: float = 11.0
+# Optional legend placement: move legends above line plots for consistent axes.
+LEGEND_ABOVE_PLOT: bool = True
+# Vertical offset used when LEGEND_ABOVE_PLOT=True.
+LEGEND_ABOVE_BBOX_Y: float = 1.02
 
 
 def parse_args() -> argparse.Namespace:
@@ -124,37 +149,99 @@ def _case_insensitive_detect_style(runs: Sequence[Any]) -> PlotStyle:
     """Detect til vs default style based on path/name substrings (case-insensitive)."""
     from scripts.plot_fwt_metrics import PLOT_STYLES_BY_EXPERIMENT
 
-    experiment_path_text = " ".join(
-        [str(run.metrics_dir) for run in runs] + [run.name for run in runs]
-    ).lower()
-    style_key = "til" if "til" in experiment_path_text else "default"
+    style_key = _case_insensitive_detect_style_key(runs)
     return PLOT_STYLES_BY_EXPERIMENT[style_key]
 
 
-def _export_subplot(
-    *,
-    fig: plt.Figure,
-    output_path: Path,
-    subplot_dpi: float,
-    pad_pixels: float,
-    fixed_subplot_height_pixels: float,
-    axis: plt.Axes,
-    axis_bbox_title: str,
-    renderer: Any,
-    export_bbox: Bbox,
-    bbox_height_inches: float,
-    export_dpi_floor: float = 72.0,
-) -> float:
-    """Save a single subplot using the axis-only bbox cropping logic."""
-    height_fixed_dpi = fixed_subplot_height_pixels / bbox_height_inches
-    export_dpi_calc = min(subplot_dpi, height_fixed_dpi)
-    export_dpi_calc = max(export_dpi_floor, export_dpi_calc)
+def _case_insensitive_detect_style_key(runs: Sequence[Any]) -> str:
+    """Detect style key based on path/name substrings (case-insensitive)."""
+    experiment_path_text = " ".join(
+        [str(run.metrics_dir) for run in runs] + [run.name for run in runs]
+    ).lower()
+    return "til" if "til" in experiment_path_text else "default"
 
+
+def _build_export_legend_kwargs(
+    base_legend_kwargs: Dict[str, Any], panel_key: str
+) -> Dict[str, Any]:
+    """Build legend kwargs for subplot export."""
+    legend_kwargs = dict(base_legend_kwargs)
+    manual_ncol = PANEL_LEGEND_NCOL_OVERRIDES.get(panel_key)
+    if manual_ncol is not None:
+        legend_kwargs["ncol"] = int(manual_ncol)
+    if LEGEND_ABOVE_PLOT and panel_key in {"train", "mean_val", "average_forgetting"}:
+        legend_kwargs["loc"] = "lower center"
+        legend_kwargs["bbox_to_anchor"] = (0.5, LEGEND_ABOVE_BBOX_Y)
+        legend_kwargs.setdefault("borderaxespad", 0.0)
+    return legend_kwargs
+
+
+def _format_task_dataset_label(task_name: str, fallback_task_number: int) -> str:
+    """Format task dataset labels to mirror plot_fwt_metrics.py style."""
+    task_name_parts = task_name.split("-", 1)
+    if len(task_name_parts) == 2 and task_name_parts[1]:
+        original_task_number = task_name_parts[0].lstrip("t")
+        dataset_name = task_name_parts[1]
+    else:
+        original_task_number = str(fallback_task_number)
+        dataset_name = task_name
+    dataset_name_lower = dataset_name.lower()
+    if "uclresm" in dataset_name_lower:
+        return f"(RML{original_task_number})"
+    if "deeprad" in dataset_name_lower:
+        return f"(DR{original_task_number})"
+    if "rcn" in dataset_name_lower:
+        return f"(RCN{original_task_number})"
+    return dataset_name
+
+
+def _build_task_index_to_dataset_name(runs: Sequence[Any]) -> Dict[int, str]:
+    """Build task-index label map for x-axis display."""
+    task_index_to_dataset_name: Dict[int, str] = {}
+    for run in runs:
+        run_task_names = getattr(run, "task_names", None)
+        for task_index, task in enumerate(run.tasks):
+            if task_index in task_index_to_dataset_name:
+                continue
+            task_name = (
+                str(run_task_names[task_index])
+                if run_task_names is not None and task_index < len(run_task_names)
+                else str(task.get("task_name", f"t{task_index}"))
+            )
+            task_index_to_dataset_name[task_index] = _format_task_dataset_label(
+                task_name, task_index
+            )
+    return task_index_to_dataset_name
+
+
+def _set_task_axis_like_fwt(
+    axis: plt.Axes,
+    task_positions: Sequence[int],
+    task_index_to_dataset_name: Dict[int, str],
+) -> None:
+    """Set x ticks every 1 and labels like plot_fwt_metrics.py."""
+    if not task_positions:
+        return
+    min_position = int(min(task_positions))
+    max_position = int(max(task_positions))
+    tick_positions = list(range(min_position, max_position + 1))
+    axis.set_xticks(tick_positions)
+    axis.set_xticklabels(
+        [
+            f"{task_position}\n"
+            f"{task_index_to_dataset_name.get(task_position - 1, 'unknown')}"
+            for task_position in tick_positions
+        ]
+    )
+
+
+def _save_independent_figure(fig: plt.Figure, output_path: Path, dpi: int) -> None:
+    """Save one independent panel figure with tight cropping."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=export_dpi_calc, bbox_inches=export_bbox)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=dpi, bbox_inches="tight", pad_inches=0.03)
     print(f"Saved subplot to {output_path}")
-    _ = axis_bbox_title  # keep for debugging hooks
-    return export_dpi_calc
+    plt.close(fig)
 
 
 def main() -> None:
@@ -165,8 +252,6 @@ def main() -> None:
         sys.path.insert(0, str(REPO_ROOT))
 
     from scripts.plot_multi_algorithms import (  # pylint: disable=import-error
-        _build_axis_only_export_bbox,
-        _build_label_colors,
         _compute_mean_val_metric_over_tasks,
         _concat_train_metric_for_run,
         _discover_runs_from_algorithm_root,
@@ -176,6 +261,15 @@ def main() -> None:
         _resolve_train_x_axis_label,
         compute_average_forgetting,
     )
+    from scripts.plot_fwt_metrics import (
+        ALGORITHM_DISPLAY_NAMES,
+        build_label_colors as build_fwt_label_colors,
+    )
+    from scripts.plot_algorithm_group_styles import (
+        build_group_color_map,
+        group_sort_key,
+    )
+    from scripts.plot_style_overrides import resolve_legend_kwargs
 
     args = parse_args()
     output_dir: Path = args.output_dir
@@ -204,12 +298,18 @@ def main() -> None:
         run_index=args.run_index,
     )
 
+    excluded_run_name_set = {"saved_models", "models", "plots", "figures"}
     if not args.include_iid2:
-        runs = [run for run in runs if run.name.strip().lower() != "iid2"]
-        if not runs:
-            raise SystemExit(
-                "No runs left after filtering iid2. Pass --include-iid2 to include it."
-            )
+        excluded_run_name_set.add("iid2")
+    runs = [
+        run for run in runs if run.name.strip().lower() not in excluded_run_name_set
+    ]
+    if not runs:
+        raise SystemExit(
+            "No runs left after filtering wrapper directories/iid2. "
+            "Pass --include-iid2 to include iid2."
+        )
+    runs = sorted(runs, key=lambda run: group_sort_key(run.name))
 
     print("Algorithms and metrics directories:")
     for run in runs:
@@ -230,25 +330,10 @@ def main() -> None:
     # Styling config derived from plot_fwt_metrics.py.
     plot_style = _case_insensitive_detect_style(runs)
     legend_kwargs: Dict[str, Any] = plot_style.get("legend_kwargs", {}) or {}
-
-    # Create combined-row figure.
-    n_rows = 1
-    n_cols = 4
-    col_width, row_height = 9, 4.5
     dpi = 550
-    fig_width = col_width * n_cols
-    fig, axes = plt.subplots(
-        n_rows,
-        n_cols,
-        figsize=(fig_width, row_height * n_rows),
-        squeeze=False,
-        dpi=dpi,
-    )
-
-    train_metric_label = "Train recall"
-    row_axes = axes[0]
-
+    figure_size = tuple(map(float, plot_style.get("figsize", (7.0, 3.5))))
     first_key, first_label = _resolve_val_metric_for_run(args.val_metric, runs[0])
+    metric_suffix = "total_f1" if first_key == "val_f1" else "cls_recall"
 
     # Legend labels/colors for algorithm lines.
     if label_list is not None:
@@ -258,11 +343,25 @@ def main() -> None:
             )
         run_labels = label_list
     else:
-        run_labels = [run.name for run in runs]
+        run_labels = [ALGORITHM_DISPLAY_NAMES.get(run.name, run.name) for run in runs]
 
-    label_colors = _build_label_colors(run_labels, labels_grouping)
+    if labels_grouping:
+        print(
+            "[WARN] --labels-grouping is ignored in this script to preserve "
+            "per-algorithm colors from plot_fwt_metrics.py."
+        )
 
-    # Panel 1: train recall vs step.
+    base_algorithm_colors = build_fwt_label_colors([run.name for run in runs])
+    algorithm_colors = build_group_color_map(
+        [run.name for run in runs],
+        fallback_colors=base_algorithm_colors,
+    )
+    task_index_to_dataset_name = _build_task_index_to_dataset_name(runs)
+    style_key = _case_insensitive_detect_style_key(runs)
+
+    # Figure 1: train recall vs step.
+    fig_train, axis_train = plt.subplots(figsize=figure_size, dpi=dpi)
+    train_metric_label = "Train recall"
     for run_idx, run in enumerate(runs):
         run_label = run_labels[run_idx]
         if not run.tasks:
@@ -276,18 +375,46 @@ def main() -> None:
             x_values = np.arange(1, len(train_series) + 1)
         else:
             x_values = np.arange(len(train_series))
-        row_axes[0].plot(
+        axis_train.plot(
             x_values,
             train_series,
+            ".-",
             label=run_label,
-            color=label_colors.get(run_label, f"C{run_idx % 10}"),
+            color=algorithm_colors.get(run.name, f"C{run_idx % 10}"),
             alpha=0.9,
         )
-    row_axes[0].set_ylabel(train_metric_label)
-    row_axes[0].set_xlabel(_resolve_train_x_axis_label(args.train_metric))
-    row_axes[0].grid(True, alpha=0.3)
+    axis_train.set_ylabel(train_metric_label, fontsize=16)
+    axis_train.set_xlabel(
+        _resolve_train_x_axis_label(args.train_metric),
+        fontsize=16,
+        labelpad=X_LABEL_PAD,
+    )
+    axis_train.tick_params(axis="both", labelsize=TICK_LABEL_FONT_SIZE)
+    axis_train.grid(True, alpha=0.3)
+    handles_train, labels_train = axis_train.get_legend_handles_labels()
+    if handles_train and labels_train and legend_kwargs:
+        export_legend_kwargs = _build_export_legend_kwargs(
+            resolve_legend_kwargs(
+                style_key=style_key,
+                panel_key="train",
+                base_legend_kwargs=legend_kwargs,
+                run_count=len(runs),
+            ),
+            "train",
+        )
+        axis_train.legend(handles_train, labels_train, **export_legend_kwargs)
+    manual_ylim_train = PANEL_YLIM_OVERRIDES.get("train")
+    if manual_ylim_train is not None:
+        axis_train.set_ylim(*manual_ylim_train)
+    _save_independent_figure(
+        fig_train,
+        output_dir
+        / f"train_{args.train_metric}_vs_{_resolve_train_x_axis_label(args.train_metric).lower()}_r1_c1.png",
+        dpi,
+    )
 
-    # Panel 2: final validation metrics (bars for Pfa/Det/Cls recall).
+    # Figure 2: final validation metrics (bars for Pfa/Det/Cls recall).
+    fig_final, axis_final = plt.subplots(figsize=figure_size, dpi=dpi)
     for run_idx, run in enumerate(runs):
         if not run.tasks:
             continue
@@ -299,219 +426,159 @@ def main() -> None:
         x_center = run_idx
         width = 0.2
         if mean_pfa is not None:
-            row_axes[1].bar(
+            axis_final.bar(
                 x_center - width,
                 mean_pfa,
                 width=width,
                 label="Pfa" if run_idx == 0 else None,
-                color=label_colors.get(run_labels[run_idx], f"C{run_idx % 10}"),
+                color=algorithm_colors.get(run.name, f"C{run_idx % 10}"),
                 hatch="//",
                 alpha=0.8,
             )
         if mean_det is not None:
-            row_axes[1].bar(
+            axis_final.bar(
                 x_center,
                 mean_det,
                 width=width,
                 label="Det recall" if run_idx == 0 else None,
-                color=label_colors.get(run_labels[run_idx], f"C{run_idx % 10}"),
+                color=algorithm_colors.get(run.name, f"C{run_idx % 10}"),
                 hatch="..",
                 alpha=0.8,
             )
         if mean_cls is not None:
-            row_axes[1].bar(
+            axis_final.bar(
                 x_center + width,
                 mean_cls,
                 width=width,
                 label="Cls recall" if run_idx == 0 else None,
-                color=label_colors.get(run_labels[run_idx], f"C{run_idx % 10}"),
+                color=algorithm_colors.get(run.name, f"C{run_idx % 10}"),
                 alpha=0.8,
             )
-    row_axes[1].set_ylabel("Metric value")
-    row_axes[1].set_xticks(np.arange(len(runs)))
-    row_axes[1].set_xticklabels([])
-    row_axes[1].set_xlabel("")
-    row_axes[1].grid(True, alpha=0.3, axis="y")
+    axis_final.set_ylabel("Metric value", fontsize=16)
+    axis_final.set_xticks(np.arange(len(runs)))
+    axis_final.set_xticklabels([])
+    axis_final.set_xlabel("")
+    axis_final.tick_params(axis="both", labelsize=TICK_LABEL_FONT_SIZE)
+    axis_final.grid(True, alpha=0.3, axis="y")
+    handles_final, labels_final = axis_final.get_legend_handles_labels()
+    if handles_final and labels_final:
+        export_legend_kwargs = resolve_legend_kwargs(
+            style_key=style_key,
+            panel_key="final_validation",
+            base_legend_kwargs=legend_kwargs,
+            run_count=len(runs),
+        )
+        manual_ncol_final = PANEL_LEGEND_NCOL_OVERRIDES.get("final_validation")
+        if manual_ncol_final is not None:
+            export_legend_kwargs["ncol"] = int(manual_ncol_final)
+        axis_final.legend(handles_final, labels_final, **export_legend_kwargs)
+    manual_ylim_final = PANEL_YLIM_OVERRIDES.get("final_validation")
+    if manual_ylim_final is not None:
+        axis_final.set_ylim(*manual_ylim_final)
+    _save_independent_figure(
+        fig_final, output_dir / "final_validation_metrics_r1_c2.png", dpi
+    )
 
-    # Panel 3: mean validation metric over tasks (one line per run).
+    # Figure 3: mean validation metric over tasks (one line per run).
+    fig_mean, axis_mean = plt.subplots(figsize=figure_size, dpi=dpi)
+    mean_task_positions: set[int] = set()
     for run_idx, run in enumerate(runs):
         x_vals, y_vals = _compute_mean_val_metric_over_tasks(run.tasks, first_key)
         if x_vals.size == 0:
             continue
-        row_axes[2].plot(
+        mean_task_positions.update(int(value) for value in x_vals.tolist())
+        axis_mean.plot(
             x_vals,
             y_vals,
-            "o-",
+            ".-",
             label=run_labels[run_idx],
-            color=label_colors.get(run_labels[run_idx], f"C{run_idx % 10}"),
+            color=algorithm_colors.get(run.name, f"C{run_idx % 10}"),
             alpha=0.9,
         )
-    row_axes[2].set_xlabel("After training up to task")
-    row_axes[2].set_ylabel(f"Val {first_label}")
-    row_axes[2].grid(True, alpha=0.3)
+    axis_mean.set_xlabel("Task", fontsize=16, labelpad=X_LABEL_PAD)
+    axis_mean.set_ylabel("F1 Score", fontsize=16)
+    _set_task_axis_like_fwt(
+        axis_mean,
+        sorted(mean_task_positions),
+        task_index_to_dataset_name,
+    )
+    axis_mean.tick_params(axis="both", labelsize=TICK_LABEL_FONT_SIZE)
+    axis_mean.grid(True, alpha=0.3)
+    handles_mean, labels_mean = axis_mean.get_legend_handles_labels()
+    if handles_mean and labels_mean and legend_kwargs:
+        export_legend_kwargs = _build_export_legend_kwargs(
+            resolve_legend_kwargs(
+                style_key=style_key,
+                panel_key="mean_val",
+                base_legend_kwargs=legend_kwargs,
+                run_count=len(runs),
+            ),
+            "mean_val",
+        )
+        axis_mean.legend(handles_mean, labels_mean, **export_legend_kwargs)
+    manual_ylim_mean = PANEL_YLIM_OVERRIDES.get("mean_val")
+    if manual_ylim_mean is not None:
+        axis_mean.set_ylim(*manual_ylim_mean)
+    _save_independent_figure(
+        fig_mean,
+        output_dir / f"mean_val_{metric_suffix}_over_tasks_r1_c3.png",
+        dpi,
+    )
 
-    # Panel 4: average forgetting over tasks (one line per run).
+    # Figure 4: backward transfer over tasks (one line per run).
+    fig_forgetting, axis_forgetting = plt.subplots(figsize=figure_size, dpi=dpi)
+    forgetting_task_positions: set[int] = set()
     for run_idx, run in enumerate(runs):
         val_metric_key, _ = _resolve_val_metric_for_run(args.val_metric, run)
         x_vals, y_vals = compute_average_forgetting(run.tasks, val_metric_key)
         if x_vals.size == 0:
             continue
-        row_axes[3].plot(
-            x_vals + 1,
-            y_vals,
-            "o-",
+        backward_transfer_values = -y_vals
+        shifted_x_values = x_vals + 1
+        forgetting_task_positions.update(
+            int(value) for value in shifted_x_values.tolist()
+        )
+        axis_forgetting.plot(
+            shifted_x_values,
+            backward_transfer_values,
+            ".-",
             label=run_labels[run_idx],
-            color=label_colors.get(run_labels[run_idx], f"C{run_idx % 10}"),
+            color=algorithm_colors.get(run.name, f"C{run_idx % 10}"),
             alpha=0.9,
         )
-    row_axes[3].set_xlabel("After training up to task")
-    row_axes[3].set_ylabel(f"Avg forgetting ({first_label})")
-    row_axes[3].grid(True, alpha=0.3)
-
-    # Titles for the combined panels (these will also be used for subplot filenames).
-    axes[0][0].set_title(
-        f"{train_metric_label} vs {_resolve_train_x_axis_label(args.train_metric).lower()}"
+    axis_forgetting.set_xlabel("Task", fontsize=16, labelpad=X_LABEL_PAD)
+    axis_forgetting.set_ylabel("Backward Transfer", fontsize=16)
+    _set_task_axis_like_fwt(
+        axis_forgetting,
+        sorted(forgetting_task_positions),
+        task_index_to_dataset_name,
     )
-    axes[0][1].set_title("Final validation metrics")
-    axes[0][2].set_title(f"Mean val {first_label} over tasks")
-    axes[0][3].set_title(f"Average forgetting ({first_label})")
-
-    # Rebuild algorithm legends explicitly so legend_kwargs (ncol/spacing/etc.)
-    # are applied consistently before export.
-    for panel_idx in (0, 2, 3):
-        handles, labels = row_axes[panel_idx].get_legend_handles_labels()
-        if handles and labels and legend_kwargs:
-            row_axes[panel_idx].legend(handles, labels, **legend_kwargs)
-
-    fig.tight_layout()
-    combined_path = output_dir / "multi_algorithms_metrics.png"
-    fig.savefig(combined_path, dpi=dpi, bbox_inches="tight")
-    print(f"Saved figure to {combined_path}")
-
-    # Apply per-axis paper-ready export settings.
-    subplot_dpi = max(300, dpi)
-    subplot_pad_pixels = 8.0
-    fixed_subplot_height_pixels = 1000.0
-    subplot_left = 0.1
-    subplot_right = 0.9
-    subplot_bottom = 0.2
-    subplot_top = 0.99
-
-    subplot_figure_width_inches = float(plot_style.get("figsize", (8.0, 6.0))[0])
-    subplot_figure_height_inches = float(plot_style.get("figsize", (8.0, 6.0))[1])
-    original_figure_size_inches = fig.get_size_inches().copy()
-
-    all_axes: List[plt.Axes] = [ax for row in axes for ax in row]
-    renderer: Any = None
-    fig.canvas.draw()
-    renderer = fig.canvas.get_renderer()
-
-    # Match the font/layout tuning used by plot_multi_algorithms' exports.
-    legend_fontsize = float(legend_kwargs.get("fontsize", 12.0))
-    for axis in all_axes:
-        axis.xaxis.label.set_size(16)
-        axis.yaxis.label.set_size(16)
-        axis.tick_params(axis="both", labelsize=13)
-
-        legend = axis.get_legend()
-        if legend is not None:
-            for legend_text in legend.get_texts():
-                legend_text.set_fontsize(legend_fontsize)
-
-    # Track original positions/titles so we can restore after exports.
-    original_positions: Dict[plt.Axes, Any] = {
-        ax: ax.get_position().frozen() for ax in all_axes
-    }
-    original_titles: Dict[plt.Axes, str] = {ax: ax.get_title() for ax in all_axes}
-
-    for row_idx in range(n_rows):
-        for col_idx in range(n_cols):
-            axis = axes[row_idx][col_idx]
-            fig.set_size_inches(
-                subplot_figure_width_inches, subplot_figure_height_inches, forward=True
-            )
-
-            axis.set_position(
-                [
-                    subplot_left,
-                    subplot_bottom,
-                    max(subplot_right - subplot_left, 1e-3),
-                    max(subplot_top - subplot_bottom, 1e-3),
-                ]
-            )
-            axis.set_anchor("W")
-            if axis.lines:
-                axis.margins(x=0.0)
-
-            # Apply the til-specific ylim for the "Avg forgetting" panel.
-            if (
-                plot_style.get("ylim") is not None
-                and "Avg forgetting" in axis.get_ylabel()
-            ):
-                axis.set_ylim(*plot_style["ylim"])
-
-            subplot_title = axis.get_title().strip()
-            if subplot_title:
-                title_stem = re.sub(r"[^A-Za-z0-9]+", "_", subplot_title).strip("_")
-                if not title_stem:
-                    title_stem = "subplot"
-            else:
-                title_stem = "subplot"
-
-            axis.set_title("")
-
-            # Hide non-target axes to avoid overlap in the export bbox.
-            for other_axis in all_axes:
-                if other_axis is not axis:
-                    other_axis.set_visible(False)
-
-            # Ensure legend kwargs are applied at export time.
-            handles, labels = axis.get_legend_handles_labels()
-            if handles and labels and legend_kwargs:
-                axis.legend(handles, labels, **legend_kwargs)
-
-            fig.canvas.draw()
-            renderer = fig.canvas.get_renderer()
-            axis_bbox_pixels = _build_axis_only_export_bbox(
-                axis=axis, renderer=renderer, pad_pixels=subplot_pad_pixels
-            )
-            bbox = axis_bbox_pixels.transformed(fig.dpi_scale_trans.inverted())
-            bbox_height_inches = max(float(bbox.height), 1e-6)
-
-            subplot_path = (
-                output_dir / f"{title_stem.lower()}_r{row_idx + 1}_c{col_idx + 1}.png"
-            )
-            export_bbox = bbox
-            _export_subplot(
-                fig=fig,
-                output_path=subplot_path,
-                subplot_dpi=subplot_dpi,
-                pad_pixels=subplot_pad_pixels,
-                fixed_subplot_height_pixels=fixed_subplot_height_pixels,
-                axis=axis,
-                axis_bbox_title=title_stem,
-                renderer=renderer,
-                export_bbox=export_bbox,
-                bbox_height_inches=bbox_height_inches,
-            )
-
-            # Restore axes state.
-            axis.set_position(original_positions[axis])
-            axis.set_anchor("C")
-            for other_axis in all_axes:
-                if other_axis is not axis:
-                    other_axis.set_visible(True)
-
-    for axis in all_axes:
-        axis.set_title(original_titles[axis])
-
-    fig.set_size_inches(
-        float(original_figure_size_inches[0]),
-        float(original_figure_size_inches[1]),
-        forward=True,
+    axis_forgetting.tick_params(axis="both", labelsize=TICK_LABEL_FONT_SIZE)
+    axis_forgetting.grid(True, alpha=0.3)
+    manual_ylim_forgetting = PANEL_YLIM_OVERRIDES.get("average_forgetting")
+    if manual_ylim_forgetting is not None:
+        axis_forgetting.set_ylim(*manual_ylim_forgetting)
+    elif plot_style.get("ylim") is not None:
+        axis_forgetting.set_ylim(*plot_style["ylim"])
+    handles_forgetting, labels_forgetting = axis_forgetting.get_legend_handles_labels()
+    if handles_forgetting and labels_forgetting and legend_kwargs:
+        export_legend_kwargs = _build_export_legend_kwargs(
+            resolve_legend_kwargs(
+                style_key=style_key,
+                panel_key="average_forgetting",
+                base_legend_kwargs=legend_kwargs,
+                run_count=len(runs),
+            ),
+            "average_forgetting",
+        )
+        axis_forgetting.legend(
+            handles_forgetting, labels_forgetting, **export_legend_kwargs
+        )
+    _save_independent_figure(
+        fig_forgetting,
+        output_dir / f"backward_transfer_{metric_suffix}_r1_c4.png",
+        dpi,
     )
-    fig.canvas.draw()
-    plt.close(fig)
 
 
 if __name__ == "__main__":

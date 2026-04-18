@@ -22,6 +22,27 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 
+try:
+    from scripts import plot_algorithm_group_styles as group_style_config  # type: ignore
+    from scripts.plot_algorithm_group_styles import (  # type: ignore
+        build_group_color_map,
+        group_sort_key,
+    )
+except Exception:  # pragma: no cover - optional styling helper
+    group_style_config = None
+
+    def build_group_color_map(  # type: ignore[misc]
+        algorithm_names: List[str],
+        fallback_colors: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        _ = algorithm_names
+        return dict(fallback_colors or {})
+
+    def group_sort_key(algorithm_name: str) -> tuple[int, str]:  # type: ignore[misc]
+        """Fallback sort key when group-style helper is unavailable."""
+        return (0, algorithm_name.lower())
+
+
 MetricRecord = Dict[str, Any]
 SeriesPoint = Tuple[int, Optional[float], str]
 PlotStyle = Dict[str, Any]
@@ -60,12 +81,12 @@ PLOT_STYLES_BY_EXPERIMENT: Dict[str, PlotStyle] = {
     },
     "til": {
         "figsize": (7, 3.5),
-        "ylim": (-0.08, 0.2),
+        # "ylim": (0, 0.85),
         "legend_kwargs": {
             "loc": "best",
             "ncol": 6,
             "fontsize": 10,
-            "columnspacing": 0.7,
+            "columnspacing": 0.1,
             "labelspacing": 0.3,
             "framealpha": 0.5,
             "borderaxespad": 0.1,
@@ -181,6 +202,14 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=None,
         help="Optional custom plot title.",
+    )
+    parser.add_argument(
+        "--enable-group-styling",
+        action="store_true",
+        help=(
+            "Enable algorithm-group marker and color-family styling. "
+            "Disabled by default to preserve current behavior."
+        ),
     )
     return parser.parse_args()
 
@@ -298,6 +327,7 @@ def plot_series(
     output_path: Path,
     plot_style: PlotStyle,
     title: Optional[str] = None,
+    use_group_styling: bool = False,
 ) -> None:
     """Create and save the metric line plot.
 
@@ -312,8 +342,15 @@ def plot_series(
     """
     figure, axis = plt.subplots(figsize=plot_style["figsize"])
 
-    sorted_algorithm_names = sorted(series_by_algorithm.keys())
-    label_colors = build_label_colors(sorted_algorithm_names)
+    sorted_algorithm_names = sorted(series_by_algorithm.keys(), key=group_sort_key)
+    base_label_colors = build_label_colors(sorted_algorithm_names)
+    if use_group_styling:
+        label_colors = build_group_color_map(
+            sorted_algorithm_names,
+            fallback_colors=base_label_colors,
+        )
+    else:
+        label_colors = base_label_colors
     all_task_indices = set()
     task_index_to_dataset_name: Dict[int, str] = {}
     for algorithm_name in sorted_algorithm_names:
@@ -361,8 +398,9 @@ def plot_series(
     axis.set_xlabel("Task", fontsize=16)
     axis.set_ylabel("Forward Transfer", fontsize=16)
     # axis.set_title(title or f"{metric_name} by task and algorithm")
-    if plot_style["ylim"] is not None:
-        axis.set_ylim(*plot_style["ylim"])
+    y_limits = plot_style.get("ylim")
+    if y_limits is not None:
+        axis.set_ylim(*y_limits)
     axis.grid(True, linestyle="--", alpha=0.3)
     axis.legend(**plot_style["legend_kwargs"])
 
@@ -375,6 +413,8 @@ def plot_series(
 def main() -> None:
     """Run the plotting pipeline."""
     arguments = parse_args()
+    if arguments.enable_group_styling and group_style_config is not None:
+        group_style_config.ENABLE_GROUP_STYLING = True
     default_output_path = resolve_default_output_path(
         json_path=arguments.json_path,
         metric_name=arguments.metric,
@@ -392,6 +432,7 @@ def main() -> None:
         output_path=output_path,
         plot_style=selected_plot_style,
         title=arguments.title,
+        use_group_styling=arguments.enable_group_styling,
     )
     print(f"Saved plot to: {output_path}")
 
