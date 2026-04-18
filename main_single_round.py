@@ -413,6 +413,10 @@ def run_single_round_training(
             )
         )
 
+    finalize_fn = getattr(model, "finalize_task_after_training", None)
+    if callable(finalize_fn):
+        finalize_fn(train_loader)
+
     result_val_t_tensor = torch.as_tensor(result_val_t, dtype=torch.long)
     max_len = max(len(row) for row in result_val_a)
     padded_val = torch.full((len(result_val_a), max_len), 0.0, dtype=torch.float)

@@ -1275,6 +1275,9 @@ def life_experience(model, inc_loader, args):
                         avg_eval_recall,
                     )
                 )
+        finalize_fn = getattr(model, "finalize_task_after_training", None)
+        if callable(finalize_fn):
+            finalize_fn(train_loader)
         log_state(
             args.state_logging,
             "Task {}: running final validation.".format(current_task),

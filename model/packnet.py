@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -39,6 +40,8 @@ class PackNetConfig:
     n_tasks: int = 3
     prune_perc: float = 0.75  # fraction of currently used weights to prune
     clipgrad: Optional[float] = 100.0
+    # Extra SGD passes on task data after packing; gradients only on owner==task.
+    post_prune_epochs: int = 0
 
     @staticmethod
     def from_args(args: object) -> "PackNetConfig":
@@ -82,12 +85,13 @@ class Net(nn.Module):
         self.incremental_loader_name = getattr(args, "loader", None)
         self.opt = self._build_optimizer()
         self.clipgrad = self.cfg.clipgrad
-        self.prune_perc = self.cfg.prune_perc #float(1 / self.n_tasks)
+        self.prune_perc = self.cfg.prune_perc  # float(1 / self.n_tasks)
         print(
             f"PackNet will prune {self.prune_perc*100:.1f}% of currently used weights after each task."
         )
 
         self.current_task: Optional[int] = None
+        self._finalized_tasks: set[int] = set()
         self._param_to_buffers: Dict[str, Tuple[str, str]] = {}
         self._init_masks_and_frozen()
 
@@ -135,11 +139,8 @@ class Net(nn.Module):
             self.current_task = t
             self._restore_bn_stats(t)
         elif t != self.current_task:
-            # Finish previous task: pack its weights and snapshot BN stats.
-            prev_task = self.current_task
-            self._pack_current_task()
-            if self._bn_modules:
-                self._snapshot_bn_stats(prev_task)
+            # Packing and BN snapshot for the previous task run in
+            # ``finalize_task_after_training`` at the end of that task.
             self.current_task = t
             self._restore_bn_stats(t)
 
@@ -182,11 +183,98 @@ class Net(nn.Module):
         return float(loss.item()), cls_tr_rec
 
     # ------------------------------------------------------------------
-    def on_task_end(self) -> None:
-        """Optional hook if the training loop signals explicit task boundaries."""
+    def finalize_task_after_training(
+        self,
+        train_loader: Optional[Iterable] = None,
+        *,
+        completed_task_index: Optional[int] = None,
+    ) -> None:
+        """Pack weights for the current task, snapshot BN, optional post-prune finetune.
+
+        Call once per task after normal training for that task finishes and
+        before end-of-task validation. Idempotent per ``completed_task_index``.
+
+        Args:
+            train_loader: Batches ``(x, y)`` or ``(x, y, ...)`` for this task;
+                used only when ``post_prune_epochs > 0``. May be ``None`` to skip
+                the finetune loop (pack + BN snapshot still run).
+            completed_task_index: Task that just finished; defaults to
+                ``self.current_task``.
+
+        Usage:
+            >>> # After the epoch loop for task ``t`` (``model.current_task == t``):
+            >>> model.finalize_task_after_training(train_loader)  # doctest: +SKIP
+        """
+        task_id = (
+            completed_task_index
+            if completed_task_index is not None
+            else self.current_task
+        )
+        if task_id is None:
+            raise RuntimeError("finalize_task_after_training requires a current task.")
+        if task_id in self._finalized_tasks:
+            return
+        if self.current_task != task_id:
+            raise RuntimeError(
+                f"finalize_task_after_training expected current_task=={task_id}, "
+                f"got {self.current_task}."
+            )
+
         self._pack_current_task()
-        if self.current_task is not None and self._bn_modules:
-            self._snapshot_bn_stats(self.current_task)
+        if self._bn_modules:
+            self._snapshot_bn_stats(task_id)
+
+        epochs = int(self.cfg.post_prune_epochs)
+        if epochs > 0 and train_loader is not None:
+            self.net.train()
+            for _ in range(epochs):
+                for batch in train_loader:
+                    x, y = self._unpack_batch_for_observe(batch)
+                    x, y = self._move_batch_to_model_device(x, y)
+                    for _ in range(self.cfg.inner_steps):
+                        with self._apply_task_mask(task_id, allow_free=False):
+                            logits = self.net(x)
+                        y_cls = unpack_y_to_class_labels(y)
+                        logits_for_loss = logits
+                        if self.is_task_incremental:
+                            logits_for_loss = (
+                                misc_utils.apply_task_incremental_logit_mask(
+                                    logits,
+                                    task_id,
+                                    self.classes_per_task,
+                                    self.n_outputs,
+                                    cil_all_seen_upto_task=task_id,
+                                    global_noise_label=self.noise_label,
+                                    loader=self.incremental_loader_name,
+                                )
+                            )
+                        loss = classification_cross_entropy(
+                            logits_for_loss,
+                            y_cls.long(),
+                            class_weighted_ce=self.class_weighted_ce,
+                        )
+                        self.opt.zero_grad()
+                        loss.backward()
+                        self._zero_grads_keep_only_task(task_id)
+                        self._zero_grads_non_prunable()
+                        if self.clipgrad is not None and self.clipgrad > 0:
+                            torch.nn.utils.clip_grad_norm_(
+                                self.net.parameters(), self.clipgrad
+                            )
+                        self.opt.step()
+                        self._restore_frozen_weights_older_tasks_only(task_id)
+
+            for name, param in self._prunable_named_parameters():
+                owner, frozen = self._get_owner_and_frozen(name)
+                mask = owner == task_id
+                if mask.any():
+                    frozen.data[mask] = param.data[mask].detach()
+
+        self._finalized_tasks.add(task_id)
+
+    def on_task_end(self) -> None:
+        """Thin alias for explicit task boundaries (pack + snapshot; no finetune)."""
+        self.finalize_task_after_training(train_loader=None)
 
     # ------------------------------------------------------------------
     def _build_backbone(self, n_inputs: int, n_outputs: int, args: object) -> nn.Module:
@@ -313,6 +401,69 @@ class Net(nn.Module):
                 param.data[frozen_positions] = frozen.data[
                     frozen_positions
                 ]  # Restore frozen weights
+
+    def _restore_frozen_weights_older_tasks_only(self, task_id: int) -> None:
+        """Restore packed values for tasks ``< task_id`` only (keeps task_id slots trainable)."""
+        for name, param in self._prunable_named_parameters():
+            owner, frozen = self._get_owner_and_frozen(name)
+            restore_mask = (owner >= 0) & (owner < task_id)
+            if restore_mask.any():
+                param.data[restore_mask] = frozen.data[restore_mask]
+
+    def _zero_grads_keep_only_task(self, task_id: int) -> None:
+        """Zero prunable gradients except at positions owned by ``task_id``."""
+        for name, param in self._prunable_named_parameters():
+            if param.grad is None:
+                continue
+            owner, _ = self._get_owner_and_frozen(name)
+            keep = owner == task_id
+            if keep.all():
+                continue
+            param.grad.data.masked_fill_(~keep, 0.0)
+
+    def _zero_grads_non_prunable(self) -> None:
+        """Zero gradients on BN/classifier/adapter params (post-prune finetune)."""
+        for name, param in self.net.named_parameters():
+            if name in self._non_prunable_params and param.grad is not None:
+                param.grad.zero_()
+
+    @staticmethod
+    def _unpack_batch_for_observe(batch: object) -> Tuple[torch.Tensor, object]:
+        """Split a dataloader batch into ``(x, y)`` (tensors may still be on CPU)."""
+        if isinstance(batch, (list, tuple)):
+            if len(batch) == 2:
+                x, y = batch[0], batch[1]
+            elif len(batch) >= 3:
+                x, y = batch[0], batch[1]
+            else:
+                raise ValueError("Batch must have at least two elements.")
+        else:
+            raise TypeError(f"Unsupported batch type: {type(batch)}")
+        if not torch.is_tensor(x):
+            x = torch.as_tensor(x)
+        if isinstance(y, (tuple, list)) and len(y) == 2:
+            cls_part, det_part = y[0], y[1]
+            if not torch.is_tensor(cls_part):
+                cls_part = torch.as_tensor(cls_part)
+            if not torch.is_tensor(det_part):
+                det_part = torch.as_tensor(det_part)
+            y = (cls_part, det_part)
+        else:
+            if not torch.is_tensor(y):
+                y = torch.as_tensor(y)
+        return x, y
+
+    def _move_batch_to_model_device(
+        self, x: torch.Tensor, y: object
+    ) -> Tuple[torch.Tensor, object]:
+        """Place ``x`` and ``y`` on the same device as ``self.net``."""
+        device = self._device()
+        x = x.to(device)
+        if isinstance(y, tuple) and len(y) == 2:
+            y = (y[0].to(device), y[1].to(device))
+        elif torch.is_tensor(y):
+            y = y.to(device)
+        return x, y
 
     # ------------------------------------------------------------------
     def _pack_current_task(self) -> None:
