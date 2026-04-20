@@ -50,7 +50,7 @@ ptyprocess==0.7.0
 pure_eval==0.2.3
 Pygments==2.19.2
 pyparsing==3.2.5
-pytest==9.0.2
+pytest==9.0.3
 python-dateutil==2.9.0.post0
 pytokens==0.4.1
 PyYAML==6.0.3
