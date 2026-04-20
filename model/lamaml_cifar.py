@@ -66,18 +66,40 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
         """
 
         raw = self.net.forward(x, fast_weights)
-        logits = misc_utils.apply_task_incremental_logit_mask(
-            raw,
-            t,
-            self.classes_per_task,
-            self.n_outputs,
-            cil_all_seen_upto_task=t,
-            global_noise_label=self.noise_label,
-            loader=self.incremental_loader_name,
-        )
+        logits = self._mask_logits_for_sample_tasks(raw, bt)
         loss_q = self.take_multitask_loss(bt, t, logits, y)
 
         return loss_q, logits
+
+    def _mask_logits_for_sample_tasks(
+        self, raw_logits: torch.Tensor, sample_task_indices: torch.Tensor
+    ) -> torch.Tensor:
+        """Apply TIL/CIL masking per replay sample task id.
+
+        Args:
+            raw_logits: Unmasked logits for the replay/meta batch.
+            sample_task_indices: Task index per sample in ``raw_logits``.
+
+        Returns:
+            Logits masked according to each sample's task id.
+        """
+        if sample_task_indices.numel() == 0:
+            return raw_logits
+        masked_logits = raw_logits.clone()
+        for task_id in torch.unique(sample_task_indices).tolist():
+            row_selector = sample_task_indices == int(task_id)
+            if not torch.any(row_selector):
+                continue
+            masked_logits[row_selector] = misc_utils.apply_task_incremental_logit_mask(
+                raw_logits[row_selector],
+                int(task_id),
+                self.classes_per_task,
+                self.n_outputs,
+                cil_all_seen_upto_task=int(task_id),
+                global_noise_label=self.noise_label,
+                loader=self.incremental_loader_name,
+            )
+        return masked_logits
 
     def inner_update(self, x, fast_weights, y, t):
         # Ensure we have a concrete, non-empty list of tensors

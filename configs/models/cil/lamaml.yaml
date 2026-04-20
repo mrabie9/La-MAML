@@ -8,3 +8,4 @@ second_order: true
 
 opt_lr: 0.01 # n
 alpha_init: 0.1 # alpha
+momentum: 0.0
