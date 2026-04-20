@@ -288,6 +288,12 @@ def get_parser():
         "--alpha_init", type=float, default=1e-3, help="initialization for the LRs"
     )
     parser.add_argument(
+        "--momentum",
+        type=float,
+        default=0.0,
+        help="Momentum used by La-MAML async per-parameter weight updates",
+    )
+    parser.add_argument(
         "--learn_lr",
         default=False,
         action="store_true",
