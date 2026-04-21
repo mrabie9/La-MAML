@@ -979,7 +979,6 @@ class Net(nn.Module):
         current_task_index = (
             int(self.current_task) if self.current_task is not None else 0
         )
-        prev_weight_strength = torch.zeros(1, device=self._device())
         for head_index in range(min(current_task_index, len(self.model.heads))):
             old_head = self.model_old.heads[head_index]
             new_head = self.model.heads[head_index]
