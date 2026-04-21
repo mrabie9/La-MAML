@@ -875,14 +875,14 @@ class Net(nn.Module):
 
             if (
                 curr_strength.dim() == 2
-                and prev_output_strength.numel() == input_node_count
+                and prev_output_strength.size(0) == input_node_count
             ):
                 prev_strength_expanded = prev_output_strength.view(1, -1).expand_as(
                     curr_strength
                 )
             elif (
                 curr_strength.dim() == 3
-                and prev_output_strength.numel() == input_node_count
+                and prev_output_strength.size(0) == input_node_count
             ):
                 prev_strength_expanded = prev_output_strength.view(1, -1, 1).expand_as(
                     curr_strength
