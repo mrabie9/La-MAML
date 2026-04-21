@@ -493,8 +493,11 @@ class Net(nn.Module):
         self.detector = ResNet1D(num_classes=1, args=args, in_channels=in_channels)
         self.det_loss = nn.BCEWithLogitsLoss()
         self.det_lambda = float(self.cfg.det_lambda)
-        self.det_optimizer = torch.optim.Adam(
-            self.detector.parameters(), lr=self.cfg.lr
+        self.det_optimizer = torch.optim.SGD(
+            self.detector.parameters(),
+            lr=self.cfg.lr,
+            momentum=0.9,
+            weight_decay=0.0,
         )
 
         mu_params: List[nn.Parameter] = []
@@ -505,12 +508,14 @@ class Net(nn.Module):
             rho_params.extend(module.rho_parameters())
         mu_params.extend(self.model.input_adapter.parameters())
 
-        self.optimizer = torch.optim.Adam(
+        self.optimizer = torch.optim.SGD(
             [
                 {"params": mu_params, "lr": self.cfg.lr},
                 {"params": rho_params, "lr": self.cfg.lr_rho},
             ],
             lr=self.cfg.lr,
+            momentum=0.9,
+            weight_decay=0.0,
         )
 
         self.current_task: Optional[int] = None
@@ -820,7 +825,11 @@ class Net(nn.Module):
         return clone
 
     def _compute_layer_regularisation_terms(
-        self, old_layer: BayesianLayer, new_layer: BayesianLayer, eps: float
+        self,
+        old_layer: BayesianLayer,
+        new_layer: BayesianLayer,
+        eps: float,
+        prev_weight_strength: torch.Tensor,
     ) -> Tuple[
         torch.Tensor,
         torch.Tensor,
@@ -829,6 +838,7 @@ class Net(nn.Module):
         torch.Tensor,
         torch.Tensor,
         int,
+        torch.Tensor,
     ]:
         """Compute UCL regularisation terms for a Bayesian layer pair.
 
@@ -836,6 +846,8 @@ class Net(nn.Module):
             old_layer: Frozen layer snapshot from the previous task.
             new_layer: Trainable layer for the current task.
             eps: Small constant for numerical stability.
+            prev_weight_strength: Strength tensor propagated from the previous
+                Bayesian layer (upper-freeze direction).
 
         Returns:
             A tuple containing sigma_weight_reg, sigma_weight_normal_reg,
@@ -850,12 +862,29 @@ class Net(nn.Module):
         fan_in, _ = _calculate_fan_in_and_fan_out(trainer_weight_mu)
         std_init = math.sqrt((2.0 / fan_in) * self.cfg.ratio)
 
-        saver_strength = std_init / safe_saver_weight_sigma
-        saver_strength_flat = saver_strength.view(saver_strength.size(0), -1)
+        curr_strength = std_init / safe_saver_weight_sigma
+        saver_strength_flat = curr_strength.view(curr_strength.size(0), -1)
         bias_strength = saver_strength_flat.mean(dim=1)
 
+        prev_strength_expanded = torch.zeros_like(curr_strength)
+        if prev_weight_strength.numel() > 1:
+            prev_output_strength = prev_weight_strength.view(
+                prev_weight_strength.size(0), -1
+            ).mean(dim=1)
+
+            if curr_strength.dim() == 2:
+                prev_strength_expanded = prev_output_strength.view(1, -1).expand_as(
+                    curr_strength
+                )
+            elif curr_strength.dim() == 3:
+                prev_strength_expanded = prev_output_strength.view(1, -1, 1).expand_as(
+                    curr_strength
+                )
+
+        l2_strength = torch.max(curr_strength, prev_strength_expanded)
+
         mu_weight_reg = (
-            (saver_strength * (trainer_weight_mu - saver_weight_mu)) ** 2
+            (l2_strength * (trainer_weight_mu - saver_weight_mu)) ** 2
         ).sum()
         l1_mu_weight_reg = (
             (saver_weight_mu.pow(2) / safe_saver_weight_sigma.pow(2))
@@ -895,6 +924,7 @@ class Net(nn.Module):
             l1_mu_weight_reg,
             l1_mu_bias_reg,
             regularized_parameter_count,
+            curr_strength,
         )
 
     def _apply_regularisation(
@@ -921,6 +951,7 @@ class Net(nn.Module):
         regularized_parameter_count = 0
         eps = 1e-8
 
+        prev_weight_strength = torch.zeros(1, device=self._device())
         for old_layer, new_layer in zip(
             self._iter_bayesian_modules(self.model_old.feature_net),
             self._iter_bayesian_modules(self.model.feature_net),
@@ -933,7 +964,10 @@ class Net(nn.Module):
                 l1_weight_term,
                 l1_bias_term,
                 param_count,
-            ) = self._compute_layer_regularisation_terms(old_layer, new_layer, eps)
+                prev_weight_strength,
+            ) = self._compute_layer_regularisation_terms(
+                old_layer, new_layer, eps, prev_weight_strength
+            )
             sigma_weight_reg = sigma_weight_reg + sigma_term
             sigma_weight_normal_reg = sigma_weight_normal_reg + sigma_normal_term
             mu_weight_reg = mu_weight_reg + mu_weight_term
@@ -945,6 +979,7 @@ class Net(nn.Module):
         current_task_index = (
             int(self.current_task) if self.current_task is not None else 0
         )
+        prev_weight_strength = torch.zeros(1, device=self._device())
         for head_index in range(min(current_task_index, len(self.model.heads))):
             old_head = self.model_old.heads[head_index]
             new_head = self.model.heads[head_index]
@@ -956,7 +991,10 @@ class Net(nn.Module):
                 l1_weight_term,
                 l1_bias_term,
                 param_count,
-            ) = self._compute_layer_regularisation_terms(old_head, new_head, eps)
+                prev_weight_strength,
+            ) = self._compute_layer_regularisation_terms(
+                old_head, new_head, eps, prev_weight_strength
+            )
             sigma_weight_reg = sigma_weight_reg + sigma_term
             sigma_weight_normal_reg = sigma_weight_normal_reg + sigma_normal_term
             mu_weight_reg = mu_weight_reg + mu_weight_term
