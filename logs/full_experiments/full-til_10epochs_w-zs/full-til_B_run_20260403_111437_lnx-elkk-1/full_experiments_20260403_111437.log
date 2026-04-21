@@ -35,4 +35,4 @@
 [2026-04-06T15:23:58+01:00] Completed: bcl_dual (exit 0)
 [2026-04-09T14:04:32+01:00] START la-er
 [2026-04-10T17:44:33+01:00] Completed: la-er (exit 0)
-[2026-04-10T14:09:54+01:00] --- Dispatching: base + icarl (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/full-til_10epochs_w-zs/full-til_B_run_20260403_111257_lnx-elkk-2/job_logs/job_icarl_20260410_140954_178725820.log) ---
+[2026-04-10T14:09:54+01:00] --- Dispatching: base + icarl (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/full-til_10epochs_w-zs/full-til_A_run_20260403_111257_lnx-elkk-2/job_logs/job_icarl_20260410_140954_178725820.log) ---

@@ -14,3 +14,5 @@
 [2026-04-18T19:00:25+01:00] === Queue phase on lnx-elkk-2 (util high/low) ===
 [2026-04-18T19:00:25+01:00] --- Dispatching: base + packnet + packnet.yaml (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260418_190025_lnx-elkk-2/job_logs/job_packnet_20260418_190025_872605505.log) ---
 [2026-04-18T19:00:25+01:00] START packnet
+[2026-04-18T23:48:08+01:00] Completed: packnet (exit 0)
+[2026-04-18T23:48:09+01:00] === full_experiments.sh finished: successful_runs=1 unsuccessful_runs=0 total_runtime=04:47:44 (17264s) ===

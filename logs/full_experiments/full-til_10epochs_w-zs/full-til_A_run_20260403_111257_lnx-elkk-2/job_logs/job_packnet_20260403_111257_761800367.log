@@ -1,7 +1,7 @@
-[STATE 2026-04-03 11:12:59] Enabling terminal logging to logs//packnet/full-tasks-2_all-10epochs_weighted-loss-2026-04-03_11-12-59-6722/0/terminal.log
+[STATE 2026-04-18 19:00:27] Enabling terminal logging to logs//packnet/full-tasks_CIL_all-2026-04-18_19-00-27-6819/0/terminal.log
 New Experiment Starting...
 Running model:  packnet
-[STATE 2026-04-03 11:12:59] Experiment 'full-tasks-2_all-10epochs_weighted-loss' starting with model 'packnet' (seed 0)
+[STATE 2026-04-18 19:00:27] Experiment 'full-tasks_CIL_all' starting with model 'packnet' (seed 0)
 Set seed 0
 t2-rcn.npz train: x=(50362, 1024), y=(50362, 2)
 t2-rcn.npz test: x=(16787, 1024), y=(16787, 2)
@@ -71,411 +71,411 @@ Noise labels ratio in t2-deeprad.npz train: 0.25, test: 0.25
 Loaded t2-deeprad.npz: Remapped labels: [58 59 60 61 62 63]. Size: 17340)
 Built classes_per_task: [6, 7, 6, 7, 7, 6, 6, 6, 7, 6]
 Classes per task: [6, 7, 6, 7, 7, 6, 6, 6, 7, 6]
-[STATE 2026-04-03 11:14:02] Loader 'task_incremental_loader' ready: 1024 inputs, 64 outputs, 10 tasks
+[STATE 2026-04-18 19:01:30] Loader 'task_incremental_loader' ready: 1024 inputs, 64 outputs, 10 tasks
 n_outputs: 64 	n_tasks: 10
-[STATE 2026-04-03 11:14:02] Logging to logs//packnet/full-tasks-2_all-10epochs_weighted-loss-2026-04-03_11-12-59-6722/0
-PackNet will prune 33.3% of currently used weights after each task.
+[STATE 2026-04-18 19:01:30] Logging to logs//packnet/full-tasks_CIL_all-2026-04-18_19-00-27-6819/0
+PackNet will prune 75.0% of currently used weights after each task.
 True
 Model device: cuda:0
-[STATE 2026-04-03 11:14:02] Model initialized on device cuda:0
-[STATE 2026-04-03 11:14:02] Invoking continual life experience flow
-[STATE 2026-04-03 11:14:02] Life experience start: 10 tasks queued
+[STATE 2026-04-18 19:01:30] Model initialized on device cuda:0
+[STATE 2026-04-18 19:01:30] Invoking continual life experience flow
+[STATE 2026-04-18 19:01:30] Life experience start: 10 tasks queued
 Task 0: 50362 training samples, 16787 test samples.
-[STATE 2026-04-03 11:14:02] Task 0: zero-shot validation (pre-train)
+[STATE 2026-04-18 19:01:30] Task 0: zero-shot validation (pre-train)
 ---- Zero-shot (pre-train) task 0: rec_cls 0.1175 | prec_cls 0.1336 | f1_cls 0.0961 | det 0.4550 | pfa 0.7831 | total_f1 0.0961 ----
-[STATE 2026-04-03 11:14:09] Starting task 0 (1/10)
-[STATE 2026-04-03 11:14:09] Task 0 Epoch 1/10: entering train loop
-[STATE 2026-04-03 11:15:33] Task 0 Epoch 1/10: running validation (end of epoch)
----- Eval at Epoch 0: cls [0.8863350077042302] | det_recall [0.8743257124305147] | det_fa [0.2431990933149668] ----
-T0 Ep 1/10 | L 0.6027 | Train Acc 0.80 | Prec 0.82 | F1 0.74 | Det Rec 0.85 | Det FA 0.26 | Epoch Time 90.81s (Eval 6.94s, Train 83.87s)
-[STATE 2026-04-03 11:15:40] T0 Ep 1/10 complete: Prec 0.8188 F1 0.7450 DetRec 0.8546 DetFA 0.2599 | 90.81s total (6.94s eval/83.87s train)
-[STATE 2026-04-03 11:15:40] Task 0 Epoch 2/10: entering train loop
-T0 Ep 2/10 | L 0.3295 | Train Acc 0.91 | Prec 0.92 | F1 0.85 | Det Rec 0.88 | Det FA 0.22 | Epoch Time 85.51s (Eval 0.00s, Train 85.51s)
-[STATE 2026-04-03 11:17:06] T0 Ep 2/10 complete: Prec 0.9192 F1 0.8467 DetRec 0.8827 DetFA 0.2176 | 85.51s total (0.00s eval/85.51s train)
-[STATE 2026-04-03 11:17:06] Task 0 Epoch 3/10: entering train loop
-T0 Ep 3/10 | L 0.2972 | Train Acc 0.91 | Prec 0.92 | F1 0.85 | Det Rec 0.89 | Det FA 0.21 | Epoch Time 85.58s (Eval 0.00s, Train 85.58s)
-[STATE 2026-04-03 11:18:31] T0 Ep 3/10 complete: Prec 0.9246 F1 0.8527 DetRec 0.8855 DetFA 0.2125 | 85.58s total (0.00s eval/85.58s train)
-[STATE 2026-04-03 11:18:31] Task 0 Epoch 4/10: entering train loop
-T0 Ep 4/10 | L 0.2729 | Train Acc 0.93 | Prec 0.94 | F1 0.87 | Det Rec 0.89 | Det FA 0.21 | Epoch Time 85.83s (Eval 0.00s, Train 85.83s)
-[STATE 2026-04-03 11:19:57] T0 Ep 4/10 complete: Prec 0.9368 F1 0.8651 DetRec 0.8883 DetFA 0.2077 | 85.83s total (0.00s eval/85.83s train)
-[STATE 2026-04-03 11:19:57] Task 0 Epoch 5/10: entering train loop
-T0 Ep 5/10 | L 0.2547 | Train Acc 0.93 | Prec 0.94 | F1 0.87 | Det Rec 0.89 | Det FA 0.21 | Epoch Time 85.70s (Eval 0.00s, Train 85.70s)
-[STATE 2026-04-03 11:21:23] T0 Ep 5/10 complete: Prec 0.9419 F1 0.8700 DetRec 0.8892 DetFA 0.2070 | 85.70s total (0.00s eval/85.70s train)
-[STATE 2026-04-03 11:21:23] Task 0 Epoch 6/10: entering train loop
-T0 Ep 6/10 | L 0.2448 | Train Acc 0.94 | Prec 0.95 | F1 0.87 | Det Rec 0.89 | Det FA 0.21 | Epoch Time 85.79s (Eval 0.00s, Train 85.79s)
-[STATE 2026-04-03 11:22:48] T0 Ep 6/10 complete: Prec 0.9471 F1 0.8733 DetRec 0.8887 DetFA 0.2075 | 85.79s total (0.00s eval/85.79s train)
-[STATE 2026-04-03 11:22:48] Task 0 Epoch 7/10: entering train loop
-T0 Ep 7/10 | L 0.2355 | Train Acc 0.94 | Prec 0.95 | F1 0.88 | Det Rec 0.89 | Det FA 0.20 | Epoch Time 85.57s (Eval 0.00s, Train 85.57s)
-[STATE 2026-04-03 11:24:14] T0 Ep 7/10 complete: Prec 0.9501 F1 0.8769 DetRec 0.8902 DetFA 0.2050 | 85.57s total (0.00s eval/85.57s train)
-[STATE 2026-04-03 11:24:14] Task 0 Epoch 8/10: entering train loop
-T0 Ep 8/10 | L 0.2303 | Train Acc 0.94 | Prec 0.95 | F1 0.88 | Det Rec 0.89 | Det FA 0.20 | Epoch Time 85.76s (Eval 0.00s, Train 85.76s)
-[STATE 2026-04-03 11:25:40] T0 Ep 8/10 complete: Prec 0.9522 F1 0.8794 DetRec 0.8919 DetFA 0.2019 | 85.76s total (0.00s eval/85.76s train)
-[STATE 2026-04-03 11:25:40] Task 0 Epoch 9/10: entering train loop
-T0 Ep 9/10 | L 0.2244 | Train Acc 0.94 | Prec 0.95 | F1 0.88 | Det Rec 0.89 | Det FA 0.20 | Epoch Time 86.64s (Eval 0.00s, Train 86.64s)
-[STATE 2026-04-03 11:27:06] T0 Ep 9/10 complete: Prec 0.9542 F1 0.8818 DetRec 0.8921 DetFA 0.2014 | 86.64s total (0.00s eval/86.64s train)
-[STATE 2026-04-03 11:27:06] Task 0 Epoch 10/10: entering train loop
-T0 Ep 10/10 | L 0.2110 | Train Acc 0.95 | Prec 0.96 | F1 0.88 | Det Rec 0.89 | Det FA 0.20 | Epoch Time 89.27s (Eval 0.00s, Train 89.27s)
-[STATE 2026-04-03 11:28:36] T0 Ep 10/10 complete: Prec 0.9581 F1 0.8846 DetRec 0.8929 DetFA 0.2014 | 89.27s total (0.00s eval/89.27s train)
-[STATE 2026-04-03 11:28:36] Task 0: running final validation.
-[STATE 2026-04-03 11:28:43] Completed task 0 (1/10)
+[STATE 2026-04-18 19:01:36] Starting task 0 (1/10)
+[STATE 2026-04-18 19:01:36] Task 0 Epoch 1/10: entering train loop
+[STATE 2026-04-18 19:02:45] Task 0 Epoch 1/10: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.8525839219756636] | det_recall [0.8641838174442893] | det_fa [0.26191450230797775] ----
+T0 Ep 1/10 | L 0.9618 | Train Acc 0.61 | Prec 0.63 | F1 0.57 | Det Rec 0.81 | Det FA 0.32 | Epoch Time 74.48s (Eval 5.71s, Train 68.77s)
+[STATE 2026-04-18 19:02:51] T0 Ep 1/10 complete: Prec 0.6287 F1 0.5692 DetRec 0.8053 DetFA 0.3171 | 74.48s total (5.71s eval/68.77s train)
+[STATE 2026-04-18 19:02:51] Task 0 Epoch 2/10: entering train loop
+T0 Ep 2/10 | L 0.4112 | Train Acc 0.87 | Prec 0.88 | F1 0.81 | Det Rec 0.88 | Det FA 0.22 | Epoch Time 76.03s (Eval 0.00s, Train 76.03s)
+[STATE 2026-04-18 19:04:07] T0 Ep 2/10 complete: Prec 0.8826 F1 0.8134 DetRec 0.8788 DetFA 0.2223 | 76.03s total (0.00s eval/76.03s train)
+[STATE 2026-04-18 19:04:07] Task 0 Epoch 3/10: entering train loop
+T0 Ep 3/10 | L 0.3477 | Train Acc 0.89 | Prec 0.91 | F1 0.84 | Det Rec 0.88 | Det FA 0.22 | Epoch Time 91.54s (Eval 0.00s, Train 91.54s)
+[STATE 2026-04-18 19:05:38] T0 Ep 3/10 complete: Prec 0.9062 F1 0.8351 DetRec 0.8823 DetFA 0.2167 | 91.54s total (0.00s eval/91.54s train)
+[STATE 2026-04-18 19:05:38] Task 0 Epoch 4/10: entering train loop
+T0 Ep 4/10 | L 0.3209 | Train Acc 0.90 | Prec 0.91 | F1 0.84 | Det Rec 0.89 | Det FA 0.21 | Epoch Time 91.63s (Eval 0.00s, Train 91.63s)
+[STATE 2026-04-18 19:07:10] T0 Ep 4/10 complete: Prec 0.9146 F1 0.8447 DetRec 0.8851 DetFA 0.2124 | 91.63s total (0.00s eval/91.63s train)
+[STATE 2026-04-18 19:07:10] Task 0 Epoch 5/10: entering train loop
+T0 Ep 5/10 | L 0.2984 | Train Acc 0.91 | Prec 0.92 | F1 0.85 | Det Rec 0.89 | Det FA 0.21 | Epoch Time 87.61s (Eval 0.00s, Train 87.61s)
+[STATE 2026-04-18 19:08:38] T0 Ep 5/10 complete: Prec 0.9234 F1 0.8523 DetRec 0.8851 DetFA 0.2136 | 87.61s total (0.00s eval/87.61s train)
+[STATE 2026-04-18 19:08:38] Task 0 Epoch 6/10: entering train loop
+T0 Ep 6/10 | L 0.2834 | Train Acc 0.92 | Prec 0.93 | F1 0.86 | Det Rec 0.89 | Det FA 0.21 | Epoch Time 87.77s (Eval 0.00s, Train 87.77s)
+[STATE 2026-04-18 19:10:05] T0 Ep 6/10 complete: Prec 0.9279 F1 0.8567 DetRec 0.8864 DetFA 0.2105 | 87.77s total (0.00s eval/87.77s train)
+[STATE 2026-04-18 19:10:05] Task 0 Epoch 7/10: entering train loop
+T0 Ep 7/10 | L 0.2704 | Train Acc 0.92 | Prec 0.93 | F1 0.86 | Det Rec 0.89 | Det FA 0.21 | Epoch Time 91.32s (Eval 0.00s, Train 91.32s)
+[STATE 2026-04-18 19:11:37] T0 Ep 7/10 complete: Prec 0.9306 F1 0.8596 DetRec 0.8869 DetFA 0.2101 | 91.32s total (0.00s eval/91.32s train)
+[STATE 2026-04-18 19:11:37] Task 0 Epoch 8/10: entering train loop
+T0 Ep 8/10 | L 0.2622 | Train Acc 0.93 | Prec 0.94 | F1 0.86 | Det Rec 0.89 | Det FA 0.21 | Epoch Time 89.31s (Eval 0.00s, Train 89.31s)
+[STATE 2026-04-18 19:13:06] T0 Ep 8/10 complete: Prec 0.9365 F1 0.8642 DetRec 0.8869 DetFA 0.2103 | 89.31s total (0.00s eval/89.31s train)
+[STATE 2026-04-18 19:13:06] Task 0 Epoch 9/10: entering train loop
+T0 Ep 9/10 | L 0.2540 | Train Acc 0.93 | Prec 0.94 | F1 0.87 | Det Rec 0.89 | Det FA 0.21 | Epoch Time 87.19s (Eval 0.00s, Train 87.19s)
+[STATE 2026-04-18 19:14:33] T0 Ep 9/10 complete: Prec 0.9386 F1 0.8680 DetRec 0.8898 DetFA 0.2060 | 87.19s total (0.00s eval/87.19s train)
+[STATE 2026-04-18 19:14:33] Task 0 Epoch 10/10: entering train loop
+T0 Ep 10/10 | L 0.2454 | Train Acc 0.93 | Prec 0.94 | F1 0.87 | Det Rec 0.89 | Det FA 0.21 | Epoch Time 87.98s (Eval 0.00s, Train 87.98s)
+[STATE 2026-04-18 19:16:01] T0 Ep 10/10 complete: Prec 0.9424 F1 0.8702 DetRec 0.8887 DetFA 0.2061 | 87.98s total (0.00s eval/87.98s train)
+[STATE 2026-04-18 19:18:45] Task 0: running final validation.
+[STATE 2026-04-18 19:18:51] Completed task 0 (1/10)
 Task 1: 51916 training samples, 17305 test samples.
-[STATE 2026-04-03 11:28:43] Task 1: zero-shot validation (pre-train)
----- Zero-shot (pre-train) task 1: rec_cls 0.1973 | prec_cls 0.1586 | f1_cls 0.0654 | det 0.4995 | pfa 0.9898 | total_f1 0.4591 ----
-[STATE 2026-04-03 11:28:57] Starting task 1 (2/10)
-[STATE 2026-04-03 11:28:57] Task 1 Epoch 1/10: entering train loop
-[STATE 2026-04-03 11:30:38] Task 1 Epoch 1/10: running validation (end of epoch)
----- Eval at Epoch 0: cls [0.638432724587705, 0.8525364931149888] | det_recall [0.8398647304466533, 0.8460404799759557] | det_fa [0.08564173507919998, 0.28330096665497595] ----
-T1 Ep 1/10 | L 0.6347 | Train Acc 0.77 | Prec 0.82 | F1 0.69 | Det Rec 0.79 | Det FA 0.36 | Epoch Time 116.88s (Eval 16.42s, Train 100.45s)
-[STATE 2026-04-03 11:30:54] T1 Ep 1/10 complete: Prec 0.8183 F1 0.6947 DetRec 0.7936 DetFA 0.3601 | 116.88s total (16.42s eval/100.45s train)
-[STATE 2026-04-03 11:30:54] Task 1 Epoch 2/10: entering train loop
-T1 Ep 2/10 | L 0.3721 | Train Acc 0.87 | Prec 0.90 | F1 0.82 | Det Rec 0.88 | Det FA 0.21 | Epoch Time 101.15s (Eval 0.00s, Train 101.15s)
-[STATE 2026-04-03 11:32:35] T1 Ep 2/10 complete: Prec 0.8991 F1 0.8179 DetRec 0.8785 DetFA 0.2083 | 101.15s total (0.00s eval/101.15s train)
-[STATE 2026-04-03 11:32:35] Task 1 Epoch 3/10: entering train loop
-T1 Ep 3/10 | L 0.3091 | Train Acc 0.89 | Prec 0.91 | F1 0.85 | Det Rec 0.90 | Det FA 0.18 | Epoch Time 101.65s (Eval 0.00s, Train 101.65s)
-[STATE 2026-04-03 11:34:17] T1 Ep 3/10 complete: Prec 0.9146 F1 0.8459 DetRec 0.8960 DetFA 0.1783 | 101.65s total (0.00s eval/101.65s train)
-[STATE 2026-04-03 11:34:17] Task 1 Epoch 4/10: entering train loop
-T1 Ep 4/10 | L 0.2784 | Train Acc 0.90 | Prec 0.92 | F1 0.86 | Det Rec 0.91 | Det FA 0.16 | Epoch Time 101.11s (Eval 0.00s, Train 101.11s)
-[STATE 2026-04-03 11:35:58] T1 Ep 4/10 complete: Prec 0.9216 F1 0.8599 DetRec 0.9054 DetFA 0.1626 | 101.11s total (0.00s eval/101.11s train)
-[STATE 2026-04-03 11:35:58] Task 1 Epoch 5/10: entering train loop
-T1 Ep 5/10 | L 0.2611 | Train Acc 0.91 | Prec 0.93 | F1 0.87 | Det Rec 0.91 | Det FA 0.16 | Epoch Time 101.26s (Eval 0.00s, Train 101.26s)
-[STATE 2026-04-03 11:37:39] T1 Ep 5/10 complete: Prec 0.9271 F1 0.8658 DetRec 0.9069 DetFA 0.1594 | 101.26s total (0.00s eval/101.26s train)
-[STATE 2026-04-03 11:37:39] Task 1 Epoch 6/10: entering train loop
-T1 Ep 6/10 | L 0.2448 | Train Acc 0.91 | Prec 0.93 | F1 0.87 | Det Rec 0.91 | Det FA 0.15 | Epoch Time 100.68s (Eval 0.00s, Train 100.68s)
-[STATE 2026-04-03 11:39:20] T1 Ep 6/10 complete: Prec 0.9329 F1 0.8747 DetRec 0.9117 DetFA 0.1519 | 100.68s total (0.00s eval/100.68s train)
-[STATE 2026-04-03 11:39:20] Task 1 Epoch 7/10: entering train loop
-T1 Ep 7/10 | L 0.2338 | Train Acc 0.92 | Prec 0.94 | F1 0.88 | Det Rec 0.91 | Det FA 0.15 | Epoch Time 101.50s (Eval 0.00s, Train 101.50s)
-[STATE 2026-04-03 11:41:01] T1 Ep 7/10 complete: Prec 0.9354 F1 0.8796 DetRec 0.9149 DetFA 0.1472 | 101.50s total (0.00s eval/101.50s train)
-[STATE 2026-04-03 11:41:01] Task 1 Epoch 8/10: entering train loop
-T1 Ep 8/10 | L 0.2213 | Train Acc 0.92 | Prec 0.94 | F1 0.88 | Det Rec 0.92 | Det FA 0.15 | Epoch Time 101.55s (Eval 0.00s, Train 101.55s)
-[STATE 2026-04-03 11:42:43] T1 Ep 8/10 complete: Prec 0.9395 F1 0.8840 DetRec 0.9160 DetFA 0.1472 | 101.55s total (0.00s eval/101.55s train)
-[STATE 2026-04-03 11:42:43] Task 1 Epoch 9/10: entering train loop
-T1 Ep 9/10 | L 0.2158 | Train Acc 0.93 | Prec 0.94 | F1 0.89 | Det Rec 0.92 | Det FA 0.14 | Epoch Time 100.87s (Eval 0.00s, Train 100.87s)
-[STATE 2026-04-03 11:44:24] T1 Ep 9/10 complete: Prec 0.9433 F1 0.8896 DetRec 0.9191 DetFA 0.1409 | 100.87s total (0.00s eval/100.87s train)
-[STATE 2026-04-03 11:44:24] Task 1 Epoch 10/10: entering train loop
-T1 Ep 10/10 | L 0.2030 | Train Acc 0.93 | Prec 0.95 | F1 0.89 | Det Rec 0.92 | Det FA 0.14 | Epoch Time 101.07s (Eval 0.00s, Train 101.07s)
-[STATE 2026-04-03 11:46:05] T1 Ep 10/10 complete: Prec 0.9468 F1 0.8922 DetRec 0.9186 DetFA 0.1418 | 101.07s total (0.00s eval/101.07s train)
-[STATE 2026-04-03 11:46:05] Task 1: running final validation.
-[STATE 2026-04-03 11:46:21] Completed task 1 (2/10)
+[STATE 2026-04-18 19:18:51] Task 1: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 1: rec_cls 0.2340 | prec_cls 0.1900 | f1_cls 0.1116 | det 0.5014 | pfa 0.9956 | total_f1 0.4570 ----
+[STATE 2026-04-18 19:19:06] Starting task 1 (2/10)
+[STATE 2026-04-18 19:19:06] Task 1 Epoch 1/10: entering train loop
+[STATE 2026-04-18 19:20:47] Task 1 Epoch 1/10: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.8955600401584308, 0.8174943678115639] | det_recall [0.866629716550932, 0.8064876692207087] | det_fa [0.2593620567112138, 0.3548036598002714] ----
+T1 Ep 1/10 | L 0.8376 | Train Acc 0.73 | Prec 0.76 | F1 0.60 | Det Rec 0.68 | Det FA 0.60 | Epoch Time 118.70s (Eval 17.02s, Train 101.68s)
+[STATE 2026-04-18 19:21:04] T1 Ep 1/10 complete: Prec 0.7638 F1 0.6004 DetRec 0.6844 DetFA 0.5976 | 118.70s total (17.02s eval/101.68s train)
+[STATE 2026-04-18 19:21:04] Task 1 Epoch 2/10: entering train loop
+T1 Ep 2/10 | L 0.4549 | Train Acc 0.84 | Prec 0.87 | F1 0.79 | Det Rec 0.86 | Det FA 0.24 | Epoch Time 101.46s (Eval 0.00s, Train 101.46s)
+[STATE 2026-04-18 19:22:46] T1 Ep 2/10 complete: Prec 0.8729 F1 0.7862 DetRec 0.8603 DetFA 0.2407 | 101.46s total (0.00s eval/101.46s train)
+[STATE 2026-04-18 19:22:46] Task 1 Epoch 3/10: entering train loop
+T1 Ep 3/10 | L 0.3629 | Train Acc 0.87 | Prec 0.90 | F1 0.83 | Det Rec 0.89 | Det FA 0.19 | Epoch Time 101.40s (Eval 0.00s, Train 101.40s)
+[STATE 2026-04-18 19:24:27] T1 Ep 3/10 complete: Prec 0.8970 F1 0.8266 DetRec 0.8886 DetFA 0.1877 | 101.40s total (0.00s eval/101.40s train)
+[STATE 2026-04-18 19:24:27] Task 1 Epoch 4/10: entering train loop
+T1 Ep 4/10 | L 0.3213 | Train Acc 0.89 | Prec 0.91 | F1 0.84 | Det Rec 0.90 | Det FA 0.18 | Epoch Time 101.24s (Eval 0.00s, Train 101.24s)
+[STATE 2026-04-18 19:26:08] T1 Ep 4/10 complete: Prec 0.9079 F1 0.8426 DetRec 0.8968 DetFA 0.1769 | 101.24s total (0.00s eval/101.24s train)
+[STATE 2026-04-18 19:26:08] Task 1 Epoch 5/10: entering train loop
+T1 Ep 5/10 | L 0.2954 | Train Acc 0.89 | Prec 0.91 | F1 0.85 | Det Rec 0.90 | Det FA 0.17 | Epoch Time 101.11s (Eval 0.00s, Train 101.11s)
+[STATE 2026-04-18 19:27:50] T1 Ep 5/10 complete: Prec 0.9122 F1 0.8510 DetRec 0.9023 DetFA 0.1686 | 101.11s total (0.00s eval/101.11s train)
+[STATE 2026-04-18 19:27:50] Task 1 Epoch 6/10: entering train loop
+T1 Ep 6/10 | L 0.2787 | Train Acc 0.90 | Prec 0.92 | F1 0.86 | Det Rec 0.90 | Det FA 0.16 | Epoch Time 101.48s (Eval 0.00s, Train 101.48s)
+[STATE 2026-04-18 19:29:31] T1 Ep 6/10 complete: Prec 0.9186 F1 0.8575 DetRec 0.9044 DetFA 0.1629 | 101.48s total (0.00s eval/101.48s train)
+[STATE 2026-04-18 19:29:31] Task 1 Epoch 7/10: entering train loop
+T1 Ep 7/10 | L 0.2661 | Train Acc 0.91 | Prec 0.92 | F1 0.86 | Det Rec 0.91 | Det FA 0.16 | Epoch Time 103.38s (Eval 0.00s, Train 103.38s)
+[STATE 2026-04-18 19:31:14] T1 Ep 7/10 complete: Prec 0.9236 F1 0.8647 DetRec 0.9081 DetFA 0.1593 | 103.38s total (0.00s eval/103.38s train)
+[STATE 2026-04-18 19:31:14] Task 1 Epoch 8/10: entering train loop
+T1 Ep 8/10 | L 0.2560 | Train Acc 0.91 | Prec 0.93 | F1 0.87 | Det Rec 0.91 | Det FA 0.15 | Epoch Time 101.22s (Eval 0.00s, Train 101.22s)
+[STATE 2026-04-18 19:32:56] T1 Ep 8/10 complete: Prec 0.9260 F1 0.8698 DetRec 0.9115 DetFA 0.1525 | 101.22s total (0.00s eval/101.22s train)
+[STATE 2026-04-18 19:32:56] Task 1 Epoch 9/10: entering train loop
+T1 Ep 9/10 | L 0.2488 | Train Acc 0.91 | Prec 0.93 | F1 0.87 | Det Rec 0.91 | Det FA 0.15 | Epoch Time 108.63s (Eval 0.00s, Train 108.63s)
+[STATE 2026-04-18 19:34:44] T1 Ep 9/10 complete: Prec 0.9286 F1 0.8712 DetRec 0.9105 DetFA 0.1546 | 108.63s total (0.00s eval/108.63s train)
+[STATE 2026-04-18 19:34:44] Task 1 Epoch 10/10: entering train loop
+T1 Ep 10/10 | L 0.2389 | Train Acc 0.91 | Prec 0.93 | F1 0.87 | Det Rec 0.91 | Det FA 0.15 | Epoch Time 108.76s (Eval 0.00s, Train 108.76s)
+[STATE 2026-04-18 19:36:33] T1 Ep 10/10 complete: Prec 0.9322 F1 0.8745 DetRec 0.9114 DetFA 0.1538 | 108.76s total (0.00s eval/108.76s train)
+[STATE 2026-04-18 19:39:47] Task 1: running final validation.
+[STATE 2026-04-18 19:40:04] Completed task 1 (2/10)
 Task 2: 350028 training samples, 175014 test samples.
-[STATE 2026-04-03 11:46:22] Task 2: zero-shot validation (pre-train)
----- Zero-shot (pre-train) task 2: rec_cls 0.0144 | prec_cls 0.1253 | f1_cls 0.0877 | det 0.5212 | pfa 0.0322 | total_f1 0.5308 ----
-[STATE 2026-04-03 11:47:53] Starting task 2 (3/10)
-[STATE 2026-04-03 11:47:53] Task 2 Epoch 1/10: entering train loop
-[STATE 2026-04-03 11:59:12] Task 2 Epoch 1/10: running validation (end of epoch)
----- Eval at Epoch 0: cls [0.6414391511276909, 0.8880785906236996, 0.36910364632001025] | det_recall [0.8413582107282039, 0.9041738217610601, 0.786191627029089] | det_fa [0.0836796844014616, 0.16835441983858823, 0.2615552071000911] ----
-T2 Ep 1/10 | L 1.4141 | Train Acc 0.35 | Prec 0.37 | F1 0.37 | Det Rec 0.78 | Det FA 0.36 | Epoch Time 771.56s (Eval 92.54s, Train 679.02s)
-[STATE 2026-04-03 12:00:44] T2 Ep 1/10 complete: Prec 0.3727 F1 0.3714 DetRec 0.7823 DetFA 0.3622 | 771.56s total (92.54s eval/679.02s train)
-[STATE 2026-04-03 12:00:44] Task 2 Epoch 2/10: entering train loop
-T2 Ep 2/10 | L 1.1376 | Train Acc 0.51 | Prec 0.52 | F1 0.51 | Det Rec 0.80 | Det FA 0.34 | Epoch Time 694.17s (Eval 0.00s, Train 694.17s)
-[STATE 2026-04-03 12:12:18] T2 Ep 2/10 complete: Prec 0.5212 F1 0.5105 DetRec 0.8006 DetFA 0.3387 | 694.17s total (0.00s eval/694.17s train)
-[STATE 2026-04-03 12:12:18] Task 2 Epoch 3/10: entering train loop
-T2 Ep 3/10 | L 1.0102 | Train Acc 0.58 | Prec 0.59 | F1 0.57 | Det Rec 0.81 | Det FA 0.33 | Epoch Time 690.22s (Eval 0.00s, Train 690.22s)
-[STATE 2026-04-03 12:23:49] T2 Ep 3/10 complete: Prec 0.5944 F1 0.5718 DetRec 0.8073 DetFA 0.3306 | 690.22s total (0.00s eval/690.22s train)
-[STATE 2026-04-03 12:23:49] Task 2 Epoch 4/10: entering train loop
-T2 Ep 4/10 | L 0.9483 | Train Acc 0.61 | Prec 0.62 | F1 0.60 | Det Rec 0.81 | Det FA 0.32 | Epoch Time 682.41s (Eval 0.00s, Train 682.41s)
-[STATE 2026-04-03 12:35:11] T2 Ep 4/10 complete: Prec 0.6248 F1 0.5974 DetRec 0.8107 DetFA 0.3239 | 682.41s total (0.00s eval/682.41s train)
-[STATE 2026-04-03 12:35:11] Task 2 Epoch 5/10: entering train loop
-T2 Ep 5/10 | L 0.9103 | Train Acc 0.62 | Prec 0.64 | F1 0.61 | Det Rec 0.81 | Det FA 0.32 | Epoch Time 687.96s (Eval 0.00s, Train 687.96s)
-[STATE 2026-04-03 12:46:39] T2 Ep 5/10 complete: Prec 0.6389 F1 0.6100 DetRec 0.8133 DetFA 0.3189 | 687.96s total (0.00s eval/687.96s train)
-[STATE 2026-04-03 12:46:39] Task 2 Epoch 6/10: entering train loop
-T2 Ep 6/10 | L 0.8884 | Train Acc 0.63 | Prec 0.65 | F1 0.62 | Det Rec 0.82 | Det FA 0.32 | Epoch Time 690.13s (Eval 0.00s, Train 690.13s)
-[STATE 2026-04-03 12:58:09] T2 Ep 6/10 complete: Prec 0.6490 F1 0.6191 DetRec 0.8157 DetFA 0.3153 | 690.13s total (0.00s eval/690.13s train)
-[STATE 2026-04-03 12:58:09] Task 2 Epoch 7/10: entering train loop
-T2 Ep 7/10 | L 0.8695 | Train Acc 0.64 | Prec 0.66 | F1 0.63 | Det Rec 0.82 | Det FA 0.31 | Epoch Time 688.79s (Eval 0.00s, Train 688.79s)
-[STATE 2026-04-03 13:09:38] T2 Ep 7/10 complete: Prec 0.6573 F1 0.6260 DetRec 0.8179 DetFA 0.3100 | 688.79s total (0.00s eval/688.79s train)
-[STATE 2026-04-03 13:09:38] Task 2 Epoch 8/10: entering train loop
-T2 Ep 8/10 | L 0.8566 | Train Acc 0.64 | Prec 0.66 | F1 0.63 | Det Rec 0.82 | Det FA 0.31 | Epoch Time 688.48s (Eval 0.00s, Train 688.48s)
-[STATE 2026-04-03 13:21:06] T2 Ep 8/10 complete: Prec 0.6607 F1 0.6299 DetRec 0.8194 DetFA 0.3079 | 688.48s total (0.00s eval/688.48s train)
-[STATE 2026-04-03 13:21:06] Task 2 Epoch 9/10: entering train loop
-T2 Ep 9/10 | L 0.8465 | Train Acc 0.65 | Prec 0.66 | F1 0.63 | Det Rec 0.82 | Det FA 0.30 | Epoch Time 688.58s (Eval 0.00s, Train 688.58s)
-[STATE 2026-04-03 13:32:35] T2 Ep 9/10 complete: Prec 0.6650 F1 0.6334 DetRec 0.8211 DetFA 0.3034 | 688.58s total (0.00s eval/688.58s train)
-[STATE 2026-04-03 13:32:35] Task 2 Epoch 10/10: entering train loop
-T2 Ep 10/10 | L 0.8389 | Train Acc 0.65 | Prec 0.67 | F1 0.64 | Det Rec 0.82 | Det FA 0.30 | Epoch Time 687.87s (Eval 0.00s, Train 687.87s)
-[STATE 2026-04-03 13:44:03] T2 Ep 10/10 complete: Prec 0.6704 F1 0.6381 DetRec 0.8219 DetFA 0.3030 | 687.87s total (0.00s eval/687.87s train)
-[STATE 2026-04-03 13:44:03] Task 2: running final validation.
-[STATE 2026-04-03 13:45:35] Completed task 2 (3/10)
+[STATE 2026-04-18 19:40:05] Task 2: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 2: rec_cls 0.0822 | prec_cls 0.1775 | f1_cls 0.1462 | det 0.5561 | pfa 0.2816 | total_f1 0.6004 ----
+[STATE 2026-04-18 19:41:36] Starting task 2 (3/10)
+[STATE 2026-04-18 19:41:36] Task 2 Epoch 1/10: entering train loop
+[STATE 2026-04-18 19:51:15] Task 2 Epoch 1/10: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.893383090277121, 0.8848632871062974, 0.504765050338751] | det_recall [0.8674716046473464, 0.9122046242069037, 0.782048406981477] | det_fa [0.2583194271681665, 0.14541852671273434, 0.4074468012320665] ----
+T2 Ep 1/10 | L 1.3912 | Train Acc 0.36 | Prec 0.36 | F1 0.38 | Det Rec 0.78 | Det FA 0.39 | Epoch Time 661.57s (Eval 82.60s, Train 578.96s)
+[STATE 2026-04-18 19:52:38] T2 Ep 1/10 complete: Prec 0.3582 F1 0.3799 DetRec 0.7752 DetFA 0.3939 | 661.57s total (82.60s eval/578.96s train)
+[STATE 2026-04-18 19:52:38] Task 2 Epoch 2/10: entering train loop
+T2 Ep 2/10 | L 1.0313 | Train Acc 0.58 | Prec 0.58 | F1 0.56 | Det Rec 0.79 | Det FA 0.38 | Epoch Time 557.33s (Eval 0.00s, Train 557.33s)
+[STATE 2026-04-18 20:01:55] T2 Ep 2/10 complete: Prec 0.5754 F1 0.5584 DetRec 0.7916 DetFA 0.3797 | 557.33s total (0.00s eval/557.33s train)
+[STATE 2026-04-18 20:01:55] Task 2 Epoch 3/10: entering train loop
+T2 Ep 3/10 | L 0.8876 | Train Acc 0.65 | Prec 0.65 | F1 0.62 | Det Rec 0.80 | Det FA 0.37 | Epoch Time 571.80s (Eval 0.00s, Train 571.80s)
+[STATE 2026-04-18 20:11:27] T2 Ep 3/10 complete: Prec 0.6464 F1 0.6170 DetRec 0.7993 DetFA 0.3721 | 571.80s total (0.00s eval/571.80s train)
+[STATE 2026-04-18 20:11:27] Task 2 Epoch 4/10: entering train loop
+T2 Ep 4/10 | L 0.8307 | Train Acc 0.67 | Prec 0.67 | F1 0.64 | Det Rec 0.80 | Det FA 0.36 | Epoch Time 563.01s (Eval 0.00s, Train 563.01s)
+[STATE 2026-04-18 20:20:50] T2 Ep 4/10 complete: Prec 0.6673 F1 0.6363 DetRec 0.8048 DetFA 0.3617 | 563.01s total (0.00s eval/563.01s train)
+[STATE 2026-04-18 20:20:50] Task 2 Epoch 5/10: entering train loop
+T2 Ep 5/10 | L 0.7990 | Train Acc 0.68 | Prec 0.68 | F1 0.65 | Det Rec 0.81 | Det FA 0.35 | Epoch Time 562.61s (Eval 0.00s, Train 562.61s)
+[STATE 2026-04-18 20:30:12] T2 Ep 5/10 complete: Prec 0.6779 F1 0.6463 DetRec 0.8093 DetFA 0.3516 | 562.61s total (0.00s eval/562.61s train)
+[STATE 2026-04-18 20:30:12] Task 2 Epoch 6/10: entering train loop
+T2 Ep 6/10 | L 0.7755 | Train Acc 0.69 | Prec 0.69 | F1 0.65 | Det Rec 0.81 | Det FA 0.34 | Epoch Time 564.83s (Eval 0.00s, Train 564.83s)
+[STATE 2026-04-18 20:39:37] T2 Ep 6/10 complete: Prec 0.6871 F1 0.6541 DetRec 0.8124 DetFA 0.3442 | 564.83s total (0.00s eval/564.83s train)
+[STATE 2026-04-18 20:39:37] Task 2 Epoch 7/10: entering train loop
+T2 Ep 7/10 | L 0.7579 | Train Acc 0.69 | Prec 0.69 | F1 0.66 | Det Rec 0.82 | Det FA 0.34 | Epoch Time 565.84s (Eval 0.00s, Train 565.84s)
+[STATE 2026-04-18 20:49:03] T2 Ep 7/10 complete: Prec 0.6941 F1 0.6611 DetRec 0.8163 DetFA 0.3352 | 565.84s total (0.00s eval/565.84s train)
+[STATE 2026-04-18 20:49:03] Task 2 Epoch 8/10: entering train loop
+T2 Ep 8/10 | L 0.7426 | Train Acc 0.70 | Prec 0.70 | F1 0.67 | Det Rec 0.82 | Det FA 0.33 | Epoch Time 458.05s (Eval 0.00s, Train 458.05s)
+[STATE 2026-04-18 20:56:41] T2 Ep 8/10 complete: Prec 0.6993 F1 0.6656 DetRec 0.8180 DetFA 0.3311 | 458.05s total (0.00s eval/458.05s train)
+[STATE 2026-04-18 20:56:41] Task 2 Epoch 9/10: entering train loop
+T2 Ep 9/10 | L 0.7297 | Train Acc 0.70 | Prec 0.70 | F1 0.67 | Det Rec 0.82 | Det FA 0.32 | Epoch Time 400.01s (Eval 0.00s, Train 400.01s)
+[STATE 2026-04-18 21:03:21] T2 Ep 9/10 complete: Prec 0.7046 F1 0.6710 DetRec 0.8214 DetFA 0.3235 | 400.01s total (0.00s eval/400.01s train)
+[STATE 2026-04-18 21:03:21] Task 2 Epoch 10/10: entering train loop
+T2 Ep 10/10 | L 0.7169 | Train Acc 0.71 | Prec 0.71 | F1 0.68 | Det Rec 0.82 | Det FA 0.32 | Epoch Time 397.27s (Eval 0.00s, Train 397.27s)
+[STATE 2026-04-18 21:09:58] T2 Ep 10/10 complete: Prec 0.7092 F1 0.6755 DetRec 0.8243 DetFA 0.3162 | 397.27s total (0.00s eval/397.27s train)
+[STATE 2026-04-18 21:20:02] Task 2: running final validation.
+[STATE 2026-04-18 21:21:03] Completed task 2 (3/10)
 Task 3: 24480 training samples, 8160 test samples.
-[STATE 2026-04-03 13:45:35] Task 3: zero-shot validation (pre-train)
----- Zero-shot (pre-train) task 3: rec_cls 0.1328 | prec_cls 0.1833 | f1_cls 0.2359 | det 0.9489 | pfa 0.0002 | total_f1 0.5533 ----
-[STATE 2026-04-03 13:47:11] Starting task 3 (4/10)
-[STATE 2026-04-03 13:47:11] Task 3 Epoch 1/10: entering train loop
-[STATE 2026-04-03 13:47:58] Task 3 Epoch 1/10: running validation (end of epoch)
----- Eval at Epoch 0: cls [0.6384185709869006, 0.892260144904729, 0.4387808185484841, 0.5578706990062866] | det_recall [0.8405429542201005, 0.906009334786762, 0.7872329284987368, 0.9984286610730345] | det_fa [0.08444677759935734, 0.16487842737970224, 0.3830630685056934, 0.002166929683820737] ----
-T3 Ep 1/10 | L 0.9673 | Train Acc 0.54 | Prec 0.53 | F1 0.58 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 147.22s (Eval 99.58s, Train 47.64s)
-[STATE 2026-04-03 13:49:38] T3 Ep 1/10 complete: Prec 0.5305 F1 0.5807 DetRec 0.9961 DetFA 0.0029 | 147.22s total (99.58s eval/47.64s train)
-[STATE 2026-04-03 13:49:38] Task 3 Epoch 2/10: entering train loop
-T3 Ep 2/10 | L 0.8388 | Train Acc 0.58 | Prec 0.58 | F1 0.62 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 47.83s (Eval 0.00s, Train 47.83s)
-[STATE 2026-04-03 13:50:26] T3 Ep 2/10 complete: Prec 0.5760 F1 0.6234 DetRec 0.9982 DetFA 0.0022 | 47.83s total (0.00s eval/47.83s train)
-[STATE 2026-04-03 13:50:26] Task 3 Epoch 3/10: entering train loop
-T3 Ep 3/10 | L 0.8052 | Train Acc 0.59 | Prec 0.60 | F1 0.64 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 47.85s (Eval 0.00s, Train 47.85s)
-[STATE 2026-04-03 13:51:13] T3 Ep 3/10 complete: Prec 0.5951 F1 0.6390 DetRec 0.9982 DetFA 0.0027 | 47.85s total (0.00s eval/47.85s train)
-[STATE 2026-04-03 13:51:13] Task 3 Epoch 4/10: entering train loop
-T3 Ep 4/10 | L 0.7885 | Train Acc 0.60 | Prec 0.60 | F1 0.65 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 47.86s (Eval 0.00s, Train 47.86s)
-[STATE 2026-04-03 13:52:01] T3 Ep 4/10 complete: Prec 0.6035 F1 0.6452 DetRec 0.9987 DetFA 0.0014 | 47.86s total (0.00s eval/47.86s train)
-[STATE 2026-04-03 13:52:01] Task 3 Epoch 5/10: entering train loop
-T3 Ep 5/10 | L 0.7686 | Train Acc 0.61 | Prec 0.61 | F1 0.66 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 47.81s (Eval 0.00s, Train 47.81s)
-[STATE 2026-04-03 13:52:49] T3 Ep 5/10 complete: Prec 0.6123 F1 0.6557 DetRec 0.9992 DetFA 0.0008 | 47.81s total (0.00s eval/47.81s train)
-[STATE 2026-04-03 13:52:49] Task 3 Epoch 6/10: entering train loop
-T3 Ep 6/10 | L 0.7602 | Train Acc 0.60 | Prec 0.61 | F1 0.66 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 47.59s (Eval 0.00s, Train 47.59s)
-[STATE 2026-04-03 13:53:37] T3 Ep 6/10 complete: Prec 0.6147 F1 0.6560 DetRec 0.9988 DetFA 0.0017 | 47.59s total (0.00s eval/47.59s train)
-[STATE 2026-04-03 13:53:37] Task 3 Epoch 7/10: entering train loop
-T3 Ep 7/10 | L 0.7524 | Train Acc 0.61 | Prec 0.62 | F1 0.66 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 47.80s (Eval 0.00s, Train 47.80s)
-[STATE 2026-04-03 13:54:24] T3 Ep 7/10 complete: Prec 0.6232 F1 0.6641 DetRec 0.9990 DetFA 0.0013 | 47.80s total (0.00s eval/47.80s train)
-[STATE 2026-04-03 13:54:24] Task 3 Epoch 8/10: entering train loop
-T3 Ep 8/10 | L 0.7471 | Train Acc 0.61 | Prec 0.62 | F1 0.66 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 47.63s (Eval 0.00s, Train 47.63s)
-[STATE 2026-04-03 13:55:12] T3 Ep 8/10 complete: Prec 0.6241 F1 0.6644 DetRec 0.9988 DetFA 0.0018 | 47.63s total (0.00s eval/47.63s train)
-[STATE 2026-04-03 13:55:12] Task 3 Epoch 9/10: entering train loop
-T3 Ep 9/10 | L 0.7403 | Train Acc 0.62 | Prec 0.63 | F1 0.67 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 47.15s (Eval 0.00s, Train 47.15s)
-[STATE 2026-04-03 13:55:59] T3 Ep 9/10 complete: Prec 0.6324 F1 0.6697 DetRec 0.9993 DetFA 0.0009 | 47.15s total (0.00s eval/47.15s train)
-[STATE 2026-04-03 13:55:59] Task 3 Epoch 10/10: entering train loop
-T3 Ep 10/10 | L 0.7322 | Train Acc 0.62 | Prec 0.63 | F1 0.67 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 47.65s (Eval 0.00s, Train 47.65s)
-[STATE 2026-04-03 13:56:47] T3 Ep 10/10 complete: Prec 0.6311 F1 0.6698 DetRec 0.9993 DetFA 0.0011 | 47.65s total (0.00s eval/47.65s train)
-[STATE 2026-04-03 13:56:47] Task 3: running final validation.
-[STATE 2026-04-03 13:58:26] Completed task 3 (4/10)
+[STATE 2026-04-18 21:21:03] Task 3: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 3: rec_cls 0.1612 | prec_cls 0.1880 | f1_cls 0.2047 | det 0.9271 | pfa 0.0606 | total_f1 0.6289 ----
+[STATE 2026-04-18 21:22:06] Starting task 3 (4/10)
+[STATE 2026-04-18 21:22:06] Task 3 Epoch 1/10: entering train loop
+[STATE 2026-04-18 21:22:33] Task 3 Epoch 1/10: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.8932978531505783, 0.8833041302114707, 0.6642821386658435, 0.5722915866317017] | det_recall [0.8676071867871433, 0.9119873089456936, 0.8122170735807057, 0.9946127454399881] | det_fa [0.25858807464760103, 0.14599715167085828, 0.3424658974996499, 0.007337878224421832] ----
+T3 Ep 1/10 | L 1.1382 | Train Acc 0.49 | Prec 0.47 | F1 0.52 | Det Rec 0.99 | Det FA 0.01 | Epoch Time 92.14s (Eval 64.50s, Train 27.64s)
+[STATE 2026-04-18 21:23:38] T3 Ep 1/10 complete: Prec 0.4663 F1 0.5215 DetRec 0.9929 DetFA 0.0081 | 92.14s total (64.50s eval/27.64s train)
+[STATE 2026-04-18 21:23:38] Task 3 Epoch 2/10: entering train loop
+T3 Ep 2/10 | L 0.8269 | Train Acc 0.59 | Prec 0.58 | F1 0.63 | Det Rec 1.00 | Det FA 0.01 | Epoch Time 27.97s (Eval 0.00s, Train 27.97s)
+[STATE 2026-04-18 21:24:06] T3 Ep 2/10 complete: Prec 0.5837 F1 0.6287 DetRec 0.9950 DetFA 0.0076 | 27.97s total (0.00s eval/27.97s train)
+[STATE 2026-04-18 21:24:06] Task 3 Epoch 3/10: entering train loop
+T3 Ep 3/10 | L 0.7689 | Train Acc 0.61 | Prec 0.61 | F1 0.65 | Det Rec 1.00 | Det FA 0.01 | Epoch Time 27.52s (Eval 0.00s, Train 27.52s)
+[STATE 2026-04-18 21:24:33] T3 Ep 3/10 complete: Prec 0.6125 F1 0.6492 DetRec 0.9966 DetFA 0.0056 | 27.52s total (0.00s eval/27.52s train)
+[STATE 2026-04-18 21:24:33] Task 3 Epoch 4/10: entering train loop
+T3 Ep 4/10 | L 0.7448 | Train Acc 0.62 | Prec 0.62 | F1 0.66 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 27.01s (Eval 0.00s, Train 27.01s)
+[STATE 2026-04-18 21:25:00] T3 Ep 4/10 complete: Prec 0.6226 F1 0.6591 DetRec 0.9982 DetFA 0.0025 | 27.01s total (0.00s eval/27.01s train)
+[STATE 2026-04-18 21:25:00] Task 3 Epoch 5/10: entering train loop
+T3 Ep 5/10 | L 0.7216 | Train Acc 0.62 | Prec 0.63 | F1 0.66 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 28.41s (Eval 0.00s, Train 28.41s)
+[STATE 2026-04-18 21:25:29] T3 Ep 5/10 complete: Prec 0.6270 F1 0.6629 DetRec 0.9989 DetFA 0.0017 | 28.41s total (0.00s eval/28.41s train)
+[STATE 2026-04-18 21:25:29] Task 3 Epoch 6/10: entering train loop
+T3 Ep 6/10 | L 0.7099 | Train Acc 0.64 | Prec 0.64 | F1 0.68 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 28.51s (Eval 0.00s, Train 28.51s)
+[STATE 2026-04-18 21:25:57] T3 Ep 6/10 complete: Prec 0.6442 F1 0.6783 DetRec 0.9992 DetFA 0.0011 | 28.51s total (0.00s eval/28.51s train)
+[STATE 2026-04-18 21:25:57] Task 3 Epoch 7/10: entering train loop
+T3 Ep 7/10 | L 0.6988 | Train Acc 0.63 | Prec 0.64 | F1 0.68 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 27.99s (Eval 0.00s, Train 27.99s)
+[STATE 2026-04-18 21:26:25] T3 Ep 7/10 complete: Prec 0.6424 F1 0.6759 DetRec 0.9993 DetFA 0.0010 | 27.99s total (0.00s eval/27.99s train)
+[STATE 2026-04-18 21:26:25] Task 3 Epoch 8/10: entering train loop
+T3 Ep 8/10 | L 0.6913 | Train Acc 0.64 | Prec 0.65 | F1 0.68 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 28.06s (Eval 0.00s, Train 28.06s)
+[STATE 2026-04-18 21:26:53] T3 Ep 8/10 complete: Prec 0.6461 F1 0.6826 DetRec 0.9994 DetFA 0.0011 | 28.06s total (0.00s eval/28.06s train)
+[STATE 2026-04-18 21:26:53] Task 3 Epoch 9/10: entering train loop
+T3 Ep 9/10 | L 0.6822 | Train Acc 0.65 | Prec 0.65 | F1 0.69 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 27.86s (Eval 0.00s, Train 27.86s)
+[STATE 2026-04-18 21:27:21] T3 Ep 9/10 complete: Prec 0.6526 F1 0.6862 DetRec 0.9994 DetFA 0.0009 | 27.86s total (0.00s eval/27.86s train)
+[STATE 2026-04-18 21:27:21] Task 3 Epoch 10/10: entering train loop
+T3 Ep 10/10 | L 0.6783 | Train Acc 0.64 | Prec 0.65 | F1 0.69 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 28.41s (Eval 0.00s, Train 28.41s)
+[STATE 2026-04-18 21:27:49] T3 Ep 10/10 complete: Prec 0.6490 F1 0.6868 DetRec 0.9994 DetFA 0.0010 | 28.41s total (0.00s eval/28.41s train)
+[STATE 2026-04-18 21:28:31] Task 3: running final validation.
+[STATE 2026-04-18 21:29:36] Completed task 3 (4/10)
 Task 4: 24480 training samples, 8160 test samples.
-[STATE 2026-04-03 13:58:27] Task 4: zero-shot validation (pre-train)
----- Zero-shot (pre-train) task 4: rec_cls 0.0968 | prec_cls 0.1324 | f1_cls 0.0729 | det 0.3908 | pfa 1.0000 | total_f1 0.5347 ----
-[STATE 2026-04-03 14:00:10] Starting task 4 (5/10)
-[STATE 2026-04-03 14:00:10] Task 4 Epoch 1/10: entering train loop
-[STATE 2026-04-03 14:00:58] Task 4 Epoch 1/10: running validation (end of epoch)
----- Eval at Epoch 0: cls [0.6412881011984065, 0.8887223166404371, 0.4381726925487689, 0.523702442399574, 0.36722227535134516] | det_recall [0.8404768761963594, 0.9054438132515071, 0.7855988711193618, 0.9964699077118737, 1.0] | det_fa [0.08655979486742098, 0.16388291974266564, 0.38605098592096737, 0.003882556085446553, 0.0] ----
-T4 Ep 1/10 | L 1.1580 | Train Acc 0.34 | Prec 0.34 | F1 0.40 | Det Rec 0.99 | Det FA 0.00 | Epoch Time 151.22s (Eval 103.34s, Train 47.88s)
-[STATE 2026-04-03 14:02:41] T4 Ep 1/10 complete: Prec 0.3409 F1 0.4010 DetRec 0.9900 DetFA 0.0000 | 151.22s total (103.34s eval/47.88s train)
-[STATE 2026-04-03 14:02:41] Task 4 Epoch 2/10: entering train loop
-T4 Ep 2/10 | L 1.0739 | Train Acc 0.38 | Prec 0.38 | F1 0.45 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 47.78s (Eval 0.00s, Train 47.78s)
-[STATE 2026-04-03 14:03:29] T4 Ep 2/10 complete: Prec 0.3789 F1 0.4457 DetRec 1.0000 DetFA 0.0000 | 47.78s total (0.00s eval/47.78s train)
-[STATE 2026-04-03 14:03:29] Task 4 Epoch 3/10: entering train loop
-T4 Ep 3/10 | L 1.0365 | Train Acc 0.40 | Prec 0.40 | F1 0.46 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 47.58s (Eval 0.00s, Train 47.58s)
-[STATE 2026-04-03 14:04:16] T4 Ep 3/10 complete: Prec 0.3988 F1 0.4649 DetRec 1.0000 DetFA 0.0000 | 47.58s total (0.00s eval/47.58s train)
-[STATE 2026-04-03 14:04:16] Task 4 Epoch 4/10: entering train loop
-T4 Ep 4/10 | L 1.0147 | Train Acc 0.42 | Prec 0.41 | F1 0.48 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 47.54s (Eval 0.00s, Train 47.54s)
-[STATE 2026-04-03 14:05:04] T4 Ep 4/10 complete: Prec 0.4132 F1 0.4831 DetRec 1.0000 DetFA 0.0000 | 47.54s total (0.00s eval/47.54s train)
-[STATE 2026-04-03 14:05:04] Task 4 Epoch 5/10: entering train loop
-T4 Ep 5/10 | L 1.0009 | Train Acc 0.43 | Prec 0.42 | F1 0.49 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 48.13s (Eval 0.00s, Train 48.13s)
-[STATE 2026-04-03 14:05:52] T4 Ep 5/10 complete: Prec 0.4246 F1 0.4928 DetRec 1.0000 DetFA 0.0000 | 48.13s total (0.00s eval/48.13s train)
-[STATE 2026-04-03 14:05:52] Task 4 Epoch 6/10: entering train loop
-T4 Ep 6/10 | L 0.9832 | Train Acc 0.43 | Prec 0.43 | F1 0.50 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 47.27s (Eval 0.00s, Train 47.27s)
-[STATE 2026-04-03 14:06:39] T4 Ep 6/10 complete: Prec 0.4314 F1 0.4978 DetRec 1.0000 DetFA 0.0000 | 47.27s total (0.00s eval/47.27s train)
-[STATE 2026-04-03 14:06:39] Task 4 Epoch 7/10: entering train loop
-T4 Ep 7/10 | L 0.9671 | Train Acc 0.44 | Prec 0.43 | F1 0.50 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 47.85s (Eval 0.00s, Train 47.85s)
-[STATE 2026-04-03 14:07:27] T4 Ep 7/10 complete: Prec 0.4269 F1 0.4996 DetRec 1.0000 DetFA 0.0000 | 47.85s total (0.00s eval/47.85s train)
-[STATE 2026-04-03 14:07:27] Task 4 Epoch 8/10: entering train loop
-T4 Ep 8/10 | L 0.9575 | Train Acc 0.45 | Prec 0.44 | F1 0.51 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 47.53s (Eval 0.00s, Train 47.53s)
-[STATE 2026-04-03 14:08:15] T4 Ep 8/10 complete: Prec 0.4427 F1 0.5083 DetRec 1.0000 DetFA 0.0000 | 47.53s total (0.00s eval/47.53s train)
-[STATE 2026-04-03 14:08:15] Task 4 Epoch 9/10: entering train loop
-T4 Ep 9/10 | L 0.9444 | Train Acc 0.45 | Prec 0.45 | F1 0.52 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 47.69s (Eval 0.00s, Train 47.69s)
-[STATE 2026-04-03 14:09:02] T4 Ep 9/10 complete: Prec 0.4525 F1 0.5176 DetRec 1.0000 DetFA 0.0000 | 47.69s total (0.00s eval/47.69s train)
-[STATE 2026-04-03 14:09:02] Task 4 Epoch 10/10: entering train loop
-T4 Ep 10/10 | L 0.9354 | Train Acc 0.46 | Prec 0.46 | F1 0.52 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 47.91s (Eval 0.00s, Train 47.91s)
-[STATE 2026-04-03 14:09:50] T4 Ep 10/10 complete: Prec 0.4601 F1 0.5225 DetRec 1.0000 DetFA 0.0000 | 47.91s total (0.00s eval/47.91s train)
-[STATE 2026-04-03 14:09:50] Task 4: running final validation.
-[STATE 2026-04-03 14:11:34] Completed task 4 (5/10)
+[STATE 2026-04-18 21:29:36] Task 4: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 4: rec_cls 0.1121 | prec_cls 0.2627 | f1_cls 0.0682 | det 0.3823 | pfa 1.0000 | total_f1 0.6115 ----
+[STATE 2026-04-18 21:30:43] Starting task 4 (5/10)
+[STATE 2026-04-18 21:30:43] Task 4 Epoch 1/10: entering train loop
+[STATE 2026-04-18 21:31:10] Task 4 Epoch 1/10: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.8939726558822354, 0.8840480628763399, 0.6627009282219178, 0.6263761556574, 0.3960640575268738] | det_recall [0.8663474633003931, 0.9143473585736066, 0.8130080469310859, 0.9997406594352617, 1.0] | det_fa [0.26016361537660665, 0.14199395174431365, 0.3412725227112239, 0.000518681129476584, 0.0] ----
+T4 Ep 1/10 | L 1.1521 | Train Acc 0.36 | Prec 0.36 | F1 0.42 | Det Rec 0.97 | Det FA 0.05 | Epoch Time 93.40s (Eval 66.65s, Train 26.74s)
+[STATE 2026-04-18 21:32:17] T4 Ep 1/10 complete: Prec 0.3577 F1 0.4229 DetRec 0.9729 DetFA 0.0509 | 93.40s total (66.65s eval/26.74s train)
+[STATE 2026-04-18 21:32:17] Task 4 Epoch 2/10: entering train loop
+T4 Ep 2/10 | L 0.9826 | Train Acc 0.42 | Prec 0.41 | F1 0.48 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 27.19s (Eval 0.00s, Train 27.19s)
+[STATE 2026-04-18 21:32:44] T4 Ep 2/10 complete: Prec 0.4097 F1 0.4766 DetRec 0.9999 DetFA 0.0000 | 27.19s total (0.00s eval/27.19s train)
+[STATE 2026-04-18 21:32:44] Task 4 Epoch 3/10: entering train loop
+T4 Ep 3/10 | L 0.9413 | Train Acc 0.43 | Prec 0.42 | F1 0.49 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 28.15s (Eval 0.00s, Train 28.15s)
+[STATE 2026-04-18 21:33:12] T4 Ep 3/10 complete: Prec 0.4244 F1 0.4908 DetRec 0.9999 DetFA 0.0000 | 28.15s total (0.00s eval/28.15s train)
+[STATE 2026-04-18 21:33:12] Task 4 Epoch 4/10: entering train loop
+T4 Ep 4/10 | L 0.9062 | Train Acc 0.46 | Prec 0.46 | F1 0.52 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 26.76s (Eval 0.00s, Train 26.76s)
+[STATE 2026-04-18 21:33:39] T4 Ep 4/10 complete: Prec 0.4553 F1 0.5189 DetRec 0.9999 DetFA 0.0000 | 26.76s total (0.00s eval/26.76s train)
+[STATE 2026-04-18 21:33:39] Task 4 Epoch 5/10: entering train loop
+T4 Ep 5/10 | L 0.8797 | Train Acc 0.48 | Prec 0.47 | F1 0.53 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 27.43s (Eval 0.00s, Train 27.43s)
+[STATE 2026-04-18 21:34:06] T4 Ep 5/10 complete: Prec 0.4722 F1 0.5318 DetRec 1.0000 DetFA 0.0000 | 27.43s total (0.00s eval/27.43s train)
+[STATE 2026-04-18 21:34:06] Task 4 Epoch 6/10: entering train loop
+T4 Ep 6/10 | L 0.8559 | Train Acc 0.50 | Prec 0.50 | F1 0.55 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 27.92s (Eval 0.00s, Train 27.92s)
+[STATE 2026-04-18 21:34:34] T4 Ep 6/10 complete: Prec 0.4955 F1 0.5495 DetRec 1.0000 DetFA 0.0000 | 27.92s total (0.00s eval/27.92s train)
+[STATE 2026-04-18 21:34:34] Task 4 Epoch 7/10: entering train loop
+T4 Ep 7/10 | L 0.8256 | Train Acc 0.51 | Prec 0.51 | F1 0.56 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 28.02s (Eval 0.00s, Train 28.02s)
+[STATE 2026-04-18 21:35:02] T4 Ep 7/10 complete: Prec 0.5080 F1 0.5640 DetRec 1.0000 DetFA 0.0000 | 28.02s total (0.00s eval/28.02s train)
+[STATE 2026-04-18 21:35:02] Task 4 Epoch 8/10: entering train loop
+T4 Ep 8/10 | L 0.8114 | Train Acc 0.52 | Prec 0.52 | F1 0.57 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 28.22s (Eval 0.00s, Train 28.22s)
+[STATE 2026-04-18 21:35:30] T4 Ep 8/10 complete: Prec 0.5193 F1 0.5710 DetRec 1.0000 DetFA 0.0000 | 28.22s total (0.00s eval/28.22s train)
+[STATE 2026-04-18 21:35:30] Task 4 Epoch 9/10: entering train loop
+T4 Ep 9/10 | L 0.7948 | Train Acc 0.53 | Prec 0.53 | F1 0.58 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 28.44s (Eval 0.00s, Train 28.44s)
+[STATE 2026-04-18 21:35:59] T4 Ep 9/10 complete: Prec 0.5322 F1 0.5833 DetRec 1.0000 DetFA 0.0000 | 28.44s total (0.00s eval/28.44s train)
+[STATE 2026-04-18 21:35:59] Task 4 Epoch 10/10: entering train loop
+T4 Ep 10/10 | L 0.7717 | Train Acc 0.55 | Prec 0.54 | F1 0.60 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 27.51s (Eval 0.00s, Train 27.51s)
+[STATE 2026-04-18 21:36:26] T4 Ep 10/10 complete: Prec 0.5434 F1 0.5958 DetRec 1.0000 DetFA 0.0000 | 27.51s total (0.00s eval/27.51s train)
+[STATE 2026-04-18 21:37:08] Task 4: running final validation.
+[STATE 2026-04-18 21:38:16] Completed task 4 (5/10)
 Task 5: 201410 training samples, 100705 test samples.
-[STATE 2026-04-03 14:11:34] Task 5: zero-shot validation (pre-train)
----- Zero-shot (pre-train) task 5: rec_cls 0.1868 | prec_cls 0.1716 | f1_cls 0.0851 | det 0.4988 | pfa 0.9817 | total_f1 0.5067 ----
-[STATE 2026-04-03 14:14:00] Starting task 5 (6/10)
-[STATE 2026-04-03 14:14:00] Task 5 Epoch 1/10: entering train loop
-[STATE 2026-04-03 14:20:35] Task 5 Epoch 1/10: running validation (end of epoch)
----- Eval at Epoch 0: cls [0.6368370133362544, 0.8931744172512702, 0.42597050422914867, 0.5243457373599122, 0.36500695970519736, 0.2946846241719069] | det_recall [0.84045207145852, 0.9061251296919747, 0.783664598444267, 0.9956059078294749, 1.0, 0.7606540420632975] | det_fa [0.0835556209426865, 0.16459781272198093, 0.3905195464288594, 0.006120346169896164, 0.0, 0.3952230698882477] ----
-T5 Ep 1/10 | L 1.3524 | Train Acc 0.40 | Prec 0.42 | F1 0.40 | Det Rec 0.77 | Det FA 0.37 | Epoch Time 540.88s (Eval 146.49s, Train 394.39s)
-[STATE 2026-04-03 14:23:01] T5 Ep 1/10 complete: Prec 0.4235 F1 0.4021 DetRec 0.7735 DetFA 0.3730 | 540.88s total (146.49s eval/394.39s train)
-[STATE 2026-04-03 14:23:01] Task 5 Epoch 2/10: entering train loop
-T5 Ep 2/10 | L 1.2150 | Train Acc 0.48 | Prec 0.49 | F1 0.47 | Det Rec 0.79 | Det FA 0.36 | Epoch Time 396.08s (Eval 0.00s, Train 396.08s)
-[STATE 2026-04-03 14:29:37] T5 Ep 2/10 complete: Prec 0.4861 F1 0.4702 DetRec 0.7865 DetFA 0.3576 | 396.08s total (0.00s eval/396.08s train)
-[STATE 2026-04-03 14:29:37] Task 5 Epoch 3/10: entering train loop
-T5 Ep 3/10 | L 1.0713 | Train Acc 0.55 | Prec 0.55 | F1 0.53 | Det Rec 0.80 | Det FA 0.34 | Epoch Time 394.87s (Eval 0.00s, Train 394.87s)
-[STATE 2026-04-03 14:36:12] T5 Ep 3/10 complete: Prec 0.5471 F1 0.5318 DetRec 0.7983 DetFA 0.3393 | 394.87s total (0.00s eval/394.87s train)
-[STATE 2026-04-03 14:36:12] Task 5 Epoch 4/10: entering train loop
-T5 Ep 4/10 | L 1.0220 | Train Acc 0.58 | Prec 0.57 | F1 0.55 | Det Rec 0.80 | Det FA 0.33 | Epoch Time 395.17s (Eval 0.00s, Train 395.17s)
-[STATE 2026-04-03 14:42:47] T5 Ep 4/10 complete: Prec 0.5669 F1 0.5522 DetRec 0.8025 DetFA 0.3329 | 395.17s total (0.00s eval/395.17s train)
-[STATE 2026-04-03 14:42:47] Task 5 Epoch 5/10: entering train loop
-T5 Ep 5/10 | L 1.0008 | Train Acc 0.59 | Prec 0.58 | F1 0.56 | Det Rec 0.80 | Det FA 0.33 | Epoch Time 395.16s (Eval 0.00s, Train 395.16s)
-[STATE 2026-04-03 14:49:22] T5 Ep 5/10 complete: Prec 0.5782 F1 0.5617 DetRec 0.8040 DetFA 0.3296 | 395.16s total (0.00s eval/395.16s train)
-[STATE 2026-04-03 14:49:22] Task 5 Epoch 6/10: entering train loop
-T5 Ep 6/10 | L 0.9815 | Train Acc 0.59 | Prec 0.59 | F1 0.57 | Det Rec 0.80 | Det FA 0.33 | Epoch Time 395.81s (Eval 0.00s, Train 395.81s)
-[STATE 2026-04-03 14:55:58] T5 Ep 6/10 complete: Prec 0.5854 F1 0.5680 DetRec 0.8043 DetFA 0.3294 | 395.81s total (0.00s eval/395.81s train)
-[STATE 2026-04-03 14:55:58] Task 5 Epoch 7/10: entering train loop
-T5 Ep 7/10 | L 0.9673 | Train Acc 0.60 | Prec 0.59 | F1 0.57 | Det Rec 0.81 | Det FA 0.33 | Epoch Time 395.74s (Eval 0.00s, Train 395.74s)
-[STATE 2026-04-03 15:02:34] T5 Ep 7/10 complete: Prec 0.5903 F1 0.5735 DetRec 0.8074 DetFA 0.3253 | 395.74s total (0.00s eval/395.74s train)
-[STATE 2026-04-03 15:02:34] Task 5 Epoch 8/10: entering train loop
-T5 Ep 8/10 | L 0.9529 | Train Acc 0.60 | Prec 0.60 | F1 0.58 | Det Rec 0.81 | Det FA 0.33 | Epoch Time 395.48s (Eval 0.00s, Train 395.48s)
-[STATE 2026-04-03 15:09:09] T5 Ep 8/10 complete: Prec 0.5965 F1 0.5784 DetRec 0.8063 DetFA 0.3284 | 395.48s total (0.00s eval/395.48s train)
-[STATE 2026-04-03 15:09:09] Task 5 Epoch 9/10: entering train loop
-T5 Ep 9/10 | L 0.9443 | Train Acc 0.61 | Prec 0.60 | F1 0.58 | Det Rec 0.81 | Det FA 0.33 | Epoch Time 396.21s (Eval 0.00s, Train 396.21s)
-[STATE 2026-04-03 15:15:46] T5 Ep 9/10 complete: Prec 0.6001 F1 0.5831 DetRec 0.8076 DetFA 0.3259 | 396.21s total (0.00s eval/396.21s train)
-[STATE 2026-04-03 15:15:46] Task 5 Epoch 10/10: entering train loop
-T5 Ep 10/10 | L 0.9376 | Train Acc 0.61 | Prec 0.60 | F1 0.59 | Det Rec 0.81 | Det FA 0.32 | Epoch Time 396.05s (Eval 0.00s, Train 396.05s)
-[STATE 2026-04-03 15:22:22] T5 Ep 10/10 complete: Prec 0.6046 F1 0.5866 DetRec 0.8083 DetFA 0.3234 | 396.05s total (0.00s eval/396.05s train)
-[STATE 2026-04-03 15:22:22] Task 5: running final validation.
-[STATE 2026-04-03 15:24:48] Completed task 5 (6/10)
+[STATE 2026-04-18 21:38:17] Task 5: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 5: rec_cls 0.2073 | prec_cls 0.1176 | f1_cls 0.1157 | det 0.5204 | pfa 0.8929 | total_f1 0.6119 ----
+[STATE 2026-04-18 21:39:52] Starting task 5 (6/10)
+[STATE 2026-04-18 21:39:52] Task 5 Epoch 1/10: entering train loop
+[STATE 2026-04-18 21:43:44] Task 5 Epoch 1/10: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.8933074457217921, 0.883079619678363, 0.6630237163914424, 0.634625574581831, 0.5271328555340126, 0.6675025011774355] | det_recall [0.8668047044757164, 0.9139661173898197, 0.8124392442586604, 0.999627994564442, 1.0, 0.8036732321750414] | det_fa [0.25988688771249147, 0.14170001311461242, 0.3416755501653463, 0.0004950068870523416, 0.0, 0.32054358690956336] ----
+T5 Ep 1/10 | L 1.0562 | Train Acc 0.56 | Prec 0.58 | F1 0.54 | Det Rec 0.77 | Det FA 0.37 | Epoch Time 327.61s (Eval 95.11s, Train 232.50s)
+[STATE 2026-04-18 21:45:19] T5 Ep 1/10 complete: Prec 0.5755 F1 0.5397 DetRec 0.7692 DetFA 0.3719 | 327.61s total (95.11s eval/232.50s train)
+[STATE 2026-04-18 21:45:19] Task 5 Epoch 2/10: entering train loop
+T5 Ep 2/10 | L 0.7372 | Train Acc 0.70 | Prec 0.71 | F1 0.67 | Det Rec 0.82 | Det FA 0.28 | Epoch Time 231.89s (Eval 0.00s, Train 231.89s)
+[STATE 2026-04-18 21:49:11] T5 Ep 2/10 complete: Prec 0.7071 F1 0.6721 DetRec 0.8244 DetFA 0.2826 | 231.89s total (0.00s eval/231.89s train)
+[STATE 2026-04-18 21:49:11] Task 5 Epoch 3/10: entering train loop
+T5 Ep 3/10 | L 0.6767 | Train Acc 0.72 | Prec 0.73 | F1 0.70 | Det Rec 0.84 | Det FA 0.26 | Epoch Time 226.70s (Eval 0.00s, Train 226.70s)
+[STATE 2026-04-18 21:52:58] T5 Ep 3/10 complete: Prec 0.7292 F1 0.6966 DetRec 0.8392 DetFA 0.2562 | 226.70s total (0.00s eval/226.70s train)
+[STATE 2026-04-18 21:52:58] Task 5 Epoch 4/10: entering train loop
+T5 Ep 4/10 | L 0.6455 | Train Acc 0.73 | Prec 0.74 | F1 0.71 | Det Rec 0.85 | Det FA 0.24 | Epoch Time 228.24s (Eval 0.00s, Train 228.24s)
+[STATE 2026-04-18 21:56:46] T5 Ep 4/10 complete: Prec 0.7419 F1 0.7105 DetRec 0.8473 DetFA 0.2432 | 228.24s total (0.00s eval/228.24s train)
+[STATE 2026-04-18 21:56:46] Task 5 Epoch 5/10: entering train loop
+T5 Ep 5/10 | L 0.6259 | Train Acc 0.74 | Prec 0.75 | F1 0.72 | Det Rec 0.85 | Det FA 0.24 | Epoch Time 229.46s (Eval 0.00s, Train 229.46s)
+[STATE 2026-04-18 22:00:36] T5 Ep 5/10 complete: Prec 0.7526 F1 0.7204 DetRec 0.8512 DetFA 0.2361 | 229.46s total (0.00s eval/229.46s train)
+[STATE 2026-04-18 22:00:36] Task 5 Epoch 6/10: entering train loop
+T5 Ep 6/10 | L 0.6096 | Train Acc 0.75 | Prec 0.76 | F1 0.73 | Det Rec 0.86 | Det FA 0.23 | Epoch Time 228.54s (Eval 0.00s, Train 228.54s)
+[STATE 2026-04-18 22:04:24] T5 Ep 6/10 complete: Prec 0.7579 F1 0.7277 DetRec 0.8557 DetFA 0.2294 | 228.54s total (0.00s eval/228.54s train)
+[STATE 2026-04-18 22:04:24] Task 5 Epoch 7/10: entering train loop
+T5 Ep 7/10 | L 0.5984 | Train Acc 0.76 | Prec 0.76 | F1 0.73 | Det Rec 0.86 | Det FA 0.23 | Epoch Time 231.54s (Eval 0.00s, Train 231.54s)
+[STATE 2026-04-18 22:08:16] T5 Ep 7/10 complete: Prec 0.7625 F1 0.7328 DetRec 0.8576 DetFA 0.2279 | 231.54s total (0.00s eval/231.54s train)
+[STATE 2026-04-18 22:08:16] Task 5 Epoch 8/10: entering train loop
+T5 Ep 8/10 | L 0.5882 | Train Acc 0.76 | Prec 0.77 | F1 0.74 | Det Rec 0.86 | Det FA 0.23 | Epoch Time 231.23s (Eval 0.00s, Train 231.23s)
+[STATE 2026-04-18 22:12:07] T5 Ep 8/10 complete: Prec 0.7670 F1 0.7364 DetRec 0.8586 DetFA 0.2262 | 231.23s total (0.00s eval/231.23s train)
+[STATE 2026-04-18 22:12:07] Task 5 Epoch 9/10: entering train loop
+T5 Ep 9/10 | L 0.5804 | Train Acc 0.76 | Prec 0.77 | F1 0.74 | Det Rec 0.86 | Det FA 0.22 | Epoch Time 230.27s (Eval 0.00s, Train 230.27s)
+[STATE 2026-04-18 22:15:57] T5 Ep 9/10 complete: Prec 0.7708 F1 0.7406 DetRec 0.8602 DetFA 0.2238 | 230.27s total (0.00s eval/230.27s train)
+[STATE 2026-04-18 22:15:57] Task 5 Epoch 10/10: entering train loop
+T5 Ep 10/10 | L 0.5714 | Train Acc 0.77 | Prec 0.77 | F1 0.74 | Det Rec 0.86 | Det FA 0.22 | Epoch Time 232.46s (Eval 0.00s, Train 232.46s)
+[STATE 2026-04-18 22:19:50] T5 Ep 10/10 complete: Prec 0.7735 F1 0.7440 DetRec 0.8613 DetFA 0.2241 | 232.46s total (0.00s eval/232.46s train)
+[STATE 2026-04-18 22:25:31] Task 5: running final validation.
+[STATE 2026-04-18 22:27:07] Completed task 5 (6/10)
 Task 6: 17340 training samples, 6800 test samples.
-[STATE 2026-04-03 15:24:48] Task 6: zero-shot validation (pre-train)
----- Zero-shot (pre-train) task 6: rec_cls 0.1855 | prec_cls 0.1099 | f1_cls 0.0709 | det 0.4984 | pfa 0.9938 | total_f1 0.4686 ----
-[STATE 2026-04-03 15:27:17] Starting task 6 (7/10)
-[STATE 2026-04-03 15:27:17] Task 6 Epoch 1/10: entering train loop
-[STATE 2026-04-03 15:27:51] Task 6 Epoch 1/10: running validation (end of epoch)
----- Eval at Epoch 0: cls [0.6365841683782586, 0.8890236735207372, 0.4301325070840111, 0.522263211109609, 0.36397332366358354, 0.2123470201979291, 0.5082912108829601] | det_recall [0.8379678110422664, 0.9044939163319876, 0.7844478596776596, 0.9949780456418659, 1.0, 0.7080645066165956, 0.9968672557400863] | det_fa [0.08881219365542896, 0.1671959193967132, 0.3894886616466251, 0.0066325299346702525, 0.0, 0.5193467898814383, 0.006265488519827433] ----
-T6 Ep 1/10 | L 0.9977 | Train Acc 0.49 | Prec 0.48 | F1 0.55 | Det Rec 0.99 | Det FA 0.00 | Epoch Time 183.74s (Eval 150.32s, Train 33.42s)
-[STATE 2026-04-03 15:30:21] T6 Ep 1/10 complete: Prec 0.4766 F1 0.5488 DetRec 0.9927 DetFA 0.0047 | 183.74s total (150.32s eval/33.42s train)
-[STATE 2026-04-03 15:30:21] Task 6 Epoch 2/10: entering train loop
-T6 Ep 2/10 | L 0.8930 | Train Acc 0.53 | Prec 0.52 | F1 0.59 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 33.88s (Eval 0.00s, Train 33.88s)
-[STATE 2026-04-03 15:30:55] T6 Ep 2/10 complete: Prec 0.5190 F1 0.5912 DetRec 0.9993 DetFA 0.0014 | 33.88s total (0.00s eval/33.88s train)
-[STATE 2026-04-03 15:30:55] Task 6 Epoch 3/10: entering train loop
-T6 Ep 3/10 | L 0.8638 | Train Acc 0.54 | Prec 0.53 | F1 0.60 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 34.11s (Eval 0.00s, Train 34.11s)
-[STATE 2026-04-03 15:31:29] T6 Ep 3/10 complete: Prec 0.5269 F1 0.5969 DetRec 0.9997 DetFA 0.0006 | 34.11s total (0.00s eval/34.11s train)
-[STATE 2026-04-03 15:31:29] Task 6 Epoch 4/10: entering train loop
-T6 Ep 4/10 | L 0.8485 | Train Acc 0.54 | Prec 0.54 | F1 0.61 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 33.60s (Eval 0.00s, Train 33.60s)
-[STATE 2026-04-03 15:32:03] T6 Ep 4/10 complete: Prec 0.5410 F1 0.6060 DetRec 0.9998 DetFA 0.0003 | 33.60s total (0.00s eval/33.60s train)
-[STATE 2026-04-03 15:32:03] Task 6 Epoch 5/10: entering train loop
-T6 Ep 5/10 | L 0.8398 | Train Acc 0.55 | Prec 0.55 | F1 0.61 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 34.14s (Eval 0.00s, Train 34.14s)
-[STATE 2026-04-03 15:32:37] T6 Ep 5/10 complete: Prec 0.5472 F1 0.6122 DetRec 0.9998 DetFA 0.0003 | 34.14s total (0.00s eval/34.14s train)
-[STATE 2026-04-03 15:32:37] Task 6 Epoch 6/10: entering train loop
-T6 Ep 6/10 | L 0.8341 | Train Acc 0.55 | Prec 0.55 | F1 0.61 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 34.12s (Eval 0.00s, Train 34.12s)
-[STATE 2026-04-03 15:33:11] T6 Ep 6/10 complete: Prec 0.5487 F1 0.6115 DetRec 0.9998 DetFA 0.0003 | 34.12s total (0.00s eval/34.12s train)
-[STATE 2026-04-03 15:33:11] Task 6 Epoch 7/10: entering train loop
-T6 Ep 7/10 | L 0.8265 | Train Acc 0.55 | Prec 0.55 | F1 0.61 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 33.96s (Eval 0.00s, Train 33.96s)
-[STATE 2026-04-03 15:33:45] T6 Ep 7/10 complete: Prec 0.5503 F1 0.6144 DetRec 0.9999 DetFA 0.0002 | 33.96s total (0.00s eval/33.96s train)
-[STATE 2026-04-03 15:33:45] Task 6 Epoch 8/10: entering train loop
-T6 Ep 8/10 | L 0.8146 | Train Acc 0.56 | Prec 0.56 | F1 0.62 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 33.94s (Eval 0.00s, Train 33.94s)
-[STATE 2026-04-03 15:34:19] T6 Ep 8/10 complete: Prec 0.5579 F1 0.6202 DetRec 0.9999 DetFA 0.0002 | 33.94s total (0.00s eval/33.94s train)
-[STATE 2026-04-03 15:34:19] Task 6 Epoch 9/10: entering train loop
-T6 Ep 9/10 | L 0.8173 | Train Acc 0.56 | Prec 0.56 | F1 0.62 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 33.93s (Eval 0.00s, Train 33.93s)
-[STATE 2026-04-03 15:34:53] T6 Ep 9/10 complete: Prec 0.5585 F1 0.6230 DetRec 0.9999 DetFA 0.0002 | 33.93s total (0.00s eval/33.93s train)
-[STATE 2026-04-03 15:34:53] Task 6 Epoch 10/10: entering train loop
-T6 Ep 10/10 | L 0.8102 | Train Acc 0.56 | Prec 0.56 | F1 0.62 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 33.79s (Eval 0.00s, Train 33.79s)
-[STATE 2026-04-03 15:35:27] T6 Ep 10/10 complete: Prec 0.5595 F1 0.6218 DetRec 0.9999 DetFA 0.0001 | 33.79s total (0.00s eval/33.79s train)
-[STATE 2026-04-03 15:35:27] Task 6: running final validation.
-[STATE 2026-04-03 15:37:58] Completed task 6 (7/10)
+[STATE 2026-04-18 22:27:07] Task 6: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 6: rec_cls 0.1992 | prec_cls 0.2323 | f1_cls 0.1887 | det 0.4792 | pfa 0.7093 | total_f1 0.6316 ----
+[STATE 2026-04-18 22:28:45] Starting task 6 (7/10)
+[STATE 2026-04-18 22:28:45] Task 6 Epoch 1/10: entering train loop
+[STATE 2026-04-18 22:29:05] Task 6 Epoch 1/10: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.8951430551875263, 0.886336065261252, 0.6624815394570462, 0.6328137458260334, 0.5232160842505289, 0.7334045278543995, 0.5408573819815763] | det_recall [0.8674414683117565, 0.914374086994388, 0.8118835618186176, 0.9997596578041822, 1.0, 0.8400139195321227, 0.9979743210803881] | det_fa [0.2582915405030475, 0.14216324295566832, 0.34370891730271363, 0.0004806843916355401, 0.0, 0.2700220607656102, 0.004051357839223946] ----
+T6 Ep 1/10 | L 1.1103 | Train Acc 0.49 | Prec 0.47 | F1 0.55 | Det Rec 0.99 | Det FA 0.02 | Epoch Time 117.70s (Eval 97.80s, Train 19.90s)
+[STATE 2026-04-18 22:30:43] T6 Ep 1/10 complete: Prec 0.4660 F1 0.5462 DetRec 0.9857 DetFA 0.0203 | 117.70s total (97.80s eval/19.90s train)
+[STATE 2026-04-18 22:30:43] Task 6 Epoch 2/10: entering train loop
+T6 Ep 2/10 | L 0.8415 | Train Acc 0.56 | Prec 0.55 | F1 0.62 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 19.82s (Eval 0.00s, Train 19.82s)
+[STATE 2026-04-18 22:31:02] T6 Ep 2/10 complete: Prec 0.5486 F1 0.6185 DetRec 0.9996 DetFA 0.0007 | 19.82s total (0.00s eval/19.82s train)
+[STATE 2026-04-18 22:31:02] Task 6 Epoch 3/10: entering train loop
+T6 Ep 3/10 | L 0.8046 | Train Acc 0.57 | Prec 0.56 | F1 0.63 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 18.97s (Eval 0.00s, Train 18.97s)
+[STATE 2026-04-18 22:31:21] T6 Ep 3/10 complete: Prec 0.5596 F1 0.6286 DetRec 0.9998 DetFA 0.0004 | 18.97s total (0.00s eval/18.97s train)
+[STATE 2026-04-18 22:31:21] Task 6 Epoch 4/10: entering train loop
+T6 Ep 4/10 | L 0.7871 | Train Acc 0.57 | Prec 0.57 | F1 0.63 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 20.04s (Eval 0.00s, Train 20.04s)
+[STATE 2026-04-18 22:31:41] T6 Ep 4/10 complete: Prec 0.5700 F1 0.6345 DetRec 0.9998 DetFA 0.0003 | 20.04s total (0.00s eval/20.04s train)
+[STATE 2026-04-18 22:31:41] Task 6 Epoch 5/10: entering train loop
+T6 Ep 5/10 | L 0.7760 | Train Acc 0.58 | Prec 0.58 | F1 0.64 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 20.07s (Eval 0.00s, Train 20.07s)
+[STATE 2026-04-18 22:32:01] T6 Ep 5/10 complete: Prec 0.5759 F1 0.6403 DetRec 0.9999 DetFA 0.0001 | 20.07s total (0.00s eval/20.07s train)
+[STATE 2026-04-18 22:32:01] Task 6 Epoch 6/10: entering train loop
+T6 Ep 6/10 | L 0.7679 | Train Acc 0.58 | Prec 0.58 | F1 0.64 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 19.47s (Eval 0.00s, Train 19.47s)
+[STATE 2026-04-18 22:32:21] T6 Ep 6/10 complete: Prec 0.5810 F1 0.6427 DetRec 0.9999 DetFA 0.0001 | 19.47s total (0.00s eval/19.47s train)
+[STATE 2026-04-18 22:32:21] Task 6 Epoch 7/10: entering train loop
+T6 Ep 7/10 | L 0.7602 | Train Acc 0.58 | Prec 0.58 | F1 0.64 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 20.21s (Eval 0.00s, Train 20.21s)
+[STATE 2026-04-18 22:32:41] T6 Ep 7/10 complete: Prec 0.5819 F1 0.6432 DetRec 0.9999 DetFA 0.0001 | 20.21s total (0.00s eval/20.21s train)
+[STATE 2026-04-18 22:32:41] Task 6 Epoch 8/10: entering train loop
+T6 Ep 8/10 | L 0.7554 | Train Acc 0.58 | Prec 0.58 | F1 0.64 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 19.76s (Eval 0.00s, Train 19.76s)
+[STATE 2026-04-18 22:33:01] T6 Ep 8/10 complete: Prec 0.5845 F1 0.6444 DetRec 0.9999 DetFA 0.0001 | 19.76s total (0.00s eval/19.76s train)
+[STATE 2026-04-18 22:33:01] Task 6 Epoch 9/10: entering train loop
+T6 Ep 9/10 | L 0.7478 | Train Acc 0.59 | Prec 0.59 | F1 0.65 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 20.11s (Eval 0.00s, Train 20.11s)
+[STATE 2026-04-18 22:33:21] T6 Ep 9/10 complete: Prec 0.5922 F1 0.6498 DetRec 0.9999 DetFA 0.0001 | 20.11s total (0.00s eval/20.11s train)
+[STATE 2026-04-18 22:33:21] Task 6 Epoch 10/10: entering train loop
+T6 Ep 10/10 | L 0.7470 | Train Acc 0.59 | Prec 0.59 | F1 0.65 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 20.04s (Eval 0.00s, Train 20.04s)
+[STATE 2026-04-18 22:33:41] T6 Ep 10/10 complete: Prec 0.5919 F1 0.6499 DetRec 0.9999 DetFA 0.0001 | 20.04s total (0.00s eval/20.04s train)
+[STATE 2026-04-18 22:34:10] Task 6: running final validation.
+[STATE 2026-04-18 22:35:48] Completed task 6 (7/10)
 Task 7: 188050 training samples, 94025 test samples.
-[STATE 2026-04-03 15:37:59] Task 7: zero-shot validation (pre-train)
----- Zero-shot (pre-train) task 7: rec_cls 0.1975 | prec_cls 0.1865 | f1_cls 0.0538 | det 0.5000 | pfa 0.9999 | total_f1 0.4622 ----
-[STATE 2026-04-03 15:41:10] Starting task 7 (8/10)
-[STATE 2026-04-03 15:41:10] Task 7 Epoch 1/10: entering train loop
-[STATE 2026-04-03 15:47:19] Task 7 Epoch 1/10: running validation (end of epoch)
----- Eval at Epoch 0: cls [0.6381759670048582, 0.8918926043049176, 0.423750224120884, 0.5178450079566314, 0.3594626853797333, 0.2125007138006124, 0.4815885361239784, 0.2948306478923306] | det_recall [0.8392435029854237, 0.9060446432151242, 0.7806448039350793, 0.99675203440085, 1.0, 0.7103821954006654, 0.9990370677251507, 0.72925353097762] | det_fa [0.08481624940191256, 0.16454884140072598, 0.3959296005109089, 0.002854150737746049, 0.0, 0.5166900469887316, 0.0019258645496985638, 0.4707518980166727] ----
-T7 Ep 1/10 | L 1.3139 | Train Acc 0.40 | Prec 0.43 | F1 0.41 | Det Rec 0.78 | Det FA 0.36 | Epoch Time 560.42s (Eval 191.78s, Train 368.65s)
-[STATE 2026-04-03 15:50:31] T7 Ep 1/10 complete: Prec 0.4262 F1 0.4064 DetRec 0.7795 DetFA 0.3567 | 560.42s total (191.78s eval/368.65s train)
-[STATE 2026-04-03 15:50:31] Task 7 Epoch 2/10: entering train loop
-T7 Ep 2/10 | L 1.2228 | Train Acc 0.45 | Prec 0.47 | F1 0.45 | Det Rec 0.79 | Det FA 0.35 | Epoch Time 369.71s (Eval 0.00s, Train 369.71s)
-[STATE 2026-04-03 15:56:40] T7 Ep 2/10 complete: Prec 0.4672 F1 0.4537 DetRec 0.7878 DetFA 0.3473 | 369.71s total (0.00s eval/369.71s train)
-[STATE 2026-04-03 15:56:40] Task 7 Epoch 3/10: entering train loop
-T7 Ep 3/10 | L 1.0857 | Train Acc 0.52 | Prec 0.53 | F1 0.52 | Det Rec 0.80 | Det FA 0.34 | Epoch Time 369.60s (Eval 0.00s, Train 369.60s)
-[STATE 2026-04-03 16:02:50] T7 Ep 3/10 complete: Prec 0.5304 F1 0.5152 DetRec 0.7952 DetFA 0.3351 | 369.60s total (0.00s eval/369.60s train)
-[STATE 2026-04-03 16:02:50] Task 7 Epoch 4/10: entering train loop
-T7 Ep 4/10 | L 1.0448 | Train Acc 0.54 | Prec 0.55 | F1 0.53 | Det Rec 0.80 | Det FA 0.34 | Epoch Time 370.10s (Eval 0.00s, Train 370.10s)
-[STATE 2026-04-03 16:09:00] T7 Ep 4/10 complete: Prec 0.5501 F1 0.5335 DetRec 0.7955 DetFA 0.3355 | 370.10s total (0.00s eval/370.10s train)
-[STATE 2026-04-03 16:09:00] Task 7 Epoch 5/10: entering train loop
-T7 Ep 5/10 | L 1.0251 | Train Acc 0.55 | Prec 0.56 | F1 0.54 | Det Rec 0.79 | Det FA 0.34 | Epoch Time 368.78s (Eval 0.00s, Train 368.78s)
-[STATE 2026-04-03 16:15:09] T7 Ep 5/10 complete: Prec 0.5590 F1 0.5410 DetRec 0.7941 DetFA 0.3393 | 368.78s total (0.00s eval/368.78s train)
-[STATE 2026-04-03 16:15:09] Task 7 Epoch 6/10: entering train loop
-T7 Ep 6/10 | L 1.0088 | Train Acc 0.56 | Prec 0.57 | F1 0.55 | Det Rec 0.80 | Det FA 0.34 | Epoch Time 368.27s (Eval 0.00s, Train 368.27s)
-[STATE 2026-04-03 16:21:17] T7 Ep 6/10 complete: Prec 0.5667 F1 0.5485 DetRec 0.7953 DetFA 0.3378 | 368.27s total (0.00s eval/368.27s train)
-[STATE 2026-04-03 16:21:17] Task 7 Epoch 7/10: entering train loop
-T7 Ep 7/10 | L 1.0015 | Train Acc 0.57 | Prec 0.57 | F1 0.55 | Det Rec 0.79 | Det FA 0.34 | Epoch Time 368.71s (Eval 0.00s, Train 368.71s)
-[STATE 2026-04-03 16:27:26] T7 Ep 7/10 complete: Prec 0.5710 F1 0.5522 DetRec 0.7947 DetFA 0.3390 | 368.71s total (0.00s eval/368.71s train)
-[STATE 2026-04-03 16:27:26] Task 7 Epoch 8/10: entering train loop
-T7 Ep 8/10 | L 0.9902 | Train Acc 0.57 | Prec 0.58 | F1 0.56 | Det Rec 0.80 | Det FA 0.34 | Epoch Time 370.48s (Eval 0.00s, Train 370.48s)
-[STATE 2026-04-03 16:33:36] T7 Ep 8/10 complete: Prec 0.5757 F1 0.5566 DetRec 0.7953 DetFA 0.3394 | 370.48s total (0.00s eval/370.48s train)
-[STATE 2026-04-03 16:33:36] Task 7 Epoch 9/10: entering train loop
-T7 Ep 9/10 | L 0.9840 | Train Acc 0.58 | Prec 0.58 | F1 0.56 | Det Rec 0.80 | Det FA 0.34 | Epoch Time 369.29s (Eval 0.00s, Train 369.29s)
-[STATE 2026-04-03 16:39:45] T7 Ep 9/10 complete: Prec 0.5817 F1 0.5611 DetRec 0.7955 DetFA 0.3386 | 369.29s total (0.00s eval/369.29s train)
-[STATE 2026-04-03 16:39:45] Task 7 Epoch 10/10: entering train loop
-T7 Ep 10/10 | L 0.9776 | Train Acc 0.58 | Prec 0.58 | F1 0.56 | Det Rec 0.80 | Det FA 0.34 | Epoch Time 369.61s (Eval 0.00s, Train 369.61s)
-[STATE 2026-04-03 16:45:55] T7 Ep 10/10 complete: Prec 0.5817 F1 0.5621 DetRec 0.7959 DetFA 0.3378 | 369.61s total (0.00s eval/369.61s train)
-[STATE 2026-04-03 16:45:55] Task 7: running final validation.
-[STATE 2026-04-03 16:49:07] Completed task 7 (8/10)
+[STATE 2026-04-18 22:35:48] Task 7: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 7: rec_cls 0.1297 | prec_cls 0.0873 | f1_cls 0.1412 | det 0.6432 | pfa 0.4132 | total_f1 0.6279 ----
+[STATE 2026-04-18 22:37:53] Starting task 7 (8/10)
+[STATE 2026-04-18 22:37:53] Task 7 Epoch 1/10: entering train loop
+[STATE 2026-04-18 22:41:27] Task 7 Epoch 1/10: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.8950918806960844, 0.8841989844472995, 0.6628340814677549, 0.6327040429192972, 0.5325191398087671, 0.7345867968930528, 0.5800372129739527, 0.6038332271460048] | det_recall [0.8673564856244598, 0.914455063794018, 0.8114576045659182, 0.9993889200436954, 1.0, 0.8403288906719679, 1.0, 0.7970086987098093] | det_fa [0.25791823032610106, 0.1403070266433327, 0.34541162241984813, 0.0012221599126091814, 0.0, 0.2699705366965825, 0.0, 0.3353576841579678] ----
+T7 Ep 1/10 | L 1.0562 | Train Acc 0.52 | Prec 0.56 | F1 0.53 | Det Rec 0.78 | Det FA 0.33 | Epoch Time 338.13s (Eval 124.91s, Train 213.22s)
+[STATE 2026-04-18 22:43:31] T7 Ep 1/10 complete: Prec 0.5568 F1 0.5297 DetRec 0.7810 DetFA 0.3254 | 338.13s total (124.91s eval/213.22s train)
+[STATE 2026-04-18 22:43:31] Task 7 Epoch 2/10: entering train loop
+T7 Ep 2/10 | L 0.8137 | Train Acc 0.65 | Prec 0.67 | F1 0.64 | Det Rec 0.81 | Det FA 0.29 | Epoch Time 215.85s (Eval 0.00s, Train 215.85s)
+[STATE 2026-04-18 22:47:07] T7 Ep 2/10 complete: Prec 0.6706 F1 0.6374 DetRec 0.8106 DetFA 0.2905 | 215.85s total (0.00s eval/215.85s train)
+[STATE 2026-04-18 22:47:07] Task 7 Epoch 3/10: entering train loop
+T7 Ep 3/10 | L 0.7454 | Train Acc 0.68 | Prec 0.70 | F1 0.67 | Det Rec 0.82 | Det FA 0.28 | Epoch Time 217.43s (Eval 0.00s, Train 217.43s)
+[STATE 2026-04-18 22:50:45] T7 Ep 3/10 complete: Prec 0.7036 F1 0.6682 DetRec 0.8178 DetFA 0.2834 | 217.43s total (0.00s eval/217.43s train)
+[STATE 2026-04-18 22:50:45] Task 7 Epoch 4/10: entering train loop
+T7 Ep 4/10 | L 0.7085 | Train Acc 0.70 | Prec 0.72 | F1 0.68 | Det Rec 0.82 | Det FA 0.28 | Epoch Time 214.26s (Eval 0.00s, Train 214.26s)
+[STATE 2026-04-18 22:54:19] T7 Ep 4/10 complete: Prec 0.7198 F1 0.6838 DetRec 0.8218 DetFA 0.2781 | 214.26s total (0.00s eval/214.26s train)
+[STATE 2026-04-18 22:54:19] Task 7 Epoch 5/10: entering train loop
+T7 Ep 5/10 | L 0.6866 | Train Acc 0.71 | Prec 0.73 | F1 0.69 | Det Rec 0.83 | Det FA 0.27 | Epoch Time 216.87s (Eval 0.00s, Train 216.87s)
+[STATE 2026-04-18 22:57:56] T7 Ep 5/10 complete: Prec 0.7308 F1 0.6945 DetRec 0.8261 DetFA 0.2713 | 216.87s total (0.00s eval/216.87s train)
+[STATE 2026-04-18 22:57:56] Task 7 Epoch 6/10: entering train loop
+T7 Ep 6/10 | L 0.6695 | Train Acc 0.72 | Prec 0.74 | F1 0.70 | Det Rec 0.83 | Det FA 0.27 | Epoch Time 214.59s (Eval 0.00s, Train 214.59s)
+[STATE 2026-04-18 23:01:30] T7 Ep 6/10 complete: Prec 0.7362 F1 0.6995 DetRec 0.8277 DetFA 0.2687 | 214.59s total (0.00s eval/214.59s train)
+[STATE 2026-04-18 23:01:30] Task 7 Epoch 7/10: entering train loop
+T7 Ep 7/10 | L 0.6573 | Train Acc 0.72 | Prec 0.74 | F1 0.70 | Det Rec 0.83 | Det FA 0.27 | Epoch Time 215.44s (Eval 0.00s, Train 215.44s)
+[STATE 2026-04-18 23:05:06] T7 Ep 7/10 complete: Prec 0.7409 F1 0.7048 DetRec 0.8300 DetFA 0.2652 | 215.44s total (0.00s eval/215.44s train)
+[STATE 2026-04-18 23:05:06] Task 7 Epoch 8/10: entering train loop
+T7 Ep 8/10 | L 0.6461 | Train Acc 0.73 | Prec 0.74 | F1 0.71 | Det Rec 0.83 | Det FA 0.27 | Epoch Time 217.79s (Eval 0.00s, Train 217.79s)
+[STATE 2026-04-18 23:08:44] T7 Ep 8/10 complete: Prec 0.7435 F1 0.7081 DetRec 0.8312 DetFA 0.2651 | 217.79s total (0.00s eval/217.79s train)
+[STATE 2026-04-18 23:08:44] Task 7 Epoch 9/10: entering train loop
+T7 Ep 9/10 | L 0.6379 | Train Acc 0.73 | Prec 0.75 | F1 0.71 | Det Rec 0.83 | Det FA 0.26 | Epoch Time 217.31s (Eval 0.00s, Train 217.31s)
+[STATE 2026-04-18 23:12:21] T7 Ep 9/10 complete: Prec 0.7476 F1 0.7121 DetRec 0.8331 DetFA 0.2606 | 217.31s total (0.00s eval/217.31s train)
+[STATE 2026-04-18 23:12:21] Task 7 Epoch 10/10: entering train loop
+T7 Ep 10/10 | L 0.6296 | Train Acc 0.74 | Prec 0.75 | F1 0.72 | Det Rec 0.83 | Det FA 0.26 | Epoch Time 218.13s (Eval 0.00s, Train 218.13s)
+[STATE 2026-04-18 23:15:59] T7 Ep 10/10 complete: Prec 0.7500 F1 0.7150 DetRec 0.8345 DetFA 0.2591 | 218.13s total (0.00s eval/218.13s train)
+[STATE 2026-04-18 23:21:17] Task 7: running final validation.
+[STATE 2026-04-18 23:23:22] Completed task 7 (8/10)
 Task 8: 36658 training samples, 12220 test samples.
-[STATE 2026-04-03 16:49:07] Task 8: zero-shot validation (pre-train)
----- Zero-shot (pre-train) task 8: rec_cls 0.1404 | prec_cls 0.0466 | f1_cls 0.0271 | det 0.4991 | pfa 0.9930 | total_f1 0.4354 ----
-[STATE 2026-04-03 16:52:23] Starting task 8 (9/10)
-[STATE 2026-04-03 16:52:23] Task 8 Epoch 1/10: entering train loop
-[STATE 2026-04-03 16:53:34] Task 8 Epoch 1/10: running validation (end of epoch)
----- Eval at Epoch 0: cls [0.6392873684991103, 0.8916453760319138, 0.4363695149975541, 0.5270078179121539, 0.3606625427789211, 0.21157883601058877, 0.48694977689435176, 0.2628673033504981, 0.6119168149474354] | det_recall [0.8386832049910046, 0.9039043543092147, 0.7867983207993786, 0.9967445975153758, 1.0, 0.7068690497261698, 0.9994581936898042, 0.7331250503990769, 0.6651622574481103] | det_fa [0.08673275225910704, 0.1689001482790037, 0.38536373089127096, 0.0036054321599098584, 0.0, 0.52119176465609, 0.0010836126203916476, 0.475750835643091, 0.5841428016614135] ----
-T8 Ep 1/10 | L 0.9692 | Train Acc 0.67 | Prec 0.70 | F1 0.52 | Det Rec 0.68 | Det FA 0.60 | Epoch Time 269.69s (Eval 198.33s, Train 71.36s)
-[STATE 2026-04-03 16:56:53] T8 Ep 1/10 complete: Prec 0.7020 F1 0.5203 DetRec 0.6767 DetFA 0.6035 | 269.69s total (198.33s eval/71.36s train)
-[STATE 2026-04-03 16:56:53] Task 8 Epoch 2/10: entering train loop
-T8 Ep 2/10 | L 0.8320 | Train Acc 0.72 | Prec 0.74 | F1 0.57 | Det Rec 0.72 | Det FA 0.52 | Epoch Time 71.34s (Eval 0.00s, Train 71.34s)
-[STATE 2026-04-03 16:58:04] T8 Ep 2/10 complete: Prec 0.7420 F1 0.5729 DetRec 0.7190 DetFA 0.5207 | 71.34s total (0.00s eval/71.34s train)
-[STATE 2026-04-03 16:58:04] Task 8 Epoch 3/10: entering train loop
-T8 Ep 3/10 | L 0.7089 | Train Acc 0.77 | Prec 0.78 | F1 0.62 | Det Rec 0.76 | Det FA 0.44 | Epoch Time 71.16s (Eval 0.00s, Train 71.16s)
-[STATE 2026-04-03 16:59:15] T8 Ep 3/10 complete: Prec 0.7822 F1 0.6243 DetRec 0.7592 DetFA 0.4418 | 71.16s total (0.00s eval/71.16s train)
-[STATE 2026-04-03 16:59:15] Task 8 Epoch 4/10: entering train loop
-T8 Ep 4/10 | L 0.6796 | Train Acc 0.78 | Prec 0.79 | F1 0.64 | Det Rec 0.76 | Det FA 0.43 | Epoch Time 71.54s (Eval 0.00s, Train 71.54s)
-[STATE 2026-04-03 17:00:27] T8 Ep 4/10 complete: Prec 0.7925 F1 0.6364 DetRec 0.7649 DetFA 0.4328 | 71.54s total (0.00s eval/71.54s train)
-[STATE 2026-04-03 17:00:27] Task 8 Epoch 5/10: entering train loop
-T8 Ep 5/10 | L 0.6510 | Train Acc 0.79 | Prec 0.80 | F1 0.65 | Det Rec 0.77 | Det FA 0.42 | Epoch Time 71.76s (Eval 0.00s, Train 71.76s)
-[STATE 2026-04-03 17:01:38] T8 Ep 5/10 complete: Prec 0.7999 F1 0.6471 DetRec 0.7725 DetFA 0.4183 | 71.76s total (0.00s eval/71.76s train)
-[STATE 2026-04-03 17:01:38] Task 8 Epoch 6/10: entering train loop
-T8 Ep 6/10 | L 0.6308 | Train Acc 0.80 | Prec 0.81 | F1 0.66 | Det Rec 0.78 | Det FA 0.41 | Epoch Time 71.09s (Eval 0.00s, Train 71.09s)
-[STATE 2026-04-03 17:02:49] T8 Ep 6/10 complete: Prec 0.8086 F1 0.6556 DetRec 0.7786 DetFA 0.4089 | 71.09s total (0.00s eval/71.09s train)
-[STATE 2026-04-03 17:02:49] Task 8 Epoch 7/10: entering train loop
-T8 Ep 7/10 | L 0.6127 | Train Acc 0.80 | Prec 0.81 | F1 0.66 | Det Rec 0.78 | Det FA 0.40 | Epoch Time 65.53s (Eval 0.00s, Train 65.53s)
-[STATE 2026-04-03 17:03:55] T8 Ep 7/10 complete: Prec 0.8109 F1 0.6587 DetRec 0.7807 DetFA 0.4024 | 65.53s total (0.00s eval/65.53s train)
-[STATE 2026-04-03 17:03:55] Task 8 Epoch 8/10: entering train loop
-T8 Ep 8/10 | L 0.6094 | Train Acc 0.82 | Prec 0.82 | F1 0.67 | Det Rec 0.78 | Det FA 0.40 | Epoch Time 63.93s (Eval 0.00s, Train 63.93s)
-[STATE 2026-04-03 17:04:59] T8 Ep 8/10 complete: Prec 0.8193 F1 0.6657 DetRec 0.7823 DetFA 0.4032 | 63.93s total (0.00s eval/63.93s train)
-[STATE 2026-04-03 17:04:59] Task 8 Epoch 9/10: entering train loop
-T8 Ep 9/10 | L 0.5932 | Train Acc 0.81 | Prec 0.82 | F1 0.67 | Det Rec 0.78 | Det FA 0.40 | Epoch Time 67.53s (Eval 0.00s, Train 67.53s)
-[STATE 2026-04-03 17:06:06] T8 Ep 9/10 complete: Prec 0.8194 F1 0.6660 DetRec 0.7848 DetFA 0.3976 | 67.53s total (0.00s eval/67.53s train)
-[STATE 2026-04-03 17:06:06] Task 8 Epoch 10/10: entering train loop
-T8 Ep 10/10 | L 0.5847 | Train Acc 0.82 | Prec 0.82 | F1 0.67 | Det Rec 0.79 | Det FA 0.40 | Epoch Time 71.00s (Eval 0.00s, Train 71.00s)
-[STATE 2026-04-03 17:07:17] T8 Ep 10/10 complete: Prec 0.8217 F1 0.6694 DetRec 0.7856 DetFA 0.3974 | 71.00s total (0.00s eval/71.00s train)
-[STATE 2026-04-03 17:07:17] Task 8: running final validation.
-[STATE 2026-04-03 17:10:33] Completed task 8 (9/10)
+[STATE 2026-04-18 23:23:22] Task 8: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 8: rec_cls 0.1575 | prec_cls 0.0534 | f1_cls 0.0308 | det 0.5005 | pfa 0.9914 | total_f1 0.6126 ----
+[STATE 2026-04-18 23:25:30] Starting task 8 (9/10)
+[STATE 2026-04-18 23:25:30] Task 8 Epoch 1/10: entering train loop
+[STATE 2026-04-18 23:26:12] Task 8 Epoch 1/10: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.8937704908927933, 0.8866146569638378, 0.6623222205990268, 0.6336685764539606, 0.5195723121078646, 0.7357287459899476, 0.5790988483552187, 0.7018433417883152, 0.5504680285272227] | det_recall [0.8680866951456679, 0.9127952109588877, 0.8123266611274436, 0.9992587117103621, 1.0, 0.8400777151373606, 1.0, 0.8119216219848258, 0.7682498985920803] | det_fa [0.2573116965674949, 0.1435566088865494, 0.3428432448162377, 0.0014825765792758482, 0.0, 0.2716233851870783, 0.0, 0.3258429053970639, 0.43735721481722] ----
+T8 Ep 1/10 | L 1.4800 | Train Acc 0.42 | Prec 0.42 | F1 0.34 | Det Rec 0.72 | Det FA 0.52 | Epoch Time 172.29s (Eval 130.08s, Train 42.21s)
+[STATE 2026-04-18 23:28:23] T8 Ep 1/10 complete: Prec 0.4214 F1 0.3450 DetRec 0.7152 DetFA 0.5217 | 172.29s total (130.08s eval/42.21s train)
+[STATE 2026-04-18 23:28:23] Task 8 Epoch 2/10: entering train loop
+T8 Ep 2/10 | L 1.0655 | Train Acc 0.60 | Prec 0.59 | F1 0.49 | Det Rec 0.77 | Det FA 0.43 | Epoch Time 41.52s (Eval 0.00s, Train 41.52s)
+[STATE 2026-04-18 23:29:04] T8 Ep 2/10 complete: Prec 0.5920 F1 0.4874 DetRec 0.7728 DetFA 0.4328 | 41.52s total (0.00s eval/41.52s train)
+[STATE 2026-04-18 23:29:04] Task 8 Epoch 3/10: entering train loop
+T8 Ep 3/10 | L 0.9225 | Train Acc 0.67 | Prec 0.66 | F1 0.54 | Det Rec 0.78 | Det FA 0.43 | Epoch Time 42.14s (Eval 0.00s, Train 42.14s)
+[STATE 2026-04-18 23:29:46] T8 Ep 3/10 complete: Prec 0.6630 F1 0.5387 DetRec 0.7764 DetFA 0.4267 | 42.14s total (0.00s eval/42.14s train)
+[STATE 2026-04-18 23:29:46] Task 8 Epoch 4/10: entering train loop
+T8 Ep 4/10 | L 0.8479 | Train Acc 0.70 | Prec 0.70 | F1 0.56 | Det Rec 0.78 | Det FA 0.43 | Epoch Time 41.71s (Eval 0.00s, Train 41.71s)
+[STATE 2026-04-18 23:30:28] T8 Ep 4/10 complete: Prec 0.6975 F1 0.5633 DetRec 0.7759 DetFA 0.4259 | 41.71s total (0.00s eval/41.71s train)
+[STATE 2026-04-18 23:30:28] Task 8 Epoch 5/10: entering train loop
+T8 Ep 5/10 | L 0.7905 | Train Acc 0.73 | Prec 0.73 | F1 0.59 | Det Rec 0.78 | Det FA 0.42 | Epoch Time 41.72s (Eval 0.00s, Train 41.72s)
+[STATE 2026-04-18 23:31:10] T8 Ep 5/10 complete: Prec 0.7271 F1 0.5850 DetRec 0.7781 DetFA 0.4213 | 41.72s total (0.00s eval/41.72s train)
+[STATE 2026-04-18 23:31:10] Task 8 Epoch 6/10: entering train loop
+T8 Ep 6/10 | L 0.7633 | Train Acc 0.75 | Prec 0.74 | F1 0.60 | Det Rec 0.78 | Det FA 0.42 | Epoch Time 42.21s (Eval 0.00s, Train 42.21s)
+[STATE 2026-04-18 23:31:52] T8 Ep 6/10 complete: Prec 0.7405 F1 0.5967 DetRec 0.7808 DetFA 0.4180 | 42.21s total (0.00s eval/42.21s train)
+[STATE 2026-04-18 23:31:52] Task 8 Epoch 7/10: entering train loop
+T8 Ep 7/10 | L 0.7334 | Train Acc 0.76 | Prec 0.75 | F1 0.61 | Det Rec 0.78 | Det FA 0.41 | Epoch Time 42.18s (Eval 0.00s, Train 42.18s)
+[STATE 2026-04-18 23:32:34] T8 Ep 7/10 complete: Prec 0.7507 F1 0.6050 DetRec 0.7817 DetFA 0.4146 | 42.18s total (0.00s eval/42.18s train)
+[STATE 2026-04-18 23:32:34] Task 8 Epoch 8/10: entering train loop
+T8 Ep 8/10 | L 0.7133 | Train Acc 0.76 | Prec 0.76 | F1 0.61 | Det Rec 0.78 | Det FA 0.41 | Epoch Time 41.62s (Eval 0.00s, Train 41.62s)
+[STATE 2026-04-18 23:33:16] T8 Ep 8/10 complete: Prec 0.7564 F1 0.6101 DetRec 0.7822 DetFA 0.4122 | 41.62s total (0.00s eval/41.62s train)
+[STATE 2026-04-18 23:33:16] Task 8 Epoch 9/10: entering train loop
+T8 Ep 9/10 | L 0.6938 | Train Acc 0.78 | Prec 0.77 | F1 0.62 | Det Rec 0.78 | Det FA 0.41 | Epoch Time 41.24s (Eval 0.00s, Train 41.24s)
+[STATE 2026-04-18 23:33:57] T8 Ep 9/10 complete: Prec 0.7699 F1 0.6210 DetRec 0.7829 DetFA 0.4111 | 41.24s total (0.00s eval/41.24s train)
+[STATE 2026-04-18 23:33:57] Task 8 Epoch 10/10: entering train loop
+T8 Ep 10/10 | L 0.6713 | Train Acc 0.79 | Prec 0.77 | F1 0.63 | Det Rec 0.78 | Det FA 0.41 | Epoch Time 41.02s (Eval 0.00s, Train 41.02s)
+[STATE 2026-04-18 23:34:38] T8 Ep 10/10 complete: Prec 0.7740 F1 0.6254 DetRec 0.7848 DetFA 0.4069 | 41.02s total (0.00s eval/41.02s train)
+[STATE 2026-04-18 23:35:38] Task 8: running final validation.
+[STATE 2026-04-18 23:37:48] Completed task 8 (9/10)
 Task 9: 17340 training samples, 6800 test samples.
-[STATE 2026-04-03 17:10:34] Task 9: zero-shot validation (pre-train)
----- Zero-shot (pre-train) task 9: rec_cls 0.2163 | prec_cls 0.2048 | f1_cls 0.0949 | det 0.5000 | pfa 1.0000 | total_f1 0.4493 ----
-[STATE 2026-04-03 17:13:55] Starting task 9 (10/10)
-[STATE 2026-04-03 17:13:55] Task 9 Epoch 1/10: entering train loop
-[STATE 2026-04-03 17:14:29] Task 9 Epoch 1/10: running validation (end of epoch)
----- Eval at Epoch 0: cls [0.6397144298302373, 0.8906901472736628, 0.43614338672985026, 0.5256651936516165, 0.36448547686333194, 0.2126921156012192, 0.4886724662073391, 0.2582232570247677, 0.4814769853226537, 0.39735882785573945] | det_recall [0.8407922402120519, 0.9065101417772139, 0.7860791492545767, 0.9953229284779975, 1.0, 0.708726002865664, 0.9993203006947684, 0.7322385105029502, 0.7579152887277929, 1.0] | det_fa [0.08469713711858916, 0.16179707539272103, 0.3855696454696051, 0.0066500819289275455, 0.0, 0.5189109860433666, 0.001359398610463352, 0.47702530733771925, 0.2492014348723918, 0.0] ----
-T9 Ep 1/10 | L 0.9882 | Train Acc 0.39 | Prec 0.39 | F1 0.46 | Det Rec 0.99 | Det FA 0.00 | Epoch Time 235.27s (Eval 201.06s, Train 34.21s)
-[STATE 2026-04-03 17:17:50] T9 Ep 1/10 complete: Prec 0.3899 F1 0.4631 DetRec 0.9895 DetFA 0.0000 | 235.27s total (201.06s eval/34.21s train)
-[STATE 2026-04-03 17:17:50] Task 9 Epoch 2/10: entering train loop
-T9 Ep 2/10 | L 0.9014 | Train Acc 0.43 | Prec 0.43 | F1 0.50 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 34.29s (Eval 0.00s, Train 34.29s)
-[STATE 2026-04-03 17:18:24] T9 Ep 2/10 complete: Prec 0.4315 F1 0.5002 DetRec 1.0000 DetFA 0.0000 | 34.29s total (0.00s eval/34.29s train)
-[STATE 2026-04-03 17:18:24] Task 9 Epoch 3/10: entering train loop
-T9 Ep 3/10 | L 0.8843 | Train Acc 0.44 | Prec 0.45 | F1 0.52 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 33.96s (Eval 0.00s, Train 33.96s)
-[STATE 2026-04-03 17:18:58] T9 Ep 3/10 complete: Prec 0.4519 F1 0.5185 DetRec 1.0000 DetFA 0.0000 | 33.96s total (0.00s eval/33.96s train)
-[STATE 2026-04-03 17:18:58] Task 9 Epoch 4/10: entering train loop
-T9 Ep 4/10 | L 0.8641 | Train Acc 0.45 | Prec 0.45 | F1 0.53 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 33.71s (Eval 0.00s, Train 33.71s)
-[STATE 2026-04-03 17:19:32] T9 Ep 4/10 complete: Prec 0.4519 F1 0.5283 DetRec 1.0000 DetFA 0.0000 | 33.71s total (0.00s eval/33.71s train)
-[STATE 2026-04-03 17:19:32] Task 9 Epoch 5/10: entering train loop
-T9 Ep 5/10 | L 0.8640 | Train Acc 0.46 | Prec 0.46 | F1 0.53 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 33.75s (Eval 0.00s, Train 33.75s)
-[STATE 2026-04-03 17:20:06] T9 Ep 5/10 complete: Prec 0.4606 F1 0.5311 DetRec 1.0000 DetFA 0.0000 | 33.75s total (0.00s eval/33.75s train)
-[STATE 2026-04-03 17:20:06] Task 9 Epoch 6/10: entering train loop
-T9 Ep 6/10 | L 0.8502 | Train Acc 0.46 | Prec 0.46 | F1 0.54 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 33.48s (Eval 0.00s, Train 33.48s)
-[STATE 2026-04-03 17:20:39] T9 Ep 6/10 complete: Prec 0.4635 F1 0.5362 DetRec 1.0000 DetFA 0.0000 | 33.48s total (0.00s eval/33.48s train)
-[STATE 2026-04-03 17:20:39] Task 9 Epoch 7/10: entering train loop
-T9 Ep 7/10 | L 0.8451 | Train Acc 0.47 | Prec 0.47 | F1 0.55 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 34.06s (Eval 0.00s, Train 34.06s)
-[STATE 2026-04-03 17:21:13] T9 Ep 7/10 complete: Prec 0.4706 F1 0.5468 DetRec 1.0000 DetFA 0.0000 | 34.06s total (0.00s eval/34.06s train)
-[STATE 2026-04-03 17:21:13] Task 9 Epoch 8/10: entering train loop
-T9 Ep 8/10 | L 0.8390 | Train Acc 0.47 | Prec 0.47 | F1 0.55 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 33.68s (Eval 0.00s, Train 33.68s)
-[STATE 2026-04-03 17:21:47] T9 Ep 8/10 complete: Prec 0.4737 F1 0.5486 DetRec 1.0000 DetFA 0.0000 | 33.68s total (0.00s eval/33.68s train)
-[STATE 2026-04-03 17:21:47] Task 9 Epoch 9/10: entering train loop
-T9 Ep 9/10 | L 0.8428 | Train Acc 0.47 | Prec 0.48 | F1 0.55 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 34.07s (Eval 0.00s, Train 34.07s)
-[STATE 2026-04-03 17:22:21] T9 Ep 9/10 complete: Prec 0.4765 F1 0.5489 DetRec 1.0000 DetFA 0.0000 | 34.07s total (0.00s eval/34.07s train)
-[STATE 2026-04-03 17:22:21] Task 9 Epoch 10/10: entering train loop
-T9 Ep 10/10 | L 0.8289 | Train Acc 0.47 | Prec 0.47 | F1 0.55 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 33.73s (Eval 0.00s, Train 33.73s)
-[STATE 2026-04-03 17:22:55] T9 Ep 10/10 complete: Prec 0.4746 F1 0.5490 DetRec 1.0000 DetFA 0.0000 | 33.73s total (0.00s eval/33.73s train)
-[STATE 2026-04-03 17:22:55] Task 9: running final validation.
-[STATE 2026-04-03 17:26:15] Completed task 9 (10/10)
+[STATE 2026-04-18 23:37:48] Task 9: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 9: rec_cls 0.2962 | prec_cls 0.2199 | f1_cls 0.1704 | det 0.4972 | pfa 1.0000 | total_f1 0.6271 ----
+[STATE 2026-04-18 23:39:58] Starting task 9 (10/10)
+[STATE 2026-04-18 23:39:58] Task 9 Epoch 1/10: entering train loop
+[STATE 2026-04-18 23:40:18] Task 9 Epoch 1/10: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.8969199947198084, 0.8863521823350221, 0.6632715185479803, 0.6294184701789052, 0.5223605092057924, 0.7340476710246482, 0.5780970970707743, 0.7024398796826032, 0.768411429910221, 0.3665517086665119] | det_recall [0.8673410000343088, 0.9121327033661802, 0.8125707150389688, 0.9996274125180376, 1.0, 0.840787960385462, 1.0, 0.8123439391855922, 0.7804197605212438, 1.0] | det_fa [0.25843522470425084, 0.14459148945778202, 0.34272206651172965, 0.0007451749639249639, 0.0, 0.2679525644756504, 0.0, 0.3249598030547692, 0.4004508099491264, 0.0] ----
+T9 Ep 1/10 | L 1.1656 | Train Acc 0.35 | Prec 0.33 | F1 0.42 | Det Rec 0.97 | Det FA 0.06 | Epoch Time 150.43s (Eval 130.77s, Train 19.65s)
+[STATE 2026-04-18 23:42:29] T9 Ep 1/10 complete: Prec 0.3300 F1 0.4240 DetRec 0.9713 DetFA 0.0561 | 150.43s total (130.77s eval/19.65s train)
+[STATE 2026-04-18 23:42:29] Task 9 Epoch 2/10: entering train loop
+T9 Ep 2/10 | L 0.9652 | Train Acc 0.39 | Prec 0.39 | F1 0.48 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 19.79s (Eval 0.00s, Train 19.79s)
+[STATE 2026-04-18 23:42:49] T9 Ep 2/10 complete: Prec 0.3933 F1 0.4787 DetRec 1.0000 DetFA 0.0000 | 19.79s total (0.00s eval/19.79s train)
+[STATE 2026-04-18 23:42:49] Task 9 Epoch 3/10: entering train loop
+T9 Ep 3/10 | L 0.9130 | Train Acc 0.41 | Prec 0.41 | F1 0.49 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 19.22s (Eval 0.00s, Train 19.22s)
+[STATE 2026-04-18 23:43:08] T9 Ep 3/10 complete: Prec 0.4092 F1 0.4914 DetRec 1.0000 DetFA 0.0000 | 19.22s total (0.00s eval/19.22s train)
+[STATE 2026-04-18 23:43:08] Task 9 Epoch 4/10: entering train loop
+T9 Ep 4/10 | L 0.8859 | Train Acc 0.42 | Prec 0.42 | F1 0.50 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 19.96s (Eval 0.00s, Train 19.96s)
+[STATE 2026-04-18 23:43:28] T9 Ep 4/10 complete: Prec 0.4179 F1 0.4964 DetRec 1.0000 DetFA 0.0000 | 19.96s total (0.00s eval/19.96s train)
+[STATE 2026-04-18 23:43:28] Task 9 Epoch 5/10: entering train loop
+T9 Ep 5/10 | L 0.8677 | Train Acc 0.43 | Prec 0.44 | F1 0.51 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 20.04s (Eval 0.00s, Train 20.04s)
+[STATE 2026-04-18 23:43:48] T9 Ep 5/10 complete: Prec 0.4378 F1 0.5133 DetRec 1.0000 DetFA 0.0000 | 20.04s total (0.00s eval/20.04s train)
+[STATE 2026-04-18 23:43:48] Task 9 Epoch 6/10: entering train loop
+T9 Ep 6/10 | L 0.8538 | Train Acc 0.44 | Prec 0.44 | F1 0.52 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 19.16s (Eval 0.00s, Train 19.16s)
+[STATE 2026-04-18 23:44:07] T9 Ep 6/10 complete: Prec 0.4420 F1 0.5159 DetRec 1.0000 DetFA 0.0000 | 19.16s total (0.00s eval/19.16s train)
+[STATE 2026-04-18 23:44:07] Task 9 Epoch 7/10: entering train loop
+T9 Ep 7/10 | L 0.8403 | Train Acc 0.44 | Prec 0.45 | F1 0.52 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 19.45s (Eval 0.00s, Train 19.45s)
+[STATE 2026-04-18 23:44:26] T9 Ep 7/10 complete: Prec 0.4488 F1 0.5230 DetRec 1.0000 DetFA 0.0000 | 19.45s total (0.00s eval/19.45s train)
+[STATE 2026-04-18 23:44:26] Task 9 Epoch 8/10: entering train loop
+T9 Ep 8/10 | L 0.8297 | Train Acc 0.45 | Prec 0.46 | F1 0.53 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 19.81s (Eval 0.00s, Train 19.81s)
+[STATE 2026-04-18 23:44:46] T9 Ep 8/10 complete: Prec 0.4551 F1 0.5268 DetRec 1.0000 DetFA 0.0000 | 19.81s total (0.00s eval/19.81s train)
+[STATE 2026-04-18 23:44:46] Task 9 Epoch 9/10: entering train loop
+T9 Ep 9/10 | L 0.8231 | Train Acc 0.45 | Prec 0.46 | F1 0.53 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 19.88s (Eval 0.00s, Train 19.88s)
+[STATE 2026-04-18 23:45:06] T9 Ep 9/10 complete: Prec 0.4614 F1 0.5339 DetRec 1.0000 DetFA 0.0000 | 19.88s total (0.00s eval/19.88s train)
+[STATE 2026-04-18 23:45:06] Task 9 Epoch 10/10: entering train loop
+T9 Ep 10/10 | L 0.8170 | Train Acc 0.46 | Prec 0.46 | F1 0.54 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 20.14s (Eval 0.00s, Train 20.14s)
+[STATE 2026-04-18 23:45:26] T9 Ep 10/10 complete: Prec 0.4641 F1 0.5392 DetRec 1.0000 DetFA 0.0000 | 20.14s total (0.00s eval/20.14s train)
+[STATE 2026-04-18 23:45:56] Task 9: running final validation.
+[STATE 2026-04-18 23:48:07] Completed task 9 (10/10)
 ####Final Validation Accuracy####
 Final Results:- 
- Total Recall: 0.4717143925499518 
- Individual Recall: [0.6386058974895622, 0.8906781924346968, 0.43646861444036095, 0.5182241810310311, 0.36231201915266353, 0.21258078675182518, 0.48288463535884574, 0.26037969206107964, 0.4909289579903313, 0.42408094878912134]
+ Total Recall: 0.6805036398741111 
+ Individual Recall: [0.8930749765978812, 0.8850438860096681, 0.6633905839210641, 0.6365309779669148, 0.527863679324289, 0.7342368501890199, 0.5742434106214891, 0.7009087492524253, 0.7670543096674737, 0.4226889751908861]
 Final Detection Results:- 
- Total Detection: 0.8718009658135886 
- Individual Detection: [0.839361636676319, 0.9046621367220089, 0.785681324627234, 0.9958755696386411, 1.0, 0.7064757949260767, 0.9994581936898042, 0.7315939588238353, 0.7549010430319663, 1.0]
+ Total Detection: 0.9023660573367639 
+ Individual Detection: [0.8667785187326197, 0.9129316210901559, 0.8120661576225062, 0.9993707555655157, 1.0, 0.8394684501101921, 1.0, 0.8131147829880799, 0.7799302872585705, 1.0]
 Final Detection False Alarm:- 
- Total False Alarm: 0.19021075269321983 
- Individual False Alarm: [0.08671243266873356, 0.16612255772000853, 0.3863763126502799, 0.004624977751325615, 0.0, 0.5225540563351156, 0.0010836126203916476, 0.4785672655172907, 0.25606631166905286, 0.0]
-SUMMARY_TR cls_rec=0.4694 cls_prec=0.4746 cls_f1=0.5490 det=0.8727 fa=0.1885
-SUMMARY_TE cls_rec=0.4717 cls_prec=0.5035 cls_f1=0.4926 det=0.8718 fa=0.1902
-[STATE 2026-04-03 17:26:16] Saving results to logs//packnet/full-tasks-2_all-10epochs_weighted-loss-2026-04-03_11-12-59-6722/0/results
+ Total False Alarm: 0.17455575935463202 
+ Individual False Alarm: [0.25953844444935914, 0.14543142769887388, 0.34328425408005236, 0.0012584888689686669, 0.0, 0.27134603065649643, 0.0, 0.32378463696327353, 0.400914310829296, 0.0]
+SUMMARY_TR cls_rec=0.4592 cls_prec=0.4641 cls_f1=0.5392 det=0.9025 fa=0.1740
+SUMMARY_TE cls_rec=0.6805 cls_prec=0.6673 cls_f1=0.6597 det=0.9024 fa=0.1746
+[STATE 2026-04-18 23:48:07] Saving results to logs//packnet/full-tasks_CIL_all-2026-04-18_19-00-27-6819/0/results
 Model size: 0.0289 GB
 Memory buffer size: 0.0000 GB
-logs//packnet/full-tasks-2_all-10epochs_weighted-loss-2026-04-03_11-12-59-6722/0/results: {'expt_name': 'full-tasks-2_all-10epochs_weighted-loss', 'model': 'packnet', 'arch': 'resnet1d', 'n_hiddens': 100, 'n_layers': 2, 'xav_init': False, 'debug': False, 'use_detector_arch': False, 'glances': 1, 'n_epochs': 10, 'batch_size': 256, 'replay_batch_size': 128, 'memories': 5120, 'lr': 0.03, 'optimizer': 'sgd', 'class_weighted_ce': True, 'cuda': True, 'seed': 0, 'log_every': 10, 'log_dir': 'logs//packnet/full-tasks-2_all-10epochs_weighted-loss-2026-04-03_11-12-59-6722/0', 'tf_dir': 'logs//packnet/full-tasks-2_all-10epochs_weighted-loss-2026-04-03_11-12-59-6722/0/tfdir', 'calc_test_accuracy': False, 'state_logging': True, 'data_path': 'data/rff/radar/full', 'task_order_files': 't2-rcn,t0-rcn,t2-uclresm-25noise,t0-deeprad,t1-deeprad,t1-uclresm-25noise,t3-deeprad,t0-uclresm-25noise,t1-rcn,t2-deeprad', 'loader': 'task_incremental_loader', 'samples_per_task': -1, 'shuffle_tasks': False, 'classes_per_it': 6, 'iterations': 5000, 'dataset': 'iq', 'workers': 0, 'validation': 0.5, 'data_scaling': 'normalize', 'use_iq_aug_features': False, 'iq_aug_feature_type': 'power', 'class_order': 'random', 'increment': 5, 'test_batch_size': 512, 'nc_per_task': None, 'nc_per_task_list': '', 'val_rate': 1000, 'opt_lr': 0.1, 'opt_wt': 0.1, 'alpha_init': 0.001, 'learn_lr': False, 'sync_update': False, 'grad_clip_norm': 5.0, 'meta_batches': 3, 'use_old_task_memory': False, 'second_order': False, 'n_memories': 5120, 'memory_strength': 0, 'steps_per_sample': 1, 'bgd_optimizer': 'sgd', 'optimizer_params': '{}', 'train_mc_iters': 5, 'std_init': 0.05, 'mean_eta': 1, 'fisher_gamma': 0.95, 'rln': 7, 'update_steps': 10, 'meta_lr': 0.001, 'update_lr': 0.1, 'ctx_lr': 0.05, 'n_meta': 2, 'inner_steps': 1, 'temperature': 5.0, 'task_emb': 64, 'classes_per_task': [6, 7, 6, 7, 7, 6, 6, 6, 7, 6], 'get_samples_per_task': <bound method IncrementalLoader.get_samples_per_task of <dataloaders.task_incremental_loader.IncrementalLoader object at 0x729d90aa9df0>>} # val: 0.523 0.472 -0.052 0.000 # sizes: model_gb=0.0289 mem_gb=0.0000 # 22333.217122077942
-[STATE 2026-04-03 17:26:16] results.pt components (approx): state_dict 73.6 MB, result_val_t 0.1 KB, result_val_a 0.8 KB
-[STATE 2026-04-03 17:26:16] Results saved; total runtime 6.20h
-Total runtime: 6.20 hours
+logs//packnet/full-tasks_CIL_all-2026-04-18_19-00-27-6819/0/results: {'expt_name': 'full-tasks_CIL_all', 'model': 'packnet', 'arch': 'resnet1d', 'n_hiddens': 100, 'n_layers': 2, 'xav_init': False, 'debug': False, 'use_detector_arch': False, 'inner_steps': 1, 'n_epochs': 10, 'batch_size': 256, 'replay_batch_size': 128, 'memories': 5120, 'lr': 0.003, 'optimizer': 'sgd', 'prune_perc': 0.75, 'post_prune_epochs': 2, 'class_weighted_ce': True, 'cuda': True, 'seed': 0, 'log_every': 10, 'log_dir': 'logs//packnet/full-tasks_CIL_all-2026-04-18_19-00-27-6819/0', 'tf_dir': 'logs//packnet/full-tasks_CIL_all-2026-04-18_19-00-27-6819/0/tfdir', 'calc_test_accuracy': False, 'state_logging': True, 'data_path': 'data/rff/radar/full', 'task_order_files': 't2-rcn,t0-rcn,t2-uclresm-25noise,t0-deeprad,t1-deeprad,t1-uclresm-25noise,t3-deeprad,t0-uclresm-25noise,t1-rcn,t2-deeprad', 'loader': 'task_incremental_loader', 'samples_per_task': -1, 'shuffle_tasks': False, 'classes_per_it': 6, 'iterations': 5000, 'dataset': 'iq', 'workers': 0, 'validation': 0.5, 'data_scaling': 'normalize', 'use_iq_aug_features': False, 'iq_aug_feature_type': 'power', 'class_order': 'random', 'increment': 5, 'test_batch_size': 512, 'nc_per_task': None, 'nc_per_task_list': '', 'val_rate': 1000, 'opt_lr': 0.1, 'opt_wt': 0.1, 'alpha_init': 0.001, 'learn_lr': False, 'sync_update': False, 'grad_clip_norm': 5.0, 'meta_batches': 3, 'use_old_task_memory': False, 'second_order': False, 'n_memories': 5120, 'memory_strength': 0, 'steps_per_sample': 1, 'bgd_optimizer': 'sgd', 'optimizer_params': '{}', 'train_mc_iters': 5, 'std_init': 0.05, 'mean_eta': 1, 'fisher_gamma': 0.95, 'rln': 7, 'meta_lr': 0.001, 'update_lr': 0.1, 'ctx_lr': 0.05, 'n_meta': 1, 'temperature': 5.0, 'task_emb': 64, 'classes_per_task': [6, 7, 6, 7, 7, 6, 6, 6, 7, 6], 'get_samples_per_task': <bound method IncrementalLoader.get_samples_per_task of <dataloaders.task_incremental_loader.IncrementalLoader object at 0x7cd321a18d10>>} # val: 0.676 0.681 0.004 0.000 # sizes: model_gb=0.0289 mem_gb=0.0000 # 17196.890422582626
+[STATE 2026-04-18 23:48:07] results.pt components (approx): state_dict 73.6 MB, result_val_t 0.1 KB, result_val_a 0.8 KB
+[STATE 2026-04-18 23:48:07] Results saved; total runtime 4.78h
+Total runtime: 4.78 hours
