@@ -896,7 +896,7 @@ class Net(nn.Module):
         l1_mu_weight_reg = (
             (saver_weight_mu.pow(2) / safe_saver_weight_sigma.pow(2))
             * (trainer_weight_mu - saver_weight_mu).abs()
-        ).sum()
+        ).sum() * (std_init**2)
 
         mu_bias_reg = torch.zeros_like(mu_weight_reg)
         l1_mu_bias_reg = torch.zeros_like(mu_weight_reg)
@@ -911,7 +911,7 @@ class Net(nn.Module):
             l1_mu_bias_reg = (
                 (saver_bias.pow(2) / saver_sigma_flat.mean(dim=1).clamp_min(eps).pow(2))
                 * (trainer_bias - saver_bias).abs()
-            ).sum()
+            ).sum() * (std_init**2)
             regularized_parameter_count += trainer_bias.numel()
 
         weight_sigma_ratio = trainer_weight_sigma.pow(2) / (
