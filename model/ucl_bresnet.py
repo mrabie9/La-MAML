@@ -867,16 +867,23 @@ class Net(nn.Module):
         bias_strength = saver_strength_flat.mean(dim=1)
 
         prev_strength_expanded = torch.zeros_like(curr_strength)
+        input_node_count = curr_strength.size(1) if curr_strength.dim() >= 2 else 0
         if prev_weight_strength.numel() > 1:
             prev_output_strength = prev_weight_strength.view(
                 prev_weight_strength.size(0), -1
             ).mean(dim=1)
 
-            if curr_strength.dim() == 2:
+            if (
+                curr_strength.dim() == 2
+                and prev_output_strength.numel() == input_node_count
+            ):
                 prev_strength_expanded = prev_output_strength.view(1, -1).expand_as(
                     curr_strength
                 )
-            elif curr_strength.dim() == 3:
+            elif (
+                curr_strength.dim() == 3
+                and prev_output_strength.numel() == input_node_count
+            ):
                 prev_strength_expanded = prev_output_strength.view(1, -1, 1).expand_as(
                     curr_strength
                 )
