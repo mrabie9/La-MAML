@@ -7,5 +7,5 @@ use_old_task_memory: false
 second_order: true
 
 opt_lr: 0.1 # n
-alpha_init: 0.1 # alpha
+alpha_init: 0.001 # alpha
 momentum: 0.9

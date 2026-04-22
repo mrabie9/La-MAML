@@ -6,6 +6,6 @@ sync_update: false
 use_old_task_memory: false
 second_order: true
 
-opt_lr: 0.01 # n
-alpha_init: 0.1 # alpha
-momentum: 0.0
+opt_lr: 0.03 # n
+alpha_init: 0.01 # alpha
+momentum: 0.9
