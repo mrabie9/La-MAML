@@ -16,8 +16,8 @@ ENABLE_GROUP_STYLING: bool = True
 # Editable algorithm grouping. Keys are group names, values are algorithm ids.
 ALGORITHM_GROUPS: Dict[str, list[str]] = {
     "regularization": ["si", "ewc", "rwalk", "lwf", "ucl"],
-    "replay": ["eralg4", "er_ring", "icarl", "gem", "agem"],
-    "meta_learning": ["lamaml", "cmaml", "smaml"],
+    "replay": ["eralg4", "er_ring", "icarl"],
+    "meta_learning": ["agem", "gem", "lamaml", "cmaml", "smaml"],
     "hybrid": ["la-er", "bcl_dual", "ctn"],
     "architectural": ["hat", "packnet"],
 }
@@ -45,11 +45,16 @@ GROUP_LINESTYLES: Dict[str, Any] = {
 # Group colormap families used to assign related shades.
 GROUP_COLOR_FAMILIES: Dict[str, str] = {
     "regularization": "Blues",
-    "replay": "Oranges",
-    "meta_learning": "Purples",
+    "replay": "Purples",
+    "meta_learning": "Oranges",
     "hybrid": "Greens",
     "architectural": "Greys",
     "ungrouped": "Greys",
+}
+
+# Optional per-group shade ranges to avoid overly light tones.
+GROUP_SHADE_RANGES: Dict[str, tuple[float, float]] = {
+    "replay": (0.55, 0.95),
 }
 
 _UNGROUPED: str = "ungrouped"
@@ -78,7 +83,11 @@ def _normalize_algorithm_name(algorithm_name: str) -> str:
         >>> _normalize_algorithm_name("A-GEM")
         'a-gem'
     """
-    return algorithm_name.strip().lower()
+    normalized_name = algorithm_name.strip().lower()
+    # Collapse common separators so aliases like "A-GEM", "a_gem", and
+    # "agem" resolve to the same canonical key.
+    normalized_name = normalized_name.replace("-", "").replace("_", "").replace(" ", "")
+    return normalized_name
 
 
 def _build_algorithm_to_group_lookup() -> Dict[str, str]:
@@ -122,6 +131,55 @@ def _shade_for_group_position(position_in_group: int, group_size: int) -> float:
     return 0.35 + 0.55 * (position_in_group / float(group_size - 1))
 
 
+def _group_shade_for_position(
+    group_name: str, position_in_group: int, group_size: int
+) -> float:
+    """Resolve the colormap shade for an algorithm in a group.
+
+    Args:
+        group_name: Resolved group key.
+        position_in_group: Zero-based position within group.
+        group_size: Number of algorithms in group.
+
+    Returns:
+        Shade value in [0, 1] suitable for matplotlib colormaps.
+    """
+    shade_range = GROUP_SHADE_RANGES.get(group_name)
+    if shade_range is None:
+        return _shade_for_group_position(position_in_group, group_size)
+
+    shade_min, shade_max = shade_range
+    if group_size <= 1:
+        return (shade_min + shade_max) / 2.0
+    return shade_min + (shade_max - shade_min) * (
+        position_in_group / float(group_size - 1)
+    )
+
+
+def _algorithm_group_position(
+    algorithm_name: str, group_name: str, fallback_position: int
+) -> int:
+    """Resolve stable position for an algorithm within its configured group.
+
+    Args:
+        algorithm_name: Algorithm identifier.
+        group_name: Resolved group key.
+        fallback_position: Position used when not explicitly configured.
+
+    Returns:
+        Zero-based position within the group ordering.
+    """
+    declared_group_algorithms = ALGORITHM_GROUPS.get(group_name, [])
+    normalized_declared_algorithms = [
+        _normalize_algorithm_name(group_algorithm_name)
+        for group_algorithm_name in declared_group_algorithms
+    ]
+    normalized_algorithm_name = _normalize_algorithm_name(algorithm_name)
+    if normalized_algorithm_name in normalized_declared_algorithms:
+        return normalized_declared_algorithms.index(normalized_algorithm_name)
+    return len(normalized_declared_algorithms) + fallback_position
+
+
 def build_group_color_map(
     algorithm_names: Iterable[str],
     fallback_colors: Dict[str, Any] | None = None,
@@ -161,11 +219,17 @@ def build_group_color_map(
         )
         color_map = plt.get_cmap(cmap_name)
         sorted_group_algorithms = sorted(
-            group_algorithms, key=lambda value: value.lower()
+            group_algorithms,
+            key=lambda value: (
+                _algorithm_group_position(value, group_name, fallback_position=0),
+                _normalize_algorithm_name(value),
+            ),
         )
         for group_position, algorithm_name in enumerate(sorted_group_algorithms):
-            shade = _shade_for_group_position(
-                group_position, len(sorted_group_algorithms)
+            shade = _group_shade_for_position(
+                group_name=group_name,
+                position_in_group=group_position,
+                group_size=len(sorted_group_algorithms),
             )
             resolved_colors[algorithm_name] = color_map(shade)
 
@@ -227,7 +291,7 @@ def resolve_group_linestyle(algorithm_name: str, fallback_linestyle: Any = "-") 
     return GROUP_LINESTYLES.get(group_name, "-")
 
 
-def group_sort_key(algorithm_name: str) -> tuple[int, str]:
+def group_sort_key(algorithm_name: str) -> tuple[int, int, str]:
     """Return a sort key that orders algorithms by group then alphabetically within it.
 
     Use this to sort a list of runs so that all regularization algorithms appear
@@ -252,4 +316,8 @@ def group_sort_key(algorithm_name: str) -> tuple[int, str]:
         group_index = GROUP_ORDER.index(group_name)
     except ValueError:
         group_index = len(GROUP_ORDER)
-    return (group_index, _normalize_algorithm_name(algorithm_name))
+    return (
+        group_index,
+        _algorithm_group_position(algorithm_name, group_name, fallback_position=0),
+        _normalize_algorithm_name(algorithm_name),
+    )

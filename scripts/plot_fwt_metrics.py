@@ -17,10 +17,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 try:
     from scripts import plot_algorithm_group_styles as group_style_config  # type: ignore
@@ -203,14 +208,6 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional custom plot title.",
     )
-    parser.add_argument(
-        "--enable-group-styling",
-        action="store_true",
-        help=(
-            "Enable algorithm-group marker and color-family styling. "
-            "Disabled by default to preserve current behavior."
-        ),
-    )
     return parser.parse_args()
 
 
@@ -327,7 +324,6 @@ def plot_series(
     output_path: Path,
     plot_style: PlotStyle,
     title: Optional[str] = None,
-    use_group_styling: bool = False,
 ) -> None:
     """Create and save the metric line plot.
 
@@ -344,13 +340,10 @@ def plot_series(
 
     sorted_algorithm_names = sorted(series_by_algorithm.keys(), key=group_sort_key)
     base_label_colors = build_label_colors(sorted_algorithm_names)
-    if use_group_styling:
-        label_colors = build_group_color_map(
-            sorted_algorithm_names,
-            fallback_colors=base_label_colors,
-        )
-    else:
-        label_colors = base_label_colors
+    label_colors = build_group_color_map(
+        sorted_algorithm_names,
+        fallback_colors=base_label_colors,
+    )
     all_task_indices = set()
     task_index_to_dataset_name: Dict[int, str] = {}
     for algorithm_name in sorted_algorithm_names:
@@ -413,7 +406,7 @@ def plot_series(
 def main() -> None:
     """Run the plotting pipeline."""
     arguments = parse_args()
-    if arguments.enable_group_styling and group_style_config is not None:
+    if group_style_config is not None:
         group_style_config.ENABLE_GROUP_STYLING = True
     default_output_path = resolve_default_output_path(
         json_path=arguments.json_path,
@@ -432,7 +425,6 @@ def main() -> None:
         output_path=output_path,
         plot_style=selected_plot_style,
         title=arguments.title,
-        use_group_styling=arguments.enable_group_styling,
     )
     print(f"Saved plot to: {output_path}")
 
