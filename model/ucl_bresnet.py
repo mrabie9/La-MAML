@@ -829,7 +829,6 @@ class Net(nn.Module):
         old_layer: BayesianLayer,
         new_layer: BayesianLayer,
         eps: float,
-        prev_weight_strength: torch.Tensor,
     ) -> Tuple[
         torch.Tensor,
         torch.Tensor,
@@ -838,7 +837,6 @@ class Net(nn.Module):
         torch.Tensor,
         torch.Tensor,
         int,
-        torch.Tensor,
     ]:
         """Compute UCL regularisation terms for a Bayesian layer pair.
 
@@ -846,8 +844,6 @@ class Net(nn.Module):
             old_layer: Frozen layer snapshot from the previous task.
             new_layer: Trainable layer for the current task.
             eps: Small constant for numerical stability.
-            prev_weight_strength: Strength tensor propagated from the previous
-                Bayesian layer (upper-freeze direction).
 
         Returns:
             A tuple containing sigma_weight_reg, sigma_weight_normal_reg,
@@ -866,32 +862,8 @@ class Net(nn.Module):
         saver_strength_flat = curr_strength.view(curr_strength.size(0), -1)
         bias_strength = saver_strength_flat.mean(dim=1)
 
-        prev_strength_expanded = torch.zeros_like(curr_strength)
-        input_node_count = curr_strength.size(1) if curr_strength.dim() >= 2 else 0
-        if prev_weight_strength.numel() > 1:
-            prev_output_strength = prev_weight_strength.view(
-                prev_weight_strength.size(0), -1
-            ).mean(dim=1)
-
-            if (
-                curr_strength.dim() == 2
-                and prev_output_strength.size(0) == input_node_count
-            ):
-                prev_strength_expanded = prev_output_strength.view(1, -1).expand_as(
-                    curr_strength
-                )
-            elif (
-                curr_strength.dim() == 3
-                and prev_output_strength.size(0) == input_node_count
-            ):
-                prev_strength_expanded = prev_output_strength.view(1, -1, 1).expand_as(
-                    curr_strength
-                )
-
-        l2_strength = torch.max(curr_strength, prev_strength_expanded)
-
         mu_weight_reg = (
-            (l2_strength * (trainer_weight_mu - saver_weight_mu)) ** 2
+            (curr_strength * (trainer_weight_mu - saver_weight_mu)) ** 2
         ).sum()
         l1_mu_weight_reg = (
             (saver_weight_mu.pow(2) / safe_saver_weight_sigma.pow(2))
@@ -931,7 +903,6 @@ class Net(nn.Module):
             l1_mu_weight_reg,
             l1_mu_bias_reg,
             regularized_parameter_count,
-            curr_strength,
         )
 
     def _apply_regularisation(
@@ -958,7 +929,6 @@ class Net(nn.Module):
         regularized_parameter_count = 0
         eps = 1e-8
 
-        prev_weight_strength = torch.zeros(1, device=self._device())
         for old_layer, new_layer in zip(
             self._iter_bayesian_modules(self.model_old.feature_net),
             self._iter_bayesian_modules(self.model.feature_net),
@@ -971,10 +941,7 @@ class Net(nn.Module):
                 l1_weight_term,
                 l1_bias_term,
                 param_count,
-                prev_weight_strength,
-            ) = self._compute_layer_regularisation_terms(
-                old_layer, new_layer, eps, prev_weight_strength
-            )
+            ) = self._compute_layer_regularisation_terms(old_layer, new_layer, eps)
             sigma_weight_reg = sigma_weight_reg + sigma_term
             sigma_weight_normal_reg = sigma_weight_normal_reg + sigma_normal_term
             mu_weight_reg = mu_weight_reg + mu_weight_term
@@ -997,10 +964,7 @@ class Net(nn.Module):
                 l1_weight_term,
                 l1_bias_term,
                 param_count,
-                prev_weight_strength,
-            ) = self._compute_layer_regularisation_terms(
-                old_head, new_head, eps, prev_weight_strength
-            )
+            ) = self._compute_layer_regularisation_terms(old_head, new_head, eps)
             sigma_weight_reg = sigma_weight_reg + sigma_term
             sigma_weight_normal_reg = sigma_weight_normal_reg + sigma_normal_term
             mu_weight_reg = mu_weight_reg + mu_weight_term
