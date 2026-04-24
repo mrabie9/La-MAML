@@ -219,7 +219,9 @@ def run_single_round_training(
     result_val_t: List[int] = []
     per_epoch_losses: List[float] = []
     per_epoch_train_recalls: List[float] = []
+    per_epoch_train_precisions: List[float] = []
     per_epoch_val_cls_rec: List[float] = []
+    per_epoch_val_cls_prec: List[float] = []
     per_epoch_train_det_rec: List[float] = []
     per_epoch_train_det_pfa: List[float] = []
     per_epoch_val_det_rec: List[float] = []
@@ -355,6 +357,7 @@ def run_single_round_training(
         cur_val_det_rec = None
         cur_val_det_fa = None
         cur_val_f1 = None
+        cur_val_prec = None
         if val_det_acc is not None:
             if isinstance(val_det_acc, (list, tuple)):
                 cur_val_det_rec = float(val_det_acc[0])
@@ -370,6 +373,11 @@ def run_single_round_training(
                 cur_val_f1 = float(val_f1[0])
             else:
                 cur_val_f1 = float(val_f1)
+        if val_prec is not None:
+            if isinstance(val_prec, (list, tuple)):
+                cur_val_prec = float(val_prec[0])
+            else:
+                cur_val_prec = float(val_prec)
 
         result_val_a.append(val_acc_values)
         result_val_t.append(current_task_index)
@@ -387,10 +395,14 @@ def run_single_round_training(
 
         per_epoch_losses.append(avg_loss)
         per_epoch_train_recalls.append(avg_rec)
+        per_epoch_train_precisions.append(avg_prec)
         per_epoch_train_det_rec.append(avg_det_rec)
         per_epoch_train_det_pfa.append(avg_det_fa)
         per_epoch_val_cls_rec.append(
             cur_val_acc if cur_val_acc is not None else float("nan")
+        )
+        per_epoch_val_cls_prec.append(
+            cur_val_prec if cur_val_prec is not None else float("nan")
         )
         per_epoch_val_det_rec.append(
             cur_val_det_rec if cur_val_det_rec is not None else float("nan")
@@ -402,14 +414,20 @@ def run_single_round_training(
         per_epoch_val_f1.append(cur_val_f1 if cur_val_f1 is not None else float("nan"))
 
         print(
-            "Epoch {}/{} | Avg Loss {:.4f} | Avg Rec {:.4f} | Avg Prec {:.4f} | Avg F1 {:.4f} | Val Rec {}".format(
+            "Epoch {}/{} | Avg Loss {:.4f} | Avg Rec {:.4f} | Avg Prec {:.4f} | Avg F1 {:.4f} | Avg Det Rec {:.4f} | Avg Det FA {:.4f} | Val Rec {} | Val Prec {:.4f} | Val F1 {:.4f} | Val Det Rec {:.4f} | Val Det FA {:.4f}".format(
                 epoch + 1,
                 args.n_epochs,
                 avg_loss,
                 avg_rec,
                 avg_prec,
                 avg_f1,
+                avg_det_rec,
+                avg_det_fa,
                 val_acc_values,
+                cur_val_prec if cur_val_prec is not None else float("nan"),
+                cur_val_f1 if cur_val_f1 is not None else float("nan"),
+                cur_val_det_rec if cur_val_det_rec is not None else float("nan"),
+                cur_val_det_fa if cur_val_det_fa is not None else float("nan"),
             )
         )
 
@@ -428,7 +446,9 @@ def run_single_round_training(
     metrics_payload: Dict[str, np.ndarray] = {
         "losses": np.asarray(per_epoch_losses, dtype=float),
         "cls_tr_rec": np.asarray(per_epoch_train_recalls, dtype=float),
+        "train_cls_prec": np.asarray(per_epoch_train_precisions, dtype=float),
         "val_acc": np.asarray(per_epoch_val_cls_rec, dtype=float),
+        "val_cls_prec": np.asarray(per_epoch_val_cls_prec, dtype=float),
         "train_det_rec": np.asarray(per_epoch_train_det_rec, dtype=float),
         "train_det_pfa": np.asarray(per_epoch_train_det_pfa, dtype=float),
         "val_det_rec": np.asarray(per_epoch_val_det_rec, dtype=float),
@@ -541,6 +561,54 @@ def main() -> None:
     result_val_t, result_val_a, time_spent, metrics_payload = run_single_round_training(
         model, train_loader, test_loader, args
     )
+
+    def _safe_last(values: np.ndarray | None) -> float | None:
+        """Return last finite metric value from a NumPy vector."""
+        if values is None or values.size == 0:
+            return None
+        last_value = float(values[-1])
+        if np.isnan(last_value):
+            return None
+        return last_value
+
+    summary_tr_parts: List[str] = []
+    summary_te_parts: List[str] = []
+
+    train_cls_rec = _safe_last(metrics_payload.get("cls_tr_rec"))
+    train_cls_prec = _safe_last(metrics_payload.get("train_cls_prec"))
+    train_cls_f1 = _safe_last(metrics_payload.get("train_f1"))
+    train_det = _safe_last(metrics_payload.get("train_det_rec"))
+    train_fa = _safe_last(metrics_payload.get("train_det_pfa"))
+    if train_cls_rec is not None:
+        summary_tr_parts.append("cls_rec={:.4f}".format(train_cls_rec))
+    if train_cls_prec is not None:
+        summary_tr_parts.append("cls_prec={:.4f}".format(train_cls_prec))
+    if train_cls_f1 is not None:
+        summary_tr_parts.append("cls_f1={:.4f}".format(train_cls_f1))
+    if train_det is not None:
+        summary_tr_parts.append("det={:.4f}".format(train_det))
+    if train_fa is not None:
+        summary_tr_parts.append("fa={:.4f}".format(train_fa))
+    if summary_tr_parts:
+        print("SUMMARY_TR " + " ".join(summary_tr_parts))
+
+    val_cls_rec = _safe_last(metrics_payload.get("val_acc"))
+    val_cls_prec = _safe_last(metrics_payload.get("val_cls_prec"))
+    val_cls_f1 = _safe_last(metrics_payload.get("val_f1_per_epoch"))
+    val_det = _safe_last(metrics_payload.get("val_det_rec"))
+    val_fa = _safe_last(metrics_payload.get("val_det_pfa"))
+    if val_cls_rec is not None:
+        summary_te_parts.append("cls_rec={:.4f}".format(val_cls_rec))
+    if val_cls_prec is not None:
+        summary_te_parts.append("cls_prec={:.4f}".format(val_cls_prec))
+    if val_cls_f1 is not None:
+        summary_te_parts.append("cls_f1={:.4f}".format(val_cls_f1))
+    if val_det is not None:
+        summary_te_parts.append("det={:.4f}".format(val_det))
+    if val_fa is not None:
+        summary_te_parts.append("fa={:.4f}".format(val_fa))
+    if summary_te_parts:
+        print("SUMMARY_TE " + " ".join(summary_te_parts))
 
     # Save per-epoch metrics under the same /metrics layout used in main.py.
     logs_dir = os.path.join(args.log_dir, "metrics")
