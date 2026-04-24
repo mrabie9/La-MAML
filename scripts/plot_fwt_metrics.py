@@ -51,6 +51,14 @@ except Exception:  # pragma: no cover - optional styling helper
 MetricRecord = Dict[str, Any]
 SeriesPoint = Tuple[int, Optional[float], str]
 PlotStyle = Dict[str, Any]
+GROUP_COLORS = ["#4477AA", "#EE6677", "#228833", "#66CCEE", "#AA3377"]
+LINESTYLES = ["-", "--", ":", "-.", (0, (5, 1))]
+LINEWIDTHS = [2.4, 1.8, 1.8, 1.5, 1.5]
+MAX_GROUPS_SINGLE_AXIS = 5
+MAX_MEMBERS_PER_GROUP = 5
+MAX_LINES_SINGLE_AXIS = 18
+IEEE_SINGLE_COLUMN_FIGSIZE = (3.5, 2.6)
+IEEE_DOUBLE_COLUMN_FIGSIZE = (7, 3.5)
 DEFAULT_ALGORITHM_COLOR_ORDER = [
     "agem",
     "bcl_dual",
@@ -71,32 +79,12 @@ DEFAULT_ALGORITHM_COLOR_ORDER = [
 ]
 PLOT_STYLES_BY_EXPERIMENT: Dict[str, PlotStyle] = {
     "default": {
-        "figsize": (6, 3),
+        "figsize": IEEE_DOUBLE_COLUMN_FIGSIZE,
         "ylim": None,
-        "legend_kwargs": {
-            "loc": "best",
-            "ncol": 3,
-            "fontsize": 10,
-            "columnspacing": 0.9,
-            "labelspacing": 0.3,
-            "framealpha": 0.5,
-            "borderaxespad": 0.1,
-            "borderpad": 0.2,
-        },
     },
     "til": {
-        "figsize": (7, 3.5),
-        # "ylim": (0, 0.85),
-        "legend_kwargs": {
-            "loc": "best",
-            "ncol": 6,
-            "fontsize": 10,
-            "columnspacing": 0.1,
-            "labelspacing": 0.3,
-            "framealpha": 0.5,
-            "borderaxespad": 0.1,
-            "borderpad": 0.2,
-        },
+        "figsize": IEEE_DOUBLE_COLUMN_FIGSIZE,
+        "ylim": None,
     },
 }
 ALGORITHM_DISPLAY_NAMES: Dict[str, str] = {
@@ -104,8 +92,8 @@ ALGORITHM_DISPLAY_NAMES: Dict[str, str] = {
     "bcl_dual": "BCL-Dual",
     "cmaml": "C-MAML",
     "ctn": "CTN",
-    "eralg4": "ER-Res",
-    "er_ring": "ER-Ring",
+    "eralg4": "Res-ER",
+    "er_ring": "Ring-ER",
     "ewc": "EWC",
     "gem": "GEM",
     "hat": "HAT",
@@ -174,6 +162,138 @@ def build_label_colors(labels: List[str]) -> Dict[str, Any]:
     return colors_by_label
 
 
+def _normalize_algorithm_name(algorithm_name: str) -> str:
+    """Normalize algorithm naming variants for stable matching."""
+    return (
+        algorithm_name.strip()
+        .lower()
+        .replace("-", "")
+        .replace("_", "")
+        .replace(" ", "")
+    )
+
+
+def _build_ordered_groups(
+    sorted_algorithm_names: List[str],
+) -> List[tuple[str, List[str]]]:
+    """Build ordered algorithm groups using shared group config when available."""
+    group_to_algorithms: Dict[str, List[str]] = {}
+    algorithm_to_group: Dict[str, str] = {}
+    configured_group_order: List[str] = []
+    configured_group_members: Dict[str, List[str]] = {}
+
+    if group_style_config is not None:
+        configured_group_order = list(
+            getattr(
+                group_style_config,
+                "GROUP_ORDER",
+                [],
+            )
+        )
+        configured_group_members = dict(
+            getattr(
+                group_style_config,
+                "ALGORITHM_GROUPS",
+                {},
+            )
+        )
+        for (
+            configured_group_name,
+            configured_member_names,
+        ) in configured_group_members.items():
+            for configured_member_name in configured_member_names:
+                algorithm_to_group[
+                    _normalize_algorithm_name(configured_member_name)
+                ] = configured_group_name
+
+    for algorithm_name in sorted_algorithm_names:
+        normalized_name = _normalize_algorithm_name(algorithm_name)
+        group_name = algorithm_to_group.get(normalized_name, "ungrouped")
+        group_to_algorithms.setdefault(group_name, []).append(algorithm_name)
+
+    ordered_groups: List[tuple[str, List[str]]] = []
+    for configured_group_name in configured_group_order:
+        if configured_group_name not in group_to_algorithms:
+            continue
+        present_algorithms = group_to_algorithms[configured_group_name]
+        configured_members = configured_group_members.get(configured_group_name, [])
+        configured_member_positions = {
+            _normalize_algorithm_name(member_name): position
+            for position, member_name in enumerate(configured_members)
+        }
+        sorted_present_algorithms = sorted(
+            present_algorithms,
+            key=lambda algorithm_name: (
+                configured_member_positions.get(
+                    _normalize_algorithm_name(algorithm_name), 10_000
+                ),
+                _normalize_algorithm_name(algorithm_name),
+            ),
+        )
+        ordered_groups.append((configured_group_name, sorted_present_algorithms))
+
+    for group_name, member_names in group_to_algorithms.items():
+        if group_name in configured_group_order:
+            continue
+        ordered_groups.append(
+            (
+                group_name,
+                sorted(
+                    member_names,
+                    key=lambda algorithm_name: _normalize_algorithm_name(
+                        algorithm_name
+                    ),
+                ),
+            )
+        )
+    return ordered_groups
+
+
+def _extract_task_axis_metadata(
+    series_by_algorithm: Dict[str, List[SeriesPoint]],
+) -> tuple[List[int], Dict[int, str]]:
+    """Collect task ordering and printable dataset names for x-axis labels."""
+    all_task_indices = set()
+    task_index_to_dataset_name: Dict[int, str] = {}
+    for series in series_by_algorithm.values():
+        for task_index, _, task_name in series:
+            all_task_indices.add(task_index)
+            if task_index in task_index_to_dataset_name:
+                continue
+            task_name_parts = task_name.split("-", 1)
+            if len(task_name_parts) == 2 and task_name_parts[1]:
+                original_task_number = task_name_parts[0].lstrip("t")
+                dataset_name = task_name_parts[1]
+            else:
+                original_task_number = "?"
+                dataset_name = task_name
+            dataset_name_lower = dataset_name.lower()
+            if "uclresm" in dataset_name_lower:
+                dataset_name = f"(RML-{original_task_number})"
+            elif "deeprad" in dataset_name_lower:
+                dataset_name = f"(DR-{original_task_number})"
+            elif "rcn" in dataset_name_lower:
+                dataset_name = f"(RCN-{original_task_number})"
+            task_index_to_dataset_name[task_index] = dataset_name
+    return sorted(all_task_indices), task_index_to_dataset_name
+
+
+def _style_axis(
+    axis: Any, sorted_task_indices: List[int], task_labels: Dict[int, str]
+) -> None:
+    """Apply shared axis formatting for publication-ready plots."""
+    axis.spines[["top", "right"]].set_visible(False)
+    axis.grid(True, linestyle=":", linewidth=0.5, alpha=0.5)
+    axis.axhline(0.0, color="black", linewidth=1.0, linestyle="--", alpha=0.7)
+    axis.set_xticks(sorted_task_indices)
+    axis.set_xticklabels(
+        [
+            f"{task_index}\n{task_labels.get(task_index, 'unknown')}"
+            for task_index in sorted_task_indices
+        ]
+    )
+
+
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments.
 
@@ -199,7 +319,8 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Path to save the figure. "
-            "Defaults to '<repo>/logs/00_sync/<experiment>/plots/<json_stem>_<metric>_plot.png'."
+            "Defaults to '<repo>/logs/00_sync/<experiment>/plots_grouped/"
+            "<Multi/Single>-Epoch_<TIL/CIL>_FWT.png'."
         ),
     )
     parser.add_argument(
@@ -245,6 +366,13 @@ def resolve_default_output_path(json_path: Path, metric_name: str) -> Path:
     Returns:
         Default destination path for the output plot.
     """
+    _ = metric_name  # Filename now follows a fixed naming convention.
+
+    experiment_path_text = str(json_path).lower()
+    epoch_mode = "Single" if "one-shot" in experiment_path_text else "Multi"
+    learning_setup = "CIL" if "cil" in experiment_path_text else "TIL"
+    default_filename = f"{epoch_mode}-Epoch_{learning_setup}_FWT.png"
+
     json_parts = json_path.parts
     if "logs" in json_parts:
         logs_index = json_parts.index("logs")
@@ -281,9 +409,9 @@ def resolve_default_output_path(json_path: Path, metric_name: str) -> Path:
                 else:
                     current_dir = current_dir / part
 
-            return current_dir / "plots" / f"{json_path.stem}_{metric_name}_plot.png"
+            return current_dir / "plots_grouped" / default_filename
 
-    return json_path.parent / "plots" / f"{json_path.stem}_{metric_name}_plot.png"
+    return json_path.parent / "plots_grouped" / default_filename
 
 
 def build_series_by_algo(
@@ -336,75 +464,138 @@ def plot_series(
     Usage:
         >>> plot_series({"algo": [(0, 0.1, "t0")]}, "metric", Path("out.png"))
     """
-    figure, axis = plt.subplots(figsize=plot_style["figsize"])
-
     sorted_algorithm_names = sorted(series_by_algorithm.keys(), key=group_sort_key)
-    base_label_colors = build_label_colors(sorted_algorithm_names)
-    label_colors = build_group_color_map(
-        sorted_algorithm_names,
-        fallback_colors=base_label_colors,
+    ordered_groups = _build_ordered_groups(sorted_algorithm_names)
+    sorted_task_indices, task_index_to_dataset_name = _extract_task_axis_metadata(
+        series_by_algorithm
     )
-    all_task_indices = set()
-    task_index_to_dataset_name: Dict[int, str] = {}
-    for algorithm_name in sorted_algorithm_names:
-        series = series_by_algorithm[algorithm_name]
-        x_positions = [point[0] for point in series]
-        y_values = [point[1] for point in series]
-        for task_index, _, task_name in series:
-            all_task_indices.add(task_index)
-            if task_index not in task_index_to_dataset_name:
-                task_name_parts = task_name.split("-", 1)
-                if len(task_name_parts) == 2 and task_name_parts[1]:
-                    original_task_number = task_name_parts[0].lstrip("t")
-                    dataset_name = task_name_parts[1]
-                else:
-                    original_task_number = "?"
-                    dataset_name = task_name
-                dataset_name_lower = dataset_name.lower()
-                if "uclresm" in dataset_name_lower:
-                    dataset_name = f"(RML-{original_task_number})"
-                elif "deeprad" in dataset_name_lower:
-                    dataset_name = f"(DR-{original_task_number})"
-                elif "rcn" in dataset_name_lower:
-                    dataset_name = f"(RCN-{original_task_number})"
-                task_index_to_dataset_name[task_index] = dataset_name
+    total_lines = sum(len(member_names) for _, member_names in ordered_groups)
+    maximum_group_size = max(
+        (len(member_names) for _, member_names in ordered_groups), default=0
+    )
+    use_small_multiples = (
+        total_lines > MAX_LINES_SINGLE_AXIS
+        or len(ordered_groups) > MAX_GROUPS_SINGLE_AXIS
+        or maximum_group_size > MAX_MEMBERS_PER_GROUP
+    )
 
-        axis.plot(
-            x_positions,
-            y_values,
-            marker=".",
-            linewidth=2.0,
-            alpha=0.8,
-            label=ALGORITHM_DISPLAY_NAMES.get(algorithm_name, algorithm_name),
-            color=label_colors.get(algorithm_name),
+    if use_small_multiples:
+        figure, axes = plt.subplots(
+            nrows=len(ordered_groups),
+            ncols=1,
+            sharex=True,
+            sharey=True,
+            figsize=(
+                IEEE_DOUBLE_COLUMN_FIGSIZE[0],
+                max(2.2 * len(ordered_groups), IEEE_DOUBLE_COLUMN_FIGSIZE[1]),
+            ),
+        )
+        if len(ordered_groups) == 1:
+            axes = [axes]
+        for group_index, (group_name, group_algorithms) in enumerate(ordered_groups):
+            axis = axes[group_index]
+            group_color = GROUP_COLORS[group_index % len(GROUP_COLORS)]
+            for member_index, algorithm_name in enumerate(
+                group_algorithms[:MAX_MEMBERS_PER_GROUP]
+            ):
+                series = series_by_algorithm[algorithm_name]
+                x_positions = [point[0] for point in series]
+                y_values = [point[1] for point in series]
+                axis.plot(
+                    x_positions,
+                    y_values,
+                    linewidth=LINEWIDTHS[member_index % len(LINEWIDTHS)],
+                    linestyle=LINESTYLES[member_index % len(LINESTYLES)],
+                    alpha=0.9,
+                    color=group_color,
+                    label=ALGORITHM_DISPLAY_NAMES.get(algorithm_name, algorithm_name),
+                )
+            _style_axis(axis, sorted_task_indices, task_index_to_dataset_name)
+            axis.set_ylabel("Forward Transfer")
+            axis.legend(
+                loc="upper right",
+                fontsize=8,
+                framealpha=0.9,
+                edgecolor="0.8",
+                borderpad=0.5,
+                labelspacing=0.3,
+                ncol=6,
+            )
+            axis.text(
+                0.01,
+                0.97,
+                group_name.replace("_", " ").title(),
+                transform=axis.transAxes,
+                va="top",
+                ha="left",
+                fontsize=8,
+            )
+        axes[-1].set_xlabel("Task")
+    else:
+        figure, axis = plt.subplots(figsize=plot_style["figsize"])
+        for group_index, (_, group_algorithms) in enumerate(ordered_groups):
+            group_color = GROUP_COLORS[group_index % len(GROUP_COLORS)]
+            for member_index, algorithm_name in enumerate(group_algorithms):
+                series = series_by_algorithm[algorithm_name]
+                x_positions = [point[0] for point in series]
+                y_values = [point[1] for point in series]
+                axis.plot(
+                    x_positions,
+                    y_values,
+                    linewidth=LINEWIDTHS[member_index % len(LINEWIDTHS)],
+                    linestyle=LINESTYLES[member_index % len(LINESTYLES)],
+                    alpha=0.9,
+                    color=group_color,
+                    label=ALGORITHM_DISPLAY_NAMES.get(algorithm_name, algorithm_name),
+                )
+        _style_axis(axis, sorted_task_indices, task_index_to_dataset_name)
+        axis.set_xlabel("Task")
+        axis.set_ylabel("Forward Transfer")
+        axis.legend(
+            loc="upper right",
+            fontsize=10,
+            edgecolor="0.8",
+            ncol=6,
+            columnspacing=0.5,
+            labelspacing=0.2,
+            framealpha=0.5,
+            borderaxespad=0.1,
+            borderpad=0.2,
         )
 
-    sorted_task_indices = sorted(all_task_indices)
-    axis.set_xticks(sorted_task_indices)
-    axis.set_xticklabels(
-        [
-            f"{task_index}\n{task_index_to_dataset_name.get(task_index, 'unknown')}"
-            for task_index in sorted_task_indices
-        ]
-    )
-    axis.axhline(0.0, color="black", linewidth=1.0, linestyle="--", alpha=0.7)
-    axis.set_xlabel("Task", fontsize=16)
-    axis.set_ylabel("Forward Transfer", fontsize=16)
-    # axis.set_title(title or f"{metric_name} by task and algorithm")
     y_limits = plot_style.get("ylim")
     if y_limits is not None:
-        axis.set_ylim(*y_limits)
-    axis.grid(True, linestyle="--", alpha=0.3)
-    axis.legend(**plot_style["legend_kwargs"])
+        if use_small_multiples:
+            for axis in axes:
+                axis.set_ylim(*y_limits)
+        else:
+            axis.set_ylim(*y_limits)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     figure.tight_layout(pad=0.1)
-    figure.savefig(output_path, dpi=600)
+    base_output_path = output_path.with_suffix("")
+    figure.savefig(base_output_path.with_suffix(".pdf"), dpi=600)
+    figure.savefig(base_output_path.with_suffix(".png"), dpi=600)
     plt.close(figure)
 
 
 def main() -> None:
     """Run the plotting pipeline."""
+    plt.rcParams.update(
+        {
+            "font.size": 9,
+            "axes.labelsize": 14,
+            "xtick.labelsize": 11,
+            "ytick.labelsize": 11,
+            "legend.fontsize": 10,
+            "axes.linewidth": 1,
+            # "lines.linewidth": 1.2,
+            "figure.dpi": 600,
+            "savefig.dpi": 600,
+            "savefig.bbox": "tight",
+            "savefig.pad_inches": 0.02,
+        }
+    )
     arguments = parse_args()
     if group_style_config is not None:
         group_style_config.ENABLE_GROUP_STYLING = True
@@ -426,7 +617,10 @@ def main() -> None:
         plot_style=selected_plot_style,
         title=arguments.title,
     )
-    print(f"Saved plot to: {output_path}")
+    print(
+        "Saved plot to: "
+        f"{output_path.with_suffix('.pdf')} and {output_path.with_suffix('.png')}"
+    )
 
 
 if __name__ == "__main__":
