@@ -30,6 +30,79 @@ from utils.training_metrics import (
 )
 
 
+def _load_model_from_results_checkpoint(
+    model: torch.nn.Module, results_checkpoint_path: str
+) -> None:
+    """Load model weights from a saved ``results.pt`` bundle.
+
+    Args:
+        model: Model instance to receive checkpoint weights.
+        results_checkpoint_path: Path to a ``results.pt`` file created by
+            ``main.py``/``save_results``.
+
+    Raises:
+        SystemExit: If the checkpoint path is invalid or the file structure is
+            not loadable as a model checkpoint.
+
+    Usage:
+        _load_model_from_results_checkpoint(model, "logs/.../results.pt")
+    """
+    checkpoint_path = Path(results_checkpoint_path).expanduser()
+    if not checkpoint_path.exists():
+        raise SystemExit("Resume checkpoint does not exist: {}".format(checkpoint_path))
+
+    try:
+        checkpoint_bundle = torch.load(
+            checkpoint_path, map_location="cpu", weights_only=False
+        )
+    except TypeError:
+        checkpoint_bundle = torch.load(checkpoint_path, map_location="cpu")
+
+    checkpoint_state_dict = None
+    if isinstance(checkpoint_bundle, (list, tuple)) and len(checkpoint_bundle) >= 3:
+        checkpoint_state_dict = checkpoint_bundle[2]
+    elif isinstance(checkpoint_bundle, dict):
+        checkpoint_state_dict = checkpoint_bundle.get("state_dict", checkpoint_bundle)
+
+    if not isinstance(checkpoint_state_dict, dict):
+        raise SystemExit(
+            "Unsupported checkpoint format at {}. Expected results.pt tuple with state_dict at index 2.".format(
+                checkpoint_path
+            )
+        )
+
+    model_state_dict = model.state_dict()
+    filtered_state_dict = {
+        key: value
+        for key, value in checkpoint_state_dict.items()
+        if key in model_state_dict
+    }
+    skipped_unexpected_keys = sorted(
+        set(checkpoint_state_dict) - set(filtered_state_dict)
+    )
+    incompatible = model.load_state_dict(filtered_state_dict, strict=False)
+
+    print(
+        "Loaded resume checkpoint: {} (matched keys: {} / {})".format(
+            checkpoint_path,
+            len(filtered_state_dict),
+            len(model_state_dict),
+        )
+    )
+    if skipped_unexpected_keys:
+        print(
+            "Skipped {} unexpected checkpoint key(s).".format(
+                len(skipped_unexpected_keys)
+            )
+        )
+    if incompatible.missing_keys:
+        print(
+            "Missing {} model key(s) in checkpoint.".format(
+                len(incompatible.missing_keys)
+            )
+        )
+
+
 def _default_main_config_chain() -> List[str]:
     """Return the default YAML config chain for single-round runs.
 
@@ -514,6 +587,16 @@ def main() -> None:
 
     base_args = file_parser.parse_args_from_yaml(config_chain or None)
     parser = file_parser.get_parser()
+    parser.add_argument(
+        "--resume-results-pt",
+        dest="resume_results_pt",
+        type=str,
+        default="",
+        help=(
+            "Path to a previous results.pt checkpoint. When provided, load model "
+            "weights from that checkpoint before continuing single-round training."
+        ),
+    )
     args = parser.parse_args(remaining, namespace=base_args)
 
     args.lr = misc_utils.scale_learning_rate_for_batch_size(args.lr, args.batch_size)
@@ -541,6 +624,12 @@ def main() -> None:
 
     Model = importlib.import_module("model." + args.model)
     model = Model.Net(n_inputs, n_outputs, n_tasks, args)
+    if getattr(args, "resume_results_pt", ""):
+        _load_model_from_results_checkpoint(model, args.resume_results_pt)
+        log_state(
+            args.state_logging,
+            "Resumed model weights from {}".format(args.resume_results_pt),
+        )
     if args.cuda:
         try:
             model.cuda()
