@@ -633,6 +633,10 @@ def write_best_params_to_yaml(
     Returns:
         The dictionary of values that were written to the YAML file.
 
+    Notes:
+        This function uses ``yaml.safe_dump`` and rewrites the full file. Existing
+        YAML comments and some formatting details are not preserved.
+
     Usage:
         applied = write_best_params_to_yaml(Path("configs/models/til/hat.yaml"), {"lr": 0.003})
     """
@@ -654,6 +658,14 @@ def write_best_params_to_yaml(
     with yaml_path.open("w", encoding="utf-8") as handle:
         yaml.safe_dump(payload, handle, sort_keys=False)
     return best_params
+
+
+def resolve_cli_config_path(config_path: str) -> Path:
+    """Resolve a CLI-provided config path using caller working-directory semantics."""
+    candidate = Path(config_path).expanduser()
+    if candidate.is_absolute():
+        return candidate.resolve()
+    return (Path.cwd() / candidate).resolve()
 
 
 def run_tuning(preset: TuningPreset) -> None:
@@ -914,19 +926,24 @@ def run_tuning(preset: TuningPreset) -> None:
     if best:
         updated_yaml_path: str | None = None
         updated_yaml_values: Dict[str, Any] | None = None
+        yaml_update_error: str | None = None
         if cli.config:
-            target_yaml = Path(cli.config[-1]).expanduser()
-            if not target_yaml.is_absolute():
-                target_yaml = (REPO_ROOT / target_yaml).resolve()
+            target_yaml = resolve_cli_config_path(cli.config[-1])
             values_to_write = dict(best.get("trial_params") or {})
             if values_to_write:
-                updated_yaml_values = write_best_params_to_yaml(
-                    target_yaml, values_to_write
-                )
-                updated_yaml_path = str(target_yaml)
-                summary["updated_yaml_path"] = updated_yaml_path
-                summary["updated_yaml_values"] = updated_yaml_values
-                dump_summary(session_dir, summary, successes)
+                try:
+                    updated_yaml_values = write_best_params_to_yaml(
+                        target_yaml, values_to_write
+                    )
+                except Exception as exc:  # pylint: disable=broad-except
+                    yaml_update_error = str(exc)
+                    summary["updated_yaml_error"] = yaml_update_error
+                    dump_summary(session_dir, summary, successes)
+                else:
+                    updated_yaml_path = str(target_yaml)
+                    summary["updated_yaml_path"] = updated_yaml_path
+                    summary["updated_yaml_values"] = updated_yaml_values
+                    dump_summary(session_dir, summary, successes)
 
         print(
             f"Best trial #{best['trial']} | score={best['score']:.4f} | params={best['trial_params']}"
@@ -934,6 +951,10 @@ def run_tuning(preset: TuningPreset) -> None:
         print(f"Logs stored in: {best['log_dir']}")
         if updated_yaml_path:
             print(f"Updated YAML config with best params: {updated_yaml_path}")
+        if yaml_update_error:
+            print(
+                f"[WARN] Could not write tuned params back to YAML: {yaml_update_error}"
+            )
     else:
         print("No successful trials were recorded.")
 
