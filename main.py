@@ -772,6 +772,15 @@ class _GlobalTilBatchNormStateManager:
             self._apply_state(*previous_state)
 
 
+def _should_use_global_til_bn_manager(args: object) -> bool:
+    """Return whether universal BN management should be active for a run."""
+    loader_name = str(getattr(args, "loader", "") or "")
+    if loader_name != "task_incremental_loader":
+        return False
+    model_name = str(getattr(args, "model", "") or "").lower()
+    return model_name not in {"hat", "packnet"}
+
+
 def _disable_model_specific_bn_task_state(model: object, args: object) -> None:
     """Disable per-model BN task-state logic when universal TIL BN is active.
 
@@ -779,7 +788,7 @@ def _disable_model_specific_bn_task_state(model: object, args: object) -> None:
         model: Instantiated continual model object.
         args: Experiment arguments with the loader mode.
     """
-    if str(getattr(args, "loader", "") or "") != "task_incremental_loader":
+    if not _should_use_global_til_bn_manager(args):
         return
 
     # If a model does not expose BN task-state hooks, no patching is needed.
@@ -1442,10 +1451,10 @@ def life_experience(model, inc_loader, args):
                     )
                 )
         finalize_fn = getattr(model, "finalize_task_after_training", None)
-        if bn_manager is not None:
-            bn_manager.on_task_end(current_task)
         if callable(finalize_fn):
             finalize_fn(train_loader)
+        if bn_manager is not None:
+            bn_manager.on_task_end(current_task)
         log_state(
             args.state_logging,
             "Task {}: running final validation.".format(current_task),
@@ -1937,8 +1946,11 @@ def main():
     # load model
     Model = importlib.import_module("model." + args.model)
     model = Model.Net(n_inputs, n_outputs, n_tasks, args)
-    _disable_model_specific_bn_task_state(model, args)
-    model._global_til_bn_manager = _GlobalTilBatchNormStateManager(model, args)  # type: ignore[attr-defined]
+    if _should_use_global_til_bn_manager(args):
+        _disable_model_specific_bn_task_state(model, args)
+        model._global_til_bn_manager = _GlobalTilBatchNormStateManager(model, args)  # type: ignore[attr-defined]
+    else:
+        model._global_til_bn_manager = None  # type: ignore[attr-defined]
     # print(model)
     if args.cuda:
         try:
