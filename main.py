@@ -34,6 +34,36 @@ def log_state(enabled, message):
     print("[STATE {}] {}".format(timestamp, message))
 
 
+TASK_SPECIFIC_EPOCH_BASELINE = 10
+TASK_SPECIFIC_EPOCH_SCHEDULE: dict[int, int] = {
+    0: 10,
+    1: 10,
+    2: 3,
+    3: 20,
+    4: 20,
+    5: 5,
+    6: 20,
+    7: 5,
+    8: 20,
+    9: 10,
+}
+
+
+def _task_epoch_schedule_for_base_epochs(base_n_epochs: int) -> dict[int, int]:
+    """Return the task-specific epoch schedule for matching baseline runs.
+
+    Args:
+        base_n_epochs: The globally configured number of epochs per task.
+
+    Returns:
+        The per-task schedule when the run uses the 10-epoch baseline, otherwise
+        an empty mapping so other experiment configurations remain unchanged.
+    """
+    if int(base_n_epochs) != TASK_SPECIFIC_EPOCH_BASELINE:
+        return {}
+    return dict(TASK_SPECIFIC_EPOCH_SCHEDULE)
+
+
 _OUTPUT_TEE_INITIALIZED = False
 _OUTPUT_TEE_LOG_FILE = None
 _OUTPUT_TEE_ORIGINAL_STDOUT = None
@@ -803,6 +833,9 @@ def life_experience(model, inc_loader, args):
 
     last_tr_cls_rec = last_tr_cls_prec = last_tr_cls_f1 = None
     last_tr_det = last_tr_fa = None
+    base_n_epochs = int(args.n_epochs)
+    task_epoch_schedule = _task_epoch_schedule_for_base_epochs(base_n_epochs)
+    args.task_epoch_schedule = task_epoch_schedule
 
     time_start = time.time()
     train_task_loaders = []
@@ -816,6 +849,11 @@ def life_experience(model, inc_loader, args):
         args.state_logging,
         "Life experience start: {} tasks queued".format(inc_loader.n_tasks),
     )
+    if task_epoch_schedule:
+        log_state(
+            args.state_logging,
+            "Using task-specific epoch schedule: {}".format(task_epoch_schedule),
+        )
 
     for task_i in range(inc_loader.n_tasks):
         result_epoch_loss = []
@@ -825,6 +863,8 @@ def life_experience(model, inc_loader, args):
         train_task_loaders.append(train_loader)
         test_task_loaders.append(test_loader)
         current_task = task_info["task"]
+        task_n_epochs = task_epoch_schedule.get(current_task, base_n_epochs)
+        args.n_epochs = task_n_epochs
         noise_label_for_task = _noise_label_for_metrics(args, train_loader)
 
         log_state(
@@ -878,7 +918,7 @@ def life_experience(model, inc_loader, args):
                 current_task, task_i + 1, inc_loader.n_tasks
             ),
         )
-        for ep in range(args.n_epochs):
+        for ep in range(task_n_epochs):
             model.real_epoch = ep
             epoch_losses = []
             epoch_train_accs = []
@@ -892,7 +932,7 @@ def life_experience(model, inc_loader, args):
             log_state(
                 args.state_logging,
                 "Task {} Epoch {}/{}: entering train loop".format(
-                    current_task, ep + 1, args.n_epochs
+                    current_task, ep + 1, task_n_epochs
                 ),
             )
 
@@ -1059,7 +1099,7 @@ def life_experience(model, inc_loader, args):
                     "T{}| Ep: {}/{}| Loss: {}| Rec: {}| Prec: {}| F1: {}| DetRec: {}| DetFA: {}".format(
                         task_info["task"],
                         ep + 1,
-                        args.n_epochs,
+                        task_n_epochs,
                         round(loss, 3),
                         round(cls_tr_rec, 2),
                         round(prec, 2),
@@ -1082,7 +1122,7 @@ def life_experience(model, inc_loader, args):
                 log_state(
                     args.state_logging,
                     "Task {} Epoch {}/{}: running validation (end of epoch)".format(
-                        current_task, ep + 1, args.n_epochs
+                        current_task, ep + 1, task_n_epochs
                     ),
                 )
                 val_acc = evaluator(model, test_task_loaders, args)
@@ -1234,7 +1274,7 @@ def life_experience(model, inc_loader, args):
                     "T{} Ep {}/{} | L {:.4f} | Train Acc {:.2f} | Prec {:.2f} | F1 {:.2f} | Det Rec {:.2f} | Det FA {:.2f} | Epoch Time {:.2f}s (Eval {:.2f}s, Train {:.2f}s)".format(
                         task_info["task"],
                         ep + 1,
-                        args.n_epochs,
+                        task_n_epochs,
                         avg_loss,
                         avg_cls_tr_rec,
                         avg_prec,
@@ -1251,7 +1291,7 @@ def life_experience(model, inc_loader, args):
                     "T{} Ep {}/{} complete: Prec {:.4f} F1 {:.4f} DetRec {:.4f} DetFA {:.4f} | {:.2f}s total ({:.2f}s eval/{:.2f}s train)".format(
                         current_task,
                         ep + 1,
-                        args.n_epochs,
+                        task_n_epochs,
                         avg_prec,
                         avg_f1,
                         avg_det_rec,
@@ -1270,7 +1310,7 @@ def life_experience(model, inc_loader, args):
                     "Task {} Epoch {}/{} | Avg Train Recall {:.5f} | Avg Eval-Mode Recall {:.5f}".format(
                         task_info["task"],
                         ep + 1,
-                        args.n_epochs,
+                        task_n_epochs,
                         avg_tr_recall,
                         avg_eval_recall,
                     )
@@ -1324,6 +1364,7 @@ def life_experience(model, inc_loader, args):
             "losses": losses,
             "cls_tr_rec": result_acc_tr,
             "val_acc": result_acc_val,
+            "n_epochs": np.int64(task_n_epochs),
             "zero_shot_rec_cls": np.float64(zero_shot_rec_cls),
             "zero_shot_prec_cls": np.float64(zero_shot_prec_cls),
             "zero_shot_f1_cls": np.float64(zero_shot_f1_cls),
@@ -1500,6 +1541,7 @@ def life_experience(model, inc_loader, args):
 
     time_end = time.time()
     time_spent = time_end - time_start
+    args.n_epochs = base_n_epochs
 
     def _pad_results(result_list: list[object], pad_value: float = 0.0) -> torch.Tensor:
         """Pad ragged per-task results into a dense 2D tensor.
