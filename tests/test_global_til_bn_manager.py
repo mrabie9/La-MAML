@@ -79,8 +79,8 @@ def test_global_til_bn_manager_disabled_for_non_til() -> None:
     assert not manager.enabled
 
 
-def test_disable_model_specific_bn_task_state_replaces_hooks() -> None:
-    """Universal mode should neutralize model-specific BN task-state hooks."""
+def test_disable_model_specific_bn_task_state_keeps_finalize_hook() -> None:
+    """Universal mode should neutralize BN hooks but preserve task finalization."""
 
     class _ModelWithHooks:
         def _reset_bn_stats(self):
@@ -98,8 +98,11 @@ def test_disable_model_specific_bn_task_state_replaces_hooks() -> None:
         def _capture_bn_state(self):
             raise RuntimeError("should not run")
 
+        def __init__(self) -> None:
+            self.finalize_called = False
+
         def finalize_task_after_training(self, train_loader=None):
-            raise RuntimeError(train_loader)
+            self.finalize_called = True
 
     model = _ModelWithHooks()
     _disable_model_specific_bn_task_state(model, _Args("task_incremental_loader"))
@@ -109,5 +112,6 @@ def test_disable_model_specific_bn_task_state_replaces_hooks() -> None:
     model._restore_bn_stats(0)
     model._apply_bn_state([], [])
     model.finalize_task_after_training(None)
+    assert model.finalize_called is True
     captured = model._capture_bn_state()
     assert captured == ([], [])

@@ -797,7 +797,6 @@ def _disable_model_specific_bn_task_state(model: object, args: object) -> None:
     setattr(model, "_snapshot_bn_stats", _noop)
     setattr(model, "_restore_bn_stats", _noop)
     setattr(model, "_apply_bn_state", _noop)
-    setattr(model, "finalize_task_after_training", _noop)
     setattr(model, "_capture_bn_state", _capture_noop)
 
 
