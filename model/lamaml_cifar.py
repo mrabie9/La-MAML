@@ -1,6 +1,5 @@
 import math
 import torch
-import torch.nn as nn
 from model.lamaml_base import *  # noqa: F403
 from model.detection_replay import (
     DetectionReplayMixin,
