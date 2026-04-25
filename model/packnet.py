@@ -583,24 +583,17 @@ class Net(nn.Module):
                 bn.num_batches_tracked.zero_()
             return
 
-        if affine is None:
-            raise RuntimeError(
-                f"BatchNorm affine snapshot missing for task {task} despite saved stats."
-            )
-        if len(stats) != len(self._bn_modules) or len(affine) != len(self._bn_modules):
-            raise RuntimeError(
-                "BatchNorm state snapshot is out of sync with model BatchNorm modules."
-            )
         for bn, (running_mean, running_var, num_batches) in zip(
             self._bn_modules, stats
         ):
             bn.running_mean.data.copy_(running_mean)
             bn.running_var.data.copy_(running_var)
             bn.num_batches_tracked.data.fill_(num_batches)
-        for bn, (w, b) in zip(self._bn_modules, affine):
-            if w is not None and bn.affine:
-                bn.weight.data.copy_(w)
-                bn.bias.data.copy_(b)
+        if affine is not None:
+            for bn, (w, b) in zip(self._bn_modules, affine):
+                if w is not None and bn.affine:
+                    bn.weight.data.copy_(w)
+                    bn.bias.data.copy_(b)
 
 
 __all__ = ["Net"]

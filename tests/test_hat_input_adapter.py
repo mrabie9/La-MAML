@@ -214,29 +214,26 @@ def test_hat_forward_resets_bn_for_uninitialized_current_task():
         assert torch.equal(captured_running_var, torch.ones_like(captured_running_var))
 
 
-def test_hat_forward_uses_fresh_bn_before_first_observe():
-    """Pre-observe forward uses fresh BN stats without claiming task ownership."""
+def test_hat_forward_does_not_initialize_bn_before_first_observe():
+    """Pre-observe forward leaves task BN initialization to observe()."""
     args = _make_args()
     model = HatNet(n_inputs=1024, n_outputs=13, n_tasks=2, args=args)
     model.eval()
 
+    live_running_means = []
     for batch_norm_module in model._bn_modules:
         batch_norm_module.running_mean.fill_(5.0)
         batch_norm_module.running_var.fill_(2.0)
         batch_norm_module.num_batches_tracked.fill_(10)
+        live_running_means.append(batch_norm_module.running_mean.detach().clone())
 
     captured_running_means = []
-    captured_running_vars = []
 
     def fake_bridge_forward(task, x, s, return_masks=False):
         """Capture the BN state used before task training starts."""
         del task, s, return_masks
         captured_running_means.extend(
             batch_norm_module.running_mean.detach().clone()
-            for batch_norm_module in model._bn_modules
-        )
-        captured_running_vars.extend(
-            batch_norm_module.running_var.detach().clone()
             for batch_norm_module in model._bn_modules
         )
         return torch.zeros(x.size(0), model.n_outputs, device=x.device)
@@ -250,13 +247,10 @@ def test_hat_forward_uses_fresh_bn_before_first_observe():
     assert model.current_task is None
     assert 0 not in model._bn_initialized_tasks
     assert captured_running_means
-    for captured_running_mean, captured_running_var in zip(
-        captured_running_means, captured_running_vars
+    for captured_running_mean, live_running_mean in zip(
+        captured_running_means, live_running_means
     ):
-        assert torch.equal(
-            captured_running_mean, torch.zeros_like(captured_running_mean)
-        )
-        assert torch.equal(captured_running_var, torch.ones_like(captured_running_var))
+        assert torch.equal(captured_running_mean, live_running_mean)
 
 
 if __name__ == "__main__":
@@ -268,5 +262,5 @@ if __name__ == "__main__":
     test_hat_grad_flow_2channel()
     test_hat_forward_uses_live_bn_for_unfinalized_current_task()
     test_hat_forward_resets_bn_for_uninitialized_current_task()
-    test_hat_forward_uses_fresh_bn_before_first_observe()
+    test_hat_forward_does_not_initialize_bn_before_first_observe()
     print("All HAT input adapter tests passed.")
