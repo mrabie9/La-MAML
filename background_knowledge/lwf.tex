@@ -1,0 +1,49 @@
+\subsubsection{Learning without Forgetting (LwF)}
+
+\gls{lwf} is a distillation-based \gls{cl} method that mitigates \gls{cf}
+without storing past-task samples. Instead of replay, it preserves previous
+knowledge by matching the current model's outputs on old classes to those of a
+frozen teacher model copied at task boundaries.
+
+\paragraph{Knowledge Preservation by Distillation}
+
+After completing task $t{-}1$, a snapshot $f_{\theta^*}$ of the model is frozen
+as a teacher. During training on task $t$, the student model $f_\theta$ is
+optimised with a standard supervised loss on current-task labels plus a
+temperature-scaled distillation term on previously seen classes:
+%
+\begin{equation}\label{eqn:lwf_loss}
+    \mathcal{L}_\text{LwF}
+    =
+    \mathcal{L}_\text{CE}^{(t)}
+    +
+    \lambda_\text{dist}
+    \,T^2\,
+    D_\text{KL}
+    \!\left(
+        \operatorname{softmax}\!\left(\frac{z_\text{teach}^{old}}{T}\right)
+        \,\Big\|\,
+        \operatorname{softmax}\!\left(\frac{z_\text{stud}^{old}}{T}\right)
+    \right)
+\end{equation}
+%
+where $z_\text{teach}^{old}$ and $z_\text{stud}^{old}$ are teacher and student
+logits restricted to old classes, $T$ is the distillation temperature, and
+$\lambda_\text{dist}$ controls the distillation strength.
+
+\paragraph{\gls{cl} Approach}
+
+In each optimisation step, \gls{lwf} performs two complementary objectives:
+(i) fit the incoming task labels, and (ii) preserve old-task decision behavior
+through logit matching to the frozen teacher. This transfers historical
+knowledge through function-space constraints rather than through explicit sample
+replay. The method therefore avoids replay memory overhead but depends on the
+teacher outputs providing sufficient signal about previous tasks.
+
+\paragraph{Inference}
+
+\gls{lwf} uses the current model directly at inference time; no teacher model is
+required. In \gls{til}, task identity is used to select the relevant logit
+slice. In \gls{cil}, prediction is made from the full logit vector across all
+seen classes.
+

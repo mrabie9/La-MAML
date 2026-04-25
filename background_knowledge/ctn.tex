@@ -1,0 +1,96 @@
+\subsubsection{Contextual Transformation Networks (CTN)}
+
+\gls{ctn} \cite{ctn_2021} is an online, bi-level \gls{cl} method comprising two
+components: a backbone network and a controller network. The backbone extracts
+feature representations from the input, while the controller applies a learned
+linear transformation to those features. This decoupled design enables
+task-specific feature modulation whilst sharing a common backbone, in contrast
+to methods such as \cite{ll_lwf_2017, ll_ewc_2017} that apply identical feature
+representations across all tasks. \gls{ctn} operates under the \gls{til}
+assumption, requiring task identity to be available at both training and
+inference time in order to select the appropriate per-task transformation
+parameters.
+
+The controller network is implemented as a \gls{mlp} that maps a task embedding
+vector to per-task \gls{film} parameters \cite{2018_FiLM},
+$\{\gamma_t, \beta_t\} \in \mathbb{R}^d$, where $d$ denotes the dimensionality
+of the backbone feature vector $\hat{h}(x) \in \mathbb{R}^d$. These parameters
+modulate $\hat{h}(x)$ element-wise as follows:
+%
+\begin{equation}\label{eqn:ctn_FiLM}
+    \tilde{h}(x;t) = \frac{\gamma_t}{\|\gamma_t\|_2} \odot \hat{h}(x)
+    + \frac{\beta_t}{\|\beta_t\|_2}
+\end{equation}
+%
+where $\odot$ denotes element-wise multiplication. The $\ell_2$ normalisation
+of $\gamma_t$ and $\beta_t$ constrains the scale of the transformation,
+stabilising training by preventing the controller outputs from growing
+unboundedly. The final task-conditioned feature vector is obtained via a
+residual connection:
+%
+\begin{equation}\label{eqn:ctn_final_features}
+    h(x;t) = \tilde{h}(x;t) + \hat{h}(x)
+\end{equation}
+
+The backbone parameters $\phi$ and controller parameters $\theta$ are optimised
+in a bi-level scheme: $\phi$ is updated using episodic memory-augmented training
+data, whilst $\theta$ is updated on a separate semantic memory stream. These two
+update steps are interleaved at each training iteration.
+
+\paragraph{\gls{cl} Approach}
+
+\gls{ctn} mitigates \gls{cf} through two complementary mechanisms: experience
+replay and feature-level regularisation.
+
+For experience replay, \gls{ctn} maintains two memory buffers: an episodic
+memory (\texttt{memx}, \texttt{memy}) and a semantic memory (\texttt{valx},
+\texttt{valy}). Each incoming minibatch is partitioned such that one sample is
+diverted to the semantic memory, whilst the remaining samples are used for
+backbone training and episodic replay. Backbone and controller updates are
+therefore driven by distinct but synchronised sample streams: $\phi$ is
+optimised using episodic memory-augmented training data, whilst $\theta$ is
+updated using samples drawn from the semantic memory. Because the controller
+trains on samples withheld from backbone updates, it encourages the backbone to
+produce features that generalise beyond the immediate training distribution.
+Both memories are bounded in capacity and partitioned evenly across tasks; once
+full, they operate as ring buffers in which incoming samples overwrite the
+oldest entries. This bounded capacity is consistent with the online \gls{cl}
+setting, in which the full training data stream is not retained.
+
+For output-distribution regularisation, \gls{ctn} stores replay exemplars from each
+task and, at task transitions, caches softened class-probability targets for those
+stored samples (rather than intermediate feature vectors). During subsequent tasks,
+training uses replay classification plus a distillation penalty that matches current
+and cached prior-task output distributions, in the spirit of \cite{ll_lwf_2017}. The
+inner-loop training objective is:
+%
+\begin{equation}
+\mathcal{L}^{tr}
+= \mathcal{L}_{\mathrm{CE}}\!\left(\hat{\mathbf{y}}, \mathbf{y}\right)
++ \mathcal{L}_{\mathrm{replay}}\!\left(\hat{\mathbf{y}}_{\mathrm{rep}}, \mathbf{y}_{\mathrm{rep}}\right)
++ \lambda \,
+D_{\mathrm{KL}}\!\left(
+\log \pi\!\left(\frac{\hat{\mathbf{y}}_{\mathrm{rep}}}{\tau}\right)
+\,\Big\|\,
+\pi\left(\dfrac{\hat{\mathbf{y}}^{\mathrm{old}}_{\mathrm{rep}}}{\tau}\right)
+\right),
+\end{equation}
+%
+where $\pi(\cdot)$ is softmax, $\hat{\mathbf{y}}_{\mathrm{rep}}$ are current logits on
+replayed samples, $\pi(\hat{\mathbf{y}}^{\,\mathrm{old}}_{\mathrm{rep}}/\tau)$ are cached softened targets
+computed from the previous-task model at transition time, $\tau>0$ is the temperature,
+and $\lambda$ controls distillation strength.
+Thus, \gls{kl} regularisation is applied in output space (task-local predictive
+distributions), indirectly constraining representation drift and mitigating forgetting.
+
+\paragraph{Task Embeddings}
+
+The controller must learn a distinct feature transformation for each task,
+requiring a task representation as input. A natural choice is a one-hot encoding
+of the task index; however, this is sparse and encodes no information about
+inter-task relationships. Instead, \gls{ctn} learns a dense task-embedding
+vector, updated via backpropagation alongside $\{\phi, \theta\}$, which serves
+as input to the controller when generating the \gls{film} parameters
+$\{\gamma_t, \beta_t\}$. This allows the task representation to become
+increasingly informative as training progresses, and in principle enables the
+controller to exploit task similarity when modulating backbone features.

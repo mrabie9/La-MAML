@@ -1,0 +1,54 @@
+\subsection{Riemannian Walk (RWalk)}
+\label{sssec:rwalk_background}
+
+\gls{rwalk} is a generalisation of \gls{ewc} and \gls{si}: it regularises updates using both local curvature information (Fisher) and trajectory-based importance scores from the optimisation path. This yields an importance-weighted parameter consolidation objective that is updated online during sequential training.
+
+\paragraph{Combined Importance Estimation}
+
+Treat each scalar parameter $\theta_i$ independently (the same update is applied element-wise to tensors). During a task, \gls{rwalk} maintains running statistics $\tilde F_i$ (Fisher) and $\tilde S_i$ (path). Let $g_i=\partial\mathcal{L}/\partial\theta_i$ be the gradient from the minibatch loss used for the current step, $\Delta\theta_i$ be the actual parameter change applied immediately afterwards by the optimiser, and $\alpha\in(0,1)$ and $\varepsilon>0$ govern smoothing and numerical stability.
+
+For curvature, \gls{rwalk} uses an online diagonal Fisher exponential moving average rather than task-end averaging:
+%
+\begin{equation}\label{eqn:rwalk_fisher_ema}
+    \tilde F_i \leftarrow \alpha\, g_i^2 + (1-\alpha)\,\tilde F_i,
+    \qquad
+    \alpha\in(0,1).
+\end{equation}
+%
+This uses the same diagonal empirical Fisher ingredient $g_i^2$ while exponentially discounting older minibatches, and it couples directly to the Fisher-weighted normaliser in the path update below. By contrast, \gls{ewc} typically consolidates Fisher importance using task-wise averages at task boundaries.
+
+The path statistic accumulates a \emph{loss-change to Riemannian step-size} ratio. Using the first-order loss-change proxy $-g_i\,\Delta\theta_i$ (the per-coordinate analogue of the synaptic contribution in \gls{si}) and a Fisher-weighted squared step $\tfrac{1}{2}\tilde F_i(\Delta\theta_i)^2$, each optimisation step contributes
+%
+\begin{equation}\label{eqn:rwalk_path_update}
+    \tilde S_i \leftarrow
+    \tilde S_i +
+    \frac{-g_i\,\Delta\theta_i}{\tfrac{1}{2}\tilde F_i(\Delta\theta_i)^2+\varepsilon}
+    \, .
+\end{equation}
+%
+Large contributions arise when $-g_i\,\Delta\theta_i$ is large relative to the Fisher-weighted step size, i.e.\ when the update is disproportionately effective at reducing loss compared with its local Riemannian magnitude.
+
+At a task boundary, running values are turned into consolidation weights: the Fisher term is taken as $F_i\leftarrow \tilde F_i$, and the path term is rescaled by a factor $\tfrac{1}{2}$, $S_i\leftarrow \tfrac{1}{2}\tilde S_i$, matching the usual pairing between the $\tfrac{1}{2}$ in the Fisher quadratic form and the discrete path integral. The effective quadratic importance used in~\eqref{eqn:rwalk_loss} is the sum
+%
+\begin{equation}\label{eqn:rwalk_importance}
+    I_i = F_i + S_i
+\end{equation}
+
+\paragraph{\gls{cl} Approach}
+
+At task $t$, \gls{rwalk} minimises current-task cross-entropy together with a quadratic penalty around the previous consolidated parameters $\theta_i^*$:
+%
+\begin{equation}\label{eqn:rwalk_loss}
+    \mathcal{L}_\text{RWalk}
+    =
+    \mathcal{L}_\text{CE}
+    +
+    \lambda
+    \sum_i (F_i + S_i)\,(\theta_i-\theta_i^*)^2
+\end{equation}
+%
+where $\lambda$ controls the stability--plasticity trade-off. Relative to pure Fisher regularisation, the additional path term captures how parameter updates affected optimisation dynamics over the task trajectory, which can improve importance estimates when curvature alone is insufficient.
+
+\paragraph{Inference}
+
+\gls{rwalk} uses the current model directly at inference time. In \gls{til}, task identity is used to select the active task logit slice. In \gls{cil}, prediction is taken from the full logit vector across all seen classes.

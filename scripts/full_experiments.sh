@@ -62,7 +62,7 @@ done
 INCLUDED_LNX_ELKK_1="ewc er_ring eralg4 gem cmaml bcl_dual agem icarl"
 INCLUDED_LNX_ELKK_2="lwf rwalk si ucl la-er lamaml smaml iid2 hat packnet ctn"
 INCLUDED_ALL="$INCLUDED_LNX_ELKK_1 $INCLUDED_LNX_ELKK_2"
-INCLUDED_ALL="icarl lwf rwalk si ucl la-er lamaml smaml iid2"
+INCLUDED_ALL="ucl"
 
 # CONCURRENCY_OPTION:
 #   0 = run everything serially

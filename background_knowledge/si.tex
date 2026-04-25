@@ -1,0 +1,57 @@
+\subsubsection{Synaptic Intelligence (SI)}
+
+\gls{si} is a regularisation-based \gls{cl} method that estimates parameter
+importance online from the optimisation trajectory. Rather than computing a
+post-hoc curvature estimate, \gls{si} accumulates a path integral that measures
+how much each parameter contributed to reducing loss during a task.
+
+\paragraph{Path-Integral Importance}
+
+During training on task $t$, \gls{si} tracks a contribution accumulator
+$W_i^{(t)}$ for each parameter $\theta_i$:
+%
+\begin{equation}\label{eqn:si_path}
+    W_i^{(t)}
+    \leftarrow
+    W_i^{(t)} - g_i \,\Delta\theta_i
+\end{equation}
+%
+where $g_i$ is the gradient and $\Delta\theta_i$ is the parameter change at the
+step. At the task boundary, this path integral is normalised by the total
+parameter displacement to obtain importance:
+%
+\begin{equation}\label{eqn:si_omega}
+    \Omega_i
+    \leftarrow
+    \Omega_i
+    +
+    \frac{W_i^{(t)}}{(\theta_i-\theta_i^*)^2+\epsilon}
+\end{equation}
+%
+where $\theta_i^*$ is the parameter value stored at the previous
+consolidation point and $\epsilon$ stabilises the denominator.
+
+\paragraph{\gls{cl} Approach}
+
+When learning subsequent tasks, \gls{si} augments current-task cross-entropy
+with a quadratic consolidation penalty:
+%
+\begin{equation}\label{eqn:si_loss}
+    \mathcal{L}_\text{SI}
+    =
+    \mathcal{L}_\text{CE}
+    +
+    c
+    \sum_i \Omega_i(\theta_i-\theta_i^*)^2
+\end{equation}
+%
+where $c$ controls regularisation strength. Parameters with high accumulated
+importance are constrained to remain near prior consolidated values, while
+low-importance parameters remain adaptable for new tasks.
+
+\paragraph{Inference}
+
+\gls{si} uses a standard linear classifier at inference time. In \gls{til}, task
+identity selects the corresponding task logit range. In \gls{cil}, prediction
+is made from the full logit vector across all seen classes.
+
