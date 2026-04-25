@@ -512,15 +512,27 @@ class ResNet1D(nn.Module):
 
     # ------------------------------------------------------------------
     def _build_norm_factory(self, args):
-        # use_groupnorm = getattr(args, "model", "") == "packnet"
-        # if use_groupnorm:
-        #     target_groups = getattr(args, "groupnorm_groups", 16)
+        if args is None:
+            return lambda channels: nn.BatchNorm1d(channels)
 
-        #     def gn_factory(channels: int):
-        #         groups = max(1, math.gcd(channels, target_groups))
-        #         return nn.GroupNorm(groups, channels)
+        use_groupnorm = bool(getattr(args, "use_groupnorm", False))
+        norm_type = str(getattr(args, "norm_type", "batchnorm")).lower()
+        if norm_type in {"groupnorm", "group_norm", "gn"}:
+            use_groupnorm = True
 
-        #     return gn_factory
+        if use_groupnorm:
+            min_channels_per_group = max(
+                1, int(getattr(args, "groupnorm_min_channels", 64))
+            )
+
+            def gn_factory(channels: int):
+                groups = max(1, channels // min_channels_per_group)
+                while groups > 1 and channels % groups != 0:
+                    groups -= 1
+                return nn.GroupNorm(groups, channels)
+
+            return gn_factory
+
         return lambda c: nn.BatchNorm1d(c)
 
 
