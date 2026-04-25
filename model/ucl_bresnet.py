@@ -679,6 +679,10 @@ class Net(nn.Module):
             stats: Running-stat snapshots from :meth:`_capture_bn_state`.
             affine: Affine parameter snapshots from :meth:`_capture_bn_state`.
         """
+        if len(stats) != len(self._bn_modules) or len(affine) != len(self._bn_modules):
+            raise RuntimeError(
+                "BatchNorm state snapshot is out of sync with model BatchNorm modules."
+            )
         for batch_norm_module, (running_mean, running_var, num_batches) in zip(
             self._bn_modules, stats
         ):
@@ -703,7 +707,11 @@ class Net(nn.Module):
         if stats is None:
             self._reset_bn_stats()
             return
-        self._apply_bn_state(stats, affine if affine is not None else [])
+        if affine is None:
+            raise RuntimeError(
+                f"BatchNorm affine snapshot missing for task {task} despite saved stats."
+            )
+        self._apply_bn_state(stats, affine)
 
     def finalize_task_after_training(
         self,
