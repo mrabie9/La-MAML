@@ -14,6 +14,7 @@ Typical usage:
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, Sequence
@@ -24,6 +25,8 @@ import numpy as np
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 PlotStyle = Dict[str, Any]
+LINESTYLES = ["-", "--", ":", "-.", (0, (5, 1))]
+LINEWIDTHS = [2.4, 1.8, 1.8, 1.5, 1.5]
 
 # Manual plot controls (set values to ``None`` to keep auto behavior).
 # Keys: train, final_validation, mean_val, average_forgetting
@@ -46,7 +49,7 @@ PANEL_LEGEND_NCOL_OVERRIDES: Dict[str, int | None] = {
 # Global x-axis label spacing (distance from axis to xlabel text).
 X_LABEL_PAD: float = 4.0
 # Global tick-label font size (applies to both x and y axes).
-TICK_LABEL_FONT_SIZE: float = 11.0
+TICK_LABEL_FONT_SIZE: float = 12.0
 # Optional legend placement: move legends above line plots for consistent axes.
 LEGEND_ABOVE_PLOT: bool = True
 # Vertical offset used when LEGEND_ABOVE_PLOT=True.
@@ -236,12 +239,72 @@ def _set_task_axis_like_fwt(
 
 
 def _save_independent_figure(fig: plt.Figure, output_path: Path, dpi: int) -> None:
-    """Save one independent panel figure with tight cropping."""
+    """Save one independent panel figure as both PDF and PNG."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
-    fig.savefig(output_path, dpi=dpi, bbox_inches="tight", pad_inches=0.03)
-    print(f"Saved subplot to {output_path}")
+    base_output_path = output_path.with_suffix("")
+    pdf_output_path = base_output_path.with_suffix(".pdf")
+    png_output_path = base_output_path.with_suffix(".png")
+    fig.savefig(pdf_output_path, dpi=dpi, bbox_inches="tight", pad_inches=0.03)
+    fig.savefig(png_output_path, dpi=dpi, bbox_inches="tight", pad_inches=0.03)
+    print(f"Saved subplot to {pdf_output_path} and {png_output_path}")
     plt.close(fig)
+
+
+def _build_experiment_prefix(run_source_dir: Path, runs: Sequence[Any]) -> str:
+    """Build '<Multi/Single>-Epoch_<TIL/CIL>' prefix from run context."""
+    experiment_path_parts = [str(run_source_dir)] + [
+        str(run.metrics_dir) for run in runs
+    ]
+    experiment_path_text = " ".join(experiment_path_parts).lower()
+    epoch_mode = "Single" if "one-shot" in experiment_path_text else "Multi"
+
+    def has_mode_token(text: str, mode: str) -> bool:
+        return bool(re.search(rf"(^|[-_/]){mode}($|[-_/])", text.lower()))
+
+    # Prefer explicit mode from the user-provided run root.
+    run_root_text = str(run_source_dir).lower()
+    if has_mode_token(run_root_text, "til"):
+        learning_setup = "TIL"
+    elif has_mode_token(run_root_text, "cil"):
+        learning_setup = "CIL"
+    else:
+        # Fallback: infer from discovered metrics directories.
+        metrics_paths_text = " ".join(str(run.metrics_dir).lower() for run in runs)
+        if has_mode_token(metrics_paths_text, "til"):
+            learning_setup = "TIL"
+        elif has_mode_token(metrics_paths_text, "cil"):
+            learning_setup = "CIL"
+        else:
+            learning_setup = "TIL"
+    return f"{epoch_mode}-Epoch_{learning_setup}"
+
+
+def _line_style_for_index(index: int) -> Dict[str, Any]:
+    """Return line width/style settings aligned with plot_fwt_metrics.py."""
+    return {
+        "linestyle": LINESTYLES[index % len(LINESTYLES)],
+        "linewidth": LINEWIDTHS[index % len(LINEWIDTHS)],
+        "alpha": 0.9,
+    }
+
+
+def _build_group_color_lookup_for_runs(
+    run_names: Sequence[str],
+    group_colors: Sequence[str],
+) -> Dict[str, str]:
+    """Build run->color mapping using FWT group ordering/color rules."""
+    from scripts.plot_fwt_metrics import _build_ordered_groups
+    from scripts.plot_algorithm_group_styles import group_sort_key
+
+    sorted_run_names = sorted(run_names, key=group_sort_key)
+    ordered_groups = _build_ordered_groups(sorted_run_names)
+    run_to_color: Dict[str, str] = {}
+    for group_index, (_, member_names) in enumerate(ordered_groups):
+        group_color = group_colors[group_index % len(group_colors)]
+        for member_name in member_names:
+            run_to_color[member_name] = group_color
+    return run_to_color
 
 
 def main() -> None:
@@ -263,13 +326,25 @@ def main() -> None:
     )
     from scripts.plot_fwt_metrics import (
         ALGORITHM_DISPLAY_NAMES,
-        build_label_colors as build_fwt_label_colors,
+        GROUP_COLORS as fwt_group_colors,
     )
-    from scripts.plot_algorithm_group_styles import (
-        build_group_color_map,
-        group_sort_key,
-    )
+    from scripts.plot_algorithm_group_styles import group_sort_key
     from scripts.plot_style_overrides import resolve_legend_kwargs
+
+    plt.rcParams.update(
+        {
+            "font.size": 9,
+            "axes.labelsize": 14,
+            "xtick.labelsize": 11,
+            "ytick.labelsize": 11,
+            "legend.fontsize": 10,
+            "axes.linewidth": 1,
+            "figure.dpi": 600,
+            "savefig.dpi": 600,
+            "savefig.bbox": "tight",
+            "savefig.pad_inches": 0.02,
+        }
+    )
 
     args = parse_args()
     output_dir: Path = args.output_dir
@@ -333,7 +408,6 @@ def main() -> None:
     dpi = 550
     figure_size = tuple(map(float, plot_style.get("figsize", (7.0, 3.5))))
     first_key, first_label = _resolve_val_metric_for_run(args.val_metric, runs[0])
-    metric_suffix = "total_f1" if first_key == "val_f1" else "cls_recall"
 
     # Legend labels/colors for algorithm lines.
     if label_list is not None:
@@ -351,13 +425,13 @@ def main() -> None:
             "per-algorithm colors from plot_fwt_metrics.py."
         )
 
-    base_algorithm_colors = build_fwt_label_colors([run.name for run in runs])
-    algorithm_colors = build_group_color_map(
+    algorithm_colors = _build_group_color_lookup_for_runs(
         [run.name for run in runs],
-        fallback_colors=base_algorithm_colors,
+        fwt_group_colors,
     )
     task_index_to_dataset_name = _build_task_index_to_dataset_name(runs)
     style_key = _case_insensitive_detect_style_key(runs)
+    experiment_prefix = _build_experiment_prefix(run_source_dir, runs)
 
     # Figure 1: train recall vs step.
     fig_train, axis_train = plt.subplots(figsize=figure_size, dpi=dpi)
@@ -378,10 +452,9 @@ def main() -> None:
         axis_train.plot(
             x_values,
             train_series,
-            ".-",
             label=run_label,
             color=algorithm_colors.get(run.name, f"C{run_idx % 10}"),
-            alpha=0.9,
+            **_line_style_for_index(run_idx),
         )
     axis_train.set_ylabel(train_metric_label, fontsize=16)
     axis_train.set_xlabel(
@@ -392,7 +465,7 @@ def main() -> None:
     axis_train.tick_params(axis="both", labelsize=TICK_LABEL_FONT_SIZE)
     axis_train.grid(True, alpha=0.3)
     handles_train, labels_train = axis_train.get_legend_handles_labels()
-    if handles_train and labels_train and legend_kwargs:
+    if handles_train and labels_train:
         export_legend_kwargs = _build_export_legend_kwargs(
             resolve_legend_kwargs(
                 style_key=style_key,
@@ -408,8 +481,7 @@ def main() -> None:
         axis_train.set_ylim(*manual_ylim_train)
     _save_independent_figure(
         fig_train,
-        output_dir
-        / f"train_{args.train_metric}_vs_{_resolve_train_x_axis_label(args.train_metric).lower()}_r1_c1.png",
+        output_dir / f"{experiment_prefix}_TR-F1",
         dpi,
     )
 
@@ -476,7 +548,7 @@ def main() -> None:
     if manual_ylim_final is not None:
         axis_final.set_ylim(*manual_ylim_final)
     _save_independent_figure(
-        fig_final, output_dir / "final_validation_metrics_r1_c2.png", dpi
+        fig_final, output_dir / f"{experiment_prefix}_Final-VAL", dpi
     )
 
     # Figure 3: mean validation metric over tasks (one line per run).
@@ -490,10 +562,9 @@ def main() -> None:
         axis_mean.plot(
             x_vals,
             y_vals,
-            ".-",
             label=run_labels[run_idx],
             color=algorithm_colors.get(run.name, f"C{run_idx % 10}"),
-            alpha=0.9,
+            **_line_style_for_index(run_idx),
         )
     axis_mean.set_xlabel("Task", fontsize=16, labelpad=X_LABEL_PAD)
     axis_mean.set_ylabel("F1 Score", fontsize=16)
@@ -505,7 +576,7 @@ def main() -> None:
     axis_mean.tick_params(axis="both", labelsize=TICK_LABEL_FONT_SIZE)
     axis_mean.grid(True, alpha=0.3)
     handles_mean, labels_mean = axis_mean.get_legend_handles_labels()
-    if handles_mean and labels_mean and legend_kwargs:
+    if handles_mean and labels_mean:
         export_legend_kwargs = _build_export_legend_kwargs(
             resolve_legend_kwargs(
                 style_key=style_key,
@@ -521,7 +592,7 @@ def main() -> None:
         axis_mean.set_ylim(*manual_ylim_mean)
     _save_independent_figure(
         fig_mean,
-        output_dir / f"mean_val_{metric_suffix}_over_tasks_r1_c3.png",
+        output_dir / f"{experiment_prefix}_CL-F1",
         dpi,
     )
 
@@ -541,10 +612,9 @@ def main() -> None:
         axis_forgetting.plot(
             shifted_x_values,
             backward_transfer_values,
-            ".-",
             label=run_labels[run_idx],
             color=algorithm_colors.get(run.name, f"C{run_idx % 10}"),
-            alpha=0.9,
+            **_line_style_for_index(run_idx),
         )
     axis_forgetting.set_xlabel("Task", fontsize=16, labelpad=X_LABEL_PAD)
     axis_forgetting.set_ylabel("Backward Transfer", fontsize=16)
@@ -561,7 +631,7 @@ def main() -> None:
     elif plot_style.get("ylim") is not None:
         axis_forgetting.set_ylim(*plot_style["ylim"])
     handles_forgetting, labels_forgetting = axis_forgetting.get_legend_handles_labels()
-    if handles_forgetting and labels_forgetting and legend_kwargs:
+    if handles_forgetting and labels_forgetting:
         export_legend_kwargs = _build_export_legend_kwargs(
             resolve_legend_kwargs(
                 style_key=style_key,
@@ -576,7 +646,7 @@ def main() -> None:
         )
     _save_independent_figure(
         fig_forgetting,
-        output_dir / f"backward_transfer_{metric_suffix}_r1_c4.png",
+        output_dir / f"{experiment_prefix}_BWT",
         dpi,
     )
 
