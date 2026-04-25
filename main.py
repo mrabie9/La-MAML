@@ -7,14 +7,16 @@ import atexit
 import time
 import os
 import sys
+from contextlib import contextmanager
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Dict, Tuple
 
 from tqdm import tqdm
 
 import numpy as np
 import torch
 from torch.autograd import Variable
+from torch.nn.modules.batchnorm import _BatchNorm
 
 import parser as file_parser
 from metrics.metrics import confusion_matrix
@@ -615,26 +617,188 @@ def _model_forward_for_metric_loop(
     Returns:
         Classifier logits tensor.
     """
-    forward_kw: dict = {}
-    if getattr(args, "loader", "") == "class_incremental_loader":
-        forward_kw["cil_all_seen_upto_task"] = task_index
-    if getattr(args, "model", "") == "anml":
-        return model(x, fast_weights=None)  # type: ignore[operator]
-    if getattr(args, "model", "") == "icarl":
-        raw_logits = model.netforward(x)  # type: ignore[attr-defined]
-        return misc_utils.apply_task_incremental_logit_mask(
-            raw_logits,
-            task_index,
-            model.classes_per_task,  # type: ignore[attr-defined]
-            model.n_classes,  # type: ignore[attr-defined]
-            cil_all_seen_upto_task=task_index,
-            global_noise_label=getattr(model, "noise_label", None),
-            loader=getattr(args, "loader", None),
+
+    def _run_forward() -> torch.Tensor:
+        forward_kw: dict = {}
+        if getattr(args, "loader", "") == "class_incremental_loader":
+            forward_kw["cil_all_seen_upto_task"] = task_index
+        if getattr(args, "model", "") == "anml":
+            return model(x, fast_weights=None)  # type: ignore[operator]
+        if getattr(args, "model", "") == "icarl":
+            raw_logits = model.netforward(x)  # type: ignore[attr-defined]
+            return misc_utils.apply_task_incremental_logit_mask(
+                raw_logits,
+                task_index,
+                model.classes_per_task,  # type: ignore[attr-defined]
+                model.n_classes,  # type: ignore[attr-defined]
+                cil_all_seen_upto_task=task_index,
+                global_noise_label=getattr(model, "noise_label", None),
+                loader=getattr(args, "loader", None),
+            )
+        try:
+            return model(x, task_index, **forward_kw)  # type: ignore[operator]
+        except TypeError:
+            return model(x, task_index)  # type: ignore[operator]
+
+    bn_manager = getattr(model, "_global_til_bn_manager", None)
+    if bn_manager is not None:
+        with bn_manager.eval_task(task_index):
+            return _run_forward()
+    return _run_forward()
+
+
+class _GlobalTilBatchNormStateManager:
+    """Fallback task-specific BatchNorm state manager for TIL runs.
+
+    This applies only to models that do not already implement their own
+    BatchNorm task-state logic (e.g. via ``_restore_bn_stats``).
+    """
+
+    def __init__(self, model: torch.nn.Module, args: object) -> None:
+        loader_name = str(getattr(args, "loader", "") or "")
+        self.enabled = loader_name == "task_incremental_loader"
+        self._bn_modules: List[_BatchNorm] = []
+        if self.enabled:
+            self._bn_modules = [
+                module for module in model.modules() if isinstance(module, _BatchNorm)
+            ]
+            self.enabled = bool(self._bn_modules)
+        self._stats_by_task: Dict[int, List[Tuple[torch.Tensor, torch.Tensor, int]]] = (
+            {}
         )
-    try:
-        return model(x, task_index, **forward_kw)  # type: ignore[operator]
-    except TypeError:
-        return model(x, task_index)  # type: ignore[operator]
+        self._affine_by_task: Dict[
+            int, List[Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]]
+        ] = {}
+        self._active_training_task: Optional[int] = None
+
+    def _capture_state(
+        self,
+    ) -> Tuple[
+        List[Tuple[torch.Tensor, torch.Tensor, int]],
+        List[Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]],
+    ]:
+        stats: List[Tuple[torch.Tensor, torch.Tensor, int]] = []
+        affine: List[Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]] = []
+        for batch_norm_module in self._bn_modules:
+            stats.append(
+                (
+                    batch_norm_module.running_mean.detach().clone(),
+                    batch_norm_module.running_var.detach().clone(),
+                    int(batch_norm_module.num_batches_tracked.item()),
+                )
+            )
+            if batch_norm_module.affine:
+                affine.append(
+                    (
+                        batch_norm_module.weight.detach().clone(),
+                        batch_norm_module.bias.detach().clone(),
+                    )
+                )
+            else:
+                affine.append((None, None))
+        return stats, affine
+
+    def _apply_state(
+        self,
+        stats: List[Tuple[torch.Tensor, torch.Tensor, int]],
+        affine: List[Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]],
+    ) -> None:
+        if len(stats) != len(self._bn_modules) or len(affine) != len(self._bn_modules):
+            raise RuntimeError(
+                "BatchNorm state snapshot is out of sync with model BatchNorm modules."
+            )
+        for batch_norm_module, (running_mean, running_var, num_batches) in zip(
+            self._bn_modules, stats
+        ):
+            batch_norm_module.running_mean.data.copy_(running_mean)
+            batch_norm_module.running_var.data.copy_(running_var)
+            batch_norm_module.num_batches_tracked.data.fill_(num_batches)
+        for batch_norm_module, (weight, bias) in zip(self._bn_modules, affine):
+            if weight is not None and batch_norm_module.affine:
+                batch_norm_module.weight.data.copy_(weight)
+                batch_norm_module.bias.data.copy_(bias)
+
+    def _reset_state(self) -> None:
+        for batch_norm_module in self._bn_modules:
+            batch_norm_module.running_mean.zero_()
+            batch_norm_module.running_var.fill_(1.0)
+            batch_norm_module.num_batches_tracked.zero_()
+
+    def _snapshot_task(self, task: int) -> None:
+        stats, affine = self._capture_state()
+        self._stats_by_task[task] = stats
+        self._affine_by_task[task] = affine
+
+    def _restore_task(self, task: int) -> None:
+        stats = self._stats_by_task.get(task)
+        affine = self._affine_by_task.get(task)
+        if stats is None:
+            self._reset_state()
+            return
+        if affine is None:
+            raise RuntimeError(
+                f"BatchNorm affine snapshot missing for task {task} despite saved stats."
+            )
+        self._apply_state(stats, affine)
+
+    def on_task_start(self, task: int) -> None:
+        if not self.enabled:
+            return
+        if (
+            self._active_training_task is not None
+            and self._active_training_task != task
+        ):
+            self._snapshot_task(self._active_training_task)
+        self._active_training_task = task
+        self._restore_task(task)
+
+    def on_task_end(self, task: int) -> None:
+        if not self.enabled:
+            return
+        self._snapshot_task(task)
+        self._active_training_task = task
+
+    @contextmanager
+    def eval_task(self, task: int):
+        """Temporarily activate task-specific BN state for one eval forward."""
+        if not self.enabled:
+            yield
+            return
+        previous_state = self._capture_state()
+        self._restore_task(task)
+        try:
+            yield
+        finally:
+            self._apply_state(*previous_state)
+
+
+def _disable_model_specific_bn_task_state(model: object, args: object) -> None:
+    """Disable per-model BN task-state logic when universal TIL BN is active.
+
+    Args:
+        model: Instantiated continual model object.
+        args: Experiment arguments with the loader mode.
+    """
+    if str(getattr(args, "loader", "") or "") != "task_incremental_loader":
+        return
+
+    # If a model does not expose BN task-state hooks, no patching is needed.
+    if not callable(getattr(model, "_restore_bn_stats", None)):
+        return
+
+    def _noop(*_args, **_kwargs):
+        return None
+
+    def _capture_noop(*_args, **_kwargs):
+        return [], []
+
+    # Keep method signatures compatible while turning model-specific logic into no-ops.
+    setattr(model, "_reset_bn_stats", _noop)
+    setattr(model, "_snapshot_bn_stats", _noop)
+    setattr(model, "_restore_bn_stats", _noop)
+    setattr(model, "_apply_bn_state", _noop)
+    setattr(model, "finalize_task_after_training", _noop)
+    setattr(model, "_capture_bn_state", _capture_noop)
 
 
 def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
@@ -810,6 +974,7 @@ def life_experience(model, inc_loader, args):
     evaluator = eval_tasks
     if args.loader == "class_incremental_loader":
         evaluator = eval_class_tasks
+    bn_manager = getattr(model, "_global_til_bn_manager", None)
 
     interactive_terminal = sys.stdout.isatty()
     log_state(
@@ -825,6 +990,8 @@ def life_experience(model, inc_loader, args):
         train_task_loaders.append(train_loader)
         test_task_loaders.append(test_loader)
         current_task = task_info["task"]
+        if bn_manager is not None:
+            bn_manager.on_task_start(current_task)
         noise_label_for_task = _noise_label_for_metrics(args, train_loader)
 
         log_state(
@@ -1276,6 +1443,8 @@ def life_experience(model, inc_loader, args):
                     )
                 )
         finalize_fn = getattr(model, "finalize_task_after_training", None)
+        if bn_manager is not None:
+            bn_manager.on_task_end(current_task)
         if callable(finalize_fn):
             finalize_fn(train_loader)
         log_state(
@@ -1769,6 +1938,8 @@ def main():
     # load model
     Model = importlib.import_module("model." + args.model)
     model = Model.Net(n_inputs, n_outputs, n_tasks, args)
+    _disable_model_specific_bn_task_state(model, args)
+    model._global_til_bn_manager = _GlobalTilBatchNormStateManager(model, args)  # type: ignore[attr-defined]
     # print(model)
     if args.cuda:
         try:
