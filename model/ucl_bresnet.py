@@ -19,6 +19,7 @@ from typing import Iterable, List, Optional, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.modules.batchnorm import _BatchNorm
 from model.resnet1d import AdcIqAdapter, ResNet1D
 from model.detection_replay import (
     noise_label_from_args,
@@ -528,6 +529,19 @@ class Net(nn.Module):
         self._last_observe_labels_cpu: Optional[torch.Tensor] = None
         self.noise_label: int | None = noise_label_from_args(args)
         self.incremental_loader_name = getattr(args, "loader", None)
+        self._use_task_bn_state = bool(
+            self.split and self.incremental_loader_name == "task_incremental_loader"
+        )
+        self._bn_modules: List[_BatchNorm] = [
+            module for module in self.model.modules() if isinstance(module, _BatchNorm)
+        ]
+        self._bn_task_stats: dict[int, List[Tuple[torch.Tensor, torch.Tensor, int]]] = (
+            {}
+        )
+        self._bn_task_affine: dict[
+            int, List[Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]]
+        ] = {}
+        self._bn_finalized_tasks: set[int] = set()
 
     def _extend_cil_heads_with_global_noise(
         self, classes_per_task: List[int]
@@ -580,6 +594,146 @@ class Net(nn.Module):
                 module.train(state)
 
     # ------------------------------------------------------------------
+    def _reset_bn_stats(self) -> None:
+        """Reset BatchNorm running statistics for a fresh TIL task."""
+        if not self._use_task_bn_state:
+            return
+        for batch_norm_module in self._bn_modules:
+            batch_norm_module.running_mean.zero_()
+            batch_norm_module.running_var.fill_(1.0)
+            batch_norm_module.num_batches_tracked.zero_()
+
+    def _snapshot_bn_stats(self, task: int) -> None:
+        """Store task-specific BatchNorm state for TIL evaluation.
+
+        Args:
+            task: Completed task index whose BatchNorm state should be restored
+                for future task-incremental evaluation.
+        """
+        if not self._use_task_bn_state:
+            return
+        stats: List[Tuple[torch.Tensor, torch.Tensor, int]] = []
+        affine: List[Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]] = []
+        for batch_norm_module in self._bn_modules:
+            stats.append(
+                (
+                    batch_norm_module.running_mean.detach().clone(),
+                    batch_norm_module.running_var.detach().clone(),
+                    int(batch_norm_module.num_batches_tracked.item()),
+                )
+            )
+            if batch_norm_module.affine:
+                affine.append(
+                    (
+                        batch_norm_module.weight.detach().clone(),
+                        batch_norm_module.bias.detach().clone(),
+                    )
+                )
+            else:
+                affine.append((None, None))
+        self._bn_task_stats[task] = stats
+        self._bn_task_affine[task] = affine
+        self._bn_finalized_tasks.add(task)
+
+    def _capture_bn_state(
+        self,
+    ) -> Tuple[
+        List[Tuple[torch.Tensor, torch.Tensor, int]],
+        List[Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]],
+    ]:
+        """Capture currently active BatchNorm state.
+
+        Returns:
+            Running-stat and affine snapshots that can be restored after a
+            temporary task-specific evaluation forward.
+        """
+        stats: List[Tuple[torch.Tensor, torch.Tensor, int]] = []
+        affine: List[Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]] = []
+        for batch_norm_module in self._bn_modules:
+            stats.append(
+                (
+                    batch_norm_module.running_mean.detach().clone(),
+                    batch_norm_module.running_var.detach().clone(),
+                    int(batch_norm_module.num_batches_tracked.item()),
+                )
+            )
+            if batch_norm_module.affine:
+                affine.append(
+                    (
+                        batch_norm_module.weight.detach().clone(),
+                        batch_norm_module.bias.detach().clone(),
+                    )
+                )
+            else:
+                affine.append((None, None))
+        return stats, affine
+
+    def _apply_bn_state(
+        self,
+        stats: List[Tuple[torch.Tensor, torch.Tensor, int]],
+        affine: List[Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]],
+    ) -> None:
+        """Apply a previously captured BatchNorm state.
+
+        Args:
+            stats: Running-stat snapshots from :meth:`_capture_bn_state`.
+            affine: Affine parameter snapshots from :meth:`_capture_bn_state`.
+        """
+        for batch_norm_module, (running_mean, running_var, num_batches) in zip(
+            self._bn_modules, stats
+        ):
+            batch_norm_module.running_mean.data.copy_(running_mean)
+            batch_norm_module.running_var.data.copy_(running_var)
+            batch_norm_module.num_batches_tracked.data.fill_(num_batches)
+        for batch_norm_module, (weight, bias) in zip(self._bn_modules, affine):
+            if weight is not None and batch_norm_module.affine:
+                batch_norm_module.weight.data.copy_(weight)
+                batch_norm_module.bias.data.copy_(bias)
+
+    def _restore_bn_stats(self, task: int) -> None:
+        """Restore saved task BatchNorm state, or reset for unseen TIL tasks.
+
+        Args:
+            task: Task index whose BatchNorm state should become active.
+        """
+        if not self._use_task_bn_state:
+            return
+        stats = self._bn_task_stats.get(task)
+        affine = self._bn_task_affine.get(task)
+        if stats is None:
+            self._reset_bn_stats()
+            return
+        self._apply_bn_state(stats, affine if affine is not None else [])
+
+    def finalize_task_after_training(
+        self,
+        train_loader: object | None = None,
+        *,
+        completed_task_index: int | None = None,
+    ) -> None:
+        """Snapshot task-specific BatchNorm state after TIL task training.
+
+        Args:
+            train_loader: Unused hook argument accepted for compatibility with
+                the repository training loop.
+            completed_task_index: Completed task index. Defaults to the current
+                task tracked by the UCL learner.
+
+        Usage:
+            The main training loop calls ``model.finalize_task_after_training(
+            train_loader)`` after finishing each task.
+        """
+        del train_loader
+        if not self._use_task_bn_state:
+            return
+        task = (
+            self.current_task if completed_task_index is None else completed_task_index
+        )
+        if task is None:
+            raise RuntimeError("finalize_task_after_training requires a current task.")
+        self._snapshot_bn_stats(task)
+
+    # ------------------------------------------------------------------
     def compute_offsets(self, task: int) -> Tuple[int, int]:
         if self.is_task_incremental:
             return misc_utils.compute_offsets(task, self.classes_per_task)
@@ -603,6 +757,41 @@ class Net(nn.Module):
         concatenated heads; TIL → separate heads). With concatenated logits,
         :func:`~utils.misc_utils.apply_task_incremental_logit_mask` applies in
         eval. With ``split=True``, only head ``t`` is returned.
+        """
+        previous_bn_state = (
+            self._capture_bn_state()
+            if self._use_task_bn_state and not self.training
+            else None
+        )
+        if self._use_task_bn_state and not self.training:
+            self._restore_bn_stats(t)
+        try:
+            logits = self._forward_with_active_bn(
+                x,
+                t,
+                cil_all_seen_upto_task=cil_all_seen_upto_task,
+            )
+        finally:
+            if previous_bn_state is not None:
+                self._apply_bn_state(*previous_bn_state)
+        return logits
+
+    def _forward_with_active_bn(
+        self,
+        x: torch.Tensor,
+        t: int,
+        *,
+        cil_all_seen_upto_task: int | None = None,
+    ) -> torch.Tensor:
+        """Run the UCL forward pass with the caller-selected BatchNorm state.
+
+        Args:
+            x: Input minibatch.
+            t: Current task index.
+            cil_all_seen_upto_task: Optional CIL mask upper bound.
+
+        Returns:
+            Task logits or masked CIL logits.
         """
         if not self.training:
             num_samples = max(1, self.cfg.eval_samples)
@@ -666,9 +855,15 @@ class Net(nn.Module):
         ).long()
         if (self.current_task is None) or (t != self.current_task):
             if self.current_task is not None:
+                if (
+                    self._use_task_bn_state
+                    and self.current_task not in self._bn_finalized_tasks
+                ):
+                    self._snapshot_bn_stats(self.current_task)
                 self.model_old = self._snapshot_model()
                 self.saved = True
             self.current_task = t
+            self._restore_bn_stats(t)
 
         device = self._device()
 
