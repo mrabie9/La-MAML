@@ -4,9 +4,9 @@ loader: class_incremental_loader
 
 lr: 0.003
 lr_rho: 0.001
-beta: 0.0002
-alpha: 0.05
-ratio: 0.001
+beta: 0.001
+alpha: 5
+ratio: 0.1
 
 eval_samples: 1 # Only used for epistemic uncertainty estimation
 split: false
