@@ -2,34 +2,33 @@
   "hosts": {
     "lnx-elkk-1": {
       "slot_high": [
-        "agem",
-        "bcl_dual",
+        "eralg4",
+        "ewc",
+        "icarl",
         "hat",
-        "si",
-        "iid2"
+        "si"
       ],
       "slot_low": [
-        "lamaml",
-        "eralg4",
-        "la-er"
+        "agem",
+        "bcl_dual",
+        "la-er",
+        "cmaml"
       ],
       "estimated_host_wall_seconds": 4739.0
     },
     "lnx-elkk-2": {
       "slot_high": [
+        "ucl",
         "er_ring",
-        "gem",
         "rwalk",
-        "ewc",
+        "packnet",
         "lwf"
       ],
       "slot_low": [
-        "packnet",
-        "icarl",
-        "cmaml",
-        "smaml",
+        "gem",
         "ctn",
-        "ucl"
+        "lamaml",
+        "smaml"
       ],
       "estimated_host_wall_seconds": 4640.0
     }

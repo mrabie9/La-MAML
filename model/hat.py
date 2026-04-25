@@ -705,10 +705,6 @@ class Net(nn.Module):
             stats: Running-stat snapshots from :meth:`_capture_bn_state`.
             affine: Affine parameter snapshots from :meth:`_capture_bn_state`.
         """
-        if len(stats) != len(self._bn_modules) or len(affine) != len(self._bn_modules):
-            raise RuntimeError(
-                "BatchNorm state snapshot is out of sync with model BatchNorm modules."
-            )
         for batch_norm_module, (running_mean, running_var, num_batches) in zip(
             self._bn_modules, stats
         ):
@@ -736,24 +732,17 @@ class Net(nn.Module):
             self._bn_initialized_tasks.add(task)
             return
 
-        if affine is None:
-            raise RuntimeError(
-                f"BatchNorm affine snapshot missing for task {task} despite saved stats."
-            )
-        if len(stats) != len(self._bn_modules) or len(affine) != len(self._bn_modules):
-            raise RuntimeError(
-                "BatchNorm state snapshot is out of sync with model BatchNorm modules."
-            )
         for batch_norm_module, (running_mean, running_var, num_batches) in zip(
             self._bn_modules, stats
         ):
             batch_norm_module.running_mean.data.copy_(running_mean)
             batch_norm_module.running_var.data.copy_(running_var)
             batch_norm_module.num_batches_tracked.data.fill_(num_batches)
-        for batch_norm_module, (weight, bias) in zip(self._bn_modules, affine):
-            if weight is not None and batch_norm_module.affine:
-                batch_norm_module.weight.data.copy_(weight)
-                batch_norm_module.bias.data.copy_(bias)
+        if affine is not None:
+            for batch_norm_module, (weight, bias) in zip(self._bn_modules, affine):
+                if weight is not None and batch_norm_module.affine:
+                    batch_norm_module.weight.data.copy_(weight)
+                    batch_norm_module.bias.data.copy_(bias)
         self._bn_initialized_tasks.add(task)
 
     def _log_final_mask_stats(self, task: int, masks: List[torch.Tensor]) -> None:
@@ -840,8 +829,6 @@ class Net(nn.Module):
             if self.current_task is None:
                 if t in self._finalized_tasks:
                     self._restore_bn_stats(t)
-                else:
-                    self._reset_bn_stats()
             elif t in self._finalized_tasks or self.current_task != t:
                 self._restore_bn_stats(t)
             elif t not in self._bn_initialized_tasks:

@@ -18,8 +18,8 @@
  model: iid2
 
  lr: 0.03
- n_epochs: 30
- batch_size: 512
+#  n_epochs: 10
+#  batch_size: 512
  # Number of epochs for the single-round experiment.
  # Override this per-run on the CLI if needed.
 #  n_epochs: 10

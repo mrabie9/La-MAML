@@ -3,10 +3,10 @@ model: ucl_bresnet
 loader: task_incremental_loader
 
 lr: 0.01
-lr_rho: 0.001
+lr_rho: 0.005
 beta: 0.02
-alpha: 0.1
-ratio: 0.001
+alpha: 10
+ratio: 0.1
 
 eval_samples: 1 # Only used for epistemic uncertainty estimation
 split: true
