@@ -826,7 +826,10 @@ class Net(nn.Module):
     ) -> torch.Tensor:
         previous_bn_state = self._capture_bn_state() if self._bn_modules else None
         try:
-            if t in self._finalized_tasks or self.current_task != t:
+            if self.current_task is None:
+                if t in self._finalized_tasks:
+                    self._restore_bn_stats(t)
+            elif t in self._finalized_tasks or self.current_task != t:
                 self._restore_bn_stats(t)
             elif t not in self._bn_initialized_tasks:
                 self._reset_bn_stats()
