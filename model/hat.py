@@ -829,6 +829,8 @@ class Net(nn.Module):
             if self.current_task is None:
                 if t in self._finalized_tasks:
                     self._restore_bn_stats(t)
+                else:
+                    self._reset_bn_stats()
             elif t in self._finalized_tasks or self.current_task != t:
                 self._restore_bn_stats(t)
             elif t not in self._bn_initialized_tasks:
