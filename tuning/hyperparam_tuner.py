@@ -18,6 +18,7 @@ from typing import Any, Callable, Dict, List, Sequence
 import numpy as np
 import torch
 import sys
+import yaml
 
 sys.path.append("/home/lunet/wsmr11/repos/La-MAML")  # to import from parent directory
 import parser as file_parser
@@ -385,7 +386,11 @@ def extract_total_f1_mean_from_trial_logs(
         f1_score = extract_total_f1_mean_from_trial_logs("/tmp/run", 3)
     """
     candidate_dir = Path(log_dir)
-    metrics_dir = candidate_dir / "metrics" if (candidate_dir / "metrics").is_dir() else candidate_dir
+    metrics_dir = (
+        candidate_dir / "metrics"
+        if (candidate_dir / "metrics").is_dir()
+        else candidate_dir
+    )
     task_files = sorted(metrics_dir.glob("task*.npz"))
     if not task_files:
         return float("nan")
@@ -614,6 +619,41 @@ def dump_summary(
             for key in param_keys:
                 row[key] = trial["params"].get(key)
             writer.writerow(row)
+
+
+def write_best_params_to_yaml(
+    yaml_path: Path, best_params: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Write best hyperparameter values into an existing YAML config.
+
+    Args:
+        yaml_path: Path to the YAML file that should be updated in-place.
+        best_params: Hyperparameter key/value pairs to persist.
+
+    Returns:
+        The dictionary of values that were written to the YAML file.
+
+    Usage:
+        applied = write_best_params_to_yaml(Path("configs/models/til/hat.yaml"), {"lr": 0.003})
+    """
+    payload: Dict[str, Any] = {}
+    if yaml_path.exists():
+        with yaml_path.open("r", encoding="utf-8") as handle:
+            loaded = yaml.safe_load(handle) or {}
+        if not isinstance(loaded, dict):
+            raise ValueError(
+                f"Cannot update YAML file '{yaml_path}': top-level document is not a mapping."
+            )
+        payload = dict(loaded)
+    else:
+        raise FileNotFoundError(f"Cannot update missing YAML file: {yaml_path}")
+
+    for key, value in best_params.items():
+        payload[key] = value
+
+    with yaml_path.open("w", encoding="utf-8") as handle:
+        yaml.safe_dump(payload, handle, sort_keys=False)
+    return best_params
 
 
 def run_tuning(preset: TuningPreset) -> None:
@@ -872,10 +912,28 @@ def run_tuning(preset: TuningPreset) -> None:
     dump_summary(session_dir, summary, successes)
 
     if best:
+        updated_yaml_path: str | None = None
+        updated_yaml_values: Dict[str, Any] | None = None
+        if cli.config:
+            target_yaml = Path(cli.config[-1]).expanduser()
+            if not target_yaml.is_absolute():
+                target_yaml = (REPO_ROOT / target_yaml).resolve()
+            values_to_write = dict(best.get("trial_params") or {})
+            if values_to_write:
+                updated_yaml_values = write_best_params_to_yaml(
+                    target_yaml, values_to_write
+                )
+                updated_yaml_path = str(target_yaml)
+                summary["updated_yaml_path"] = updated_yaml_path
+                summary["updated_yaml_values"] = updated_yaml_values
+                dump_summary(session_dir, summary, successes)
+
         print(
             f"Best trial #{best['trial']} | score={best['score']:.4f} | params={best['trial_params']}"
         )
         print(f"Logs stored in: {best['log_dir']}")
+        if updated_yaml_path:
+            print(f"Updated YAML config with best params: {updated_yaml_path}")
     else:
         print("No successful trials were recorded.")
 
