@@ -52,6 +52,12 @@ def get_parser():
         action="store_true",
         help="Enable the detector architecture; when disabled, treat -1 class labels as an extra task class.",
     )
+    parser.add_argument(
+        "--use_groupnorm",
+        default=False,
+        action="store_true",
+        help="Use GroupNorm in compatible backbones instead of BatchNorm.",
+    )
 
     # optimizer parameters influencing all models
     parser.add_argument(
