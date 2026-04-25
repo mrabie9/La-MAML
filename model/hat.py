@@ -571,6 +571,7 @@ class Net(nn.Module):
         self._bn_task_affine: Dict[
             int, List[Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]]
         ] = {}
+        self._bn_initialized_tasks: set[int] = set()
 
     # ------------------------------------------------------------------
     def _device(self) -> torch.device:
@@ -728,6 +729,7 @@ class Net(nn.Module):
         affine = self._bn_task_affine.get(task)
         if stats is None:
             self._reset_bn_stats()
+            self._bn_initialized_tasks.add(task)
             return
 
         for batch_norm_module, (running_mean, running_var, num_batches) in zip(
@@ -741,6 +743,7 @@ class Net(nn.Module):
                 if weight is not None and batch_norm_module.affine:
                     batch_norm_module.weight.data.copy_(weight)
                     batch_norm_module.bias.data.copy_(bias)
+        self._bn_initialized_tasks.add(task)
 
     def _log_final_mask_stats(self, task: int, masks: List[torch.Tensor]) -> None:
         """Print compact end-of-task mask saturation diagnostics.
@@ -823,10 +826,11 @@ class Net(nn.Module):
     ) -> torch.Tensor:
         previous_bn_state = self._capture_bn_state() if self._bn_modules else None
         try:
-            if t in self._bn_task_stats:
+            if t in self._finalized_tasks or self.current_task != t:
                 self._restore_bn_stats(t)
-            elif self.current_task != t:
-                self._restore_bn_stats(t)
+            elif t not in self._bn_initialized_tasks:
+                self._reset_bn_stats()
+                self._bn_initialized_tasks.add(t)
             device = x.device if x.is_cuda else self._device()
             logits = self.bridge.forward(
                 self._task_tensor(t, device), x, s or self.smax, return_masks=False
