@@ -462,7 +462,6 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                     self.n_outputs,
                     cil_all_seen_upto_task=t,
                     global_noise_label=self.noise_label,
-                    loader=self.incremental_loader_name,
                 )
             targets = y_work.long()
             preds = torch.argmax(logits_for_loss, dim=1)
@@ -527,7 +526,6 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                             self.n_outputs,
                             cil_all_seen_upto_task=t,
                             global_noise_label=self.noise_label,
-                            loader=self.incremental_loader_name,
                         )
                     )
                 outer_loss = classification_cross_entropy(
