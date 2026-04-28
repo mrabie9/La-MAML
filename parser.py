@@ -351,6 +351,12 @@ def get_parser():
         help="memory strength (meaning depends on memory)",
     )
     parser.add_argument(
+        "--memory_loss_lambda",
+        type=float,
+        default=1.0,
+        help="AGEM: scales replay/memory loss regularization strength.",
+    )
+    parser.add_argument(
         "--steps_per_sample", default=1, type=int, help="training steps per batch"
     )
 
