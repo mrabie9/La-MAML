@@ -45,6 +45,7 @@ class AgemConfig:
     cls_lambda: float = 1.0
     det_memories: int = 2000
     det_replay_batch: int = 64
+    memory_loss_lambda: float = 1.0
 
     @staticmethod
     def from_args(args: object) -> "AgemConfig":
@@ -155,6 +156,7 @@ class Net(DetectionReplayMixin, nn.Module):
         self.inner_steps = self.cfg.inner_steps
         self.det_lambda = float(self.cfg.det_lambda)
         self.cls_lambda = float(self.cfg.cls_lambda)
+        self.memory_loss_lambda = float(self.cfg.memory_loss_lambda)
         self._init_det_replay(
             self.cfg.det_memories,
             self.cfg.det_replay_batch,
@@ -418,11 +420,12 @@ class Net(DetectionReplayMixin, nn.Module):
                     logits = self.forward(mem_x, past_task)[:, offset1:offset2]
                     if logits.numel() == 0:
                         continue
-                    ptloss = classification_cross_entropy(
+                    memory_loss = classification_cross_entropy(
                         logits,
                         mem_y_task,
                         class_weighted_ce=self.class_weighted_ce,
                     )
+                    ptloss = self.memory_loss_lambda * memory_loss
                     ptloss.backward()
                     if self.cfg.grad_clip_norm:
                         torch.nn.utils.clip_grad_norm_(
