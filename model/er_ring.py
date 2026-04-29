@@ -36,6 +36,7 @@ class ErRingConfig:
     cls_lambda: float = 1.0
     det_memories: int = 2000
     det_replay_batch: int = 64
+    memory_loss_lambda: float = 1.0
 
     @staticmethod
     def from_args(args: object) -> "ErRingConfig":
@@ -69,6 +70,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
         self.det_lambda = float(self.cfg.det_lambda)
         self.cls_lambda = float(self.cfg.cls_lambda)
+        self.memory_loss_lambda = float(self.cfg.memory_loss_lambda)
         self._init_det_replay(
             self.cfg.det_memories,
             self.cfg.det_replay_batch,
@@ -331,7 +333,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                         pred, yy, class_weighted_ce=self.class_weighted_ce
                     )
 
-            loss = loss1 + loss2
+            loss = loss1 + (self.memory_loss_lambda * loss2)
             loss.backward()
             self.opt.step()
 

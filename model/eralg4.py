@@ -54,6 +54,7 @@ class ErAlgConfig:
     cls_lambda: float = 1.0
     det_memories: int = 2000
     det_replay_batch: int = 64
+    memory_loss_lambda: float = 1.0
 
     @staticmethod
     def from_args(args: object) -> "ErAlgConfig":
@@ -94,6 +95,7 @@ class Net(DetectionReplayMixin, nn.Module):
         self.inner_steps = self.cfg.inner_steps
         self.det_lambda = float(self.cfg.det_lambda)
         self.cls_lambda = float(self.cfg.cls_lambda)
+        self.memory_loss_lambda = float(self.cfg.memory_loss_lambda)
         self._init_det_replay(
             self.cfg.det_memories,
             self.cfg.det_replay_batch,
@@ -177,9 +179,12 @@ class Net(DetectionReplayMixin, nn.Module):
             myi = np.empty(shape=(0, 0))
             mti = np.empty(shape=(0, 0))
 
-        bxs = []
-        bys = []
-        bts = []
+        replay_x = []
+        replay_y = []
+        replay_t = []
+        current_x = []
+        current_y = []
+        current_t = []
 
         if len(self.M) > 0:
             order = [i for i in range(0, len(self.M))]
@@ -194,14 +199,19 @@ class Net(DetectionReplayMixin, nn.Module):
                 if self.noise_label is not None and yi_scalar == self.noise_label:
                     continue
 
-                bxs.append(xi)
-                bys.append(yi_scalar)
-                bts.append(ti)
+                replay_x.append(xi)
+                replay_y.append(yi_scalar)
+                replay_t.append(ti)
 
         for i in range(len(myi)):
-            bxs.append(mxi[i])
-            bys.append(myi[i])
-            bts.append(mti[i])
+            current_x.append(mxi[i])
+            current_y.append(myi[i])
+            current_t.append(mti[i])
+
+        bxs = replay_x + current_x
+        bys = replay_y + current_y
+        bts = replay_t + current_t
+        replay_count = len(replay_x)
 
         bxs = Variable(torch.from_numpy(np.array(bxs))).float()
         bys = Variable(torch.from_numpy(np.array(bys))).long().view(-1)
@@ -213,7 +223,25 @@ class Net(DetectionReplayMixin, nn.Module):
             bys = bys.cuda()
             bts = bts.cuda()
 
-        return bxs, bys, bts
+        return bxs, bys, bts, replay_count
+
+    def _weighted_multitask_loss(
+        self,
+        logits: torch.Tensor,
+        labels: torch.Tensor,
+        tasks: torch.Tensor,
+        replay_count: int,
+    ) -> torch.Tensor:
+        replay_count = max(0, min(int(replay_count), logits.size(0)))
+        replay_loss = torch.zeros((), device=logits.device, dtype=logits.dtype)
+        if replay_count > 0:
+            replay_loss = self.take_multitask_loss(
+                tasks[:replay_count], logits[:replay_count], labels[:replay_count]
+            )
+        current_loss = self.take_multitask_loss(
+            tasks[replay_count:], logits[replay_count:], labels[replay_count:]
+        )
+        return current_loss + (self.memory_loss_lambda * replay_loss)
 
     def observe(self, x, y, t):
         ### step through elements of x
@@ -353,13 +381,13 @@ class Net(DetectionReplayMixin, nn.Module):
             self.net.zero_grad()
 
             # Draw batch from buffer:
-            bx, by, bt = self.getBatch(x, y, t)
+            bx, by, bt, replay_count = self.getBatch(x, y, t)
 
             bx = bx.squeeze()
             # Unmasked logits: replay rows may span tasks; global CE targets index
             # the full ``n_outputs`` vector (including shared noise class).
             prediction = self.net.forward(bx)
-            loss = self.take_multitask_loss(bt, prediction, by)
+            loss = self._weighted_multitask_loss(prediction, by, bt, replay_count)
             cls_tr_rec.append(self._batch_accuracy(bt, prediction, by))
 
             loss.backward()
@@ -478,7 +506,7 @@ class Net(DetectionReplayMixin, nn.Module):
             meta_losses = [0 for _ in range(n_batches)]
 
             y_pack = unpack_y_to_class_labels(y)
-            bx, by, bt = self.getBatch(
+            bx, by, bt, replay_count = self.getBatch(
                 x.detach().cpu().numpy(),
                 y_pack.detach().cpu().numpy(),
                 t,
@@ -506,7 +534,9 @@ class Net(DetectionReplayMixin, nn.Module):
                 )
 
                 prediction = self.net.forward(bx, fast_weights)
-                meta_loss = self.take_multitask_loss(bt, prediction, by)
+                meta_loss = self._weighted_multitask_loss(
+                    prediction, by, bt, replay_count
+                )
                 meta_losses[i] += meta_loss
 
             # update alphas
@@ -532,7 +562,7 @@ class Net(DetectionReplayMixin, nn.Module):
 
             # compute ER loss for network weights
             prediction = self.net.forward(bx)
-            loss = self.take_multitask_loss(bt, prediction, by)
+            loss = self._weighted_multitask_loss(prediction, by, bt, replay_count)
             cls_tr_rec.append(self._batch_accuracy(bt, prediction, by))
 
             loss.backward()
