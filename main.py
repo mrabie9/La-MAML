@@ -47,6 +47,7 @@ TASK_SPECIFIC_EPOCH_SCHEDULE: dict[int, int] = {
     8: 20,
     9: 10,
 }
+LEGACY_USE_GLOBAL_N_EPOCHS = False
 
 
 def _task_epoch_schedule_for_base_epochs(base_n_epochs: int) -> dict[int, int]:
@@ -834,7 +835,12 @@ def life_experience(model, inc_loader, args):
     last_tr_cls_rec = last_tr_cls_prec = last_tr_cls_f1 = None
     last_tr_det = last_tr_fa = None
     base_n_epochs = int(args.n_epochs)
-    task_epoch_schedule = _task_epoch_schedule_for_base_epochs(base_n_epochs)
+    force_global_n_epochs_legacy = bool(LEGACY_USE_GLOBAL_N_EPOCHS)
+    task_epoch_schedule = (
+        {}
+        if force_global_n_epochs_legacy
+        else _task_epoch_schedule_for_base_epochs(base_n_epochs)
+    )
     args.task_epoch_schedule = task_epoch_schedule
 
     time_start = time.time()
@@ -853,6 +859,13 @@ def life_experience(model, inc_loader, args):
         log_state(
             args.state_logging,
             "Using task-specific epoch schedule: {}".format(task_epoch_schedule),
+        )
+    elif force_global_n_epochs_legacy:
+        log_state(
+            args.state_logging,
+            "Legacy epoch behavior enabled: using n_epochs={} for all tasks".format(
+                base_n_epochs
+            ),
         )
 
     for task_i in range(inc_loader.n_tasks):
