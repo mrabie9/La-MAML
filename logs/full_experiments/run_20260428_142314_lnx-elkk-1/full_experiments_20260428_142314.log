@@ -14,3 +14,5 @@
 [2026-04-28T14:23:14+01:00] === Queue phase on lnx-elkk-1 (util high/low) ===
 [2026-04-28T14:23:14+01:00] --- Dispatching: base + agem + agem.yaml (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260428_142314_lnx-elkk-1/job_logs/job_agem_20260428_142314_548321021.log) ---
 [2026-04-28T14:23:14+01:00] START agem
+[2026-04-28T17:13:20+01:00] Completed: agem (exit 0)
+[2026-04-28T17:13:20+01:00] === full_experiments.sh finished: successful_runs=1 unsuccessful_runs=0 total_runtime=02:50:06 (10206s) ===
