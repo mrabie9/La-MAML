@@ -134,6 +134,39 @@ def get_parser():
 
     # experiment parameters
     parser.add_argument("--cuda", default=True, action="store_true", help="Use GPU")
+    parser.add_argument(
+        "--amp",
+        dest="amp",
+        action="store_true",
+        help="Enable automatic mixed precision during training on CUDA.",
+    )
+    parser.add_argument(
+        "--no-amp",
+        dest="amp",
+        action="store_false",
+        help="Disable automatic mixed precision during training.",
+    )
+    parser.set_defaults(amp=True)
+    parser.add_argument(
+        "--amp_dtype",
+        type=str,
+        default="bfloat16",
+        choices=["float16", "bfloat16"],
+        help="Autocast dtype when AMP is enabled.",
+    )
+    parser.add_argument(
+        "--cudnn_benchmark",
+        dest="cudnn_benchmark",
+        action="store_true",
+        help="Enable cuDNN benchmark mode for potentially faster convolutions.",
+    )
+    parser.add_argument(
+        "--no-cudnn-benchmark",
+        dest="cudnn_benchmark",
+        action="store_false",
+        help="Disable cuDNN benchmark mode.",
+    )
+    parser.set_defaults(cudnn_benchmark=True)
     parser.add_argument("--seed", type=int, default=0, help="random seed of model")
     parser.add_argument(
         "--log_every",
