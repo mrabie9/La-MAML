@@ -11,7 +11,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
 
-import numpy as np
 import random
 
 from model.resnet1d import ResNet1D
@@ -114,22 +113,23 @@ def projectgrad(gradient, memories, margin=0.5, eps=1e-3, oiter=0):
     output: x, p-vector
     """
 
-    memories_np = memories.cpu().t().double().numpy()
-    gradient_np = gradient.cpu().contiguous().view(-1).double().numpy()
+    # Keep projection math in Torch to avoid GPU<->CPU sync overhead.
+    # Use float64 to match previous NumPy double precision behavior.
+    memories_t = memories.t().to(dtype=torch.float64)
+    gradient_t = gradient.contiguous().view(-1).to(dtype=torch.float64)
 
     # merge memories
-    memories_np2 = memories_np.mean(axis=0).reshape(1, memories_np.shape[1])
-
-    ref_mag = np.dot(memories_np2, memories_np2.transpose())
-    dotp = np.dot(gradient_np.reshape(1, -1), memories_np2.transpose())
+    memories_t2 = memories_t.mean(dim=0)
+    ref_mag = torch.dot(memories_t2, memories_t2)
+    dotp = torch.dot(gradient_t, memories_t2)
 
     # if(oiter%100==0):
     #     print('similarity : ', similarity.item())
-    #     print('dotp:', dotp)
+    #     print('dotp:', dotp.item())
 
-    if dotp[0, 0] < 0:
-        proj = gradient_np.reshape(1, -1) - ((dotp / ref_mag) * memories_np2)
-        gradient.copy_(torch.Tensor(proj).view(-1, 1))
+    if dotp.item() < 0:
+        proj = gradient_t - ((dotp / ref_mag) * memories_t2)
+        gradient.copy_(proj.to(dtype=gradient.dtype).view(-1, 1))
 
 
 class Net(DetectionReplayMixin, nn.Module):
