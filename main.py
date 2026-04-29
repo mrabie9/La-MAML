@@ -47,7 +47,7 @@ TASK_SPECIFIC_EPOCH_SCHEDULE: dict[int, int] = {
     8: 20,
     9: 10,
 }
-LEGACY_USE_GLOBAL_N_EPOCHS = False
+LEGACY_USE_GLOBAL_N_EPOCHS = True
 
 
 def _task_epoch_schedule_for_base_epochs(base_n_epochs: int) -> dict[int, int]:
