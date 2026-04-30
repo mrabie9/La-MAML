@@ -33,6 +33,11 @@ Usage:
     python scripts/plot_multi_algorithms.py \\
         --run-dir logs/full_experiments/full-til_10epochs_w-zs/full-til_A_run_20260403_111257_lnx-elkk-2 \\
         --plot-layout together -o plots/
+
+    # Auto-discover all algorithms from a saved_models directory
+    python scripts/plot_multi_algorithms.py \\
+        --runs-dir logs/00_sync/full-til_10epochs_w-zs/saved_models \\
+        --plot-layout separate -o plots/
 """
 
 from __future__ import annotations
@@ -656,6 +661,52 @@ def _discover_runs_from_algorithm_root(
     return algorithm_names, metrics_dirs
 
 
+def _discover_runs_from_saved_models_root(
+    saved_models_root_dir: Path,
+) -> tuple[List[str], List[Path]]:
+    """Discover latest metrics directory per algorithm from a saved_models root.
+
+    Expected layout:
+    ``<saved_models_root>/<algorithm>/<experiment>/<seed>/metrics/task*.npz``.
+    """
+    if not saved_models_root_dir.is_dir():
+        raise SystemExit(
+            f"Saved-models root is not a directory: {saved_models_root_dir}"
+        )
+
+    discovered_by_algo: Dict[str, Tuple[float, Path]] = {}
+    for algorithm_dir in sorted(saved_models_root_dir.iterdir()):
+        if not algorithm_dir.is_dir():
+            continue
+        algorithm_name = algorithm_dir.name
+        latest_candidate: Tuple[float, Path] | None = None
+
+        for metrics_dir in algorithm_dir.rglob("metrics"):
+            if not metrics_dir.is_dir():
+                continue
+            if not any(metrics_dir.glob("task*.npz")):
+                continue
+            metrics_mtime = metrics_dir.stat().st_mtime
+            if latest_candidate is None or metrics_mtime > latest_candidate[0]:
+                latest_candidate = (metrics_mtime, metrics_dir.resolve())
+
+        if latest_candidate is not None:
+            discovered_by_algo[algorithm_name] = latest_candidate
+
+    if not discovered_by_algo:
+        raise SystemExit(
+            "No algorithm metrics directories found under saved_models root: "
+            f"{saved_models_root_dir}"
+        )
+
+    sorted_algorithms = sorted(discovered_by_algo.keys())
+    algorithm_names = [algorithm_name for algorithm_name in sorted_algorithms]
+    metrics_dirs = [
+        discovered_by_algo[algorithm_name][1] for algorithm_name in sorted_algorithms
+    ]
+    return algorithm_names, metrics_dirs
+
+
 def _resolve_algo_name(metrics_dir: Path, explicit_name: str | None) -> str:
     """Resolve the algorithm name for a metrics directory.
 
@@ -1117,6 +1168,26 @@ def _build_axis_only_export_bbox(
     )
 
 
+def _resolve_safe_export_dpi(
+    figure_width_inches: float,
+    figure_height_inches: float,
+    requested_dpi: int,
+    max_dimension_pixels: int = 16000,
+) -> int:
+    """Clamp export DPI so no figure dimension becomes too large.
+
+    Some image viewers fail to open very tall/high-resolution PNGs. This keeps
+    the largest side under a practical pixel ceiling while preserving the
+    requested DPI whenever possible.
+    """
+    largest_side_inches = max(figure_width_inches, figure_height_inches)
+    if largest_side_inches <= 0:
+        return requested_dpi
+    max_safe_dpi = int(max_dimension_pixels / largest_side_inches)
+    max_safe_dpi = max(72, max_safe_dpi)
+    return min(requested_dpi, max_safe_dpi)
+
+
 def plot_multi_algorithms(
     runs: Sequence[AlgoRun],
     output_dir: Path | None,
@@ -1156,10 +1227,10 @@ def plot_multi_algorithms(
     # Use a larger figure when saving to file to allow detailed zooming.
     if output_dir is not None:
         col_width, row_height = 9, 4.5
-        dpi = 550
+        requested_dpi = 550
     else:
         col_width, row_height = 4.0, 3.0
-        dpi = 200
+        requested_dpi = 200
 
     if combined_mode:
         # For combined layout use balanced widths across four panels.
@@ -1172,7 +1243,7 @@ def plot_multi_algorithms(
             n_cols,
             figsize=(fig_width, row_height * n_rows),
             squeeze=False,
-            dpi=dpi,
+            dpi=requested_dpi,
         )
     else:
         fig, axes = plt.subplots(
@@ -1180,7 +1251,19 @@ def plot_multi_algorithms(
             n_cols,
             figsize=(col_width * n_cols, row_height * n_rows),
             squeeze=False,
-            dpi=dpi,
+            dpi=requested_dpi,
+        )
+
+    figure_width_inches, figure_height_inches = fig.get_size_inches()
+    dpi = _resolve_safe_export_dpi(
+        figure_width_inches=float(figure_width_inches),
+        figure_height_inches=float(figure_height_inches),
+        requested_dpi=requested_dpi,
+    )
+    if dpi != requested_dpi and output_dir is not None:
+        print(
+            "[INFO] Reduced export DPI from "
+            f"{requested_dpi} to {dpi} to keep image dimensions loadable."
         )
 
     def _resolve_val_metric_for_run(choice: str, run: AlgoRun) -> tuple[str, str]:
@@ -1712,7 +1795,8 @@ def _parse_args() -> argparse.Namespace:
         help=(
             "Directory containing either run folders with job_logs/ or "
             "algorithm folders with per-algorithm runs (for example "
-            "logs/00_sync/full-til_10epochs_w-zs)."
+            "logs/00_sync/full-til_10epochs_w-zs or "
+            "logs/00_sync/full-til_10epochs_w-zs/saved_models)."
         ),
     )
     parser.add_argument(
@@ -1840,6 +1924,14 @@ def main() -> None:
             )
         if (run_source_dir / "job_logs").is_dir():
             algorithm_names, metrics_dirs = _discover_runs_from_run_dir(run_source_dir)
+        elif run_source_dir.name == "saved_models":
+            algorithm_names, metrics_dirs = _discover_runs_from_saved_models_root(
+                run_source_dir
+            )
+        elif (run_source_dir / "saved_models").is_dir():
+            algorithm_names, metrics_dirs = _discover_runs_from_saved_models_root(
+                run_source_dir / "saved_models"
+            )
         else:
             algorithm_names, metrics_dirs = _discover_runs_from_algorithm_root(
                 run_source_dir
