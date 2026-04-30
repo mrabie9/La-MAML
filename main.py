@@ -7,6 +7,7 @@ import atexit
 import time
 import os
 import sys
+from contextlib import nullcontext
 from pathlib import Path
 from typing import List
 
@@ -851,6 +852,10 @@ def life_experience(model, inc_loader, args):
         evaluator = eval_class_tasks
 
     interactive_terminal = sys.stdout.isatty()
+    amp_dtype = (
+        torch.bfloat16 if getattr(args, "amp_dtype", "bfloat16") == "bfloat16" else torch.float16
+    )
+    use_amp = bool(getattr(args, "amp", False) and args.cuda)
     log_state(
         args.state_logging,
         "Life experience start: {} tasks queued".format(inc_loader.n_tasks),
@@ -983,8 +988,15 @@ def life_experience(model, inc_loader, args):
                     else:
                         v_y = v_y.cuda()
                 model.train()
-
-                loss, cls_tr_rec = model.observe(Variable(v_x), v_y, task_info["task"])
+                amp_context = (
+                    torch.autocast(device_type="cuda", dtype=amp_dtype)
+                    if use_amp
+                    else nullcontext()
+                )
+                with amp_context:
+                    loss, cls_tr_rec = model.observe(
+                        Variable(v_x), v_y, task_info["task"]
+                    )
                 observe_cls_tr_rec = float(cls_tr_rec)
                 # debug_noise_label = _noise_label_max_for_task(train_loader)
                 # model.eval()
@@ -1788,6 +1800,15 @@ def main():
 
     # initialize seeds
     misc_utils.init_seed(args.seed)
+    if args.cuda:
+        log_state(
+            args.state_logging,
+            "Runtime accel: cudnn.benchmark={} amp={} amp_dtype={}".format(
+                torch.backends.cudnn.benchmark,
+                bool(getattr(args, "amp", False)),
+                getattr(args, "amp_dtype", "bfloat16"),
+            ),
+        )
 
     # set up loader
     # 2 options: class_incremental and task_incremental
