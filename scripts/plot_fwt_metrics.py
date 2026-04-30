@@ -51,7 +51,9 @@ except Exception:  # pragma: no cover - optional styling helper
 MetricRecord = Dict[str, Any]
 SeriesPoint = Tuple[int, Optional[float], str]
 PlotStyle = Dict[str, Any]
-GROUP_COLORS = ["#4477AA", "#EE6677", "#228833", "#66CCEE", "#AA3377"]
+# GROUP_COLORS = ["#4477AA", "#EE6677", "#228833", "#66CCEE", "#AA3377"]
+GROUP_COLORS = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00"]
+# GROUP_COLORS = ['#4E79A7', '#F28E2B', '#E15759', '#76B7B2', '#59A14F']
 LINESTYLES = ["-", "--", ":", "-.", (0, (5, 1))]
 LINEWIDTHS = [2.4, 1.8, 1.8, 1.5, 1.5]
 MAX_GROUPS_SINGLE_AXIS = 5
