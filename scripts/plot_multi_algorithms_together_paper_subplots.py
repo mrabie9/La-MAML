@@ -54,6 +54,12 @@ TICK_LABEL_FONT_SIZE: float = 12.0
 LEGEND_ABOVE_PLOT: bool = True
 # Vertical offset used when LEGEND_ABOVE_PLOT=True.
 LEGEND_ABOVE_BBOX_Y: float = 1.02
+# Fixed axes box (left, right, bottom, top) so graph areas stay consistent
+# across exported panels while still trimming outer whitespace on save.
+AXES_BOX_LEFT: float = 0.11
+AXES_BOX_RIGHT: float = 0.99
+AXES_BOX_BOTTOM: float = 0.16
+AXES_BOX_TOP: float = 0.78
 
 
 def parse_args() -> argparse.Namespace:
@@ -125,6 +131,15 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         required=True,
         help="Output directory to save the combined PNG and individual subplot PNGs.",
+    )
+    parser.add_argument(
+        "--fwt-json-path",
+        type=Path,
+        default=None,
+        help=(
+            "Optional path to fwt_metrics.json. When provided (or auto-discovered), "
+            "an additional FWT figure is generated using scripts/plot_fwt_metrics.py."
+        ),
     )
     return parser.parse_args()
 
@@ -232,16 +247,26 @@ def _set_task_axis_like_fwt(
     axis.set_xticklabels(
         [
             f"{task_position}\n"
-            f"{task_index_to_dataset_name.get(task_position - 1, 'unknown')}"
+            f"{task_index_to_dataset_name.get(task_position, 'unknown')}"
             for task_position in tick_positions
         ]
     )
 
 
+def _hide_top_right_spines(axis: plt.Axes) -> None:
+    """Hide top/right spines for consistent plot framing."""
+    axis.spines[["top", "right"]].set_visible(False)
+
+
 def _save_independent_figure(fig: plt.Figure, output_path: Path, dpi: int) -> None:
     """Save one independent panel figure as both PDF and PNG."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.tight_layout()
+    fig.subplots_adjust(
+        left=AXES_BOX_LEFT,
+        right=AXES_BOX_RIGHT,
+        bottom=AXES_BOX_BOTTOM,
+        top=AXES_BOX_TOP,
+    )
     base_output_path = output_path.with_suffix("")
     pdf_output_path = base_output_path.with_suffix(".pdf")
     png_output_path = base_output_path.with_suffix(".png")
@@ -278,6 +303,36 @@ def _build_experiment_prefix(run_source_dir: Path, runs: Sequence[Any]) -> str:
         else:
             learning_setup = "TIL"
     return f"{epoch_mode}-Epoch_{learning_setup}"
+
+
+def _candidate_fwt_json_paths(run_source_dir: Path) -> list[Path]:
+    """Build candidate fwt_metrics.json paths from the run source directory."""
+    candidates: list[Path] = []
+    candidates.append(run_source_dir / "fwt_metrics.json")
+
+    source_parts = list(run_source_dir.parts)
+    if "00_sync" in source_parts:
+        sync_index = source_parts.index("00_sync")
+        full_experiment_parts = source_parts.copy()
+        full_experiment_parts[sync_index] = "full_experiments"
+        full_experiments_dir = Path(*full_experiment_parts)
+        candidates.append(full_experiments_dir / "fwt_metrics.json")
+        candidates.append(full_experiments_dir / "fwt_metrics_A.json")
+
+    return candidates
+
+
+def _resolve_fwt_json_path(
+    explicit_fwt_json_path: Path | None, run_source_dir: Path
+) -> Path | None:
+    """Resolve FWT metrics JSON path from explicit input or known defaults."""
+    if explicit_fwt_json_path is not None:
+        return explicit_fwt_json_path
+
+    for candidate_path in _candidate_fwt_json_paths(run_source_dir):
+        if candidate_path.is_file():
+            return candidate_path
+    return None
 
 
 def _line_style_for_index(index: int) -> Dict[str, Any]:
@@ -327,6 +382,9 @@ def main() -> None:
     from scripts.plot_fwt_metrics import (
         ALGORITHM_DISPLAY_NAMES,
         GROUP_COLORS as fwt_group_colors,
+        build_series_by_algo,
+        load_metrics,
+        plot_series,
     )
     from scripts.plot_algorithm_group_styles import group_sort_key
     from scripts.plot_style_overrides import resolve_legend_kwargs
@@ -462,6 +520,7 @@ def main() -> None:
         fontsize=16,
         labelpad=X_LABEL_PAD,
     )
+    _hide_top_right_spines(axis_train)
     axis_train.tick_params(axis="both", labelsize=TICK_LABEL_FONT_SIZE)
     axis_train.grid(True, alpha=0.3)
     handles_train, labels_train = axis_train.get_legend_handles_labels()
@@ -530,6 +589,7 @@ def main() -> None:
     axis_final.set_xticks(np.arange(len(runs)))
     axis_final.set_xticklabels([])
     axis_final.set_xlabel("")
+    _hide_top_right_spines(axis_final)
     axis_final.tick_params(axis="both", labelsize=TICK_LABEL_FONT_SIZE)
     axis_final.grid(True, alpha=0.3, axis="y")
     handles_final, labels_final = axis_final.get_legend_handles_labels()
@@ -558,9 +618,10 @@ def main() -> None:
         x_vals, y_vals = _compute_mean_val_metric_over_tasks(run.tasks, first_key)
         if x_vals.size == 0:
             continue
-        mean_task_positions.update(int(value) for value in x_vals.tolist())
+        zero_based_x_values = x_vals - 1
+        mean_task_positions.update(int(value) for value in zero_based_x_values.tolist())
         axis_mean.plot(
-            x_vals,
+            zero_based_x_values,
             y_vals,
             label=run_labels[run_idx],
             color=algorithm_colors.get(run.name, f"C{run_idx % 10}"),
@@ -573,6 +634,7 @@ def main() -> None:
         sorted(mean_task_positions),
         task_index_to_dataset_name,
     )
+    _hide_top_right_spines(axis_mean)
     axis_mean.tick_params(axis="both", labelsize=TICK_LABEL_FONT_SIZE)
     axis_mean.grid(True, alpha=0.3)
     handles_mean, labels_mean = axis_mean.get_legend_handles_labels()
@@ -605,12 +667,9 @@ def main() -> None:
         if x_vals.size == 0:
             continue
         backward_transfer_values = -y_vals
-        shifted_x_values = x_vals + 1
-        forgetting_task_positions.update(
-            int(value) for value in shifted_x_values.tolist()
-        )
+        forgetting_task_positions.update(int(value) for value in x_vals.tolist())
         axis_forgetting.plot(
-            shifted_x_values,
+            x_vals,
             backward_transfer_values,
             label=run_labels[run_idx],
             color=algorithm_colors.get(run.name, f"C{run_idx % 10}"),
@@ -623,6 +682,7 @@ def main() -> None:
         sorted(forgetting_task_positions),
         task_index_to_dataset_name,
     )
+    _hide_top_right_spines(axis_forgetting)
     axis_forgetting.tick_params(axis="both", labelsize=TICK_LABEL_FONT_SIZE)
     axis_forgetting.grid(True, alpha=0.3)
     manual_ylim_forgetting = PANEL_YLIM_OVERRIDES.get("average_forgetting")
@@ -649,6 +709,53 @@ def main() -> None:
         output_dir / f"{experiment_prefix}_BWT",
         dpi,
     )
+
+    # Figure 5: forward transfer over tasks (generated by plot_fwt_metrics.py).
+    fwt_json_path = _resolve_fwt_json_path(args.fwt_json_path, run_source_dir)
+    if fwt_json_path is None:
+        print(
+            "[WARN] Could not locate fwt_metrics.json automatically; "
+            "skipping FWT figure. Pass --fwt-json-path to enable it."
+        )
+    else:
+        try:
+            fwt_records = load_metrics(fwt_json_path)
+            fwt_series_by_algorithm = build_series_by_algo(
+                fwt_records, "forward_transfer_total_f1_zs"
+            )
+            if not args.include_iid2:
+                fwt_series_by_algorithm.pop("iid2", None)
+
+            # Keep only discovered algorithms so FWT uses the same run set.
+            discovered_algorithm_names = {run.name for run in runs}
+            fwt_series_by_algorithm = {
+                algorithm_name: series
+                for algorithm_name, series in fwt_series_by_algorithm.items()
+                if algorithm_name in discovered_algorithm_names
+            }
+            if not fwt_series_by_algorithm:
+                print(
+                    f"[WARN] FWT metrics found at {fwt_json_path}, but no algorithms "
+                    "overlap with discovered runs; skipping FWT figure."
+                )
+            else:
+                fwt_output_path = output_dir / f"{experiment_prefix}_FWT"
+                fwt_plot_style = _case_insensitive_detect_style(runs)
+                fwt_plot_style = dict(fwt_plot_style)
+                fwt_plot_style["figsize"] = figure_size
+                plot_series(
+                    series_by_algorithm=fwt_series_by_algorithm,
+                    metric_name="forward_transfer_total_f1_zs",
+                    output_path=fwt_output_path,
+                    plot_style=fwt_plot_style,
+                )
+                print(
+                    "Saved FWT subplot to "
+                    f"{fwt_output_path.with_suffix('.pdf')} and "
+                    f"{fwt_output_path.with_suffix('.png')}"
+                )
+        except (FileNotFoundError, ValueError) as error:
+            print(f"[WARN] Unable to generate FWT figure from {fwt_json_path}: {error}")
 
 
 if __name__ == "__main__":
