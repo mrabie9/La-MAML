@@ -19,6 +19,7 @@ import argparse
 import copy
 import csv
 import importlib
+import multiprocessing as mp
 import re
 import sys
 from dataclasses import dataclass
@@ -127,6 +128,19 @@ def _resolve_device(device_choice: str) -> torch.device:
             raise SystemExit("CUDA requested but not available.")
         return torch.device("cuda")
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def _configure_multiprocessing_start_method() -> None:
+    """Use spawn workers to avoid fork warnings/deadlock risks on Python 3.12+."""
+    current_start_method = mp.get_start_method(allow_none=True)
+    if current_start_method is None:
+        mp.set_start_method("spawn")
+        return
+    if current_start_method != "spawn":
+        print(
+            "WARNING: multiprocessing start method is "
+            f"'{current_start_method}', not 'spawn'."
+        )
 
 
 def _parse_peak_train_f1_from_job_log(job_log_path: Path) -> Dict[int, float]:
@@ -481,6 +495,9 @@ def _evaluate_one_job_log(
     device: torch.device,
     loader_context_cache: Dict[Tuple[Any, ...], SharedLoaderContext],
 ) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    algo_name = _infer_algo_name(job_log_path)
+    print(f"START algo={algo_name} log={job_log_path.name}")
+
     train_f1_after_task_by_task = _parse_peak_train_f1_from_job_log(job_log_path)
     test_f1_after_task_by_task = _parse_task_end_test_f1_from_job_log(job_log_path)
     run_dir = _resolve_run_dir_from_job_log(job_log_path)
@@ -493,11 +510,13 @@ def _evaluate_one_job_log(
         run_args, loader_context_cache
     )
     model = _instantiate_model(run_args, state_dict, device, shared_loader_context)
+    print(f"EVAL_TRAIN algo={algo_name}")
     final_train_f1_by_task = _evaluate_final_model_f1_by_task(
         model=model,
         task_loaders=shared_loader_context.train_task_loaders,
         run_args=run_args,
     )
+    print(f"EVAL_TEST algo={algo_name}")
     final_test_f1_by_task = _evaluate_final_model_f1_by_task(
         model=model,
         task_loaders=shared_loader_context.test_task_loaders,
@@ -516,7 +535,7 @@ def _evaluate_one_job_log(
     )
     train_bwt_proxy = -avg_representational_forgetting
     aggregate = {
-        "algo": _infer_algo_name(job_log_path),
+        "algo": algo_name,
         "job_log": str(job_log_path),
         "run_dir": str(run_dir),
         "results": str(results_path),
@@ -544,10 +563,12 @@ def _evaluate_one_job_log(
                 "generalisation_shift": row["generalisation_shift"],
             }
         )
+    print(f"DONE algo={algo_name}")
     return aggregate, detailed_rows
 
 
 def main() -> None:
+    _configure_multiprocessing_start_method()
     args = _parse_args()
     device = _resolve_device(args.device)
     discovered_job_logs = _discover_job_logs(
