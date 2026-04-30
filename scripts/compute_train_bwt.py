@@ -376,7 +376,11 @@ def _rows_and_aggregate(
         final_test_f1 = float(final_test_f1_by_task[task_index])
         representational_forgetting = train_f1_after_task - final_train_f1
         test_forgetting = test_f1_after_task - final_test_f1
-        generalisation_shift = test_forgetting - representational_forgetting
+        # GS_i = (R_T,i^train - R_T,i^test) - (R_i,i^train - R_i,i^test)
+        # computed directly from train/test cls_f1 gaps.
+        generalisation_shift = (final_train_f1 - final_test_f1) - (
+            train_f1_after_task - test_f1_after_task
+        )
         rows.append(
             {
                 "task": float(task_index),
