@@ -151,6 +151,13 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                         0.00001,
                     ],
                 },
+                "memory_loss_lambda": {
+                    "kind": "float",
+                    "factors": (0.5, 1.0, 2.0),
+                    "min": 0.1,
+                    "fallback": 1.0,
+                    "values": [0.1, 0.5, 1, 5, 10, 50, 100, 500],
+                },
             }
         ),
     ),
@@ -255,6 +262,13 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                         0.00001,
                     ],
                 },
+                "memory_loss_lambda": {
+                    "kind": "float",
+                    "factors": (0.5, 1.0, 2.0),
+                    "min": 0.1,
+                    "fallback": 1.0,
+                    "values": [0.1, 0.5, 1, 5, 10, 50, 100, 500],
+                },
             }
         ),
     ),
@@ -313,6 +327,13 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                         0.00003,
                         0.00001,
                     ],
+                },
+                "memory_loss_lambda": {
+                    "kind": "float",
+                    "factors": (0.5, 1.0, 2.0),
+                    "min": 0.1,
+                    "fallback": 1.0,
+                    "values": [0.1, 0.5, 1, 5, 10, 50, 100, 500],
                 },
             }
         ),
