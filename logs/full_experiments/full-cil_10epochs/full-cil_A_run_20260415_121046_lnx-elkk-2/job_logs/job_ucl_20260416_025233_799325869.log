@@ -467,7 +467,7 @@ Final Detection Results:-
 Final Detection False Alarm:- 
  Total False Alarm: 0.9 
  Individual False Alarm: [0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-SUMMARY_TR cls_rec=0.4076 cls_prec=0.3625 cls_f1=0.4280 det=0.5000 fa=0.9000
+SUMMARY_TR cls_rec=0.6480 cls_prec=0.6500 cls_f1=0.6260 det=0.5000 fa=0.9000
 SUMMARY_TE cls_rec=0.0000 cls_prec=0.0000 cls_f1=0.0108 det=0.5000 fa=0.9000
 [STATE 2026-04-24 05:04:10] Saving results to logs//ucl/full-tasks_CIL_all-2026-04-23_20-05-31-9540/0/results
 Model size: 0.0863 GB

@@ -199,7 +199,7 @@ Final Detection Results:-
 Final Detection False Alarm:- 
  Total False Alarm: 0.10192874418448397 
  Individual False Alarm: [0.12606520065594035, 0.195863055054953, 0.21731925177437583, 0.00023674242424242425, 0.0, 0.19292747073170802, 0.0, 0.18280309217902413, 0.10407262902459584, 0.0]
-SUMMARY_TR cls_rec=0.4536 cls_prec=0.4386 cls_f1=0.5023 det=0.9069 fa=0.1018
+SUMMARY_TR cls_rec=0.5950 cls_prec=0.6660 cls_f1=0.6390 det=0.9069 fa=0.1018
 SUMMARY_TE cls_rec=0.5803 cls_prec=0.6463 cls_f1=0.6195 det=0.9068 fa=0.1019
 [STATE 2026-04-22 17:53:33] Saving results to logs//cmaml/full-tasks_CIL_all-2026-04-22_11-25-33-8847/0/results
 Model size: 0.0289 GB

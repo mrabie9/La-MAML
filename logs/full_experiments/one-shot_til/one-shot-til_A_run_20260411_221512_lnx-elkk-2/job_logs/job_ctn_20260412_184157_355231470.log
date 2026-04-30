@@ -199,7 +199,7 @@ Final Detection Results:-
 Final Detection False Alarm:- 
  Total False Alarm: 0.21596435626872088 
  Individual False Alarm: [0.21642876641796507, 0.07072860650544041, 0.32705752212254485, 0.0, 0.0, 0.33978416536758843, 0.0030160973405928466, 0.30738201604148124, 0.8952463888915958, 0.0]
-SUMMARY_TR cls_rec=0.5056 cls_prec=0.5255 cls_f1=0.5352 det=0.8689 fa=0.2160
+SUMMARY_TR cls_rec=0.5450 cls_prec=0.6290 cls_f1=0.5230 det=0.8689 fa=0.2160
 SUMMARY_TE cls_rec=0.5855 cls_prec=0.6367 cls_f1=0.5933 det=0.8689 fa=0.2160
 [STATE 2026-04-12 20:32:49] Saving results to logs//ctn/full-tasks-2_all-10epochs_weighted-loss-2026-04-12_18-41-59-1938/0/results
 Model size: 0.0147 GB
