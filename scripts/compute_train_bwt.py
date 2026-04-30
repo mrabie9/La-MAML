@@ -24,7 +24,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Sequence
 
 import numpy as np
 import torch
@@ -52,7 +52,6 @@ _TASK_EPOCH_F1_RE = re.compile(
     r"T(?P<task>\d+)\s+Ep\s+\d+/\d+\s+complete:\s+Prec\s+[0-9.]+\s+F1\s+(?P<f1>[0-9.]+)"
 )
 _EVAL_CLS_VECTOR_RE = re.compile(r"Eval at Epoch\s+\d+:\s+cls\s+\[(?P<cls>[^\]]*)\]")
-_SHARED_EVAL_VALIDATION_SPLIT = 0.3
 
 
 @dataclass
@@ -265,37 +264,15 @@ def _load_results_bundle(
     return state_dict, copy.deepcopy(saved_args)
 
 
-def _build_loader_cache_key(run_args: argparse.Namespace) -> Tuple[Any, ...]:
-    """Build a cache key for dataloader contexts that can be shared."""
-    key_fields = (
-        "loader",
-        "data_path",
-        "dataset",
-        "task_order_files",
-        "shuffle_tasks",
-        "class_order",
-        "increment",
-        "validation",
-        "workers",
-        "samples_per_task",
-        "seed",
-        "classes_per_it",
-        "nc_per_task",
-        "nc_per_task_list",
-        "data_scaling",
-        "use_iq_aug_features",
-        "iq_aug_feature_type",
-        "test_batch_size",
-    )
-    return tuple(getattr(run_args, field_name, None) for field_name in key_fields)
-
-
-def _build_shared_loader_context(run_args: argparse.Namespace) -> SharedLoaderContext:
-    """Build a single loader context that can be reused by many models."""
+def _build_loader_context(run_args: argparse.Namespace) -> SharedLoaderContext:
+    """Build a dedicated loader context for one model evaluation."""
     # Train-BWT evaluation is data-loading heavy; use more workers to reduce
     # loader bottlenecks when rebuilding task loaders.
     run_args.workers = 12
-    run_args.validation = _SHARED_EVAL_VALIDATION_SPLIT
+    print(
+        f"LOADER_NEW loader={run_args.loader} dataset={run_args.dataset} "
+        f"validation={run_args.validation} workers={run_args.workers}"
+    )
     loader_module = importlib.import_module(f"dataloaders.{run_args.loader}")
     incremental_loader = loader_module.IncrementalLoader(run_args, seed=run_args.seed)
     n_inputs, n_outputs, n_tasks = incremental_loader.get_dataset_info()
@@ -308,29 +285,6 @@ def _build_shared_loader_context(run_args: argparse.Namespace) -> SharedLoaderCo
         test_task_loaders=test_task_loaders,
         get_samples_per_task_resolver=incremental_loader.get_samples_per_task,
     )
-
-
-def _get_or_build_shared_loader_context(
-    run_args: argparse.Namespace,
-    loader_context_cache: Dict[Tuple[Any, ...], SharedLoaderContext],
-) -> SharedLoaderContext:
-    """Return a cached shared loader context, building it once per key."""
-    run_args.validation = _SHARED_EVAL_VALIDATION_SPLIT
-    cache_key = _build_loader_cache_key(run_args)
-    shared_context = loader_context_cache.get(cache_key)
-    if shared_context is not None:
-        print(
-            f"CACHE_HIT loader={run_args.loader} dataset={run_args.dataset} "
-            f"tasks={shared_context.n_tasks} workers={run_args.workers}"
-        )
-        return shared_context
-    print(
-        f"CACHE_MISS loader={run_args.loader} dataset={run_args.dataset} "
-        f"validation={run_args.validation} workers={run_args.workers}"
-    )
-    shared_context = _build_shared_loader_context(run_args)
-    loader_context_cache[cache_key] = shared_context
-    return shared_context
 
 
 def _instantiate_model(
@@ -493,7 +447,6 @@ def _filter_job_logs_by_algorithms(
 def _evaluate_one_job_log(
     job_log_path: Path,
     device: torch.device,
-    loader_context_cache: Dict[Tuple[Any, ...], SharedLoaderContext],
 ) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
     algo_name = _infer_algo_name(job_log_path)
     print(f"START algo={algo_name} log={job_log_path.name}")
@@ -506,9 +459,7 @@ def _evaluate_one_job_log(
 
     run_args.cuda = device.type == "cuda"
     run_args.log_dir = str(run_dir)
-    shared_loader_context = _get_or_build_shared_loader_context(
-        run_args, loader_context_cache
-    )
+    shared_loader_context = _build_loader_context(run_args)
     model = _instantiate_model(run_args, state_dict, device, shared_loader_context)
     print(f"EVAL_TRAIN algo={algo_name}")
     final_train_f1_by_task = _evaluate_final_model_f1_by_task(
@@ -594,12 +545,9 @@ def main() -> None:
     aggregate_rows: List[Dict[str, Any]] = []
     detailed_rows: List[Dict[str, Any]] = []
     failed_rows: List[Dict[str, str]] = []
-    loader_context_cache: Dict[Tuple[Any, ...], SharedLoaderContext] = {}
     for log_index, job_log_path in enumerate(job_logs, start=1):
         try:
-            aggregate, detailed = _evaluate_one_job_log(
-                job_log_path, device, loader_context_cache
-            )
+            aggregate, detailed = _evaluate_one_job_log(job_log_path, device)
             aggregate_rows.append(aggregate)
             detailed_rows.extend(detailed)
             print(
