@@ -155,3 +155,64 @@ Note: Unified mixed IQ test tensors to (N, 3, L) via ADC0 I/Q + zero-padded ADC1
 T6 Ep 1/1 | L 2.6683 | Train Acc 0.28 | Prec 0.29 | F1 0.33 | Det Rec 0.88 | Det FA 0.17 | Epoch Time 442.08s (Eval 413.33s, Train 28.75s)
 [STATE 2026-04-30 14:26:59] T6 Ep 1/1 complete: Prec 0.2887 F1 0.3277 DetRec 0.8843 DetFA 0.1718 | 442.08s total (413.33s eval/28.75s train)
 [STATE 2026-04-30 14:26:59] Task 6: running final validation.
+[STATE 2026-04-30 14:33:52] Completed task 6 (7/10)
+Note: Unified mixed IQ test tensors to (N, 3, L) via ADC0 I/Q + zero-padded ADC1/2 (IID2-style) for cumulative CIL.
+[STATE 2026-04-30 14:34:03] Task 7: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 7: rec_cls 0.0194 | prec_cls 0.0004 | f1_cls 0.0111 | det 0.5028 | pfa 0.4960 | total_f1 0.0335 ----
+[STATE 2026-04-30 14:43:05] Starting task 7 (8/10)
+[STATE 2026-04-30 14:43:05] Task 7 Epoch 1/1: entering train loop
+[STATE 2026-04-30 14:48:18] Task 7 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.03916185578824361] | det_recall [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5563925640917322] | det_fa [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.6288446133802691] ----
+T7 Ep 1/1 | L 1.6052 | Train Acc 0.32 | Prec 0.35 | F1 0.33 | Det Rec 0.75 | Det FA 0.41 | Epoch Time 854.15s (Eval 541.63s, Train 312.52s)
+[STATE 2026-04-30 14:57:20] T7 Ep 1/1 complete: Prec 0.3454 F1 0.3342 DetRec 0.7492 DetFA 0.4055 | 854.15s total (541.63s eval/312.52s train)
+[STATE 2026-04-30 14:57:20] Task 7: running final validation.
+[STATE 2026-04-30 15:06:21] Completed task 7 (8/10)
+Note: Unified mixed IQ test tensors to (N, 3, L) via ADC0 I/Q + zero-padded ADC1/2 (IID2-style) for cumulative CIL.
+[STATE 2026-04-30 15:06:30] Task 8: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 8: rec_cls 0.0354 | prec_cls 0.0110 | f1_cls 0.0221 | det 0.5492 | pfa 0.6779 | total_f1 0.0341 ----
+[STATE 2026-04-30 15:17:45] Starting task 8 (9/10)
+[STATE 2026-04-30 15:17:45] Task 8 Epoch 1/1: entering train loop
+[STATE 2026-04-30 15:18:47] Task 8 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.02516129539532954] | det_recall [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5322739750705041] | det_fa [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.7389718810834605] ----
+T8 Ep 1/1 | L 2.3585 | Train Acc 0.29 | Prec 0.26 | F1 0.24 | Det Rec 0.69 | Det FA 0.50 | Epoch Time 736.48s (Eval 673.75s, Train 62.73s)
+[STATE 2026-04-30 15:30:01] T8 Ep 1/1 complete: Prec 0.2560 F1 0.2387 DetRec 0.6925 DetFA 0.4988 | 736.48s total (673.75s eval/62.73s train)
+[STATE 2026-04-30 15:30:01] Task 8: running final validation.
+[STATE 2026-04-30 15:43:14] Completed task 8 (9/10)
+Note: Unified mixed IQ test tensors to (N, 3, L) via ADC0 I/Q + zero-padded ADC1/2 (IID2-style) for cumulative CIL.
+[STATE 2026-04-30 15:43:22] Task 9: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 9: rec_cls 0.0236 | prec_cls 0.0006 | f1_cls 0.0079 | det 0.5230 | pfa 0.7524 | total_f1 0.0289 ----
+[STATE 2026-04-30 15:58:48] Starting task 9 (10/10)
+[STATE 2026-04-30 15:58:48] Task 9 Epoch 1/1: entering train loop
+[STATE 2026-04-30 15:59:17] Task 9 Epoch 1/1: running validation (end of epoch)
+/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/sklearn/metrics/_classification.py:98: UserWarning: The number of unique classes is greater than 50% of the number of samples. `y` could represent a regression problem, not a classification problem.
+  type_true = type_of_target(y_true, input_name="y_true")
+/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/sklearn/utils/multiclass.py:79: UserWarning: The number of unique classes is greater than 50% of the number of samples. `y` could represent a regression problem, not a classification problem.
+  ys_types = set(type_of_target(x) for x in ys)
+/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/sklearn/metrics/_classification.py:98: UserWarning: The number of unique classes is greater than 50% of the number of samples. `y` could represent a regression problem, not a classification problem.
+  type_true = type_of_target(y_true, input_name="y_true")
+/home/lunet/wsmr11/repos/La-MAML/la-maml_env/lib/python3.10/site-packages/sklearn/utils/multiclass.py:79: UserWarning: The number of unique classes is greater than 50% of the number of samples. `y` could represent a regression problem, not a classification problem.
+  ys_types = set(type_of_target(x) for x in ys)
+---- Eval at Epoch 0: cls [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.013682134233697575] | det_recall [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5011223277475109, 0.5114053692305811] | det_fa [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.002416807354226074, 0.5538010919147652] ----
+T9 Ep 1/1 | L 2.2105 | Train Acc 0.28 | Prec 0.22 | F1 0.34 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 984.01s (Eval 954.97s, Train 29.04s)
+[STATE 2026-04-30 16:15:12] T9 Ep 1/1 complete: Prec 0.2248 F1 0.3424 DetRec 0.9984 DetFA 0.0029 | 984.01s total (954.97s eval/29.04s train)
+[STATE 2026-04-30 16:15:12] Task 9: running final validation.
+[STATE 2026-04-30 16:28:41] Completed task 9 (10/10)
+####Final Validation Accuracy####
+Final Results:- 
+ Total Recall: 0.0013368814539146613 
+ Individual Recall: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.013368814539146612]
+Final Detection Results:- 
+ Total Detection: 0.5012770934774945 
+ Individual Detection: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5000020211819872, 0.5000015694250882, 0.5008830288397819, 0.5118843153280872]
+Final Detection False Alarm:- 
+ Total False Alarm: 0.05561623086140451 
+ Individual False Alarm: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0028331715795437903, 0.5533291370345014]
+SUMMARY_TR cls_rec=0.2766 cls_prec=0.2248 cls_f1=0.3424 det=0.5013 fa=0.0556
+SUMMARY_TE cls_rec=0.0013 cls_prec=0.0000 cls_f1=0.0294 det=0.5013 fa=0.0556
+[STATE 2026-04-30 16:28:43] Saving results to logs//er_ring/full-tasks_CIL_all-2026-04-30_13-14-16-9203/0/results
+Model size: 0.0289 GB
+Memory buffer size: 0.0197 GB
+logs//er_ring/full-tasks_CIL_all-2026-04-30_13-14-16-9203/0/results: {'expt_name': 'full-tasks_CIL_all', 'model': 'er_ring', 'arch': 'resnet1d', 'n_hiddens': 100, 'n_layers': 2, 'xav_init': False, 'debug': False, 'use_detector_arch': False, 'use_groupnorm': False, 'inner_steps': 2, 'n_epochs': 1, 'batch_size': 256, 'replay_batch_size': 128, 'memories': 5120, 'lr': 0.01, 'optimizer': 'sgd', 'prune_perc': 0.75, 'post_prune_epochs': 0, 'class_weighted_ce': True, 'cuda': True, 'amp': True, 'amp_dtype': 'bfloat16', 'cudnn_benchmark': True, 'seed': 0, 'log_every': 10, 'log_dir': 'logs//er_ring/full-tasks_CIL_all-2026-04-30_13-14-16-9203/0', 'tf_dir': 'logs//er_ring/full-tasks_CIL_all-2026-04-30_13-14-16-9203/0/tfdir', 'calc_test_accuracy': False, 'state_logging': True, 'data_path': 'data/rff/radar/full', 'task_order_files': 't2-rcn,t0-rcn,t2-uclresm-25noise,t0-deeprad,t1-deeprad,t1-uclresm-25noise,t3-deeprad,t0-uclresm-25noise,t1-rcn,t2-deeprad', 'loader': 'class_incremental_loader', 'samples_per_task': -1, 'shuffle_tasks': False, 'classes_per_it': 6, 'iterations': 5000, 'dataset': 'iq', 'workers': 0, 'validation': 0.5, 'data_scaling': 'normalize', 'use_iq_aug_features': False, 'iq_aug_feature_type': 'power', 'class_order': 'random', 'increment': 5, 'test_batch_size': 512, 'nc_per_task': None, 'nc_per_task_list': '', 'val_rate': 1000, 'opt_lr': 0.1, 'opt_wt': 0.1, 'alpha_init': 0.001, 'momentum': 0.0, 'learn_lr': False, 'sync_update': False, 'grad_clip_norm': 5.0, 'meta_batches': 3, 'use_old_task_memory': False, 'second_order': False, 'n_memories': 5120, 'memory_strength': 0, 'memory_loss_lambda': 0.1, 'steps_per_sample': 1, 'bgd_optimizer': 'sgd', 'optimizer_params': '{}', 'train_mc_iters': 5, 'std_init': 0.05, 'mean_eta': 1, 'fisher_gamma': 0.95, 'rln': 7, 'meta_lr': 0.001, 'update_lr': 0.1, 'ctx_lr': 0.05, 'n_meta': 1, 'temperature': 5.0, 'task_emb': 64, 'noise_label': 54, 'classes_per_task': [5, 6, 5, 6, 6, 5, 5, 5, 6, 5], 'get_samples_per_task': <bound method IncrementalLoader.get_samples_per_task of <dataloaders.class_incremental_loader.IncrementalLoader object at 0x760fd7e6e230>>, 'task_epoch_schedule': {}} # val: 0.147 0.001 -0.146 0.000 # sizes: model_gb=0.0289 mem_gb=0.0197 # 11582.158606290817
+[STATE 2026-04-30 16:28:43] results.pt components (approx): state_dict 29.6 MB, result_val_t 0.1 KB, result_val_a 0.8 KB
+[STATE 2026-04-30 16:28:43] Results saved; total runtime 3.22h
+Total runtime: 3.22 hours

@@ -108,3 +108,105 @@ Task 2: 350028 training samples, 175014 test samples.
 ---- Zero-shot (pre-train) task 2: rec_cls 0.1996 | prec_cls 0.2163 | f1_cls 0.1510 | det 0.4848 | pfa 0.9566 | total_f1 0.5566 ----
 [STATE 2026-04-30 13:29:50] Starting task 2 (3/10)
 [STATE 2026-04-30 13:29:50] Task 2 Epoch 1/1: entering train loop
+[STATE 2026-04-30 15:35:19] Task 2 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.6630233578356397, 0.692688798169526, 0.6462384856015249] | det_recall [0.8430921604403832, 0.5820658182158038, 0.8201953728305862] | det_fa [0.21436567362992417, 0.8073479232036411, 0.30997700449469145] ----
+T2 Ep 1/1 | L 3.5453 | Train Acc 0.44 | Prec 0.52 | F1 0.47 | Det Rec 0.78 | Det FA 0.29 | Epoch Time 7632.44s (Eval 103.33s, Train 7529.12s)
+[STATE 2026-04-30 15:37:03] T2 Ep 1/1 complete: Prec 0.5228 F1 0.4748 DetRec 0.7822 DetFA 0.2890 | 7632.44s total (103.33s eval/7529.12s train)
+[STATE 2026-04-30 15:37:03] Task 2: running final validation.
+[STATE 2026-04-30 15:38:46] Completed task 2 (3/10)
+Task 3: 24480 training samples, 8160 test samples.
+[STATE 2026-04-30 15:38:46] Task 3: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 3: rec_cls 0.1463 | prec_cls 0.1949 | f1_cls 0.1047 | det 0.4020 | pfa 0.9154 | total_f1 0.4734 ----
+[STATE 2026-04-30 15:40:33] Starting task 3 (4/10)
+[STATE 2026-04-30 15:40:33] Task 3 Epoch 1/1: entering train loop
+[STATE 2026-04-30 15:49:15] Task 3 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.7314661432132679, 0.7340803549459394, 0.5367600118533407, 0.4986662425601227] | det_recall [0.8550088944691082, 0.5744749608696358, 0.7965507498060003, 0.9952190417452167] | det_fa [0.22502806219104407, 0.8447004574460921, 0.34448243507866644, 0.0024467161851981474] ----
+T3 Ep 1/1 | L 9.5773 | Train Acc 0.33 | Prec 0.33 | F1 0.39 | Det Rec 0.91 | Det FA 0.02 | Epoch Time 628.92s (Eval 107.22s, Train 521.71s)
+[STATE 2026-04-30 15:51:02] T3 Ep 1/1 complete: Prec 0.3320 F1 0.3897 DetRec 0.9109 DetFA 0.0207 | 628.92s total (107.22s eval/521.71s train)
+[STATE 2026-04-30 15:51:02] Task 3: running final validation.
+[STATE 2026-04-30 15:52:49] Completed task 3 (4/10)
+Task 4: 24480 training samples, 8160 test samples.
+[STATE 2026-04-30 15:52:49] Task 4: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 4: rec_cls 0.1609 | prec_cls 0.2046 | f1_cls 0.1109 | det 0.3993 | pfa 0.9825 | total_f1 0.4842 ----
+[STATE 2026-04-30 15:54:41] Starting task 4 (5/10)
+[STATE 2026-04-30 15:54:41] Task 4 Epoch 1/1: entering train loop
+[STATE 2026-04-30 16:03:17] Task 4 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.7449096206310989, 0.7253311330413472, 0.5532267449811588, 0.4926894434190183, 0.3266048722601976] | det_recall [0.8585838524238962, 0.6175369639747701, 0.791264436227652, 0.995485320639193, 1.0] | det_fa [0.22961363129417947, 0.7533913701755417, 0.3618156146578757, 0.0066055260513047335, 0.0] ----
+T4 Ep 1/1 | L 5.2792 | Train Acc 0.24 | Prec 0.26 | F1 0.32 | Det Rec 0.91 | Det FA 0.01 | Epoch Time 628.19s (Eval 111.34s, Train 516.85s)
+[STATE 2026-04-30 16:05:09] T4 Ep 1/1 complete: Prec 0.2602 F1 0.3192 DetRec 0.9132 DetFA 0.0083 | 628.19s total (111.34s eval/516.85s train)
+[STATE 2026-04-30 16:05:09] Task 4: running final validation.
+[STATE 2026-04-30 16:07:00] Completed task 4 (5/10)
+Task 5: 201410 training samples, 100705 test samples.
+[STATE 2026-04-30 16:07:01] Task 5: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 5: rec_cls 0.1677 | prec_cls 0.1952 | f1_cls 0.1126 | det 0.4573 | pfa 0.9669 | total_f1 0.4731 ----
+[STATE 2026-04-30 16:09:42] Starting task 5 (6/10)
+[STATE 2026-04-30 16:09:42] Task 5 Epoch 1/1: entering train loop
+[STATE 2026-04-30 16:43:16] Task 5 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.7088810302574586, 0.6818380971293346, 0.5883638129153739, 0.422208367972543, 0.2975004247125989, 0.6735162512978822] | det_recall [0.8537435033439574, 0.6911173604543698, 0.8078838878691199, 0.9940075360717011, 0.9998829588014981, 0.8514376637815365] | det_fa [0.2323821472038279, 0.5906298292853863, 0.3224808569630648, 0.011017096289821308, 0.0, 0.21142182922369077] ----
+T5 Ep 1/1 | L 2.4166 | Train Acc 0.51 | Prec 0.60 | F1 0.54 | Det Rec 0.81 | Det FA 0.28 | Epoch Time 2100.65s (Eval 85.88s, Train 2014.77s)
+[STATE 2026-04-30 16:44:42] T5 Ep 1/1 complete: Prec 0.6009 F1 0.5407 DetRec 0.8120 DetFA 0.2754 | 2100.65s total (85.88s eval/2014.77s train)
+[STATE 2026-04-30 16:44:42] Task 5: running final validation.
+[STATE 2026-04-30 16:46:08] Completed task 5 (6/10)
+Task 6: 17340 training samples, 6800 test samples.
+[STATE 2026-04-30 16:46:08] Task 6: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 6: rec_cls 0.1038 | prec_cls 0.1454 | f1_cls 0.1480 | det 0.6717 | pfa 0.6365 | total_f1 0.4943 ----
+[STATE 2026-04-30 16:47:36] Starting task 6 (7/10)
+[STATE 2026-04-30 16:47:36] Task 6 Epoch 1/1: entering train loop
+[STATE 2026-04-30 16:49:06] Task 6 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.7011318458280397, 0.7125237272598889, 0.5372245436593065, 0.4975267235007178, 0.31347381830371573, 0.6289994762886659, 0.45565914386517264] | det_recall [0.8349382535877087, 0.6150326480293407, 0.7891381270783556, 0.9947309926849867, 1.0, 0.8316415750057231, 0.9995919626074113] | det_fa [0.26400911009844213, 0.761218916272543, 0.3510177606142518, 0.009556566505516196, 0.0, 0.2699397594406163, 0.0008160747851772288] ----
+T6 Ep 1/1 | L 6.5310 | Train Acc 0.31 | Prec 0.30 | F1 0.39 | Det Rec 0.95 | Det FA 0.02 | Epoch Time 177.82s (Eval 87.89s, Train 89.94s)
+[STATE 2026-04-30 16:50:34] T6 Ep 1/1 complete: Prec 0.2951 F1 0.3884 DetRec 0.9545 DetFA 0.0182 | 177.82s total (87.89s eval/89.94s train)
+[STATE 2026-04-30 16:50:34] Task 6: running final validation.
+[STATE 2026-04-30 16:52:02] Completed task 6 (7/10)
+Task 7: 188050 training samples, 94025 test samples.
+[STATE 2026-04-30 16:52:02] Task 7: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 7: rec_cls 0.1933 | prec_cls 0.2116 | f1_cls 0.1367 | det 0.4607 | pfa 0.9108 | total_f1 0.4855 ----
+[STATE 2026-04-30 16:53:55] Starting task 7 (8/10)
+[STATE 2026-04-30 16:53:55] Task 7 Epoch 1/1: entering train loop
+[STATE 2026-04-30 17:11:44] Task 7 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.636184077447294, 0.6559370162814373, 0.5653195607328425, 0.4242961541220535, 0.2919436706145524, 0.6385513824383999, 0.3782262220237723, 0.6962139983920952] | det_recall [0.7480895712285415, 0.6401978657244866, 0.799573392997291, 0.9902849776711826, 1.0, 0.8431443065380612, 0.9904655851615682, 0.8196085796782626] | det_fa [0.4586555191237509, 0.6998598083027542, 0.30582170287441934, 0.019187796595618978, 0.0, 0.2284349824361939, 0.019068829676863797, 0.3268455618212192] ----
+T7 Ep 1/1 | L 1.9382 | Train Acc 0.56 | Prec 0.64 | F1 0.58 | Det Rec 0.79 | Det FA 0.34 | Epoch Time 1182.32s (Eval 112.86s, Train 1069.46s)
+[STATE 2026-04-30 17:13:37] T7 Ep 1/1 complete: Prec 0.6361 F1 0.5786 DetRec 0.7912 DetFA 0.3404 | 1182.32s total (112.86s eval/1069.46s train)
+[STATE 2026-04-30 17:13:37] Task 7: running final validation.
+[STATE 2026-04-30 17:15:29] Completed task 7 (8/10)
+Task 8: 36658 training samples, 12220 test samples.
+[STATE 2026-04-30 17:15:29] Task 8: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 8: rec_cls 0.2162 | prec_cls 0.2083 | f1_cls 0.0944 | det 0.5001 | pfa 0.9521 | total_f1 0.4673 ----
+[STATE 2026-04-30 17:17:25] Starting task 8 (9/10)
+[STATE 2026-04-30 17:17:25] Task 8 Epoch 1/1: entering train loop
+[STATE 2026-04-30 17:20:34] Task 8 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.6737502081519011, 0.7007581782480726, 0.553580774896554, 0.4584903455501895, 0.30379397725625196, 0.6317320263337657, 0.4307547842692511, 0.6306316871328935, 0.4635940743719685] | det_recall [0.8422764488487255, 0.7703607302975212, 0.7835534779862768, 0.99395137453771, 0.9997571707707165, 0.8242500967168364, 0.999316671931741, 0.8085611126856752, 0.8129669202483657] | det_fa [0.2652900160652844, 0.4200042081341996, 0.38770199769921426, 0.009880442142388002, 0.0, 0.2802983655861963, 0.0010876382793750135, 0.32693376722222495, 0.09746636589393061] ----
+T8 Ep 1/1 | L 2.9552 | Train Acc 0.30 | Prec 0.37 | F1 0.37 | Det Rec 0.74 | Det FA 0.08 | Epoch Time 304.24s (Eval 115.47s, Train 188.77s)
+[STATE 2026-04-30 17:22:29] T8 Ep 1/1 complete: Prec 0.3706 F1 0.3749 DetRec 0.7433 DetFA 0.0758 | 304.24s total (115.47s eval/188.77s train)
+[STATE 2026-04-30 17:22:29] Task 8: running final validation.
+[STATE 2026-04-30 17:24:25] Completed task 8 (9/10)
+Task 9: 17340 training samples, 6800 test samples.
+[STATE 2026-04-30 17:24:25] Task 9: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 9: rec_cls 0.2771 | prec_cls 0.2192 | f1_cls 0.1690 | det 0.4331 | pfa 1.0000 | total_f1 0.4972 ----
+[STATE 2026-04-30 17:26:22] Starting task 9 (10/10)
+[STATE 2026-04-30 17:26:22] Task 9 Epoch 1/1: entering train loop
+[STATE 2026-04-30 17:27:52] Task 9 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.6725622180470937, 0.6673829867144757, 0.5364887565766312, 0.49212072748405145, 0.3109805001585659, 0.6065799582753494, 0.40925529909992947, 0.5871083627841458, 0.43622621544379775, 0.37026672670540417] | det_recall [0.8336892720714392, 0.7749280535255899, 0.7794326887115185, 0.9937817349274932, 1.0, 0.8299617378434975, 0.9995734961154128, 0.7978668396901913, 0.8087875239184795, 1.0] | det_fa [0.3081173649379205, 0.4113147399588881, 0.35146147228959795, 0.010745965050676187, 0.0, 0.26404867004847177, 0.0008530077691741771, 0.3459305784093386, 0.15174300256266463, 0.0] ----
+T9 Ep 1/1 | L 4.4666 | Train Acc 0.32 | Prec 0.32 | F1 0.39 | Det Rec 0.92 | Det FA 0.04 | Epoch Time 207.23s (Eval 117.66s, Train 89.56s)
+[STATE 2026-04-30 17:29:49] T9 Ep 1/1 complete: Prec 0.3175 F1 0.3927 DetRec 0.9234 DetFA 0.0404 | 207.23s total (117.66s eval/89.56s train)
+[STATE 2026-04-30 17:29:49] Task 9: running final validation.
+[STATE 2026-04-30 17:31:47] Completed task 9 (10/10)
+####Final Validation Accuracy####
+Final Results:- 
+ Total Recall: 0.5118139690746631 
+ Individual Recall: [0.6710786504592203, 0.667846746055945, 0.5341182250928549, 0.49718823949597785, 0.3116235590137204, 0.6083515215087905, 0.41909541361527874, 0.5865462420375084, 0.43845459618610927, 0.3838364972812268]
+Final Detection Results:- 
+ Total Detection: 0.8813262762339782 
+ Individual Detection: [0.835678232215318, 0.7743385120239435, 0.7793596374624412, 0.9936109499897977, 1.0, 0.8296638993884439, 0.9993094922077237, 0.7983108154349803, 0.8029912236171338, 1.0]
+Final Detection False Alarm:- 
+ Total False Alarm: 0.18473161737037905 
+ Individual False Alarm: [0.3068759135014167, 0.41040150404084796, 0.35090364959799153, 0.01109463671834178, 0.0, 0.26472520267113786, 0.0013810155845524988, 0.34402096294655765, 0.15791328864294432, 0.0]
+SUMMARY_TR cls_rec=0.3240 cls_prec=0.3175 cls_f1=0.3927 det=0.8818 fa=0.1844
+SUMMARY_TE cls_rec=0.5118 cls_prec=0.5165 cls_f1=0.5149 det=0.8813 fa=0.1847
+[STATE 2026-04-30 17:31:47] Saving results to logs//eralg4/full-tasks_CIL_all-2026-04-30_13-09-16-6496/0/results
+Model size: 0.0289 GB
+Memory buffer size: 0.0000 GB
+logs//eralg4/full-tasks_CIL_all-2026-04-30_13-09-16-6496/0/results: {'expt_name': 'full-tasks_CIL_all', 'model': 'eralg4', 'arch': 'resnet1d', 'n_hiddens': 100, 'n_layers': 2, 'xav_init': False, 'debug': False, 'use_detector_arch': False, 'use_groupnorm': False, 'inner_steps': 2, 'n_epochs': 1, 'batch_size': 256, 'replay_batch_size': 128, 'memories': 5120, 'lr': 0.003, 'optimizer': 'sgd', 'prune_perc': 0.75, 'post_prune_epochs': 0, 'class_weighted_ce': True, 'cuda': True, 'amp': True, 'amp_dtype': 'bfloat16', 'cudnn_benchmark': True, 'seed': 0, 'log_every': 10, 'log_dir': 'logs//eralg4/full-tasks_CIL_all-2026-04-30_13-09-16-6496/0', 'tf_dir': 'logs//eralg4/full-tasks_CIL_all-2026-04-30_13-09-16-6496/0/tfdir', 'calc_test_accuracy': False, 'state_logging': True, 'data_path': 'data/rff/radar/full', 'task_order_files': 't2-rcn,t0-rcn,t2-uclresm-25noise,t0-deeprad,t1-deeprad,t1-uclresm-25noise,t3-deeprad,t0-uclresm-25noise,t1-rcn,t2-deeprad', 'loader': 'task_incremental_loader', 'samples_per_task': -1, 'shuffle_tasks': False, 'classes_per_it': 6, 'iterations': 5000, 'dataset': 'iq', 'workers': 0, 'validation': 0.5, 'data_scaling': 'normalize', 'use_iq_aug_features': False, 'iq_aug_feature_type': 'power', 'class_order': 'random', 'increment': 5, 'test_batch_size': 512, 'nc_per_task': None, 'nc_per_task_list': '', 'val_rate': 1000, 'opt_lr': 0.1, 'opt_wt': 0.1, 'alpha_init': 0.001, 'momentum': 0.0, 'learn_lr': False, 'sync_update': False, 'grad_clip_norm': 5.0, 'meta_batches': 3, 'use_old_task_memory': False, 'second_order': False, 'n_memories': 5120, 'memory_strength': 0, 'memory_loss_lambda': 5, 'steps_per_sample': 1, 'bgd_optimizer': 'sgd', 'optimizer_params': '{}', 'train_mc_iters': 5, 'std_init': 0.05, 'mean_eta': 1, 'fisher_gamma': 0.95, 'rln': 7, 'meta_lr': 0.001, 'update_lr': 0.1, 'ctx_lr': 0.05, 'n_meta': 1, 'temperature': 5.0, 'task_emb': 64, 'classes_per_task': [6, 7, 6, 7, 7, 6, 6, 6, 7, 6], 'get_samples_per_task': <bound method IncrementalLoader.get_samples_per_task of <dataloaders.task_incremental_loader.IncrementalLoader object at 0x71df2ded6230>>, 'task_epoch_schedule': {}} # val: 0.565 0.512 -0.053 0.000 # sizes: model_gb=0.0289 mem_gb=0.0000 # 15687.16075849533
+[STATE 2026-04-30 17:31:47] results.pt components (approx): state_dict 29.6 MB, result_val_t 0.1 KB, result_val_a 0.8 KB
+[STATE 2026-04-30 17:31:48] Results saved; total runtime 4.36h
+Total runtime: 4.36 hours

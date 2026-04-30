@@ -14,3 +14,5 @@
 [2026-04-30T13:09:14+01:00] === Queue phase on lnx-elkk-1 (util high/low) ===
 [2026-04-30T13:09:14+01:00] --- Dispatching: base + eralg4 + eralg4.yaml (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260430_130914_lnx-elkk-1/job_logs/job_eralg4_20260430_130914_938168736.log) ---
 [2026-04-30T13:09:14+01:00] START eralg4
+[2026-04-30T17:31:49+01:00] Completed: eralg4 (exit 0)
+[2026-04-30T17:31:49+01:00] === full_experiments.sh finished: successful_runs=1 unsuccessful_runs=0 total_runtime=04:22:35 (15755s) ===
