@@ -14,3 +14,4 @@
 [2026-04-29T11:06:45+01:00] === Queue phase on lnx-elkk-1 (util high/low) ===
 [2026-04-29T11:06:45+01:00] --- Dispatching: base + agem + agem.yaml (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260429_110645_lnx-elkk-1/job_logs/job_agem_20260429_110645_774575689.log) ---
 [2026-04-29T11:06:45+01:00] START agem
+[2026-04-29T16:46:36+01:00] ERROR: agem failed with exit code 130
