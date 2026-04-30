@@ -197,7 +197,7 @@ Final Detection Results:-
 Final Detection False Alarm:- 
  Total False Alarm: 0.27448913773054046 
  Individual False Alarm: [0.00713208357255913, 0.016648564474366585, 0.2382020560263087, 0.24967538759260316, 0.33648135332681733, 0.27792356775459437, 0.3076816141256693, 0.2774639849763365, 0.5034255554904681, 0.5302572099656816]
-SUMMARY_TR cls_rec=0.0924 cls_prec=0.1054 cls_f1=0.2230 det=0.4678 fa=0.2748
+SUMMARY_TR cls_rec=0.2320 cls_prec=0.2480 cls_f1=0.2740 det=0.4678 fa=0.2748
 SUMMARY_TE cls_rec=0.0313 cls_prec=0.0882 cls_f1=0.0555 det=0.4676 fa=0.2745
 [STATE 2026-04-13 19:36:27] Saving results to logs//gem/full-tasks-2_all-10epochs_weighted-loss-2026-04-13_15-13-40-6200/0/results
 Model size: 0.0289 GB

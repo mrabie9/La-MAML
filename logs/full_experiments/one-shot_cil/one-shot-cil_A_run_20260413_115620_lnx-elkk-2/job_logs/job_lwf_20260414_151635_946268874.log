@@ -197,7 +197,7 @@ Final Detection Results:-
 Final Detection False Alarm:- 
  Total False Alarm: 0.8394597376263718 
  Individual False Alarm: [0.20220390462410037, 0.7127436790530669, 0.7984375391510897, 0.8372410638932216, 0.8817592692676831, 0.9810494132857618, 0.9841127713421574, 0.9989634435247642, 0.9991096806892897, 0.9989766114325828]
-SUMMARY_TR cls_rec=0.1060 cls_prec=0.3398 cls_f1=0.1233 det=0.5641 fa=0.8400
+SUMMARY_TR cls_rec=0.3080 cls_prec=0.5440 cls_f1=0.3110 det=0.5641 fa=0.8400
 SUMMARY_TE cls_rec=0.1359 cls_prec=0.1712 cls_f1=0.1110 det=0.5644 fa=0.8395
 [STATE 2026-04-14 18:57:50] Saving results to logs//lwf/full-tasks-2_all-10epochs_weighted-loss-2026-04-14_15-16-37-6631/0/results
 Model size: 0.0577 GB

@@ -467,7 +467,7 @@ Final Detection Results:-
 Final Detection False Alarm:- 
  Total False Alarm: 0.13562309920909812 
  Individual False Alarm: [0.0, 0.0, 0.0, 0.004252146876157106, 0.0019264867744930348, 0.17113325102858873, 0.16081301960942623, 0.20429209741117188, 0.2986881933042717, 0.5151257970868726]
-SUMMARY_TR cls_rec=0.4527 cls_prec=0.4591 cls_f1=0.5377 det=0.5043 fa=0.0847
+SUMMARY_TR cls_rec=0.7040 cls_prec=0.7100 cls_f1=0.6960 det=0.5043 fa=0.0847
 SUMMARY_TE cls_rec=0.0037 cls_prec=0.0038 cls_f1=0.0297 det=0.4786 fa=0.1356
 [STATE 2026-04-16 02:52:32] Saving results to logs//rwalk/full-tasks_CIL_all-2026-04-15_22-23-59-1983/0/results
 Model size: 0.0289 GB
