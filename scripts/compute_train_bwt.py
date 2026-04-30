@@ -21,8 +21,9 @@ import csv
 import importlib
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Sequence, Tuple
 
 import numpy as np
 import torch
@@ -49,6 +50,17 @@ except ImportError:  # pragma: no cover
 _TASK_EPOCH_F1_RE = re.compile(
     r"T(?P<task>\d+)\s+Ep\s+\d+/\d+\s+complete:\s+Prec\s+[0-9.]+\s+F1\s+(?P<f1>[0-9.]+)"
 )
+
+
+@dataclass
+class SharedLoaderContext:
+    """Reusable loader-derived context shared across compatible models."""
+
+    n_inputs: int
+    n_outputs: int
+    n_tasks: int
+    train_task_loaders: List[Any]
+    get_samples_per_task_resolver: Any
 
 
 def _parse_args() -> argparse.Namespace:
@@ -214,17 +226,77 @@ def _load_results_bundle(
     return state_dict, copy.deepcopy(saved_args)
 
 
-def _instantiate_model_and_loader(
-    run_args: argparse.Namespace,
-    state_dict: dict[str, Any],
-    device: torch.device,
-):
+def _build_loader_cache_key(run_args: argparse.Namespace) -> Tuple[Any, ...]:
+    """Build a cache key for dataloader contexts that can be shared."""
+    key_fields = (
+        "loader",
+        "data_path",
+        "dataset",
+        "task_order_files",
+        "shuffle_tasks",
+        "class_order",
+        "increment",
+        "validation",
+        "workers",
+        "samples_per_task",
+        "seed",
+        "classes_per_it",
+        "nc_per_task",
+        "nc_per_task_list",
+        "data_scaling",
+        "use_iq_aug_features",
+        "iq_aug_feature_type",
+        "test_batch_size",
+    )
+    return tuple(getattr(run_args, field_name, None) for field_name in key_fields)
+
+
+def _build_shared_loader_context(run_args: argparse.Namespace) -> SharedLoaderContext:
+    """Build a single loader context that can be reused by many models."""
     loader_module = importlib.import_module(f"dataloaders.{run_args.loader}")
     incremental_loader = loader_module.IncrementalLoader(run_args, seed=run_args.seed)
     n_inputs, n_outputs, n_tasks = incremental_loader.get_dataset_info()
+    train_task_loaders = _build_train_task_loaders(incremental_loader)
+    return SharedLoaderContext(
+        n_inputs=n_inputs,
+        n_outputs=n_outputs,
+        n_tasks=n_tasks,
+        train_task_loaders=train_task_loaders,
+        get_samples_per_task_resolver=incremental_loader.get_samples_per_task,
+    )
+
+
+def _get_or_build_shared_loader_context(
+    run_args: argparse.Namespace,
+    loader_context_cache: Dict[Tuple[Any, ...], SharedLoaderContext],
+) -> SharedLoaderContext:
+    """Return a cached shared loader context, building it once per key."""
+    cache_key = _build_loader_cache_key(run_args)
+    shared_context = loader_context_cache.get(cache_key)
+    if shared_context is not None:
+        return shared_context
+    shared_context = _build_shared_loader_context(run_args)
+    loader_context_cache[cache_key] = shared_context
+    return shared_context
+
+
+def _instantiate_model(
+    run_args: argparse.Namespace,
+    state_dict: dict[str, Any],
+    device: torch.device,
+    shared_loader_context: SharedLoaderContext,
+):
+    # Some learners (for example iCaRL) expect this resolver on args and
+    # assert when samples_per_task <= 0 if it is missing.
+    run_args.get_samples_per_task = shared_loader_context.get_samples_per_task_resolver
 
     model_module = importlib.import_module(f"model.{run_args.model}")
-    model = model_module.Net(n_inputs, n_outputs, n_tasks, run_args)
+    model = model_module.Net(
+        shared_loader_context.n_inputs,
+        shared_loader_context.n_outputs,
+        shared_loader_context.n_tasks,
+        run_args,
+    )
 
     model_state_dict = model.state_dict()
     filtered_state = {
@@ -233,7 +305,7 @@ def _instantiate_model_and_loader(
     model.load_state_dict(filtered_state, strict=False)
     model.to(device)
     model.eval()
-    return model, incremental_loader
+    return model
 
 
 def _build_train_task_loaders(incremental_loader: Any) -> List[Any]:
@@ -341,6 +413,7 @@ def _filter_job_logs_by_algorithms(
 def _evaluate_one_job_log(
     job_log_path: Path,
     device: torch.device,
+    loader_context_cache: Dict[Tuple[Any, ...], SharedLoaderContext],
 ) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
     peak_train_f1_by_task = _parse_peak_train_f1_from_job_log(job_log_path)
     run_dir = _resolve_run_dir_from_job_log(job_log_path)
@@ -349,13 +422,13 @@ def _evaluate_one_job_log(
 
     run_args.cuda = device.type == "cuda"
     run_args.log_dir = str(run_dir)
-    model, incremental_loader = _instantiate_model_and_loader(
-        run_args, state_dict, device
+    shared_loader_context = _get_or_build_shared_loader_context(
+        run_args, loader_context_cache
     )
-    train_task_loaders = _build_train_task_loaders(incremental_loader)
+    model = _instantiate_model(run_args, state_dict, device, shared_loader_context)
     final_train_f1_by_task = _evaluate_final_model_train_f1(
         model=model,
-        train_task_loaders=train_task_loaders,
+        train_task_loaders=shared_loader_context.train_task_loaders,
         run_args=run_args,
     )
     per_task_rows, avg_forgetting, train_bwt_proxy = _rows_and_aggregate(
@@ -413,9 +486,12 @@ def main() -> None:
     aggregate_rows: List[Dict[str, Any]] = []
     detailed_rows: List[Dict[str, Any]] = []
     failed_rows: List[Dict[str, str]] = []
+    loader_context_cache: Dict[Tuple[Any, ...], SharedLoaderContext] = {}
     for log_index, job_log_path in enumerate(job_logs, start=1):
         try:
-            aggregate, detailed = _evaluate_one_job_log(job_log_path, device)
+            aggregate, detailed = _evaluate_one_job_log(
+                job_log_path, device, loader_context_cache
+            )
             aggregate_rows.append(aggregate)
             detailed_rows.extend(detailed)
             print(
