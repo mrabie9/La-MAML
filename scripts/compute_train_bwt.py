@@ -50,6 +50,8 @@ except ImportError:  # pragma: no cover
 _TASK_EPOCH_F1_RE = re.compile(
     r"T(?P<task>\d+)\s+Ep\s+\d+/\d+\s+complete:\s+Prec\s+[0-9.]+\s+F1\s+(?P<f1>[0-9.]+)"
 )
+_EVAL_CLS_VECTOR_RE = re.compile(r"Eval at Epoch\s+\d+:\s+cls\s+\[(?P<cls>[^\]]*)\]")
+_SHARED_EVAL_VALIDATION_SPLIT = 0.3
 
 
 @dataclass
@@ -60,6 +62,7 @@ class SharedLoaderContext:
     n_outputs: int
     n_tasks: int
     train_task_loaders: List[Any]
+    test_task_loaders: List[Any]
     get_samples_per_task_resolver: Any
 
 
@@ -142,6 +145,28 @@ def _parse_peak_train_f1_from_job_log(job_log_path: Path) -> Dict[int, float]:
             f"No task epoch-complete F1 lines found in log: {job_log_path}"
         )
     return peak_by_task
+
+
+def _parse_task_end_test_f1_from_job_log(job_log_path: Path) -> Dict[int, float]:
+    """Parse per-task test F1 measured right after each task training step."""
+    task_end_test_f1_by_task: Dict[int, float] = {}
+    with job_log_path.open("r", encoding="utf-8", errors="replace") as log_file:
+        for line_text in log_file:
+            match = _EVAL_CLS_VECTOR_RE.search(line_text)
+            if match is None:
+                continue
+            cls_raw_values = match.group("cls").strip()
+            if not cls_raw_values:
+                continue
+            cls_tokens = [token.strip() for token in cls_raw_values.split(",")]
+            cls_values = [float(token) for token in cls_tokens if token]
+            if not cls_values:
+                continue
+            task_index = len(cls_values) - 1
+            task_end_test_f1_by_task[task_index] = cls_values[task_index]
+    if not task_end_test_f1_by_task:
+        raise SystemExit(f"No per-epoch eval cls vectors found in log: {job_log_path}")
+    return task_end_test_f1_by_task
 
 
 def _resolve_run_dir_from_job_log(job_log_path: Path) -> Path:
@@ -253,15 +278,20 @@ def _build_loader_cache_key(run_args: argparse.Namespace) -> Tuple[Any, ...]:
 
 def _build_shared_loader_context(run_args: argparse.Namespace) -> SharedLoaderContext:
     """Build a single loader context that can be reused by many models."""
+    # Train-BWT evaluation is data-loading heavy; use more workers to reduce
+    # loader bottlenecks when rebuilding task loaders.
+    run_args.workers = 12
+    run_args.validation = _SHARED_EVAL_VALIDATION_SPLIT
     loader_module = importlib.import_module(f"dataloaders.{run_args.loader}")
     incremental_loader = loader_module.IncrementalLoader(run_args, seed=run_args.seed)
     n_inputs, n_outputs, n_tasks = incremental_loader.get_dataset_info()
-    train_task_loaders = _build_train_task_loaders(incremental_loader)
+    train_task_loaders, test_task_loaders = _build_task_loaders(incremental_loader)
     return SharedLoaderContext(
         n_inputs=n_inputs,
         n_outputs=n_outputs,
         n_tasks=n_tasks,
         train_task_loaders=train_task_loaders,
+        test_task_loaders=test_task_loaders,
         get_samples_per_task_resolver=incremental_loader.get_samples_per_task,
     )
 
@@ -271,10 +301,19 @@ def _get_or_build_shared_loader_context(
     loader_context_cache: Dict[Tuple[Any, ...], SharedLoaderContext],
 ) -> SharedLoaderContext:
     """Return a cached shared loader context, building it once per key."""
+    run_args.validation = _SHARED_EVAL_VALIDATION_SPLIT
     cache_key = _build_loader_cache_key(run_args)
     shared_context = loader_context_cache.get(cache_key)
     if shared_context is not None:
+        print(
+            f"CACHE_HIT loader={run_args.loader} dataset={run_args.dataset} "
+            f"tasks={shared_context.n_tasks} workers={run_args.workers}"
+        )
         return shared_context
+    print(
+        f"CACHE_MISS loader={run_args.loader} dataset={run_args.dataset} "
+        f"validation={run_args.validation} workers={run_args.workers}"
+    )
     shared_context = _build_shared_loader_context(run_args)
     loader_context_cache[cache_key] = shared_context
     return shared_context
@@ -308,14 +347,16 @@ def _instantiate_model(
     return model
 
 
-def _build_train_task_loaders(incremental_loader: Any) -> List[Any]:
+def _build_task_loaders(incremental_loader: Any) -> tuple[List[Any], List[Any]]:
     train_task_loaders: List[Any] = []
+    test_task_loaders: List[Any] = []
     for _ in range(incremental_loader.n_tasks):
         _task_info, train_loader, _val_loader, _test_loader = (
             incremental_loader.new_task()
         )
         train_task_loaders.append(train_loader)
-    return train_task_loaders
+        test_task_loaders.append(_test_loader)
+    return train_task_loaders, test_task_loaders
 
 
 def _extract_metric_at_index(metric_values: object, index: int) -> float:
@@ -328,9 +369,9 @@ def _extract_metric_at_index(metric_values: object, index: int) -> float:
     return float(metric_values)
 
 
-def _evaluate_final_model_train_f1(
+def _evaluate_final_model_f1_by_task(
     model: torch.nn.Module,
-    train_task_loaders: Sequence[Any],
+    task_loaders: Sequence[Any],
     run_args: argparse.Namespace,
 ) -> Dict[int, float]:
     evaluator = (
@@ -339,40 +380,65 @@ def _evaluate_final_model_train_f1(
         else eval_tasks
     )
     with torch.no_grad():
-        eval_output = evaluator(model, list(train_task_loaders), run_args)
+        eval_output = evaluator(model, list(task_loaders), run_args)
     _cls_rec, _cls_prec, cls_f1, _det, _fa = _split_eval_output(eval_output)
     return {
         task_index: _extract_metric_at_index(cls_f1, task_index)
-        for task_index in range(len(train_task_loaders))
+        for task_index in range(len(task_loaders))
     }
 
 
 def _rows_and_aggregate(
-    peak_train_f1_by_task: Dict[int, float],
+    train_f1_after_task_by_task: Dict[int, float],
     final_train_f1_by_task: Dict[int, float],
-) -> tuple[List[Dict[str, float]], float, float]:
-    task_ids = sorted(set(peak_train_f1_by_task) & set(final_train_f1_by_task))
+    test_f1_after_task_by_task: Dict[int, float],
+    final_test_f1_by_task: Dict[int, float],
+) -> tuple[List[Dict[str, float]], float, float, float]:
+    task_ids = sorted(
+        set(train_f1_after_task_by_task)
+        & set(final_train_f1_by_task)
+        & set(test_f1_after_task_by_task)
+        & set(final_test_f1_by_task)
+    )
     rows: List[Dict[str, float]] = []
     for task_index in task_ids:
-        peak_value = float(peak_train_f1_by_task[task_index])
-        final_value = float(final_train_f1_by_task[task_index])
-        forgetting_value = peak_value - final_value
+        train_f1_after_task = float(train_f1_after_task_by_task[task_index])
+        final_train_f1 = float(final_train_f1_by_task[task_index])
+        test_f1_after_task = float(test_f1_after_task_by_task[task_index])
+        final_test_f1 = float(final_test_f1_by_task[task_index])
+        representational_forgetting = train_f1_after_task - final_train_f1
+        test_forgetting = test_f1_after_task - final_test_f1
+        generalisation_shift = test_forgetting - representational_forgetting
         rows.append(
             {
                 "task": float(task_index),
-                "peak_train_f1": peak_value,
-                "final_train_f1": final_value,
-                "forgetting": forgetting_value,
+                "train_f1_after_task": train_f1_after_task,
+                "final_train_f1": final_train_f1,
+                "test_f1_after_task": test_f1_after_task,
+                "final_test_f1": final_test_f1,
+                "representational_forgetting": representational_forgetting,
+                "test_forgetting": test_forgetting,
+                "generalisation_shift": generalisation_shift,
             }
         )
     if len(rows) < 2:
         raise SystemExit(
             "Need at least 2 tasks to compute average forgetting over tasks 0..T-2."
         )
-    forget_values = [row["forgetting"] for row in rows[:-1]]
-    avg_forgetting = float(np.mean(forget_values))
-    train_bwt_proxy = -avg_forgetting
-    return rows, avg_forgetting, train_bwt_proxy
+    representational_forgetting_values = [
+        row["representational_forgetting"] for row in rows[:-1]
+    ]
+    test_forgetting_values = [row["test_forgetting"] for row in rows[:-1]]
+    generalisation_shift_values = [row["generalisation_shift"] for row in rows[:-1]]
+    avg_representational_forgetting = float(np.mean(representational_forgetting_values))
+    avg_test_forgetting = float(np.mean(test_forgetting_values))
+    avg_generalisation_shift = float(np.mean(generalisation_shift_values))
+    return (
+        rows,
+        avg_representational_forgetting,
+        avg_test_forgetting,
+        avg_generalisation_shift,
+    )
 
 
 def _infer_algo_name(job_log_path: Path) -> str:
@@ -415,7 +481,8 @@ def _evaluate_one_job_log(
     device: torch.device,
     loader_context_cache: Dict[Tuple[Any, ...], SharedLoaderContext],
 ) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
-    peak_train_f1_by_task = _parse_peak_train_f1_from_job_log(job_log_path)
+    train_f1_after_task_by_task = _parse_peak_train_f1_from_job_log(job_log_path)
+    test_f1_after_task_by_task = _parse_task_end_test_f1_from_job_log(job_log_path)
     run_dir = _resolve_run_dir_from_job_log(job_log_path)
     results_path = run_dir / "results.pt"
     state_dict, run_args = _load_results_bundle(results_path)
@@ -426,23 +493,39 @@ def _evaluate_one_job_log(
         run_args, loader_context_cache
     )
     model = _instantiate_model(run_args, state_dict, device, shared_loader_context)
-    final_train_f1_by_task = _evaluate_final_model_train_f1(
+    final_train_f1_by_task = _evaluate_final_model_f1_by_task(
         model=model,
-        train_task_loaders=shared_loader_context.train_task_loaders,
+        task_loaders=shared_loader_context.train_task_loaders,
         run_args=run_args,
     )
-    per_task_rows, avg_forgetting, train_bwt_proxy = _rows_and_aggregate(
-        peak_train_f1_by_task=peak_train_f1_by_task,
-        final_train_f1_by_task=final_train_f1_by_task,
+    final_test_f1_by_task = _evaluate_final_model_f1_by_task(
+        model=model,
+        task_loaders=shared_loader_context.test_task_loaders,
+        run_args=run_args,
     )
+    (
+        per_task_rows,
+        avg_representational_forgetting,
+        avg_test_forgetting,
+        avg_generalisation_shift,
+    ) = _rows_and_aggregate(
+        train_f1_after_task_by_task=train_f1_after_task_by_task,
+        final_train_f1_by_task=final_train_f1_by_task,
+        test_f1_after_task_by_task=test_f1_after_task_by_task,
+        final_test_f1_by_task=final_test_f1_by_task,
+    )
+    train_bwt_proxy = -avg_representational_forgetting
     aggregate = {
         "algo": _infer_algo_name(job_log_path),
         "job_log": str(job_log_path),
         "run_dir": str(run_dir),
         "results": str(results_path),
         "n_tasks": len(per_task_rows),
-        "avg_forgetting_0_to_t_minus_2": avg_forgetting,
+        "avg_representational_forgetting_0_to_t_minus_2": avg_representational_forgetting,
+        "avg_test_forgetting_0_to_t_minus_2": avg_test_forgetting,
+        "avg_generalisation_shift_0_to_t_minus_2": avg_generalisation_shift,
         "train_bwt_proxy": train_bwt_proxy,
+        "test_bwt": -avg_test_forgetting,
     }
     detailed_rows: List[Dict[str, Any]] = []
     for row in per_task_rows:
@@ -452,9 +535,13 @@ def _evaluate_one_job_log(
                 "job_log": str(job_log_path),
                 "run_dir": str(run_dir),
                 "task": int(row["task"]),
-                "peak_train_f1": row["peak_train_f1"],
+                "train_f1_after_task": row["train_f1_after_task"],
                 "final_train_f1": row["final_train_f1"],
-                "forgetting": row["forgetting"],
+                "test_f1_after_task": row["test_f1_after_task"],
+                "final_test_f1": row["final_test_f1"],
+                "representational_forgetting": row["representational_forgetting"],
+                "test_forgetting": row["test_forgetting"],
+                "generalisation_shift": row["generalisation_shift"],
             }
         )
     return aggregate, detailed_rows
@@ -512,13 +599,18 @@ def main() -> None:
 
     aggregate_rows.sort(key=lambda row: str(row["algo"]))
     print("")
-    print(f"{'algo':<14} {'tasks':>5} {'avg_forgetting':>14} {'train_bwt_proxy':>16}")
-    print("-" * 55)
+    print(
+        f"{'algo':<14} {'tasks':>5} {'avg_rf':>12} {'avg_tf':>12} {'avg_gs':>12} "
+        f"{'train_bwt':>12}"
+    )
+    print("-" * 74)
     for row in aggregate_rows:
         print(
             f"{row['algo']:<14} {int(row['n_tasks']):5d} "
-            f"{float(row['avg_forgetting_0_to_t_minus_2']):14.6f} "
-            f"{float(row['train_bwt_proxy']):16.6f}"
+            f"{float(row['avg_representational_forgetting_0_to_t_minus_2']):12.6f} "
+            f"{float(row['avg_test_forgetting_0_to_t_minus_2']):12.6f} "
+            f"{float(row['avg_generalisation_shift_0_to_t_minus_2']):12.6f} "
+            f"{float(row['train_bwt_proxy']):12.6f}"
         )
 
     if failed_rows:
@@ -535,8 +627,11 @@ def main() -> None:
                 "run_dir",
                 "results",
                 "n_tasks",
-                "avg_forgetting_0_to_t_minus_2",
+                "avg_representational_forgetting_0_to_t_minus_2",
+                "avg_test_forgetting_0_to_t_minus_2",
+                "avg_generalisation_shift_0_to_t_minus_2",
                 "train_bwt_proxy",
+                "test_bwt",
             ]
             writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
             writer.writeheader()
@@ -550,9 +645,13 @@ def main() -> None:
                 "job_log",
                 "run_dir",
                 "task",
-                "peak_train_f1",
+                "train_f1_after_task",
                 "final_train_f1",
-                "forgetting",
+                "test_f1_after_task",
+                "final_test_f1",
+                "representational_forgetting",
+                "test_forgetting",
+                "generalisation_shift",
             ]
             writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
             writer.writeheader()
