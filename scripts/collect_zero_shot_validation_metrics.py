@@ -188,6 +188,7 @@ def _candidate_metrics_dirs_for_logged_output(
             "one-shot_CIL",
             "one-shot_TIL",
             "full-til_10epochs_w-zs",
+            "full-cil_10epochs"
         ):
             sync_base = (
                 _SCRIPT_DIR.parent
