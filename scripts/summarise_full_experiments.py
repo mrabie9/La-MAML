@@ -613,26 +613,12 @@ def _compute_concurrent_runtime_seconds(log_path: str) -> Optional[float]:
 def print_summary(
     summaries: Dict[str, AlgoSummary],
     concurrent_runtime_seconds: Optional[float] = None,
+    output_format: str = "readable",
 ) -> None:
     if not summaries:
         print("No algorithm runs found in log.")
         return
 
-    w_algo, w_exit = 8, 5
-    w_num = 7
-    w_time = 8
-    # tr: rec prec f1_c det fa f1 | te: rec prec f1_c det fa f1 | Size_GB Time
-    header = (
-        f"{'Algo':<{w_algo}} {'Exit':<{w_exit}} "
-        f"{'rec':>{w_num}} {'prec':>{w_num}} {'F1_c':>{w_num}} "
-        f"{'det':>{w_num}} {'fa':>{w_num}} {'f1':>{w_num}} "
-        f"| "
-        f"{'rec':>{w_num}} {'prec':>{w_num}} {'F1_c':>{w_num}} "
-        f"{'det':>{w_num}} {'fa':>{w_num}} {'f1':>{w_num}} "
-        f"{'Size_GB':>{w_num}} {'Time':>{w_time}}"
-    )
-    print(header)
-    print("-" * len(header))
     sorted_summaries = sorted(
         summaries.values(),
         key=lambda summary: (
@@ -641,6 +627,43 @@ def print_summary(
             summary.name,
         ),
     )
+    if output_format == "markdown":
+        markdown_header_columns = [
+            "Algo",
+            "Exit",
+            "TR rec",
+            "TR prec",
+            "TR F1_c",
+            "TR det",
+            "TR fa",
+            "TR f1",
+            "TE rec",
+            "TE prec",
+            "TE F1_c",
+            "TE det",
+            "TE fa",
+            "TE f1",
+            "Size_GB",
+            "Time",
+        ]
+        print("| " + " | ".join(markdown_header_columns) + " |")
+        print("| " + " | ".join(["---"] * len(markdown_header_columns)) + " |")
+    else:
+        w_algo, w_exit = 8, 5
+        w_num = 7
+        w_time = 8
+        header = (
+            f"{'Algo':<{w_algo}} {'Exit':<{w_exit}} "
+            f"{'rec':>{w_num}} {'prec':>{w_num}} {'F1_c':>{w_num}} "
+            f"{'det':>{w_num}} {'fa':>{w_num}} {'f1':>{w_num}} "
+            f"| "
+            f"{'rec':>{w_num}} {'prec':>{w_num}} {'F1_c':>{w_num}} "
+            f"{'det':>{w_num}} {'fa':>{w_num}} {'f1':>{w_num}} "
+            f"{'Size_GB':>{w_num}} {'Time':>{w_time}}"
+        )
+        print(header)
+        print("-" * len(header))
+
     for s in sorted_summaries:
         train_classification_f1 = _classification_f1_from_recall_precision(
             s.cls_rec_tr, s.cls_prec_tr
@@ -648,20 +671,43 @@ def print_summary(
         test_classification_f1 = _classification_f1_from_recall_precision(
             s.cls_rec_te, s.cls_prec_te
         )
-        size_str = f"{s.size_gb:.3f}" if s.size_gb is not None else "  -"
         time_str = _format_time(s.time_sec)
-        exit_str = str(s.exit_code) if s.exit_code is not None else ""
-        print(
-            f"{s.name:<{w_algo}} {exit_str:<{w_exit}} "
-            f"{_fmt(s.cls_rec_tr):>{w_num}} {_fmt(s.cls_prec_tr):>{w_num}} "
-            f"{_fmt(train_classification_f1):>{w_num}} "
-            f"{_fmt(s.det_tr):>{w_num}} {_fmt(s.fa_tr):>{w_num}} {_fmt(s.cls_f1_tr):>{w_num}} "
-            f"| "
-            f"{_fmt(s.cls_rec_te):>{w_num}} {_fmt(s.cls_prec_te):>{w_num}} "
-            f"{_fmt(test_classification_f1):>{w_num}} "
-            f"{_fmt(s.det_te):>{w_num}} {_fmt(s.fa_te):>{w_num}} {_fmt(s.cls_f1_te):>{w_num}} "
-            f"{size_str:>{w_num}} {time_str:>{w_time}}"
-        )
+        if output_format == "markdown":
+            size_str = f"{s.size_gb:.3f}" if s.size_gb is not None else "-"
+            exit_str = str(s.exit_code) if s.exit_code is not None else "-"
+            row_values = [
+                s.name,
+                exit_str,
+                _fmt(s.cls_rec_tr).strip(),
+                _fmt(s.cls_prec_tr).strip(),
+                _fmt(train_classification_f1).strip(),
+                _fmt(s.det_tr).strip(),
+                _fmt(s.fa_tr).strip(),
+                _fmt(s.cls_f1_tr).strip(),
+                _fmt(s.cls_rec_te).strip(),
+                _fmt(s.cls_prec_te).strip(),
+                _fmt(test_classification_f1).strip(),
+                _fmt(s.det_te).strip(),
+                _fmt(s.fa_te).strip(),
+                _fmt(s.cls_f1_te).strip(),
+                size_str,
+                time_str,
+            ]
+            print("| " + " | ".join(row_values) + " |")
+        else:
+            size_str = f"{s.size_gb:.3f}" if s.size_gb is not None else "  -"
+            exit_str = str(s.exit_code) if s.exit_code is not None else ""
+            print(
+                f"{s.name:<{w_algo}} {exit_str:<{w_exit}} "
+                f"{_fmt(s.cls_rec_tr):>{w_num}} {_fmt(s.cls_prec_tr):>{w_num}} "
+                f"{_fmt(train_classification_f1):>{w_num}} "
+                f"{_fmt(s.det_tr):>{w_num}} {_fmt(s.fa_tr):>{w_num}} {_fmt(s.cls_f1_tr):>{w_num}} "
+                f"| "
+                f"{_fmt(s.cls_rec_te):>{w_num}} {_fmt(s.cls_prec_te):>{w_num}} "
+                f"{_fmt(test_classification_f1):>{w_num}} "
+                f"{_fmt(s.det_te):>{w_num}} {_fmt(s.fa_te):>{w_num}} {_fmt(s.cls_f1_te):>{w_num}} "
+                f"{size_str:>{w_num}} {time_str:>{w_time}}"
+            )
 
     total_serial_seconds = sum(
         summary.time_sec
@@ -669,29 +715,47 @@ def print_summary(
         if summary.time_sec is not None
     )
     if total_serial_seconds > 0:
-        print("-" * len(header))
-        print(f"Total serial time (all models): {_format_time(total_serial_seconds)}")
-        if concurrent_runtime_seconds is not None:
+        if output_format == "markdown":
+            print()
             print(
-                "Total concurrent time (coordinator log wall-clock): "
-                f"{_format_time(concurrent_runtime_seconds)}"
+                f"- Total serial time (all models): `{_format_time(total_serial_seconds)}`"
             )
-
-
-def _merge_many_summaries(
-    summary_collections: List[Dict[str, AlgoSummary]],
-) -> Dict[str, AlgoSummary]:
-    merged_summaries: Dict[str, AlgoSummary] = {}
-    for summary_collection in summary_collections:
-        for algorithm_name, summary in summary_collection.items():
-            merged_summary = merged_summaries.setdefault(
-                algorithm_name, AlgoSummary(name=algorithm_name)
+            if concurrent_runtime_seconds is not None:
+                print(
+                    "- Total concurrent time (coordinator log wall-clock): "
+                    f"`{_format_time(concurrent_runtime_seconds)}`"
+                )
+        else:
+            print(
+                f"Total serial time (all models): {_format_time(total_serial_seconds)}"
             )
-            _merge_summary(merged_summary, summary)
-    return merged_summaries
+            if concurrent_runtime_seconds is not None:
+                print(
+                    "Total concurrent time (coordinator log wall-clock): "
+                    f"{_format_time(concurrent_runtime_seconds)}"
+                )
 
 
-def main() -> None:
+def _print_metadata(log_paths: List[str], output_format: str) -> None:
+    if output_format == "markdown":
+        print("## Full Experiments Summary")
+        print()
+        if len(log_paths) == 1:
+            print(f"- Log: `{log_paths[0]}`")
+        else:
+            print(f"- Logs ({len(log_paths)}):")
+            for log_path in log_paths:
+                print(f"  - `{log_path}`")
+        print()
+        return
+
+    if len(log_paths) == 1:
+        print(f"Log: {log_paths[0]}")
+    else:
+        print(f"Logs ({len(log_paths)}): {', '.join(log_paths)}")
+
+
+def _parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Summarise full_experiments log file by algorithm performance."
     )
@@ -711,7 +775,18 @@ def main() -> None:
             "summary. Example: --logs run_elkk1 run_elkk2"
         ),
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--output-format",
+        type=str,
+        choices=("readable", "markdown"),
+        default="readable",
+        help="Output format for the summary table.",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = _parse_arguments()
 
     if args.logs:
         log_paths = args.logs
@@ -729,13 +804,25 @@ def main() -> None:
             total_concurrent_runtime_seconds += concurrent_runtime_seconds
 
     merged_summaries = _merge_many_summaries(summary_collections)
-    if len(log_paths) == 1:
-        print(f"Log: {log_paths[0]}")
-    else:
-        print(f"Logs ({len(log_paths)}): {', '.join(log_paths)}")
+    _print_metadata(log_paths, output_format=args.output_format)
     print_summary(
-        merged_summaries, concurrent_runtime_seconds=total_concurrent_runtime_seconds
+        merged_summaries,
+        concurrent_runtime_seconds=total_concurrent_runtime_seconds,
+        output_format=args.output_format,
     )
+
+
+def _merge_many_summaries(
+    summary_collections: List[Dict[str, AlgoSummary]],
+) -> Dict[str, AlgoSummary]:
+    merged_summaries: Dict[str, AlgoSummary] = {}
+    for summary_collection in summary_collections:
+        for algorithm_name, summary in summary_collection.items():
+            merged_summary = merged_summaries.setdefault(
+                algorithm_name, AlgoSummary(name=algorithm_name)
+            )
+            _merge_summary(merged_summary, summary)
+    return merged_summaries
 
 
 if __name__ == "__main__":
