@@ -489,6 +489,8 @@ def _evaluate_one_job_log(
         test_f1_after_task_by_task=test_f1_after_task_by_task,
         final_test_f1_by_task=final_test_f1_by_task,
     )
+    f1_total_tr = float(np.mean([row["final_train_f1"] for row in per_task_rows]))
+    f1_total_te = float(np.mean([row["final_test_f1"] for row in per_task_rows]))
     train_bwt_proxy = -avg_representational_forgetting
     aggregate = {
         "algo": algo_name,
@@ -499,6 +501,8 @@ def _evaluate_one_job_log(
         "avg_representational_forgetting_0_to_t_minus_2": avg_representational_forgetting,
         "avg_test_forgetting_0_to_t_minus_2": avg_test_forgetting,
         "avg_generalisation_shift_0_to_t_minus_2": avg_generalisation_shift,
+        "f1_total_tr": f1_total_tr,
+        "f1_total_te": f1_total_te,
         "train_bwt_proxy": train_bwt_proxy,
         "test_bwt": -avg_test_forgetting,
     }
@@ -586,15 +590,17 @@ def main() -> None:
     print("")
     print(
         f"{'algo':<14} {'tasks':>5} {'avg_rf':>12} {'avg_tf':>12} {'avg_gs':>12} "
-        f"{'train_bwt':>12}"
+        f"{'f1_tr':>10} {'f1_te':>10} {'train_bwt':>12}"
     )
-    print("-" * 74)
+    print("-" * 96)
     for row in aggregate_rows:
         print(
             f"{row['algo']:<14} {int(row['n_tasks']):5d} "
             f"{float(row['avg_representational_forgetting_0_to_t_minus_2']):12.6f} "
             f"{float(row['avg_test_forgetting_0_to_t_minus_2']):12.6f} "
             f"{float(row['avg_generalisation_shift_0_to_t_minus_2']):12.6f} "
+            f"{float(row['f1_total_tr']):10.6f} "
+            f"{float(row['f1_total_te']):10.6f} "
             f"{float(row['train_bwt_proxy']):12.6f}"
         )
 
@@ -615,6 +621,8 @@ def main() -> None:
                 "avg_representational_forgetting_0_to_t_minus_2",
                 "avg_test_forgetting_0_to_t_minus_2",
                 "avg_generalisation_shift_0_to_t_minus_2",
+                "f1_total_tr",
+                "f1_total_te",
                 "train_bwt_proxy",
                 "test_bwt",
             ]
