@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 from pathlib import Path
 from typing import Dict, List, Sequence
 
@@ -80,37 +81,119 @@ def _filter_by_algorithms(
     ]
 
 
+def _get_avg_forgetting_value(summary_row: Dict[str, str]) -> float:
+    """Return avg forgetting from either legacy or current summary schema."""
+    if "avg_representational_forgetting_0_to_t_minus_2" in summary_row:
+        return float(summary_row["avg_representational_forgetting_0_to_t_minus_2"])
+    return float(summary_row.get("avg_forgetting_0_to_t_minus_2", "nan"))
+
+
+def _get_avg_test_forgetting_value(summary_row: Dict[str, str]) -> float:
+    """Return avg test forgetting from either legacy or current schema."""
+    if "avg_test_forgetting_0_to_t_minus_2" in summary_row:
+        return float(summary_row["avg_test_forgetting_0_to_t_minus_2"])
+    return float(summary_row.get("avg_tf", "nan"))
+
+
+def _get_avg_generalisation_shift_value(summary_row: Dict[str, str]) -> float:
+    """Return avg generalisation shift from either legacy or current schema."""
+    if "avg_generalisation_shift_0_to_t_minus_2" in summary_row:
+        return float(summary_row["avg_generalisation_shift_0_to_t_minus_2"])
+    return float(summary_row.get("avg_gs", "nan"))
+
+
+def _get_first_float_from_row(detail_row: Dict[str, str], keys: Sequence[str]) -> float:
+    """Return first parseable float value among candidate keys, else NaN."""
+    for key in keys:
+        raw_value = detail_row.get(key)
+        if raw_value is None or raw_value == "":
+            continue
+        try:
+            return float(raw_value)
+        except ValueError:
+            continue
+    return float("nan")
+
+
+def _resolve_representational_forgetting(detail_row: Dict[str, str]) -> float:
+    """Resolve representational forgetting across legacy/current schemas."""
+    direct_value = _get_first_float_from_row(
+        detail_row, ("representational_forgetting", "avg_forgetting", "forgetting")
+    )
+    if not math.isnan(direct_value):
+        return direct_value
+    train_after_task_value = _get_first_float_from_row(
+        detail_row, ("train_f1_after_task", "train_f1_peak")
+    )
+    final_train_value = _get_first_float_from_row(
+        detail_row, ("final_train_f1", "train_f1_final")
+    )
+    if math.isnan(train_after_task_value) or math.isnan(final_train_value):
+        return float("nan")
+    return train_after_task_value - final_train_value
+
+
 def _print_summary_table(rows: Sequence[Dict[str, str]]) -> None:
     """Print compact summary rows for train-BWT results."""
     if not rows:
         print("No summary rows to display.")
         return
     sorted_rows = sorted(rows, key=lambda row: row.get("algo", ""))
-    print(f"{'algo':<14} {'tasks':>5} {'avg_forgetting':>14} {'train_bwt_proxy':>16}")
-    print("-" * 55)
+    print(
+        f"{'algo':<14} {'tasks':>5} {'avg_rf':>12} {'avg_tf':>12} {'avg_gs':>12} "
+        f"{'train_bwt':>12}"
+    )
+    print("-" * 74)
     for row in sorted_rows:
         algo_name = row.get("algo", "unknown")
         task_count = int(float(row.get("n_tasks", "0")))
-        avg_forgetting = float(row.get("avg_forgetting_0_to_t_minus_2", "nan"))
+        avg_forgetting = _get_avg_forgetting_value(row)
+        avg_test_forgetting = _get_avg_test_forgetting_value(row)
+        avg_generalisation_shift = _get_avg_generalisation_shift_value(row)
         train_bwt_proxy = float(row.get("train_bwt_proxy", "nan"))
         print(
-            f"{algo_name:<14} {task_count:5d} {avg_forgetting:14.6f} "
-            f"{train_bwt_proxy:16.6f}"
+            f"{algo_name:<14} {task_count:5d} {avg_forgetting:12.6f} "
+            f"{avg_test_forgetting:12.6f} {avg_generalisation_shift:12.6f} "
+            f"{train_bwt_proxy:12.6f}"
         )
 
 
 def _print_details_stats(rows: Sequence[Dict[str, str]]) -> None:
-    """Print a compact per-algorithm count of detail rows."""
+    """Print detail-row counts and forgetting coverage by algorithm."""
     if not rows:
         print("No detail rows to display.")
         return
     counts_by_algo: Dict[str, int] = {}
+    valid_forgetting_counts_by_algo: Dict[str, int] = {}
+    forgetting_sum_by_algo: Dict[str, float] = {}
     for row in rows:
         algo_name = row.get("algo", "unknown")
         counts_by_algo[algo_name] = counts_by_algo.get(algo_name, 0) + 1
-    print("\nPer-algorithm detail rows:")
+        representational_forgetting = _resolve_representational_forgetting(row)
+        if math.isnan(representational_forgetting):
+            continue
+        valid_forgetting_counts_by_algo[algo_name] = (
+            valid_forgetting_counts_by_algo.get(algo_name, 0) + 1
+        )
+        forgetting_sum_by_algo[algo_name] = (
+            forgetting_sum_by_algo.get(algo_name, 0.0) + representational_forgetting
+        )
+    print(
+        "\nPer-algorithm detail rows "
+        "(valid_rf_rows and mean_rf include legacy/current schemas):"
+    )
     for algo_name in sorted(counts_by_algo):
-        print(f"- {algo_name}: {counts_by_algo[algo_name]}")
+        total_row_count = counts_by_algo[algo_name]
+        valid_row_count = valid_forgetting_counts_by_algo.get(algo_name, 0)
+        mean_forgetting = (
+            forgetting_sum_by_algo[algo_name] / valid_row_count
+            if valid_row_count > 0
+            else float("nan")
+        )
+        print(
+            f"- {algo_name}: total_rows={total_row_count}, "
+            f"valid_rf_rows={valid_row_count}, mean_rf={mean_forgetting:.6f}"
+        )
 
 
 def main() -> None:
