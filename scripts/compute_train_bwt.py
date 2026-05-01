@@ -52,7 +52,6 @@ except ImportError:  # pragma: no cover
 _TASK_EPOCH_F1_RE = re.compile(
     r"T(?P<task>\d+)\s+Ep\s+\d+/\d+\s+complete:\s+Prec\s+[0-9.]+\s+F1\s+(?P<f1>[0-9.]+)"
 )
-_EVAL_CLS_VECTOR_RE = re.compile(r"Eval at Epoch\s+\d+:\s+cls\s+\[(?P<cls>[^\]]*)\]")
 
 
 @dataclass
@@ -161,25 +160,36 @@ def _parse_peak_train_f1_from_job_log(job_log_path: Path) -> Dict[int, float]:
     return peak_by_task
 
 
-def _parse_task_end_test_f1_from_job_log(job_log_path: Path) -> Dict[int, float]:
-    """Parse per-task test F1 measured right after each task training step."""
+def _parse_task_end_test_f1_from_metrics_dir(metrics_dir: Path) -> Dict[int, float]:
+    """Parse per-task test cls_f1 after each task from task*.npz metrics."""
+    task_metrics_files = sorted(
+        metrics_dir.glob("task*.npz"),
+        key=lambda metrics_path: (
+            int(metrics_path.stem.removeprefix("task"))
+            if metrics_path.stem.removeprefix("task").isdigit()
+            else -1
+        ),
+    )
+    if not task_metrics_files:
+        raise SystemExit(f"No task*.npz files found under metrics dir: {metrics_dir}")
+
     task_end_test_f1_by_task: Dict[int, float] = {}
-    with job_log_path.open("r", encoding="utf-8", errors="replace") as log_file:
-        for line_text in log_file:
-            match = _EVAL_CLS_VECTOR_RE.search(line_text)
-            if match is None:
-                continue
-            cls_raw_values = match.group("cls").strip()
-            if not cls_raw_values:
-                continue
-            cls_tokens = [token.strip() for token in cls_raw_values.split(",")]
-            cls_values = [float(token) for token in cls_tokens if token]
-            if not cls_values:
-                continue
-            task_index = len(cls_values) - 1
-            task_end_test_f1_by_task[task_index] = cls_values[task_index]
-    if not task_end_test_f1_by_task:
-        raise SystemExit(f"No per-epoch eval cls vectors found in log: {job_log_path}")
+    for task_index, metrics_path in enumerate(task_metrics_files):
+        with np.load(metrics_path, allow_pickle=True) as metrics_data:
+            if "val_f1" not in metrics_data:
+                raise SystemExit(
+                    "Missing 'val_f1' in metrics file (required for cls_f1-only "
+                    f"test BWT): {metrics_path}"
+                )
+            val_f1_values = np.asarray(metrics_data["val_f1"], dtype=float).reshape(-1)
+            tasks_seen = task_index + 1
+            if val_f1_values.size > tasks_seen:
+                val_f1_values = val_f1_values[-tasks_seen:]
+            if val_f1_values.size <= task_index:
+                raise SystemExit(
+                    f"val_f1 in {metrics_path} does not include index {task_index}."
+                )
+            task_end_test_f1_by_task[task_index] = float(val_f1_values[task_index])
     return task_end_test_f1_by_task
 
 
@@ -457,8 +467,10 @@ def _evaluate_one_job_log(
     print(f"START algo={algo_name} log={job_log_path.name}")
 
     train_f1_after_task_by_task = _parse_peak_train_f1_from_job_log(job_log_path)
-    test_f1_after_task_by_task = _parse_task_end_test_f1_from_job_log(job_log_path)
     run_dir = _resolve_run_dir_from_job_log(job_log_path)
+    test_f1_after_task_by_task = _parse_task_end_test_f1_from_metrics_dir(
+        run_dir / "metrics"
+    )
     results_path = run_dir / "results.pt"
     state_dict, run_args = _load_results_bundle(results_path)
 
