@@ -432,14 +432,14 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                     "factors": (0.5, 1.0, 2.0),
                     "min": 32,
                     "fallback": 256,
-                    "values": [25,50,100,200,400,800],
+                    "values": [25, 50, 100, 200, 400, 800],
                 },
                 "gamma": {
                     "kind": "float",
                     "factors": (0.5, 1.0, 2.0),
                     "min": 0.1,
                     "fallback": 0.5,
-                    "values": [0.1,0.25,0.5,0.75,1.0,1.5,2.5],
+                    "values": [0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.5],
                 },
             }
         ),
@@ -523,7 +523,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                     "min": 1e-4,
                     "fallback": 0.1,
                     "values": [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3],
-                }
+                },
             }
         ),
     ),
@@ -743,11 +743,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                     "factors": (0.5, 1.0, 2.0),
                     "min": 1e-5,
                     "fallback": 1e-3,
-                    "values": [
-                        0.1,
-                        0.25,
-                        0.5
-                    ],  #
+                    "values": [0.1, 0.25, 0.5],  #
                 },
                 "beta": {
                     "kind": "float",
@@ -771,32 +767,20 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                         # 50,
                         # 100
                     ],
-                }, 
+                },
                 "lr_rho": {
                     "kind": "float",
                     "factors": (0.5, 1.0, 2.0),
                     "min": 1e-5,
                     "fallback": 1e-3,
-                    "values": [
-                        0.005,
-                        0.001,
-                        0.02,
-                        0.05
-                    ],  #
+                    "values": [0.005, 0.001, 0.02, 0.05],  #
                 },
                 "alpha": {
                     "kind": "float",
                     "factors": (0.5, 1.0, 2.0),
                     "min": 0.05,
                     "fallback": 0.3,
-                    "values": [
-                        1,
-                        2,
-                        5,
-                        10,
-                        20,
-                        50
-                    ],
+                    "values": [1, 2, 5, 10, 20, 50],
                 },
             }
         ),

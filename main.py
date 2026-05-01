@@ -853,7 +853,9 @@ def life_experience(model, inc_loader, args):
 
     interactive_terminal = sys.stdout.isatty()
     amp_dtype = (
-        torch.bfloat16 if getattr(args, "amp_dtype", "bfloat16") == "bfloat16" else torch.float16
+        torch.bfloat16
+        if getattr(args, "amp_dtype", "bfloat16") == "bfloat16"
+        else torch.float16
     )
     use_amp = bool(getattr(args, "amp", False) and args.cuda)
     log_state(
