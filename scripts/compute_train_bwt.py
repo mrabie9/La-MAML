@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import copy
 import csv
+import gc
 import importlib
 import multiprocessing as mp
 import re
@@ -522,6 +523,13 @@ def _evaluate_one_job_log(
     return aggregate, detailed_rows
 
 
+def _force_cleanup_between_algorithms() -> None:
+    """Force host/GPU memory cleanup between algorithm evaluations."""
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
 def main() -> None:
     _configure_multiprocessing_start_method()
     args = _parse_args()
@@ -561,6 +569,10 @@ def main() -> None:
         except (Exception, SystemExit) as exc:  # pragma: no cover
             failed_rows.append({"job_log": str(job_log_path), "error": str(exc)})
             print(f"[{log_index}/{len(job_logs)}] SKIPPED {job_log_path}: {exc}")
+        finally:
+            # The per-algorithm evaluation builds large dataloaders and model
+            # objects; force cleanup to reduce cumulative memory pressure.
+            _force_cleanup_between_algorithms()
 
     if not aggregate_rows:
         print("No complete job logs were processed successfully.")
