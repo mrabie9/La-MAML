@@ -85,7 +85,11 @@ def test_hat_2channel_and_3channel_forward():
 
 
 def test_hat_grad_flow_3channel():
-    """Gradients flow through the adapter for 3-channel input."""
+    """Gradients flow through the adapter for 3-channel input.
+
+    ``HatInputAdapter`` reshapes ``(B, 3, L)`` to ``(B, 3, 2, L/2)``, so
+    ``AdcIqAdapter`` uses the 4D einsum path (``weight``), not ``proj_3ch``.
+    """
     args = _make_args()
     model = HatNet(n_inputs=1024, n_outputs=13, n_tasks=2, args=args)
     model.train()
@@ -93,8 +97,8 @@ def test_hat_grad_flow_3channel():
     logits = model(x, t=0)
     loss = logits.sum()
     loss.backward()
-    proj = model.bridge.input_adapter._adapter.proj_3ch
-    assert proj.weight.grad is not None
+    adapter = model.bridge.input_adapter._adapter
+    assert adapter.weight.grad is not None
     assert x.grad is not None
 
 
@@ -169,10 +173,11 @@ def test_hat_forward_uses_live_bn_for_unfinalized_current_task():
         assert torch.equal(captured_running_mean, live_running_mean)
 
 
-def test_hat_forward_resets_bn_for_uninitialized_current_task():
-    """Current-task forward initializes BN when observe has not run yet."""
+def test_hat_forward_leaves_bn_unchanged_for_uninitialized_current_task():
+    """Per-task BN is disabled: forward does not reset running stats before bridge."""
     args = _make_args()
     model = HatNet(n_inputs=1024, n_outputs=13, n_tasks=2, args=args)
+    assert model._use_task_bn_state is False
     model.eval()
     model.current_task = 0
 
@@ -185,7 +190,7 @@ def test_hat_forward_resets_bn_for_uninitialized_current_task():
     captured_running_vars = []
 
     def fake_bridge_forward(task, x, s, return_masks=False):
-        """Capture the BN state after current-task forward initialization."""
+        """Capture the BN state seen inside the backbone forward."""
         del task, s, return_masks
         captured_running_means.extend(
             batch_norm_module.running_mean.detach().clone()
@@ -203,15 +208,17 @@ def test_hat_forward_resets_bn_for_uninitialized_current_task():
         logits = model(torch.randn(2, 2, 512), t=0)
 
     assert logits.shape == (2, 13)
-    assert 0 in model._bn_initialized_tasks
+    assert 0 not in model._bn_initialized_tasks
     assert captured_running_means
     for captured_running_mean, captured_running_var in zip(
         captured_running_means, captured_running_vars
     ):
         assert torch.equal(
-            captured_running_mean, torch.zeros_like(captured_running_mean)
+            captured_running_mean, torch.full_like(captured_running_mean, 5.0)
         )
-        assert torch.equal(captured_running_var, torch.ones_like(captured_running_var))
+        assert torch.equal(
+            captured_running_var, torch.full_like(captured_running_var, 2.0)
+        )
 
 
 def test_hat_forward_does_not_initialize_bn_before_first_observe():
@@ -261,6 +268,6 @@ if __name__ == "__main__":
     test_hat_grad_flow_3channel()
     test_hat_grad_flow_2channel()
     test_hat_forward_uses_live_bn_for_unfinalized_current_task()
-    test_hat_forward_resets_bn_for_uninitialized_current_task()
+    test_hat_forward_leaves_bn_unchanged_for_uninitialized_current_task()
     test_hat_forward_does_not_initialize_bn_before_first_observe()
     print("All HAT input adapter tests passed.")

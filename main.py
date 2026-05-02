@@ -715,10 +715,18 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
             yb_cls_cpu = yb_cls.detach().cpu()
             yb_cls_for_metrics = yb_cls_cpu
             noise_label_for_metrics = noise_label
-            if "ucl" in args.model:
-                offset1, _ = misc_utils.compute_offsets(
-                    t, class_counts if class_counts is not None else args.nc_per_task
-                )
+            # Task-incremental learners (UCL and any model exposing ``split``) emit
+            # task-local logits; shift global labels the same way as the training
+            # metric loop in ``life_experience`` (``model.compute_offsets``).
+            if getattr(model, "split", False):
+                compute_offsets_fn = getattr(model, "compute_offsets", None)
+                if callable(compute_offsets_fn):
+                    offset1, _ = compute_offsets_fn(t)
+                else:
+                    offset1, _ = misc_utils.compute_offsets(
+                        t,
+                        class_counts if class_counts is not None else args.nc_per_task,
+                    )
                 if getattr(args, "use_detector_arch", False):
                     yb_cls_for_metrics = yb_cls_cpu.clone()
                     if noise_label_for_metrics is not None:
