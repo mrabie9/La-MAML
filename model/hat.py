@@ -562,6 +562,9 @@ class Net(nn.Module):
             self.num_batches = None
         self.batch_idx = 0
         self._finalized_tasks: set[int] = set()
+        # Per-task BN snapshotting disabled: single running BN state across tasks
+        # (matches UCL and avoids relying on in-memory snapshots for re-eval).
+        self._use_task_bn_state: bool = False
         self._bn_modules: List[_BatchNorm] = [
             m for m in self.bridge.model.modules() if isinstance(m, _BatchNorm)
         ]
@@ -627,6 +630,8 @@ class Net(nn.Module):
         task starts from the current shared representation while collecting its
         own running statistics.
         """
+        if not self._use_task_bn_state:
+            return
         for batch_norm_module in self._bn_modules:
             batch_norm_module.running_mean.zero_()
             batch_norm_module.running_var.fill_(1.0)
@@ -639,6 +644,8 @@ class Net(nn.Module):
             task: The completed task index whose BatchNorm state should be
                 restored during later evaluation.
         """
+        if not self._use_task_bn_state:
+            return
         stats: List[Tuple[torch.Tensor, torch.Tensor, int]] = []
         affine: List[Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]] = []
         for batch_norm_module in self._bn_modules:
@@ -723,6 +730,8 @@ class Net(nn.Module):
             task: Task index whose BatchNorm state should become active.
         """
         if not self._bn_modules:
+            return
+        if not self._use_task_bn_state:
             return
 
         stats = self._bn_task_stats.get(task)
@@ -817,23 +826,27 @@ class Net(nn.Module):
         )
         if task is None:
             raise RuntimeError("finalize_task_after_training requires a current task.")
-        self._snapshot_bn_stats(task)
+        if self._use_task_bn_state:
+            self._snapshot_bn_stats(task)
         self._finalise_task(task)
 
     # ------------------------------------------------------------------
     def forward(
         self, x: torch.Tensor, t: int, s: Optional[float] = None
     ) -> torch.Tensor:
-        previous_bn_state = self._capture_bn_state() if self._bn_modules else None
+        previous_bn_state = None
+        if self._use_task_bn_state and self._bn_modules:
+            previous_bn_state = self._capture_bn_state()
         try:
-            if self.current_task is None:
-                if t in self._finalized_tasks:
+            if self._use_task_bn_state:
+                if self.current_task is None:
+                    if t in self._finalized_tasks:
+                        self._restore_bn_stats(t)
+                elif t in self._finalized_tasks or self.current_task != t:
                     self._restore_bn_stats(t)
-            elif t in self._finalized_tasks or self.current_task != t:
-                self._restore_bn_stats(t)
-            elif t not in self._bn_initialized_tasks:
-                self._reset_bn_stats()
-                self._bn_initialized_tasks.add(t)
+                elif t not in self._bn_initialized_tasks:
+                    self._reset_bn_stats()
+                    self._bn_initialized_tasks.add(t)
             device = x.device if x.is_cuda else self._device()
             logits = self.bridge.forward(
                 self._task_tensor(t, device), x, s or self.smax, return_masks=False
@@ -864,13 +877,16 @@ class Net(nn.Module):
 
         if self.current_task is None:
             self.current_task = t
-            self._restore_bn_stats(t)
+            if self._use_task_bn_state:
+                self._restore_bn_stats(t)
         elif t != self.current_task:
             if self.current_task not in self._finalized_tasks:
-                self._snapshot_bn_stats(self.current_task)
+                if self._use_task_bn_state:
+                    self._snapshot_bn_stats(self.current_task)
                 self._finalise_task(self.current_task)
             self.current_task = t
-            self._restore_bn_stats(t)
+            if self._use_task_bn_state:
+                self._restore_bn_stats(t)
 
         device = x.device if x.is_cuda else self._device()
         batch_idx, total_batches = self._update_epoch_counters(t)

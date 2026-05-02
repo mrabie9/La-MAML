@@ -529,9 +529,9 @@ class Net(nn.Module):
         self._last_observe_labels_cpu: Optional[torch.Tensor] = None
         self.noise_label: int | None = noise_label_from_args(args)
         self.incremental_loader_name = getattr(args, "loader", None)
-        self._use_task_bn_state = bool(
-            self.split and self.incremental_loader_name == "task_incremental_loader"
-        )
+        # Per-task BN snapshotting is disabled: keep a single running BN state
+        # across tasks (matches historical runs that did not rely on snapshots).
+        self._use_task_bn_state = False
         self._bn_modules: List[_BatchNorm] = [
             module for module in self.model.modules() if isinstance(module, _BatchNorm)
         ]
