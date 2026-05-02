@@ -344,6 +344,41 @@ def _line_style_for_index(index: int) -> Dict[str, Any]:
     }
 
 
+def _build_algorithm_to_fwt_panel_line_member_index(
+    algorithm_names: Sequence[str],
+) -> Dict[str, int]:
+    """Map each algorithm to its linestyle slot within its FWT color group.
+
+    ``plot_fwt_metrics.plot_series`` assigns ``LINESTYLES[member_index]`` per
+    algorithm using this grouping. The BWT/CL-F1/train panels previously used
+    the global run index instead, so e.g. A-GEM could be solid on FWT but
+    dash-dot on BWT. Using the same member index keeps legend line styles
+    aligned across figures.
+
+    Args:
+        algorithm_names: Algorithm ids (e.g. run names) included in the export.
+
+    Returns:
+        Mapping from each name in ``algorithm_names`` to a non-negative member
+        index within its ordered group.
+
+    Usage:
+        >>> idx = _build_algorithm_to_fwt_panel_line_member_index(["agem", "gem"])
+        >>> idx["agem"]
+        0
+    """
+    from scripts.plot_algorithm_group_styles import group_sort_key
+    from scripts.plot_fwt_metrics import _build_ordered_groups
+
+    sorted_names = sorted(algorithm_names, key=group_sort_key)
+    ordered_groups = _build_ordered_groups(sorted_names)
+    algorithm_to_member_index: Dict[str, int] = {}
+    for _, member_names in ordered_groups:
+        for member_index, name in enumerate(member_names):
+            algorithm_to_member_index[name] = member_index
+    return algorithm_to_member_index
+
+
 def _build_group_color_lookup_for_runs(
     run_names: Sequence[str],
     group_colors: Sequence[str],
@@ -487,6 +522,9 @@ def main() -> None:
         [run.name for run in runs],
         fwt_group_colors,
     )
+    algorithm_line_member_index = _build_algorithm_to_fwt_panel_line_member_index(
+        [run.name for run in runs]
+    )
     task_index_to_dataset_name = _build_task_index_to_dataset_name(runs)
     style_key = _case_insensitive_detect_style_key(runs)
     experiment_prefix = _build_experiment_prefix(run_source_dir, runs)
@@ -512,7 +550,7 @@ def main() -> None:
             train_series,
             label=run_label,
             color=algorithm_colors.get(run.name, f"C{run_idx % 10}"),
-            **_line_style_for_index(run_idx),
+            **_line_style_for_index(algorithm_line_member_index.get(run.name, run_idx)),
         )
     axis_train.set_ylabel(train_metric_label, fontsize=16)
     axis_train.set_xlabel(
@@ -625,7 +663,7 @@ def main() -> None:
             y_vals,
             label=run_labels[run_idx],
             color=algorithm_colors.get(run.name, f"C{run_idx % 10}"),
-            **_line_style_for_index(run_idx),
+            **_line_style_for_index(algorithm_line_member_index.get(run.name, run_idx)),
         )
     axis_mean.set_xlabel("Task", fontsize=16, labelpad=X_LABEL_PAD)
     axis_mean.set_ylabel("F1 Score", fontsize=16)
@@ -673,7 +711,7 @@ def main() -> None:
             backward_transfer_values,
             label=run_labels[run_idx],
             color=algorithm_colors.get(run.name, f"C{run_idx % 10}"),
-            **_line_style_for_index(run_idx),
+            **_line_style_for_index(algorithm_line_member_index.get(run.name, run_idx)),
         )
     axis_forgetting.set_xlabel("Task", fontsize=16, labelpad=X_LABEL_PAD)
     axis_forgetting.set_ylabel("Backward Transfer", fontsize=16)
