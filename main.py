@@ -828,6 +828,36 @@ def eval_class_tasks(model, tasks, args, **kwargs):
     )
 
 
+def _save_task_checkpoint(
+    model: torch.nn.Module, experiment_log_dir: str, task_index: int
+) -> str:
+    """Persist ``model`` weights under ``experiment_log_dir/checkpoints``.
+
+    Checkpoints are written after each continual-learning task completes (same
+    experiment root as ``metrics/`` and ``results.pt``).
+
+    Args:
+        model: Trained module whose ``state_dict`` will be stored.
+        experiment_log_dir: Run directory (typically ``args.log_dir``).
+        task_index: Completed task id (``task_info['task']``).
+
+    Returns:
+        Absolute path to the saved ``.pt`` file.
+
+    Usage:
+        path = _save_task_checkpoint(model, args.log_dir, current_task)
+    """
+    checkpoints_dir = os.path.join(experiment_log_dir, "checkpoints")
+    os.makedirs(checkpoints_dir, exist_ok=True)
+    checkpoint_path = os.path.join(checkpoints_dir, "task_{}.pt".format(task_index))
+    torch.save(
+        {"task": int(task_index), "state_dict": model.state_dict()},
+        checkpoint_path,
+        pickle_protocol=4,
+    )
+    return checkpoint_path
+
+
 def life_experience(model, inc_loader, args):
     result_val_a = []
     result_test_a = []
@@ -1475,6 +1505,13 @@ def life_experience(model, inc_loader, args):
             if test_det_fa is not None:
                 result_test_det_fa.append(test_det_fa)
             result_test_t.append(task_info["task"])
+
+        checkpoint_path = _save_task_checkpoint(model, args.log_dir, current_task)
+        print("Saved task checkpoint: {}".format(checkpoint_path))
+        log_state(
+            args.state_logging,
+            "Saved task checkpoint to {}".format(checkpoint_path),
+        )
 
         log_state(
             args.state_logging,
