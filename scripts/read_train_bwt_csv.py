@@ -46,6 +46,11 @@ def _parse_args() -> argparse.Namespace:
             "'rwalk,icarl')."
         ),
     )
+    parser.add_argument(
+        "--markdown",
+        action="store_true",
+        help="Print summary table in Markdown format (without tasks column).",
+    )
     return parser.parse_args()
 
 
@@ -133,12 +138,27 @@ def _resolve_representational_forgetting(detail_row: Dict[str, str]) -> float:
     return train_after_task_value - final_train_value
 
 
-def _print_summary_table(rows: Sequence[Dict[str, str]]) -> None:
+def _print_summary_table(rows: Sequence[Dict[str, str]], markdown: bool = False) -> None:
     """Print compact summary rows for train-BWT results."""
     if not rows:
         print("No summary rows to display.")
         return
     sorted_rows = sorted(rows, key=lambda row: row.get("algo", ""))
+    if markdown:
+        print("| algo | avg_rf | avg_tf | avg_gs | train_bwt |")
+        print("| --- | ---: | ---: | ---: | ---: |")
+        for row in sorted_rows:
+            algo_name = row.get("algo", "unknown")
+            avg_forgetting = _get_avg_forgetting_value(row)
+            avg_test_forgetting = _get_avg_test_forgetting_value(row)
+            avg_generalisation_shift = _get_avg_generalisation_shift_value(row)
+            train_bwt_proxy = float(row.get("train_bwt_proxy", "nan"))
+            print(
+                f"| {algo_name} | {avg_forgetting:.6f} | {avg_test_forgetting:.6f} | "
+                f"{avg_generalisation_shift:.6f} | {train_bwt_proxy:.6f} |"
+            )
+        return
+
     print(
         f"{'algo':<14} {'tasks':>5} {'avg_rf':>12} {'avg_tf':>12} {'avg_gs':>12} "
         f"{'train_bwt':>12}"
@@ -204,7 +224,7 @@ def main() -> None:
     summary_rows = _read_csv_rows(args.summary_csv)
     summary_rows = _filter_by_algorithms(summary_rows, selected_algorithms)
     print(f"Loaded summary rows: {len(summary_rows)}")
-    _print_summary_table(summary_rows)
+    _print_summary_table(summary_rows, markdown=args.markdown)
 
     if args.details_csv is not None:
         detail_rows = _read_csv_rows(args.details_csv)
