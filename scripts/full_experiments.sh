@@ -85,17 +85,17 @@ MAX_JOBS=2
 
 HOST_SHORT_RAW="$(hostname -s 2>/dev/null || hostname)"
 HOST_SHORT="$(echo "$HOST_SHORT_RAW" | tr '[:upper:]' '[:lower:]')"
-HOST_KEY=""
-case "$HOST_SHORT" in
-  lnx-elkk-1) HOST_KEY="lnx-elkk-1" ;;
-  lnx-elkk-2) HOST_KEY="lnx-elkk-2" ;;
-  WIN-LBO-22410) HOST_KEY="WIN-LBO-22410" ;;
-  *)
-    # Allow running on other hosts, but require an explicit HOST_KEY.
-    HOST_KEY="${HOST_KEY:-}" ;;
-esac
+# Preserve explicit HOST_KEY overrides from the environment.
+HOST_KEY="${HOST_KEY:-}"
 if [ -z "$HOST_KEY" ]; then
-  echo "Unknown HOST_SHORT='$HOST_SHORT'. Expected lnx-elkk-1 or lnx-elkk-2." >&2
+  case "$HOST_SHORT" in
+    lnx-elkk-1) HOST_KEY="lnx-elkk-1" ;;
+    lnx-elkk-2) HOST_KEY="lnx-elkk-2" ;;
+    win-lbo-22410) HOST_KEY="win-lbo-22410" ;;
+  esac
+fi
+if [ -z "$HOST_KEY" ]; then
+  echo "Unknown HOST_SHORT='$HOST_SHORT'." >&2
   exit 1
 fi
 

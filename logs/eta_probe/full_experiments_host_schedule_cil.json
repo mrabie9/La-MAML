@@ -1,6 +1,6 @@
 {
   "hosts": {
-    "WIN-LBO-22410": {
+    "win-lbo-22410": {
       "slot_high": [
         "eralg4",
         "cmaml",
