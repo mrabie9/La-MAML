@@ -7,6 +7,7 @@
 # Usage:
 #   ./scripts/full_experiments_mem_sweep.sh
 #   ./scripts/full_experiments_mem_sweep.sh --mode cil
+#   ./scripts/full_experiments_mem_sweep.sh --one-shot
 #
 # full_experiments.sh activates la-maml_env when present (see AGENTS.md).
 # On hosts whose short hostname is not lnx-elkk-1 or lnx-elkk-2, you may need
@@ -14,6 +15,21 @@
 # so the cached schedule JSON matches the intended machine.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ONE_SHOT=0
+FORWARDED_ARGS=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --one-shot)
+      ONE_SHOT=1
+      shift
+      ;;
+    *)
+      FORWARDED_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
 
 # Edit this list to choose which buffer sizes to run (order is preserved).
 MEM_VALS=(512 2048 5120)
@@ -22,11 +38,17 @@ overall_exit=0
 
 for n_mem in "${MEM_VALS[@]}"; do
   echo "[full_experiments_mem_sweep] === memories=${n_mem} (also n_memories=${n_mem}) ==="
-  if ! "$SCRIPT_DIR/full_experiments.sh" \
-    -d "mem_${n_mem}" \
-    --memories "$n_mem" \
-    --n_memories "$n_mem" \
-    "$@"; then
+  cmd=(
+    "$SCRIPT_DIR/full_experiments.sh"
+    -d "mem_${n_mem}"
+    --memories "$n_mem"
+    --n_memories "$n_mem"
+  )
+  if [ "$ONE_SHOT" -eq 1 ]; then
+    cmd+=(--one-shot)
+  fi
+  cmd+=("${FORWARDED_ARGS[@]}")
+  if ! "${cmd[@]}"; then
     overall_exit=1
   fi
 done
