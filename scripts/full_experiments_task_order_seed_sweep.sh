@@ -16,7 +16,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Edit this list to choose which task-order seeds to run (order is preserved).
-TASK_ORDER_SEEDS=(0 1 2)
+TASK_ORDER_SEEDS=(57 1040 329)
 
 overall_exit=0
 
