@@ -14,6 +14,7 @@ EXPERIMENT_DESC=""
 RERUN_PROBE=0
 SCHEDULE_JSON_OVERRIDE=""
 MODEL_MODE_OVERRIDE=""
+PASSTHROUGH_ARGS=()
 while [ $# -gt 0 ]; do
     case "$1" in
         -d|--desc|--description)
@@ -42,18 +43,25 @@ while [ $# -gt 0 ]; do
             RERUN_PROBE=1
             shift 1
             ;;
+        --)
+            shift 1
+            while [ $# -gt 0 ]; do
+                PASSTHROUGH_ARGS+=("$1")
+                shift 1
+            done
+            ;;
         -h|--help)
             echo "Usage: $0 [--desc/-d DESCRIPTION] [--schedule-json PATH] [--mode til|cil]"
             echo "  DESCRIPTION is used to label the logs folder (sanitized)."
             echo "  --schedule-json  use a specific host schedule JSON file."
             echo "  --mode/--model   select model mode: til or cil."
             echo "  --rerun-probe   regenerate host schedule split (serial timings cached)."
+            echo "  unknown args are forwarded to main.py/main_single_round.py."
             exit 0
             ;;
         *)
-            echo "Unknown argument: $1"
-            echo "Usage: $0 [--desc/-d DESCRIPTION] [--schedule-json PATH] [--mode til|cil]"
-            exit 1
+            PASSTHROUGH_ARGS+=("$1")
+            shift 1
             ;;
     esac
 done
@@ -129,6 +137,9 @@ log_msg "LOG_FILE=$LOG_FILE"
 log_msg "INCLUDED_ALL=$INCLUDED_ALL"
 if [ -n "$EXPERIMENT_DESC" ]; then
     log_msg "EXPERIMENT_DESC=$EXPERIMENT_DESC"
+fi
+if [ "${#PASSTHROUGH_ARGS[@]}" -gt 0 ]; then
+    log_msg "PASSTHROUGH_ARGS=${PASSTHROUGH_ARGS[*]}"
 fi
 
 # Activate environment (see AGENTS.md)
@@ -345,7 +356,7 @@ run_job_sync() {
   if [ "$name" = "iid2" ]; then
     entrypoint="main_single_round.py"
   fi
-  python3 "$entrypoint" --config "$BASE_CONFIG" --config "$model_yaml" >"$JOB_LOG_FILE" 2>&1
+  python3 "$entrypoint" --config "$BASE_CONFIG" --config "$model_yaml" "${PASSTHROUGH_ARGS[@]}" >"$JOB_LOG_FILE" 2>&1
   local exit_code=$?
   record_job_result "$exit_code"
   if [ "$exit_code" -eq 0 ]; then
@@ -398,7 +409,7 @@ run_job_bg() {
     if [ "$name" = "iid2" ]; then
       entrypoint="main_single_round.py"
     fi
-    python3 "$entrypoint" --config "$BASE_CONFIG" --config "$model_yaml" >"$JOB_LOG_FILE" 2>&1
+    python3 "$entrypoint" --config "$BASE_CONFIG" --config "$model_yaml" "${PASSTHROUGH_ARGS[@]}" >"$JOB_LOG_FILE" 2>&1
     exit_code=$?
     if [ "$exit_code" -eq 0 ]; then
       echo "[$(date -Iseconds)] Completed: $name (exit 0)" >>"$LOG_FILE"
@@ -524,7 +535,7 @@ else
       if [ "$a" = "iid2" ]; then
         entrypoint="main_single_round.py"
       fi
-      python3 "$entrypoint" --config "$BASE_CONFIG" --config "$model_yaml_a" >"$JOB_LOG_FILE_A" 2>&1
+      python3 "$entrypoint" --config "$BASE_CONFIG" --config "$model_yaml_a" "${PASSTHROUGH_ARGS[@]}" >"$JOB_LOG_FILE_A" 2>&1
       exit_code=$?
       if [ "$exit_code" -eq 0 ]; then
         echo "[$(date -Iseconds)] Completed: $a (exit 0)" >>"$LOG_FILE"
@@ -540,7 +551,7 @@ else
       if [ "$b" = "iid2" ]; then
         entrypoint="main_single_round.py"
       fi
-      python3 "$entrypoint" --config "$BASE_CONFIG" --config "$model_yaml_b" >"$JOB_LOG_FILE_B" 2>&1
+      python3 "$entrypoint" --config "$BASE_CONFIG" --config "$model_yaml_b" "${PASSTHROUGH_ARGS[@]}" >"$JOB_LOG_FILE_B" 2>&1
       exit_code=$?
       if [ "$exit_code" -eq 0 ]; then
         echo "[$(date -Iseconds)] Completed: $b (exit 0)" >>"$LOG_FILE"
