@@ -1,5 +1,5 @@
 import os
-from typing import List, Sequence
+from typing import List, Sequence, TypeVar
 
 import numpy as np
 import torch
@@ -7,6 +7,8 @@ from torch.utils.data import DataLoader
 
 from dataloaders.idataset import DummyArrayDataset
 from dataloaders.iq_data_loader import IQDataGenerator
+
+_TaskSeqElem = TypeVar("_TaskSeqElem")
 
 
 def _normalize_label_array(labels, expected_len, source):
@@ -214,6 +216,36 @@ def _resolve_task_file_order(all_files: Sequence[str], order_arg: str) -> List[s
             )
 
     return ordered_files
+
+
+def permute_task_sequence(
+    base_sequence: Sequence[_TaskSeqElem],
+    task_order_seed: int | None,
+) -> tuple[list[_TaskSeqElem], np.ndarray | None]:
+    """Deterministically reorder tasks for continual-learning experiments.
+
+    Args:
+        base_sequence: Ordered tasks after resolving ``--task-order-files`` or default sort.
+        task_order_seed: When not ``None``, permute using ``numpy.random.default_rng``;
+            ``None`` keeps ``base_sequence`` order.
+
+    Returns:
+        A pair ``(reordered, perm)``. When ``perm`` is not ``None``,
+        ``reordered[slot] == base_sequence[int(perm[slot])]`` for each slot.
+
+    Usage:
+        >>> permute_task_sequence(("only",), 123)[0]
+        ['only']
+    """
+
+    items = list(base_sequence)
+    num_tasks = len(items)
+    if task_order_seed is None or num_tasks <= 1:
+        return items, None
+    rng = np.random.default_rng(task_order_seed)
+    perm = rng.permutation(num_tasks)
+    reordered = [items[int(perm[slot])] for slot in range(num_tasks)]
+    return reordered, perm
 
 
 def _maybe_move_sample_axis(x, y, source):
@@ -469,6 +501,17 @@ class IncrementalLoader:
             data_files = _resolve_task_file_order(
                 data_files, self._args.task_order_files
             )
+            base_task_labels = [os.path.splitext(f)[0] for f in data_files]
+            task_order_seed = getattr(self._args, "task_order_seed", None)
+            data_files, task_perm = permute_task_sequence(data_files, task_order_seed)
+            if task_perm is not None:
+                presentation_labels = [os.path.splitext(f)[0] for f in data_files]
+                print(
+                    f"[task_order] task_order_seed={task_order_seed} "
+                    f"base_order={base_task_labels} "
+                    f"presentation_slot_to_base_index={task_perm.tolist()} "
+                    f"presentation_order={presentation_labels}"
+                )
             raw_datasets = []
             all_labels = []
             labels_offset = 0
@@ -820,3 +863,37 @@ class IncrementalLoader:
                 for task in self.train_dataset
             ]
             self._args.classes_per_task = self.classes_per_task
+
+            task_order_seed_pt = getattr(self._args, "task_order_seed", None)
+            num_tasks_pt = len(self.train_dataset)
+            _, perm_pt = permute_task_sequence(
+                list(range(num_tasks_pt)), task_order_seed_pt
+            )
+            if perm_pt is not None:
+                base_names_pt = list(self.task_names)
+                self.train_dataset = [
+                    self.train_dataset[int(perm_pt[slot])]
+                    for slot in range(num_tasks_pt)
+                ]
+                self.test_dataset = [
+                    self.test_dataset[int(perm_pt[slot])]
+                    for slot in range(num_tasks_pt)
+                ]
+                self.sample_permutations = [
+                    self.sample_permutations[int(perm_pt[slot])]
+                    for slot in range(num_tasks_pt)
+                ]
+                self.classes_per_task = [
+                    self.classes_per_task[int(perm_pt[slot])]
+                    for slot in range(num_tasks_pt)
+                ]
+                self.task_names = [
+                    f"task{int(perm_pt[slot])}" for slot in range(num_tasks_pt)
+                ]
+                print(
+                    f"[task_order] task_order_seed={task_order_seed_pt} "
+                    f"base_order={base_names_pt} "
+                    f"presentation_slot_to_base_index={perm_pt.tolist()} "
+                    f"presentation_order={list(self.task_names)}"
+                )
+                self._args.classes_per_task = self.classes_per_task
