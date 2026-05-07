@@ -89,6 +89,7 @@ HOST_KEY=""
 case "$HOST_SHORT" in
   lnx-elkk-1) HOST_KEY="lnx-elkk-1" ;;
   lnx-elkk-2) HOST_KEY="lnx-elkk-2" ;;
+  WIN-LBO-22410) HOST_KEY="WIN-LBO-22410" ;;
   *)
     # Allow running on other hosts, but require an explicit HOST_KEY.
     HOST_KEY="${HOST_KEY:-}" ;;
