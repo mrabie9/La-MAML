@@ -223,10 +223,15 @@ def get_parser():
         help="training samples per task (all if negative)",
     )
     parser.add_argument(
-        "--shuffle_tasks",
-        default=False,
-        action="store_true",
-        help="present tasks in order",
+        "--task-order-seed",
+        dest="task_order_seed",
+        type=int,
+        default=None,
+        help=(
+            "When set, randomly permute task presentation order after resolving "
+            "--task-order-files / default alphabetical order, using this seed via "
+            "numpy.random.Generator (independent of --seed). Omit for the base order."
+        ),
     )
     parser.add_argument(
         "--classes_per_it", type=int, default=4, help="number of classes in every batch"

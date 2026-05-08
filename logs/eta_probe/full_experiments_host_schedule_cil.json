@@ -1,5 +1,15 @@
 {
   "hosts": {
+    "win-lbo-22410": {
+      "slot_high": [
+        "eralg4",
+        "cmaml",
+        "smaml"
+      ],
+      "slot_low": [
+      ],
+      "estimated_host_wall_seconds": 8635.0
+    },
     "lnx-elkk-1": {
       "slot_high": [
         "agem",

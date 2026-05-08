@@ -12,8 +12,10 @@ SCRIPT_START_EPOCH="$(date +%s)"
 
 EXPERIMENT_DESC=""
 RERUN_PROBE=0
+ONE_SHOT=0
 SCHEDULE_JSON_OVERRIDE=""
 MODEL_MODE_OVERRIDE=""
+PASSTHROUGH_ARGS=()
 while [ $# -gt 0 ]; do
     case "$1" in
         -d|--desc|--description)
@@ -42,18 +44,30 @@ while [ $# -gt 0 ]; do
             RERUN_PROBE=1
             shift 1
             ;;
+        --one-shot)
+            ONE_SHOT=1
+            shift 1
+            ;;
+        --)
+            shift 1
+            while [ $# -gt 0 ]; do
+                PASSTHROUGH_ARGS+=("$1")
+                shift 1
+            done
+            ;;
         -h|--help)
-            echo "Usage: $0 [--desc/-d DESCRIPTION] [--schedule-json PATH] [--mode til|cil]"
+            echo "Usage: $0 [--desc/-d DESCRIPTION] [--schedule-json PATH] [--mode til|cil] [--one-shot]"
             echo "  DESCRIPTION is used to label the logs folder (sanitized)."
             echo "  --schedule-json  use a specific host schedule JSON file."
             echo "  --mode/--model   select model mode: til or cil."
+            echo "  --one-shot       force main.py runs to use --n_epochs 1 --inner_steps 2."
             echo "  --rerun-probe   regenerate host schedule split (serial timings cached)."
+            echo "  unknown args are forwarded to main.py/main_single_round.py."
             exit 0
             ;;
         *)
-            echo "Unknown argument: $1"
-            echo "Usage: $0 [--desc/-d DESCRIPTION] [--schedule-json PATH] [--mode til|cil]"
-            exit 1
+            PASSTHROUGH_ARGS+=("$1")
+            shift 1
             ;;
     esac
 done
@@ -71,16 +85,17 @@ MAX_JOBS=2
 
 HOST_SHORT_RAW="$(hostname -s 2>/dev/null || hostname)"
 HOST_SHORT="$(echo "$HOST_SHORT_RAW" | tr '[:upper:]' '[:lower:]')"
-HOST_KEY=""
-case "$HOST_SHORT" in
-  lnx-elkk-1) HOST_KEY="lnx-elkk-1" ;;
-  lnx-elkk-2) HOST_KEY="lnx-elkk-2" ;;
-  *)
-    # Allow running on other hosts, but require an explicit HOST_KEY.
-    HOST_KEY="${HOST_KEY:-}" ;;
-esac
+# Preserve explicit HOST_KEY overrides from the environment.
+HOST_KEY="${HOST_KEY:-}"
 if [ -z "$HOST_KEY" ]; then
-  echo "Unknown HOST_SHORT='$HOST_SHORT'. Expected lnx-elkk-1 or lnx-elkk-2." >&2
+  case "$HOST_SHORT" in
+    lnx-elkk-1) HOST_KEY="lnx-elkk-1" ;;
+    lnx-elkk-2) HOST_KEY="lnx-elkk-2" ;;
+    win-lbo-22410) HOST_KEY="win-lbo-22410" ;;
+  esac
+fi
+if [ -z "$HOST_KEY" ]; then
+  echo "Unknown HOST_SHORT='$HOST_SHORT'." >&2
   exit 1
 fi
 
@@ -129,6 +144,12 @@ log_msg "LOG_FILE=$LOG_FILE"
 log_msg "INCLUDED_ALL=$INCLUDED_ALL"
 if [ -n "$EXPERIMENT_DESC" ]; then
     log_msg "EXPERIMENT_DESC=$EXPERIMENT_DESC"
+fi
+if [ "${#PASSTHROUGH_ARGS[@]}" -gt 0 ]; then
+    log_msg "PASSTHROUGH_ARGS=${PASSTHROUGH_ARGS[*]}"
+fi
+if [ "$ONE_SHOT" -eq 1 ]; then
+    log_msg "ONE_SHOT=1 (main.py runs use --n_epochs 1 --inner_steps 2)"
 fi
 
 # Activate environment (see AGENTS.md)
@@ -345,7 +366,11 @@ run_job_sync() {
   if [ "$name" = "iid2" ]; then
     entrypoint="main_single_round.py"
   fi
-  python3 "$entrypoint" --config "$BASE_CONFIG" --config "$model_yaml" >"$JOB_LOG_FILE" 2>&1
+  local run_args=("${PASSTHROUGH_ARGS[@]}")
+  if [ "$ONE_SHOT" -eq 1 ] && [ "$entrypoint" = "main.py" ]; then
+    run_args+=(--n_epochs 1 --inner_steps 2)
+  fi
+  python3 "$entrypoint" --config "$BASE_CONFIG" --config "$model_yaml" "${run_args[@]}" >"$JOB_LOG_FILE" 2>&1
   local exit_code=$?
   record_job_result "$exit_code"
   if [ "$exit_code" -eq 0 ]; then
@@ -398,7 +423,11 @@ run_job_bg() {
     if [ "$name" = "iid2" ]; then
       entrypoint="main_single_round.py"
     fi
-    python3 "$entrypoint" --config "$BASE_CONFIG" --config "$model_yaml" >"$JOB_LOG_FILE" 2>&1
+    run_args=("${PASSTHROUGH_ARGS[@]}")
+    if [ "$ONE_SHOT" -eq 1 ] && [ "$entrypoint" = "main.py" ]; then
+      run_args+=(--n_epochs 1 --inner_steps 2)
+    fi
+    python3 "$entrypoint" --config "$BASE_CONFIG" --config "$model_yaml" "${run_args[@]}" >"$JOB_LOG_FILE" 2>&1
     exit_code=$?
     if [ "$exit_code" -eq 0 ]; then
       echo "[$(date -Iseconds)] Completed: $name (exit 0)" >>"$LOG_FILE"
@@ -524,7 +553,11 @@ else
       if [ "$a" = "iid2" ]; then
         entrypoint="main_single_round.py"
       fi
-      python3 "$entrypoint" --config "$BASE_CONFIG" --config "$model_yaml_a" >"$JOB_LOG_FILE_A" 2>&1
+      run_args=("${PASSTHROUGH_ARGS[@]}")
+      if [ "$ONE_SHOT" -eq 1 ] && [ "$entrypoint" = "main.py" ]; then
+        run_args+=(--n_epochs 1 --inner_steps 2)
+      fi
+      python3 "$entrypoint" --config "$BASE_CONFIG" --config "$model_yaml_a" "${run_args[@]}" >"$JOB_LOG_FILE_A" 2>&1
       exit_code=$?
       if [ "$exit_code" -eq 0 ]; then
         echo "[$(date -Iseconds)] Completed: $a (exit 0)" >>"$LOG_FILE"
@@ -540,7 +573,11 @@ else
       if [ "$b" = "iid2" ]; then
         entrypoint="main_single_round.py"
       fi
-      python3 "$entrypoint" --config "$BASE_CONFIG" --config "$model_yaml_b" >"$JOB_LOG_FILE_B" 2>&1
+      run_args=("${PASSTHROUGH_ARGS[@]}")
+      if [ "$ONE_SHOT" -eq 1 ] && [ "$entrypoint" = "main.py" ]; then
+        run_args+=(--n_epochs 1 --inner_steps 2)
+      fi
+      python3 "$entrypoint" --config "$BASE_CONFIG" --config "$model_yaml_b" "${run_args[@]}" >"$JOB_LOG_FILE_B" 2>&1
       exit_code=$?
       if [ "$exit_code" -eq 0 ]; then
         echo "[$(date -Iseconds)] Completed: $b (exit 0)" >>"$LOG_FILE"

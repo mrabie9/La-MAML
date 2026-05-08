@@ -6,7 +6,6 @@ loader: task_incremental_loader
 data_path: data/rff/radar_det_cls/hpt
 dataset: iq
 data_scaling: normalize
-shuffle_tasks: false
 classes_per_it: 6
 iterations: 5000
 workers: 0
