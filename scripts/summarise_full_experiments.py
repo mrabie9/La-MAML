@@ -24,6 +24,12 @@ Usage:
 If --log is omitted, the newest `run_*` directory under
 `logs/full_experiments/` is used when available; otherwise the newest
 `full_experiments_*.log` file is used.
+
+Memory sweep comparison (TR and TE: f1_c, det, fa, f1):
+    python scripts/summarise_full_experiments.py --mem-compare-runs \\
+        logs/full_experiments/run_20260511_221802_lnx-elkk-1_mem_512 \\
+        logs/full_experiments/run_20260513_173647_lnx-elkk-1_mem_1024
+    python scripts/summarise_full_experiments.py --log run_A --mem-compare-runs run_B run_C
 """
 
 from __future__ import annotations
@@ -35,7 +41,8 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from collections import Counter
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -98,6 +105,7 @@ MODEL_SIZE_RE = re.compile(r"Model size:\s+(?P<gb>[0-9.]+)\s+GB")
 LOG_TIMESTAMP_RE = re.compile(r"^\[(?P<stamp>\d{4}-\d{2}-\d{2}T[^]]+)\]")
 LOGGING_TO_RE = re.compile(r"Logging to\s+(?P<path>\S+)")
 RESULTS_DICT_RE = re.compile(r"'log_dir':\s*'(?P<path>[^']+)'")
+RUN_MEM_SUFFIX_RE = re.compile(r"_mem_(?P<mem>\d+)$")
 
 
 def _find_default_log() -> str:
@@ -736,6 +744,187 @@ def print_summary(
                 )
 
 
+def _parse_memory_buffer_size_from_run_directory(run_directory: str) -> Optional[int]:
+    """Extract replay buffer size from a run folder name ending in ``_mem_<n>``.
+
+    Args:
+        run_directory: Path to a coordinator run directory whose basename may
+            end with ``_mem_<digits>`` (as produced by ``full_experiments_mem_sweep.sh``).
+
+    Returns:
+        Parsed non-negative buffer size if the basename matches, else None.
+
+    Usage:
+        >>> _parse_memory_buffer_size_from_run_directory(
+        ...     "logs/full_experiments/run_20260511_221802_lnx-elkk-1_mem_512"
+        ... )
+        512
+    """
+    base_name = Path(run_directory).name
+    match = RUN_MEM_SUFFIX_RE.search(base_name)
+    if match:
+        return int(match.group("mem"))
+    return None
+
+
+def print_mem_buffer_comparison(
+    run_directory_paths: List[str],
+    output_format: str = "readable",
+) -> None:
+    """Print compact TR and TE ``f1_c``, ``det``, ``fa``, and ``f1`` per algo per run.
+
+    Loads each run directory with :func:`parse_path`, pairs metrics with the
+    buffer size inferred from ``_mem_<n>`` in the directory name (same eight
+    numeric fields as the TR and TE blocks in :func:`print_summary`).
+    Algorithms repeat across rows for each memory setting.
+
+    Args:
+        run_directory_paths: Coordinator run directories (typically
+            ``logs/full_experiments/run_*_mem_*``).
+        output_format: ``readable`` or ``markdown`` table style.
+
+    Returns:
+        None.
+
+    Usage:
+        >>> print_mem_buffer_comparison(
+        ...     [
+        ...         "logs/full_experiments/run_20260511_221802_lnx-elkk-1_mem_512",
+        ...         "logs/full_experiments/run_20260513_173647_lnx-elkk-1_mem_1024",
+        ...     ]
+        ... )
+    """
+    table_rows: List[Tuple[str, Optional[int], str, AlgoSummary]] = []
+    for run_directory in run_directory_paths:
+        memory_size = _parse_memory_buffer_size_from_run_directory(run_directory)
+        run_label = Path(run_directory).name
+        summaries = parse_path(run_directory)
+        for algorithm_name, summary in summaries.items():
+            table_rows.append((algorithm_name, memory_size, run_label, summary))
+
+    if not table_rows:
+        print("No algorithm runs found for memory buffer comparison.")
+        return
+
+    pair_counts = Counter(
+        (algorithm_name, memory_size)
+        for algorithm_name, memory_size, _, _ in table_rows
+    )
+    show_run_column = any(count > 1 for count in pair_counts.values())
+
+    def row_sort_key(
+        item: Tuple[str, Optional[int], str, AlgoSummary],
+    ) -> Tuple[str, float, str]:
+        algorithm_name, memory_size, run_label, _summary = item
+        memory_sort_key = (
+            float(memory_size) if memory_size is not None else float("inf")
+        )
+        return (algorithm_name, memory_sort_key, run_label)
+
+    table_rows.sort(key=row_sort_key)
+
+    if output_format == "markdown":
+        print()
+        print("### Memory buffer comparison (TR and TE: f1_c, det, fa, f1)")
+        print()
+        header_cells = ["Algo", "mem"]
+        if show_run_column:
+            header_cells.append("run_dir")
+        header_cells += [
+            "tr_f1_c",
+            "tr_det",
+            "tr_fa",
+            "tr_f1",
+            "te_f1_c",
+            "te_det",
+            "te_fa",
+            "te_f1",
+        ]
+        print("| " + " | ".join(header_cells) + " |")
+        print("| " + " | ".join(["---"] * len(header_cells)) + " |")
+        for algorithm_name, memory_size, run_label, summary in table_rows:
+            train_f1_c = _classification_f1_from_recall_precision(
+                summary.cls_rec_tr, summary.cls_prec_tr
+            )
+            test_f1_c = _classification_f1_from_recall_precision(
+                summary.cls_rec_te, summary.cls_prec_te
+            )
+            memory_cell = str(memory_size) if memory_size is not None else "-"
+            data_cells = [
+                algorithm_name,
+                memory_cell,
+            ]
+            if show_run_column:
+                data_cells.append(run_label)
+            data_cells += [
+                _fmt(train_f1_c).strip(),
+                _fmt(summary.det_tr).strip(),
+                _fmt(summary.fa_tr).strip(),
+                _fmt(summary.cls_f1_tr).strip(),
+                _fmt(test_f1_c).strip(),
+                _fmt(summary.det_te).strip(),
+                _fmt(summary.fa_te).strip(),
+                _fmt(summary.cls_f1_te).strip(),
+            ]
+            print("| " + " | ".join(data_cells) + " |")
+        return
+
+    print()
+    print("Memory buffer comparison (TR: f1_c det fa f1 | TE: f1_c det fa f1)")
+    width_algorithm = max(len(item[0]) for item in table_rows)
+    width_algorithm = max(width_algorithm, len("Algo"))
+    width_run = max(len(item[2]) for item in table_rows) if show_run_column else 0
+    if show_run_column:
+        width_run = max(width_run, len("run_dir"))
+    width_numeric = 7
+    header_parts = [
+        f"{'Algo':<{width_algorithm}}",
+        f"{'mem':>6}",
+    ]
+    if show_run_column:
+        header_parts.append(f"{'run_dir':<{width_run}}")
+    header_parts += [
+        f"{'f1_c':>{width_numeric}}",
+        f"{'det':>{width_numeric}}",
+        f"{'fa':>{width_numeric}}",
+        f"{'f1':>{width_numeric}}",
+        "|",
+        f"{'f1_c':>{width_numeric}}",
+        f"{'det':>{width_numeric}}",
+        f"{'fa':>{width_numeric}}",
+        f"{'f1':>{width_numeric}}",
+    ]
+    header_line = " ".join(header_parts)
+    print(header_line)
+    print("-" * len(header_line))
+    for algorithm_name, memory_size, run_label, summary in table_rows:
+        train_f1_c = _classification_f1_from_recall_precision(
+            summary.cls_rec_tr, summary.cls_prec_tr
+        )
+        test_f1_c = _classification_f1_from_recall_precision(
+            summary.cls_rec_te, summary.cls_prec_te
+        )
+        memory_cell = f"{memory_size:>6}" if memory_size is not None else f"{'-':>6}"
+        row_parts = [
+            f"{algorithm_name:<{width_algorithm}}",
+            memory_cell,
+        ]
+        if show_run_column:
+            row_parts.append(f"{run_label:<{width_run}}")
+        row_parts += [
+            f"{_fmt(train_f1_c):>{width_numeric}}",
+            f"{_fmt(summary.det_tr):>{width_numeric}}",
+            f"{_fmt(summary.fa_tr):>{width_numeric}}",
+            f"{_fmt(summary.cls_f1_tr):>{width_numeric}}",
+            "|",
+            f"{_fmt(test_f1_c):>{width_numeric}}",
+            f"{_fmt(summary.det_te):>{width_numeric}}",
+            f"{_fmt(summary.fa_te):>{width_numeric}}",
+            f"{_fmt(summary.cls_f1_te):>{width_numeric}}",
+        ]
+        print(" ".join(row_parts))
+
+
 def _print_metadata(log_paths: List[str], output_format: str) -> None:
     if output_format == "markdown":
         print("## Full Experiments Summary")
@@ -782,34 +971,70 @@ def _parse_arguments() -> argparse.Namespace:
         default="readable",
         help="Output format for the summary table.",
     )
+    parser.add_argument(
+        "--mem-compare-runs",
+        type=str,
+        nargs="+",
+        default=None,
+        metavar="RUN_DIR",
+        help=(
+            "Coordinator run directories (typically logs/full_experiments/run_*_mem_*) "
+            "to compare TR and TE f1_c, det, fa, and f1 across buffer sizes. "
+            "Printed after the main summary when --log/--logs are also used; "
+            "buffer size is read from the directory name suffix _mem_<n>."
+        ),
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = _parse_arguments()
 
-    if args.logs:
-        log_paths = args.logs
+    if args.logs is not None:
+        log_paths: List[str] = list(args.logs)
+    elif args.log is not None:
+        log_paths = [args.log]
+    elif args.mem_compare_runs is not None:
+        log_paths = []
     else:
-        log_paths = [args.log or _find_default_log()]
+        log_paths = [_find_default_log()]
 
     summary_collections: List[Dict[str, AlgoSummary]] = []
     total_concurrent_runtime_seconds: Optional[float] = 0.0
-    for log_path in log_paths:
-        summary_collections.append(parse_path(log_path))
-        concurrent_runtime_seconds = _compute_concurrent_runtime_seconds(log_path)
-        if concurrent_runtime_seconds is None:
-            total_concurrent_runtime_seconds = None
-        elif total_concurrent_runtime_seconds is not None:
-            total_concurrent_runtime_seconds += concurrent_runtime_seconds
+    if log_paths:
+        for log_path in log_paths:
+            summary_collections.append(parse_path(log_path))
+            concurrent_runtime_seconds = _compute_concurrent_runtime_seconds(log_path)
+            if concurrent_runtime_seconds is None:
+                total_concurrent_runtime_seconds = None
+            elif total_concurrent_runtime_seconds is not None:
+                total_concurrent_runtime_seconds += concurrent_runtime_seconds
 
-    merged_summaries = _merge_many_summaries(summary_collections)
-    _print_metadata(log_paths, output_format=args.output_format)
-    print_summary(
-        merged_summaries,
-        concurrent_runtime_seconds=total_concurrent_runtime_seconds,
-        output_format=args.output_format,
-    )
+        merged_summaries = _merge_many_summaries(summary_collections)
+        _print_metadata(log_paths, output_format=args.output_format)
+        print_summary(
+            merged_summaries,
+            concurrent_runtime_seconds=total_concurrent_runtime_seconds,
+            output_format=args.output_format,
+        )
+
+    if args.mem_compare_runs:
+        if not log_paths:
+            if args.output_format == "markdown":
+                print("## Memory buffer comparison")
+                print()
+                for run_path in args.mem_compare_runs:
+                    print(f"- `{run_path}`")
+                print()
+            else:
+                print(
+                    "Memory compare runs ("
+                    f"{len(args.mem_compare_runs)}): {', '.join(args.mem_compare_runs)}"
+                )
+        print_mem_buffer_comparison(
+            list(args.mem_compare_runs),
+            output_format=args.output_format,
+        )
 
 
 def _merge_many_summaries(
