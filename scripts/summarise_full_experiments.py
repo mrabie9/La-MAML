@@ -30,6 +30,11 @@ Memory sweep comparison (TR and TE: f1_c, det, fa, f1):
         logs/full_experiments/run_20260511_221802_lnx-elkk-1_mem_512 \\
         logs/full_experiments/run_20260513_173647_lnx-elkk-1_mem_1024
     python scripts/summarise_full_experiments.py --log run_A --mem-compare-runs run_B run_C
+
+Task order seed sweep (same table layout; label from ``_task_order_seed_<n>``):
+    python scripts/summarise_full_experiments.py --task-order-seed-compare-runs \\
+        logs/full_experiments/run_20260101_120000_lnx-elkk-1_task_order_seed_57 \\
+        logs/full_experiments/run_20260101_180000_lnx-elkk-1_task_order_seed_1040
 """
 
 from __future__ import annotations
@@ -42,7 +47,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from collections import Counter
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -106,6 +111,7 @@ LOG_TIMESTAMP_RE = re.compile(r"^\[(?P<stamp>\d{4}-\d{2}-\d{2}T[^]]+)\]")
 LOGGING_TO_RE = re.compile(r"Logging to\s+(?P<path>\S+)")
 RESULTS_DICT_RE = re.compile(r"'log_dir':\s*'(?P<path>[^']+)'")
 RUN_MEM_SUFFIX_RE = re.compile(r"_mem_(?P<mem>\d+)$")
+RUN_TASK_ORDER_SEED_SUFFIX_RE = re.compile(r"_task_order_seed_(?P<seed>\d+)$")
 
 
 def _find_default_log() -> str:
@@ -767,67 +773,129 @@ def _parse_memory_buffer_size_from_run_directory(run_directory: str) -> Optional
     return None
 
 
-def print_mem_buffer_comparison(
-    run_directory_paths: List[str],
-    output_format: str = "readable",
-) -> None:
-    """Print compact TR and TE ``f1_c``, ``det``, ``fa``, and ``f1`` per algo per run.
-
-    Loads each run directory with :func:`parse_path`, pairs metrics with the
-    buffer size inferred from ``_mem_<n>`` in the directory name (same eight
-    numeric fields as the TR and TE blocks in :func:`print_summary`).
-    Algorithms repeat across rows for each memory setting.
+def _parse_task_order_seed_from_run_directory(run_directory: str) -> Optional[int]:
+    """Extract task-order seed from a run folder name ending in ``_task_order_seed_<n>``.
 
     Args:
-        run_directory_paths: Coordinator run directories (typically
-            ``logs/full_experiments/run_*_mem_*``).
-        output_format: ``readable`` or ``markdown`` table style.
+        run_directory: Path to a coordinator run directory whose basename may
+            end with ``_task_order_seed_<digits>`` (as produced by
+            ``full_experiments_task_order_seed_sweep.sh``).
+
+    Returns:
+        Parsed seed if the basename matches, else None.
+
+    Usage:
+        >>> _parse_task_order_seed_from_run_directory(
+        ...     "logs/full_experiments/run_20260101_120000_lnx-elkk-1_task_order_seed_57"
+        ... )
+        57
+    """
+    base_name = Path(run_directory).name
+    match = RUN_TASK_ORDER_SEED_SUFFIX_RE.search(base_name)
+    if match:
+        return int(match.group("seed"))
+    return None
+
+
+def _print_compare_runs_path_intro(
+    run_paths: List[str],
+    markdown_heading: str,
+    readable_label: str,
+    output_format: str,
+) -> None:
+    """Print a short preamble listing coordinator run paths for a sweep comparison.
+
+    Args:
+        run_paths: Run directories passed on the CLI.
+        markdown_heading: Markdown heading line (e.g. ``## Memory buffer comparison``).
+        readable_label: One-line prefix before the path list in readable mode.
+        output_format: ``readable`` or ``markdown``.
 
     Returns:
         None.
 
     Usage:
-        >>> print_mem_buffer_comparison(
-        ...     [
-        ...         "logs/full_experiments/run_20260511_221802_lnx-elkk-1_mem_512",
-        ...         "logs/full_experiments/run_20260513_173647_lnx-elkk-1_mem_1024",
-        ...     ]
+        >>> _print_compare_runs_path_intro(
+        ...     ["logs/full_experiments/run_A_mem_512"],
+        ...     "## Memory buffer comparison",
+        ...     "Memory compare runs",
+        ...     "markdown",
         ... )
+    """
+    if output_format == "markdown":
+        print(markdown_heading)
+        print()
+        for run_path in run_paths:
+            print(f"- `{run_path}`")
+        print()
+        return
+    print(f"{readable_label} ({len(run_paths)}): {', '.join(run_paths)}")
+
+
+def _print_tr_te_sweep_comparison(
+    run_directory_paths: List[str],
+    output_format: str,
+    *,
+    sweep_label_header: str,
+    sweep_label_from_run: Callable[[str], Optional[int]],
+    markdown_section_title: str,
+    readable_title_line: str,
+    empty_message: str,
+) -> None:
+    """Print TR/TE f1_c, det, fa, f1 rows keyed by a per-run integer parsed from the path.
+
+    Args:
+        run_directory_paths: Coordinator run directories to load with :func:`parse_path`.
+        output_format: ``readable`` or ``markdown``.
+        sweep_label_header: Column name for the parsed sweep parameter (e.g. ``mem``).
+        sweep_label_from_run: Returns the sweep label integer from a run directory path.
+        markdown_section_title: Markdown subsection title (``### ...``).
+        readable_title_line: First-line description in readable mode.
+        empty_message: Printed when no algorithm rows are produced.
+
+    Returns:
+        None.
     """
     table_rows: List[Tuple[str, Optional[int], str, AlgoSummary]] = []
     for run_directory in run_directory_paths:
-        memory_size = _parse_memory_buffer_size_from_run_directory(run_directory)
+        sweep_label_value = sweep_label_from_run(run_directory)
         run_label = Path(run_directory).name
         summaries = parse_path(run_directory)
         for algorithm_name, summary in summaries.items():
-            table_rows.append((algorithm_name, memory_size, run_label, summary))
+            table_rows.append((algorithm_name, sweep_label_value, run_label, summary))
 
     if not table_rows:
-        print("No algorithm runs found for memory buffer comparison.")
+        print(empty_message)
         return
 
     pair_counts = Counter(
-        (algorithm_name, memory_size)
-        for algorithm_name, memory_size, _, _ in table_rows
+        (algorithm_name, sweep_label_value)
+        for algorithm_name, sweep_label_value, _, _ in table_rows
     )
     show_run_column = any(count > 1 for count in pair_counts.values())
+
+    label_width = len(sweep_label_header)
+    for _algorithm_name, sweep_label_value, _run_label, _summary in table_rows:
+        if sweep_label_value is not None:
+            label_width = max(label_width, len(str(sweep_label_value)))
+    label_width = max(label_width, 6)
 
     def row_sort_key(
         item: Tuple[str, Optional[int], str, AlgoSummary],
     ) -> Tuple[str, float, str]:
-        algorithm_name, memory_size, run_label, _summary = item
-        memory_sort_key = (
-            float(memory_size) if memory_size is not None else float("inf")
+        algorithm_name, sweep_label_value, run_label, _summary = item
+        sort_key = (
+            float(sweep_label_value) if sweep_label_value is not None else float("inf")
         )
-        return (algorithm_name, memory_sort_key, run_label)
+        return (algorithm_name, sort_key, run_label)
 
     table_rows.sort(key=row_sort_key)
 
     if output_format == "markdown":
         print()
-        print("### Memory buffer comparison (TR and TE: f1_c, det, fa, f1)")
+        print(markdown_section_title)
         print()
-        header_cells = ["Algo", "mem"]
+        header_cells = ["Algo", sweep_label_header]
         if show_run_column:
             header_cells.append("run_dir")
         header_cells += [
@@ -842,17 +910,19 @@ def print_mem_buffer_comparison(
         ]
         print("| " + " | ".join(header_cells) + " |")
         print("| " + " | ".join(["---"] * len(header_cells)) + " |")
-        for algorithm_name, memory_size, run_label, summary in table_rows:
+        for algorithm_name, sweep_label_value, run_label, summary in table_rows:
             train_f1_c = _classification_f1_from_recall_precision(
                 summary.cls_rec_tr, summary.cls_prec_tr
             )
             test_f1_c = _classification_f1_from_recall_precision(
                 summary.cls_rec_te, summary.cls_prec_te
             )
-            memory_cell = str(memory_size) if memory_size is not None else "-"
+            label_cell = (
+                str(sweep_label_value) if sweep_label_value is not None else "-"
+            )
             data_cells = [
                 algorithm_name,
-                memory_cell,
+                label_cell,
             ]
             if show_run_column:
                 data_cells.append(run_label)
@@ -870,7 +940,7 @@ def print_mem_buffer_comparison(
         return
 
     print()
-    print("Memory buffer comparison (TR: f1_c det fa f1 | TE: f1_c det fa f1)")
+    print(readable_title_line)
     width_algorithm = max(len(item[0]) for item in table_rows)
     width_algorithm = max(width_algorithm, len("Algo"))
     width_run = max(len(item[2]) for item in table_rows) if show_run_column else 0
@@ -879,7 +949,7 @@ def print_mem_buffer_comparison(
     width_numeric = 7
     header_parts = [
         f"{'Algo':<{width_algorithm}}",
-        f"{'mem':>6}",
+        f"{sweep_label_header:>{label_width}}",
     ]
     if show_run_column:
         header_parts.append(f"{'run_dir':<{width_run}}")
@@ -897,17 +967,21 @@ def print_mem_buffer_comparison(
     header_line = " ".join(header_parts)
     print(header_line)
     print("-" * len(header_line))
-    for algorithm_name, memory_size, run_label, summary in table_rows:
+    for algorithm_name, sweep_label_value, run_label, summary in table_rows:
         train_f1_c = _classification_f1_from_recall_precision(
             summary.cls_rec_tr, summary.cls_prec_tr
         )
         test_f1_c = _classification_f1_from_recall_precision(
             summary.cls_rec_te, summary.cls_prec_te
         )
-        memory_cell = f"{memory_size:>6}" if memory_size is not None else f"{'-':>6}"
+        label_cell = (
+            f"{sweep_label_value:>{label_width}}"
+            if sweep_label_value is not None
+            else f"{'-':>{label_width}}"
+        )
         row_parts = [
             f"{algorithm_name:<{width_algorithm}}",
-            memory_cell,
+            label_cell,
         ]
         if show_run_column:
             row_parts.append(f"{run_label:<{width_run}}")
@@ -923,6 +997,80 @@ def print_mem_buffer_comparison(
             f"{_fmt(summary.cls_f1_te):>{width_numeric}}",
         ]
         print(" ".join(row_parts))
+
+
+def print_mem_buffer_comparison(
+    run_directory_paths: List[str],
+    output_format: str = "readable",
+) -> None:
+    """Print compact TR and TE metrics across replay buffer sizes (see sweep script).
+
+    Args:
+        run_directory_paths: Coordinator run directories (typically
+            ``logs/full_experiments/run_*_mem_*``).
+        output_format: ``readable`` or ``markdown`` table style.
+
+    Returns:
+        None.
+
+    Usage:
+        >>> print_mem_buffer_comparison(
+        ...     [
+        ...         "logs/full_experiments/run_20260511_221802_lnx-elkk-1_mem_512",
+        ...         "logs/full_experiments/run_20260513_173647_lnx-elkk-1_mem_1024",
+        ...     ]
+        ... )
+    """
+    _print_tr_te_sweep_comparison(
+        run_directory_paths,
+        output_format,
+        sweep_label_header="mem",
+        sweep_label_from_run=_parse_memory_buffer_size_from_run_directory,
+        markdown_section_title=(
+            "### Memory buffer comparison (TR and TE: f1_c, det, fa, f1)"
+        ),
+        readable_title_line=(
+            "Memory buffer comparison (TR: f1_c det fa f1 | TE: f1_c det fa f1)"
+        ),
+        empty_message="No algorithm runs found for memory buffer comparison.",
+    )
+
+
+def print_task_order_seed_comparison(
+    run_directory_paths: List[str],
+    output_format: str = "readable",
+) -> None:
+    """Print compact TR and TE metrics across task-order seeds (see sweep script).
+
+    Args:
+        run_directory_paths: Coordinator run directories (typically
+            ``logs/full_experiments/run_*_task_order_seed_*``).
+        output_format: ``readable`` or ``markdown`` table style.
+
+    Returns:
+        None.
+
+    Usage:
+        >>> print_task_order_seed_comparison(
+        ...     [
+        ...         "logs/full_experiments/run_20260101_120000_lnx-elkk-1_task_order_seed_57",
+        ...         "logs/full_experiments/run_20260101_180000_lnx-elkk-1_task_order_seed_1040",
+        ...     ]
+        ... )
+    """
+    _print_tr_te_sweep_comparison(
+        run_directory_paths,
+        output_format,
+        sweep_label_header="task_order_seed",
+        sweep_label_from_run=_parse_task_order_seed_from_run_directory,
+        markdown_section_title=(
+            "### Task order seed comparison (TR and TE: f1_c, det, fa, f1)"
+        ),
+        readable_title_line=(
+            "Task order seed comparison (TR: f1_c det fa f1 | TE: f1_c det fa f1)"
+        ),
+        empty_message="No algorithm runs found for task order seed comparison.",
+    )
 
 
 def _print_metadata(log_paths: List[str], output_format: str) -> None:
@@ -984,17 +1132,34 @@ def _parse_arguments() -> argparse.Namespace:
             "buffer size is read from the directory name suffix _mem_<n>."
         ),
     )
+    parser.add_argument(
+        "--task-order-seed-compare-runs",
+        type=str,
+        nargs="+",
+        default=None,
+        metavar="RUN_DIR",
+        help=(
+            "Coordinator run directories (typically run_*_task_order_seed_<n>) "
+            "to compare TR and TE f1_c, det, fa, and f1 across task-order seeds. "
+            "Same table as --mem-compare-runs; seed is read from suffix "
+            "_task_order_seed_<n> (see full_experiments_task_order_seed_sweep.sh)."
+        ),
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = _parse_arguments()
 
+    any_sweep_compare = (
+        args.mem_compare_runs is not None
+        or args.task_order_seed_compare_runs is not None
+    )
     if args.logs is not None:
         log_paths: List[str] = list(args.logs)
     elif args.log is not None:
         log_paths = [args.log]
-    elif args.mem_compare_runs is not None:
+    elif any_sweep_compare:
         log_paths = []
     else:
         log_paths = [_find_default_log()]
@@ -1020,19 +1185,27 @@ def main() -> None:
 
     if args.mem_compare_runs:
         if not log_paths:
-            if args.output_format == "markdown":
-                print("## Memory buffer comparison")
-                print()
-                for run_path in args.mem_compare_runs:
-                    print(f"- `{run_path}`")
-                print()
-            else:
-                print(
-                    "Memory compare runs ("
-                    f"{len(args.mem_compare_runs)}): {', '.join(args.mem_compare_runs)}"
-                )
+            _print_compare_runs_path_intro(
+                list(args.mem_compare_runs),
+                "## Memory buffer comparison",
+                "Memory compare runs",
+                args.output_format,
+            )
         print_mem_buffer_comparison(
             list(args.mem_compare_runs),
+            output_format=args.output_format,
+        )
+
+    if args.task_order_seed_compare_runs:
+        if not log_paths:
+            _print_compare_runs_path_intro(
+                list(args.task_order_seed_compare_runs),
+                "## Task order seed comparison",
+                "Task order seed compare runs",
+                args.output_format,
+            )
+        print_task_order_seed_comparison(
+            list(args.task_order_seed_compare_runs),
             output_format=args.output_format,
         )
 
