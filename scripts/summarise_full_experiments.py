@@ -30,6 +30,9 @@ Memory sweep comparison (TR and TE: f1_c, det, fa, f1):
         logs/full_experiments/run_20260511_221802_lnx-elkk-1_mem_512 \\
         logs/full_experiments/run_20260513_173647_lnx-elkk-1_mem_1024
     python scripts/summarise_full_experiments.py --log run_A --mem-compare-runs run_B run_C
+    python scripts/summarise_full_experiments.py --mem-compare-runs \\
+        logs/full_experiments/run_*_mem_* \\
+        --base-mem logs/full_experiments/full-til_10epochs_w-zs
 
 Task order seed sweep (same table layout; label from ``_task_order_seed_<n>``):
     python scripts/summarise_full_experiments.py --task-order-seed-compare-runs \\
@@ -115,7 +118,7 @@ LOGGING_TO_RE = re.compile(r"Logging to\s+(?P<path>\S+)")
 RESULTS_DICT_RE = re.compile(r"'log_dir':\s*'(?P<path>[^']+)'")
 RUN_MEM_SUFFIX_RE = re.compile(r"_mem_(?P<mem>\d+)$")
 RUN_TASK_ORDER_SEED_SUFFIX_RE = re.compile(r"_task_order_seed_(?P<seed>\d+)$")
-BASE_TASK_ORDER_SWEEP_LABEL = "base"
+BASE_SWEEP_LABEL = "base"
 SweepLabelValue = Union[int, str]
 
 
@@ -846,10 +849,10 @@ def _parse_memory_buffer_size_from_run_directory(run_directory: str) -> Optional
 def _sweep_label_sort_key(
     sweep_label_value: Optional[SweepLabelValue],
 ) -> Tuple[int, float | str]:
-    """Order sweep labels with baseline ``base`` first, then numeric seeds.
+    """Order sweep labels with baseline ``base`` first, then numeric sweep values.
 
     Args:
-        sweep_label_value: Parsed seed integer, ``base``, or None.
+        sweep_label_value: Parsed mem/seed integer, ``base``, or None.
 
     Returns:
         Tuple suitable for sorting comparison table rows.
@@ -860,7 +863,7 @@ def _sweep_label_sort_key(
         >>> _sweep_label_sort_key(57)
         (1, 57.0)
     """
-    if sweep_label_value == BASE_TASK_ORDER_SWEEP_LABEL:
+    if sweep_label_value == BASE_SWEEP_LABEL:
         return (0, 0)
     if sweep_label_value is None:
         return (2, float("inf"))
@@ -998,9 +1001,7 @@ def _print_tr_te_sweep_comparison(
                 and algorithm_name not in comparison_algorithm_names
             ):
                 continue
-            table_rows.append(
-                (algorithm_name, BASE_TASK_ORDER_SWEEP_LABEL, run_label, summary)
-            )
+            table_rows.append((algorithm_name, BASE_SWEEP_LABEL, run_label, summary))
     for run_directory in run_directory_paths:
         sweep_label_value = sweep_label_from_run(run_directory)
         run_label = Path(run_directory).name
@@ -1153,6 +1154,7 @@ def _print_tr_te_sweep_comparison(
 def print_mem_buffer_comparison(
     run_directory_paths: List[str],
     output_format: str = "readable",
+    base_directory_path: Optional[str] = None,
 ) -> None:
     """Print compact TR and TE metrics across replay buffer sizes (see sweep script).
 
@@ -1160,6 +1162,10 @@ def print_mem_buffer_comparison(
         run_directory_paths: Coordinator run directories (typically
             ``logs/full_experiments/run_*_mem_*``).
         output_format: ``readable`` or ``markdown`` table style.
+        base_directory_path: Optional baseline logs (default buffer size). May be a
+            single coordinator run or a parent folder of runs (e.g.
+            ``logs/full_experiments/full-til_10epochs_w-zs``); rows use sweep label
+            ``base``. Only algorithms present in ``run_directory_paths`` are included.
 
     Returns:
         None.
@@ -1169,9 +1175,13 @@ def print_mem_buffer_comparison(
         ...     [
         ...         "logs/full_experiments/run_20260511_221802_lnx-elkk-1_mem_512",
         ...         "logs/full_experiments/run_20260513_173647_lnx-elkk-1_mem_1024",
-        ...     ]
+        ...     ],
+        ...     base_directory_path="logs/full_experiments/full-til_10epochs_w-zs",
         ... )
     """
+    base_run_paths: Optional[List[str]] = None
+    if base_directory_path is not None:
+        base_run_paths = _discover_coordinator_run_directories(base_directory_path)
     _print_tr_te_sweep_comparison(
         run_directory_paths,
         output_format,
@@ -1184,6 +1194,8 @@ def print_mem_buffer_comparison(
             "Memory buffer comparison (TR: f1_c det fa f1 | TE: f1_c det fa f1)"
         ),
         empty_message="No algorithm runs found for memory buffer comparison.",
+        base_run_directory_paths=base_run_paths,
+        separate_algorithms=True,
     )
 
 
@@ -1291,7 +1303,20 @@ def _parse_arguments() -> argparse.Namespace:
             "Coordinator run directories (typically logs/full_experiments/run_*_mem_*) "
             "to compare TR and TE f1_c, det, fa, and f1 across buffer sizes. "
             "Printed after the main summary when --log/--logs are also used; "
-            "buffer size is read from the directory name suffix _mem_<n>."
+            "buffer size is read from the directory name suffix _mem_<n> "
+            "(see full_experiments_mem_sweep.sh)."
+        ),
+    )
+    parser.add_argument(
+        "--base-mem",
+        type=str,
+        default=None,
+        metavar="BASE_DIR",
+        help=(
+            "Baseline experiment directory for --mem-compare-runs (default replay "
+            "buffer, no _mem_<n> suffix). May be one coordinator run or a parent "
+            "folder of runs (e.g. logs/full_experiments/full-til_10epochs_w-zs). "
+            "Adds rows labelled 'base' in the comparison table."
         ),
     )
     parser.add_argument(
@@ -1359,8 +1384,11 @@ def main() -> None:
 
     if args.mem_compare_runs:
         if not log_paths:
+            intro_paths = list(args.mem_compare_runs)
+            if args.base_mem is not None:
+                intro_paths = [args.base_mem] + intro_paths
             _print_compare_runs_path_intro(
-                list(args.mem_compare_runs),
+                intro_paths,
                 "## Memory buffer comparison",
                 "Memory compare runs",
                 args.output_format,
@@ -1368,6 +1396,7 @@ def main() -> None:
         print_mem_buffer_comparison(
             list(args.mem_compare_runs),
             output_format=args.output_format,
+            base_directory_path=args.base_mem,
         )
 
     if args.task_order_seed_compare_runs:
