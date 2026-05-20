@@ -35,6 +35,9 @@ Task order seed sweep (same table layout; label from ``_task_order_seed_<n>``):
     python scripts/summarise_full_experiments.py --task-order-seed-compare-runs \\
         logs/full_experiments/run_20260101_120000_lnx-elkk-1_task_order_seed_57 \\
         logs/full_experiments/run_20260101_180000_lnx-elkk-1_task_order_seed_1040
+    python scripts/summarise_full_experiments.py --task-order-seed-compare-runs \\
+        logs/full_experiments/run_*_task_order_seed_* \\
+        --base-seed logs/full_experiments/full-til_10epochs_w-zs
 """
 
 from __future__ import annotations
@@ -47,7 +50,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from collections import Counter
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -112,6 +115,8 @@ LOGGING_TO_RE = re.compile(r"Logging to\s+(?P<path>\S+)")
 RESULTS_DICT_RE = re.compile(r"'log_dir':\s*'(?P<path>[^']+)'")
 RUN_MEM_SUFFIX_RE = re.compile(r"_mem_(?P<mem>\d+)$")
 RUN_TASK_ORDER_SEED_SUFFIX_RE = re.compile(r"_task_order_seed_(?P<seed>\d+)$")
+BASE_TASK_ORDER_SWEEP_LABEL = "base"
+SweepLabelValue = Union[int, str]
 
 
 def _find_default_log() -> str:
@@ -526,6 +531,68 @@ def _merge_summary(into: AlgoSummary, source: AlgoSummary) -> None:
         into.status = source.status
 
 
+def _resolve_job_log_path(run_directory: str, job_log_path: str) -> Optional[str]:
+    """Resolve a coordinator job log path, including after host or prefix moves.
+
+    Args:
+        run_directory: Coordinator run directory containing ``job_logs/``.
+        job_log_path: Path recorded in the coordinator log (may be absolute elsewhere).
+
+    Returns:
+        Existing path to read, or None if no matching file is found.
+
+    Usage:
+        >>> _resolve_job_log_path(
+        ...     "logs/full_experiments/run_20260101_120000_lnx-elkk-1",
+        ...     "logs/full_experiments/run_20260101_120000_lnx-elkk-1/job_logs/job_gem.log",
+        ... )
+    """
+    if os.path.isfile(job_log_path):
+        return job_log_path
+    job_log_file_name = os.path.basename(job_log_path)
+    candidate_under_run = os.path.join(run_directory, "job_logs", job_log_file_name)
+    if os.path.isfile(candidate_under_run):
+        return candidate_under_run
+    return None
+
+
+def _discover_coordinator_run_directories(parent_directory: str) -> List[str]:
+    """List coordinator run directories under a parent or return the parent itself.
+
+    Args:
+        parent_directory: Either a coordinator run (contains ``full_experiments_*.log``)
+            or a parent folder whose immediate children are coordinator runs
+            (e.g. ``logs/full_experiments/full-til_10epochs_w-zs``).
+
+    Returns:
+        Sorted list of coordinator run directory paths.
+
+    Raises:
+        SystemExit: If ``parent_directory`` is missing or contains no coordinator runs.
+
+    Usage:
+        >>> _discover_coordinator_run_directories(
+        ...     "logs/full_experiments/full-til_10epochs_w-zs"
+        ... )  # doctest: +SKIP
+    """
+    parent_path = Path(parent_directory)
+    if not parent_path.is_dir():
+        raise SystemExit(f"Not a directory: {parent_directory}")
+    if sorted(parent_path.glob("full_experiments_*.log")):
+        return [str(parent_path)]
+    coordinator_runs = sorted(
+        child_path
+        for child_path in parent_path.iterdir()
+        if child_path.is_dir() and sorted(child_path.glob("full_experiments_*.log"))
+    )
+    if not coordinator_runs:
+        raise SystemExit(
+            f"No coordinator run directories (full_experiments_*.log) found under: "
+            f"{parent_directory}"
+        )
+    return [str(coordinator_run) for coordinator_run in coordinator_runs]
+
+
 def parse_run_directory(path: str) -> Dict[str, AlgoSummary]:
     main_log_candidates = sorted(
         glob.glob(os.path.join(path, "full_experiments_*.log"))
@@ -557,11 +624,14 @@ def parse_run_directory(path: str) -> Dict[str, AlgoSummary]:
             job_logs_by_algo[job_match.group("algo")] = job_log_path
 
     for algo_name, job_log_path in job_logs_by_algo.items():
-        job_summaries = parse_job_log(job_log_path, algo_name=algo_name)
+        resolved_job_log_path = _resolve_job_log_path(path, job_log_path)
+        if resolved_job_log_path is None:
+            continue
+        job_summaries = parse_job_log(resolved_job_log_path, algo_name=algo_name)
         if algo_name in job_summaries:
             summary = summaries.setdefault(algo_name, AlgoSummary(name=algo_name))
             _merge_summary(summary, job_summaries[algo_name])
-            _apply_metrics_fallback_from_job_log(summary, job_log_path)
+            _apply_metrics_fallback_from_job_log(summary, resolved_job_log_path)
 
     return summaries
 
@@ -773,6 +843,32 @@ def _parse_memory_buffer_size_from_run_directory(run_directory: str) -> Optional
     return None
 
 
+def _sweep_label_sort_key(
+    sweep_label_value: Optional[SweepLabelValue],
+) -> Tuple[int, float | str]:
+    """Order sweep labels with baseline ``base`` first, then numeric seeds.
+
+    Args:
+        sweep_label_value: Parsed seed integer, ``base``, or None.
+
+    Returns:
+        Tuple suitable for sorting comparison table rows.
+
+    Usage:
+        >>> _sweep_label_sort_key("base")
+        (0, 0)
+        >>> _sweep_label_sort_key(57)
+        (1, 57.0)
+    """
+    if sweep_label_value == BASE_TASK_ORDER_SWEEP_LABEL:
+        return (0, 0)
+    if sweep_label_value is None:
+        return (2, float("inf"))
+    if isinstance(sweep_label_value, int):
+        return (1, float(sweep_label_value))
+    return (1, str(sweep_label_value))
+
+
 def _parse_task_order_seed_from_run_directory(run_directory: str) -> Optional[int]:
     """Extract task-order seed from a run folder name ending in ``_task_order_seed_<n>``.
 
@@ -795,6 +891,30 @@ def _parse_task_order_seed_from_run_directory(run_directory: str) -> Optional[in
     if match:
         return int(match.group("seed"))
     return None
+
+
+def _print_sweep_algorithm_separator(
+    output_format: str,
+    separator_width: int,
+) -> None:
+    """Print a dashed line between algorithm groups in a sweep comparison table.
+
+    Args:
+        output_format: ``readable`` or ``markdown``.
+        separator_width: Character width for readable-mode dashes.
+
+    Returns:
+        None.
+
+    Usage:
+        >>> _print_sweep_algorithm_separator("readable", 40)  # doctest: +SKIP
+    """
+    if output_format == "markdown":
+        print()
+        print("---")
+        print()
+        return
+    print("-" * separator_width)
 
 
 def _print_compare_runs_path_intro(
@@ -841,6 +961,8 @@ def _print_tr_te_sweep_comparison(
     markdown_section_title: str,
     readable_title_line: str,
     empty_message: str,
+    base_run_directory_paths: Optional[List[str]] = None,
+    separate_algorithms: bool = False,
 ) -> None:
     """Print TR/TE f1_c, det, fa, f1 rows keyed by a per-run integer parsed from the path.
 
@@ -852,11 +974,33 @@ def _print_tr_te_sweep_comparison(
         markdown_section_title: Markdown subsection title (``### ...``).
         readable_title_line: First-line description in readable mode.
         empty_message: Printed when no algorithm rows are produced.
+        base_run_directory_paths: Optional baseline runs (label ``base`` in the sweep
+            column); only algorithms present in ``run_directory_paths`` are included.
+        separate_algorithms: When True, print a dashed line between each algorithm's
+            rows in the comparison table.
 
     Returns:
         None.
     """
-    table_rows: List[Tuple[str, Optional[int], str, AlgoSummary]] = []
+    table_rows: List[Tuple[str, Optional[SweepLabelValue], str, AlgoSummary]] = []
+    comparison_algorithm_names: Optional[set[str]] = None
+    if base_run_directory_paths:
+        comparison_algorithm_names = set()
+        for run_directory in run_directory_paths:
+            comparison_algorithm_names.update(parse_path(run_directory).keys())
+
+    for run_directory in base_run_directory_paths or []:
+        run_label = Path(run_directory).name
+        summaries = parse_path(run_directory)
+        for algorithm_name, summary in summaries.items():
+            if (
+                comparison_algorithm_names is not None
+                and algorithm_name not in comparison_algorithm_names
+            ):
+                continue
+            table_rows.append(
+                (algorithm_name, BASE_TASK_ORDER_SWEEP_LABEL, run_label, summary)
+            )
     for run_directory in run_directory_paths:
         sweep_label_value = sweep_label_from_run(run_directory)
         run_label = Path(run_directory).name
@@ -881,13 +1025,10 @@ def _print_tr_te_sweep_comparison(
     label_width = max(label_width, 6)
 
     def row_sort_key(
-        item: Tuple[str, Optional[int], str, AlgoSummary],
-    ) -> Tuple[str, float, str]:
+        item: Tuple[str, Optional[SweepLabelValue], str, AlgoSummary],
+    ) -> Tuple[str, Tuple[int, float | str], str]:
         algorithm_name, sweep_label_value, run_label, _summary = item
-        sort_key = (
-            float(sweep_label_value) if sweep_label_value is not None else float("inf")
-        )
-        return (algorithm_name, sort_key, run_label)
+        return (algorithm_name, _sweep_label_sort_key(sweep_label_value), run_label)
 
     table_rows.sort(key=row_sort_key)
 
@@ -910,7 +1051,12 @@ def _print_tr_te_sweep_comparison(
         ]
         print("| " + " | ".join(header_cells) + " |")
         print("| " + " | ".join(["---"] * len(header_cells)) + " |")
+        previous_algorithm_name: Optional[str] = None
         for algorithm_name, sweep_label_value, run_label, summary in table_rows:
+            if separate_algorithms and previous_algorithm_name is not None:
+                if algorithm_name != previous_algorithm_name:
+                    _print_sweep_algorithm_separator(output_format, 0)
+            previous_algorithm_name = algorithm_name
             train_f1_c = _classification_f1_from_recall_precision(
                 summary.cls_rec_tr, summary.cls_prec_tr
             )
@@ -967,7 +1113,12 @@ def _print_tr_te_sweep_comparison(
     header_line = " ".join(header_parts)
     print(header_line)
     print("-" * len(header_line))
+    previous_algorithm_name: Optional[str] = None
     for algorithm_name, sweep_label_value, run_label, summary in table_rows:
+        if separate_algorithms and previous_algorithm_name is not None:
+            if algorithm_name != previous_algorithm_name:
+                _print_sweep_algorithm_separator(output_format, len(header_line))
+        previous_algorithm_name = algorithm_name
         train_f1_c = _classification_f1_from_recall_precision(
             summary.cls_rec_tr, summary.cls_prec_tr
         )
@@ -1039,6 +1190,7 @@ def print_mem_buffer_comparison(
 def print_task_order_seed_comparison(
     run_directory_paths: List[str],
     output_format: str = "readable",
+    base_directory_path: Optional[str] = None,
 ) -> None:
     """Print compact TR and TE metrics across task-order seeds (see sweep script).
 
@@ -1046,6 +1198,10 @@ def print_task_order_seed_comparison(
         run_directory_paths: Coordinator run directories (typically
             ``logs/full_experiments/run_*_task_order_seed_*``).
         output_format: ``readable`` or ``markdown`` table style.
+        base_directory_path: Optional baseline logs (default task order). May be a
+            single coordinator run or a parent directory of runs (e.g.
+            ``logs/full_experiments/full-til_10epochs_w-zs``); rows use sweep label
+            ``base``. Only algorithms present in ``run_directory_paths`` are included.
 
     Returns:
         None.
@@ -1055,9 +1211,13 @@ def print_task_order_seed_comparison(
         ...     [
         ...         "logs/full_experiments/run_20260101_120000_lnx-elkk-1_task_order_seed_57",
         ...         "logs/full_experiments/run_20260101_180000_lnx-elkk-1_task_order_seed_1040",
-        ...     ]
+        ...     ],
+        ...     base_directory_path="logs/full_experiments/full-til_10epochs_w-zs",
         ... )
     """
+    base_run_paths: Optional[List[str]] = None
+    if base_directory_path is not None:
+        base_run_paths = _discover_coordinator_run_directories(base_directory_path)
     _print_tr_te_sweep_comparison(
         run_directory_paths,
         output_format,
@@ -1070,6 +1230,8 @@ def print_task_order_seed_comparison(
             "Task order seed comparison (TR: f1_c det fa f1 | TE: f1_c det fa f1)"
         ),
         empty_message="No algorithm runs found for task order seed comparison.",
+        base_run_directory_paths=base_run_paths,
+        separate_algorithms=True,
     )
 
 
@@ -1145,6 +1307,18 @@ def _parse_arguments() -> argparse.Namespace:
             "_task_order_seed_<n> (see full_experiments_task_order_seed_sweep.sh)."
         ),
     )
+    parser.add_argument(
+        "--base-seed",
+        type=str,
+        default=None,
+        metavar="BASE_DIR",
+        help=(
+            "Baseline experiment directory for --task-order-seed-compare-runs "
+            "(default task order, no _task_order_seed_ suffix). May be one coordinator "
+            "run or a parent folder of runs (e.g. logs/full_experiments/"
+            "full-til_10epochs_w-zs). Adds rows labelled 'base' in the comparison table."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -1198,8 +1372,11 @@ def main() -> None:
 
     if args.task_order_seed_compare_runs:
         if not log_paths:
+            intro_paths = list(args.task_order_seed_compare_runs)
+            if args.base_seed is not None:
+                intro_paths = [args.base_seed] + intro_paths
             _print_compare_runs_path_intro(
-                list(args.task_order_seed_compare_runs),
+                intro_paths,
                 "## Task order seed comparison",
                 "Task order seed compare runs",
                 args.output_format,
@@ -1207,6 +1384,7 @@ def main() -> None:
         print_task_order_seed_comparison(
             list(args.task_order_seed_compare_runs),
             output_format=args.output_format,
+            base_directory_path=args.base_seed,
         )
 
 
