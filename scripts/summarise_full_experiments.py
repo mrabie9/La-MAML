@@ -24,6 +24,23 @@ Usage:
 If --log is omitted, the newest `run_*` directory under
 `logs/full_experiments/` is used when available; otherwise the newest
 `full_experiments_*.log` file is used.
+
+Memory sweep comparison (TR and TE: f1_c, det, fa, f1):
+    python scripts/summarise_full_experiments.py --mem-compare-runs \\
+        logs/full_experiments/run_20260511_221802_lnx-elkk-1_mem_512 \\
+        logs/full_experiments/run_20260513_173647_lnx-elkk-1_mem_1024
+    python scripts/summarise_full_experiments.py --log run_A --mem-compare-runs run_B run_C
+    python scripts/summarise_full_experiments.py --mem-compare-runs \\
+        logs/full_experiments/run_*_mem_* \\
+        --base-mem logs/full_experiments/full-til_10epochs_w-zs
+
+Task order seed sweep (same table layout; label from ``_task_order_seed_<n>``):
+    python scripts/summarise_full_experiments.py --task-order-seed-compare-runs \\
+        logs/full_experiments/run_20260101_120000_lnx-elkk-1_task_order_seed_57 \\
+        logs/full_experiments/run_20260101_180000_lnx-elkk-1_task_order_seed_1040
+    python scripts/summarise_full_experiments.py --task-order-seed-compare-runs \\
+        logs/full_experiments/run_*_task_order_seed_* \\
+        --base-seed logs/full_experiments/full-til_10epochs_w-zs
 """
 
 from __future__ import annotations
@@ -35,7 +52,8 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from collections import Counter
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -98,6 +116,10 @@ MODEL_SIZE_RE = re.compile(r"Model size:\s+(?P<gb>[0-9.]+)\s+GB")
 LOG_TIMESTAMP_RE = re.compile(r"^\[(?P<stamp>\d{4}-\d{2}-\d{2}T[^]]+)\]")
 LOGGING_TO_RE = re.compile(r"Logging to\s+(?P<path>\S+)")
 RESULTS_DICT_RE = re.compile(r"'log_dir':\s*'(?P<path>[^']+)'")
+RUN_MEM_SUFFIX_RE = re.compile(r"_mem_(?P<mem>\d+)$")
+RUN_TASK_ORDER_SEED_SUFFIX_RE = re.compile(r"_task_order_seed_(?P<seed>\d+)$")
+BASE_SWEEP_LABEL = "base"
+SweepLabelValue = Union[int, str]
 
 
 def _find_default_log() -> str:
@@ -512,6 +534,68 @@ def _merge_summary(into: AlgoSummary, source: AlgoSummary) -> None:
         into.status = source.status
 
 
+def _resolve_job_log_path(run_directory: str, job_log_path: str) -> Optional[str]:
+    """Resolve a coordinator job log path, including after host or prefix moves.
+
+    Args:
+        run_directory: Coordinator run directory containing ``job_logs/``.
+        job_log_path: Path recorded in the coordinator log (may be absolute elsewhere).
+
+    Returns:
+        Existing path to read, or None if no matching file is found.
+
+    Usage:
+        >>> _resolve_job_log_path(
+        ...     "logs/full_experiments/run_20260101_120000_lnx-elkk-1",
+        ...     "logs/full_experiments/run_20260101_120000_lnx-elkk-1/job_logs/job_gem.log",
+        ... )
+    """
+    if os.path.isfile(job_log_path):
+        return job_log_path
+    job_log_file_name = os.path.basename(job_log_path)
+    candidate_under_run = os.path.join(run_directory, "job_logs", job_log_file_name)
+    if os.path.isfile(candidate_under_run):
+        return candidate_under_run
+    return None
+
+
+def _discover_coordinator_run_directories(parent_directory: str) -> List[str]:
+    """List coordinator run directories under a parent or return the parent itself.
+
+    Args:
+        parent_directory: Either a coordinator run (contains ``full_experiments_*.log``)
+            or a parent folder whose immediate children are coordinator runs
+            (e.g. ``logs/full_experiments/full-til_10epochs_w-zs``).
+
+    Returns:
+        Sorted list of coordinator run directory paths.
+
+    Raises:
+        SystemExit: If ``parent_directory`` is missing or contains no coordinator runs.
+
+    Usage:
+        >>> _discover_coordinator_run_directories(
+        ...     "logs/full_experiments/full-til_10epochs_w-zs"
+        ... )  # doctest: +SKIP
+    """
+    parent_path = Path(parent_directory)
+    if not parent_path.is_dir():
+        raise SystemExit(f"Not a directory: {parent_directory}")
+    if sorted(parent_path.glob("full_experiments_*.log")):
+        return [str(parent_path)]
+    coordinator_runs = sorted(
+        child_path
+        for child_path in parent_path.iterdir()
+        if child_path.is_dir() and sorted(child_path.glob("full_experiments_*.log"))
+    )
+    if not coordinator_runs:
+        raise SystemExit(
+            f"No coordinator run directories (full_experiments_*.log) found under: "
+            f"{parent_directory}"
+        )
+    return [str(coordinator_run) for coordinator_run in coordinator_runs]
+
+
 def parse_run_directory(path: str) -> Dict[str, AlgoSummary]:
     main_log_candidates = sorted(
         glob.glob(os.path.join(path, "full_experiments_*.log"))
@@ -543,11 +627,14 @@ def parse_run_directory(path: str) -> Dict[str, AlgoSummary]:
             job_logs_by_algo[job_match.group("algo")] = job_log_path
 
     for algo_name, job_log_path in job_logs_by_algo.items():
-        job_summaries = parse_job_log(job_log_path, algo_name=algo_name)
+        resolved_job_log_path = _resolve_job_log_path(path, job_log_path)
+        if resolved_job_log_path is None:
+            continue
+        job_summaries = parse_job_log(resolved_job_log_path, algo_name=algo_name)
         if algo_name in job_summaries:
             summary = summaries.setdefault(algo_name, AlgoSummary(name=algo_name))
             _merge_summary(summary, job_summaries[algo_name])
-            _apply_metrics_fallback_from_job_log(summary, job_log_path)
+            _apply_metrics_fallback_from_job_log(summary, resolved_job_log_path)
 
     return summaries
 
@@ -736,6 +823,430 @@ def print_summary(
                 )
 
 
+def _parse_memory_buffer_size_from_run_directory(run_directory: str) -> Optional[int]:
+    """Extract replay buffer size from a run folder name ending in ``_mem_<n>``.
+
+    Args:
+        run_directory: Path to a coordinator run directory whose basename may
+            end with ``_mem_<digits>`` (as produced by ``full_experiments_mem_sweep.sh``).
+
+    Returns:
+        Parsed non-negative buffer size if the basename matches, else None.
+
+    Usage:
+        >>> _parse_memory_buffer_size_from_run_directory(
+        ...     "logs/full_experiments/run_20260511_221802_lnx-elkk-1_mem_512"
+        ... )
+        512
+    """
+    base_name = Path(run_directory).name
+    match = RUN_MEM_SUFFIX_RE.search(base_name)
+    if match:
+        return int(match.group("mem"))
+    return None
+
+
+def _sweep_label_sort_key(
+    sweep_label_value: Optional[SweepLabelValue],
+) -> Tuple[int, float | str]:
+    """Order sweep labels with baseline ``base`` first, then numeric sweep values.
+
+    Args:
+        sweep_label_value: Parsed mem/seed integer, ``base``, or None.
+
+    Returns:
+        Tuple suitable for sorting comparison table rows.
+
+    Usage:
+        >>> _sweep_label_sort_key("base")
+        (0, 0)
+        >>> _sweep_label_sort_key(57)
+        (1, 57.0)
+    """
+    if sweep_label_value == BASE_SWEEP_LABEL:
+        return (0, 0)
+    if sweep_label_value is None:
+        return (2, float("inf"))
+    if isinstance(sweep_label_value, int):
+        return (1, float(sweep_label_value))
+    return (1, str(sweep_label_value))
+
+
+def _parse_task_order_seed_from_run_directory(run_directory: str) -> Optional[int]:
+    """Extract task-order seed from a run folder name ending in ``_task_order_seed_<n>``.
+
+    Args:
+        run_directory: Path to a coordinator run directory whose basename may
+            end with ``_task_order_seed_<digits>`` (as produced by
+            ``full_experiments_task_order_seed_sweep.sh``).
+
+    Returns:
+        Parsed seed if the basename matches, else None.
+
+    Usage:
+        >>> _parse_task_order_seed_from_run_directory(
+        ...     "logs/full_experiments/run_20260101_120000_lnx-elkk-1_task_order_seed_57"
+        ... )
+        57
+    """
+    base_name = Path(run_directory).name
+    match = RUN_TASK_ORDER_SEED_SUFFIX_RE.search(base_name)
+    if match:
+        return int(match.group("seed"))
+    return None
+
+
+def _print_sweep_algorithm_separator(
+    output_format: str,
+    separator_width: int,
+) -> None:
+    """Print a dashed line between algorithm groups in a sweep comparison table.
+
+    Args:
+        output_format: ``readable`` or ``markdown``.
+        separator_width: Character width for readable-mode dashes.
+
+    Returns:
+        None.
+
+    Usage:
+        >>> _print_sweep_algorithm_separator("readable", 40)  # doctest: +SKIP
+    """
+    if output_format == "markdown":
+        print()
+        print("---")
+        print()
+        return
+    print("-" * separator_width)
+
+
+def _print_compare_runs_path_intro(
+    run_paths: List[str],
+    markdown_heading: str,
+    readable_label: str,
+    output_format: str,
+) -> None:
+    """Print a short preamble listing coordinator run paths for a sweep comparison.
+
+    Args:
+        run_paths: Run directories passed on the CLI.
+        markdown_heading: Markdown heading line (e.g. ``## Memory buffer comparison``).
+        readable_label: One-line prefix before the path list in readable mode.
+        output_format: ``readable`` or ``markdown``.
+
+    Returns:
+        None.
+
+    Usage:
+        >>> _print_compare_runs_path_intro(
+        ...     ["logs/full_experiments/run_A_mem_512"],
+        ...     "## Memory buffer comparison",
+        ...     "Memory compare runs",
+        ...     "markdown",
+        ... )
+    """
+    if output_format == "markdown":
+        print(markdown_heading)
+        print()
+        for run_path in run_paths:
+            print(f"- `{run_path}`")
+        print()
+        return
+    print(f"{readable_label} ({len(run_paths)}): {', '.join(run_paths)}")
+
+
+def _print_tr_te_sweep_comparison(
+    run_directory_paths: List[str],
+    output_format: str,
+    *,
+    sweep_label_header: str,
+    sweep_label_from_run: Callable[[str], Optional[int]],
+    markdown_section_title: str,
+    readable_title_line: str,
+    empty_message: str,
+    base_run_directory_paths: Optional[List[str]] = None,
+    separate_algorithms: bool = False,
+) -> None:
+    """Print TR/TE f1_c, det, fa, f1 rows keyed by a per-run integer parsed from the path.
+
+    Args:
+        run_directory_paths: Coordinator run directories to load with :func:`parse_path`.
+        output_format: ``readable`` or ``markdown``.
+        sweep_label_header: Column name for the parsed sweep parameter (e.g. ``mem``).
+        sweep_label_from_run: Returns the sweep label integer from a run directory path.
+        markdown_section_title: Markdown subsection title (``### ...``).
+        readable_title_line: First-line description in readable mode.
+        empty_message: Printed when no algorithm rows are produced.
+        base_run_directory_paths: Optional baseline runs (label ``base`` in the sweep
+            column); only algorithms present in ``run_directory_paths`` are included.
+        separate_algorithms: When True, print a dashed line between each algorithm's
+            rows in the comparison table.
+
+    Returns:
+        None.
+    """
+    table_rows: List[Tuple[str, Optional[SweepLabelValue], str, AlgoSummary]] = []
+    comparison_algorithm_names: Optional[set[str]] = None
+    if base_run_directory_paths:
+        comparison_algorithm_names = set()
+        for run_directory in run_directory_paths:
+            comparison_algorithm_names.update(parse_path(run_directory).keys())
+
+    for run_directory in base_run_directory_paths or []:
+        run_label = Path(run_directory).name
+        summaries = parse_path(run_directory)
+        for algorithm_name, summary in summaries.items():
+            if (
+                comparison_algorithm_names is not None
+                and algorithm_name not in comparison_algorithm_names
+            ):
+                continue
+            table_rows.append((algorithm_name, BASE_SWEEP_LABEL, run_label, summary))
+    for run_directory in run_directory_paths:
+        sweep_label_value = sweep_label_from_run(run_directory)
+        run_label = Path(run_directory).name
+        summaries = parse_path(run_directory)
+        for algorithm_name, summary in summaries.items():
+            table_rows.append((algorithm_name, sweep_label_value, run_label, summary))
+
+    if not table_rows:
+        print(empty_message)
+        return
+
+    pair_counts = Counter(
+        (algorithm_name, sweep_label_value)
+        for algorithm_name, sweep_label_value, _, _ in table_rows
+    )
+    show_run_column = any(count > 1 for count in pair_counts.values())
+
+    label_width = len(sweep_label_header)
+    for _algorithm_name, sweep_label_value, _run_label, _summary in table_rows:
+        if sweep_label_value is not None:
+            label_width = max(label_width, len(str(sweep_label_value)))
+    label_width = max(label_width, 6)
+
+    def row_sort_key(
+        item: Tuple[str, Optional[SweepLabelValue], str, AlgoSummary],
+    ) -> Tuple[str, Tuple[int, float | str], str]:
+        algorithm_name, sweep_label_value, run_label, _summary = item
+        return (algorithm_name, _sweep_label_sort_key(sweep_label_value), run_label)
+
+    table_rows.sort(key=row_sort_key)
+
+    if output_format == "markdown":
+        print()
+        print(markdown_section_title)
+        print()
+        header_cells = ["Algo", sweep_label_header]
+        if show_run_column:
+            header_cells.append("run_dir")
+        header_cells += [
+            "tr_f1_c",
+            "tr_det",
+            "tr_fa",
+            "tr_f1",
+            "te_f1_c",
+            "te_det",
+            "te_fa",
+            "te_f1",
+        ]
+        print("| " + " | ".join(header_cells) + " |")
+        print("| " + " | ".join(["---"] * len(header_cells)) + " |")
+        previous_algorithm_name: Optional[str] = None
+        for algorithm_name, sweep_label_value, run_label, summary in table_rows:
+            if separate_algorithms and previous_algorithm_name is not None:
+                if algorithm_name != previous_algorithm_name:
+                    _print_sweep_algorithm_separator(output_format, 0)
+            previous_algorithm_name = algorithm_name
+            train_f1_c = _classification_f1_from_recall_precision(
+                summary.cls_rec_tr, summary.cls_prec_tr
+            )
+            test_f1_c = _classification_f1_from_recall_precision(
+                summary.cls_rec_te, summary.cls_prec_te
+            )
+            label_cell = (
+                str(sweep_label_value) if sweep_label_value is not None else "-"
+            )
+            data_cells = [
+                algorithm_name,
+                label_cell,
+            ]
+            if show_run_column:
+                data_cells.append(run_label)
+            data_cells += [
+                _fmt(train_f1_c).strip(),
+                _fmt(summary.det_tr).strip(),
+                _fmt(summary.fa_tr).strip(),
+                _fmt(summary.cls_f1_tr).strip(),
+                _fmt(test_f1_c).strip(),
+                _fmt(summary.det_te).strip(),
+                _fmt(summary.fa_te).strip(),
+                _fmt(summary.cls_f1_te).strip(),
+            ]
+            print("| " + " | ".join(data_cells) + " |")
+        return
+
+    print()
+    print(readable_title_line)
+    width_algorithm = max(len(item[0]) for item in table_rows)
+    width_algorithm = max(width_algorithm, len("Algo"))
+    width_run = max(len(item[2]) for item in table_rows) if show_run_column else 0
+    if show_run_column:
+        width_run = max(width_run, len("run_dir"))
+    width_numeric = 7
+    header_parts = [
+        f"{'Algo':<{width_algorithm}}",
+        f"{sweep_label_header:>{label_width}}",
+    ]
+    if show_run_column:
+        header_parts.append(f"{'run_dir':<{width_run}}")
+    header_parts += [
+        f"{'f1_c':>{width_numeric}}",
+        f"{'det':>{width_numeric}}",
+        f"{'fa':>{width_numeric}}",
+        f"{'f1':>{width_numeric}}",
+        "|",
+        f"{'f1_c':>{width_numeric}}",
+        f"{'det':>{width_numeric}}",
+        f"{'fa':>{width_numeric}}",
+        f"{'f1':>{width_numeric}}",
+    ]
+    header_line = " ".join(header_parts)
+    print(header_line)
+    print("-" * len(header_line))
+    previous_algorithm_name: Optional[str] = None
+    for algorithm_name, sweep_label_value, run_label, summary in table_rows:
+        if separate_algorithms and previous_algorithm_name is not None:
+            if algorithm_name != previous_algorithm_name:
+                _print_sweep_algorithm_separator(output_format, len(header_line))
+        previous_algorithm_name = algorithm_name
+        train_f1_c = _classification_f1_from_recall_precision(
+            summary.cls_rec_tr, summary.cls_prec_tr
+        )
+        test_f1_c = _classification_f1_from_recall_precision(
+            summary.cls_rec_te, summary.cls_prec_te
+        )
+        label_cell = (
+            f"{sweep_label_value:>{label_width}}"
+            if sweep_label_value is not None
+            else f"{'-':>{label_width}}"
+        )
+        row_parts = [
+            f"{algorithm_name:<{width_algorithm}}",
+            label_cell,
+        ]
+        if show_run_column:
+            row_parts.append(f"{run_label:<{width_run}}")
+        row_parts += [
+            f"{_fmt(train_f1_c):>{width_numeric}}",
+            f"{_fmt(summary.det_tr):>{width_numeric}}",
+            f"{_fmt(summary.fa_tr):>{width_numeric}}",
+            f"{_fmt(summary.cls_f1_tr):>{width_numeric}}",
+            "|",
+            f"{_fmt(test_f1_c):>{width_numeric}}",
+            f"{_fmt(summary.det_te):>{width_numeric}}",
+            f"{_fmt(summary.fa_te):>{width_numeric}}",
+            f"{_fmt(summary.cls_f1_te):>{width_numeric}}",
+        ]
+        print(" ".join(row_parts))
+
+
+def print_mem_buffer_comparison(
+    run_directory_paths: List[str],
+    output_format: str = "readable",
+    base_directory_path: Optional[str] = None,
+) -> None:
+    """Print compact TR and TE metrics across replay buffer sizes (see sweep script).
+
+    Args:
+        run_directory_paths: Coordinator run directories (typically
+            ``logs/full_experiments/run_*_mem_*``).
+        output_format: ``readable`` or ``markdown`` table style.
+        base_directory_path: Optional baseline logs (default buffer size). May be a
+            single coordinator run or a parent folder of runs (e.g.
+            ``logs/full_experiments/full-til_10epochs_w-zs``); rows use sweep label
+            ``base``. Only algorithms present in ``run_directory_paths`` are included.
+
+    Returns:
+        None.
+
+    Usage:
+        >>> print_mem_buffer_comparison(
+        ...     [
+        ...         "logs/full_experiments/run_20260511_221802_lnx-elkk-1_mem_512",
+        ...         "logs/full_experiments/run_20260513_173647_lnx-elkk-1_mem_1024",
+        ...     ],
+        ...     base_directory_path="logs/full_experiments/full-til_10epochs_w-zs",
+        ... )
+    """
+    base_run_paths: Optional[List[str]] = None
+    if base_directory_path is not None:
+        base_run_paths = _discover_coordinator_run_directories(base_directory_path)
+    _print_tr_te_sweep_comparison(
+        run_directory_paths,
+        output_format,
+        sweep_label_header="mem",
+        sweep_label_from_run=_parse_memory_buffer_size_from_run_directory,
+        markdown_section_title=(
+            "### Memory buffer comparison (TR and TE: f1_c, det, fa, f1)"
+        ),
+        readable_title_line=(
+            "Memory buffer comparison (TR: f1_c det fa f1 | TE: f1_c det fa f1)"
+        ),
+        empty_message="No algorithm runs found for memory buffer comparison.",
+        base_run_directory_paths=base_run_paths,
+        separate_algorithms=True,
+    )
+
+
+def print_task_order_seed_comparison(
+    run_directory_paths: List[str],
+    output_format: str = "readable",
+    base_directory_path: Optional[str] = None,
+) -> None:
+    """Print compact TR and TE metrics across task-order seeds (see sweep script).
+
+    Args:
+        run_directory_paths: Coordinator run directories (typically
+            ``logs/full_experiments/run_*_task_order_seed_*``).
+        output_format: ``readable`` or ``markdown`` table style.
+        base_directory_path: Optional baseline logs (default task order). May be a
+            single coordinator run or a parent directory of runs (e.g.
+            ``logs/full_experiments/full-til_10epochs_w-zs``); rows use sweep label
+            ``base``. Only algorithms present in ``run_directory_paths`` are included.
+
+    Returns:
+        None.
+
+    Usage:
+        >>> print_task_order_seed_comparison(
+        ...     [
+        ...         "logs/full_experiments/run_20260101_120000_lnx-elkk-1_task_order_seed_57",
+        ...         "logs/full_experiments/run_20260101_180000_lnx-elkk-1_task_order_seed_1040",
+        ...     ],
+        ...     base_directory_path="logs/full_experiments/full-til_10epochs_w-zs",
+        ... )
+    """
+    base_run_paths: Optional[List[str]] = None
+    if base_directory_path is not None:
+        base_run_paths = _discover_coordinator_run_directories(base_directory_path)
+    _print_tr_te_sweep_comparison(
+        run_directory_paths,
+        output_format,
+        sweep_label_header="task_order_seed",
+        sweep_label_from_run=_parse_task_order_seed_from_run_directory,
+        markdown_section_title=(
+            "### Task order seed comparison (TR and TE: f1_c, det, fa, f1)"
+        ),
+        readable_title_line=(
+            "Task order seed comparison (TR: f1_c det fa f1 | TE: f1_c det fa f1)"
+        ),
+        empty_message="No algorithm runs found for task order seed comparison.",
+        base_run_directory_paths=base_run_paths,
+        separate_algorithms=True,
+    )
+
+
 def _print_metadata(log_paths: List[str], output_format: str) -> None:
     if output_format == "markdown":
         print("## Full Experiments Summary")
@@ -782,34 +1293,128 @@ def _parse_arguments() -> argparse.Namespace:
         default="readable",
         help="Output format for the summary table.",
     )
+    parser.add_argument(
+        "--mem-compare-runs",
+        type=str,
+        nargs="+",
+        default=None,
+        metavar="RUN_DIR",
+        help=(
+            "Coordinator run directories (typically logs/full_experiments/run_*_mem_*) "
+            "to compare TR and TE f1_c, det, fa, and f1 across buffer sizes. "
+            "Printed after the main summary when --log/--logs are also used; "
+            "buffer size is read from the directory name suffix _mem_<n> "
+            "(see full_experiments_mem_sweep.sh)."
+        ),
+    )
+    parser.add_argument(
+        "--base-mem",
+        type=str,
+        default=None,
+        metavar="BASE_DIR",
+        help=(
+            "Baseline experiment directory for --mem-compare-runs (default replay "
+            "buffer, no _mem_<n> suffix). May be one coordinator run or a parent "
+            "folder of runs (e.g. logs/full_experiments/full-til_10epochs_w-zs). "
+            "Adds rows labelled 'base' in the comparison table."
+        ),
+    )
+    parser.add_argument(
+        "--task-order-seed-compare-runs",
+        type=str,
+        nargs="+",
+        default=None,
+        metavar="RUN_DIR",
+        help=(
+            "Coordinator run directories (typically run_*_task_order_seed_<n>) "
+            "to compare TR and TE f1_c, det, fa, and f1 across task-order seeds. "
+            "Same table as --mem-compare-runs; seed is read from suffix "
+            "_task_order_seed_<n> (see full_experiments_task_order_seed_sweep.sh)."
+        ),
+    )
+    parser.add_argument(
+        "--base-seed",
+        type=str,
+        default=None,
+        metavar="BASE_DIR",
+        help=(
+            "Baseline experiment directory for --task-order-seed-compare-runs "
+            "(default task order, no _task_order_seed_ suffix). May be one coordinator "
+            "run or a parent folder of runs (e.g. logs/full_experiments/"
+            "full-til_10epochs_w-zs). Adds rows labelled 'base' in the comparison table."
+        ),
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = _parse_arguments()
 
-    if args.logs:
-        log_paths = args.logs
+    any_sweep_compare = (
+        args.mem_compare_runs is not None
+        or args.task_order_seed_compare_runs is not None
+    )
+    if args.logs is not None:
+        log_paths: List[str] = list(args.logs)
+    elif args.log is not None:
+        log_paths = [args.log]
+    elif any_sweep_compare:
+        log_paths = []
     else:
-        log_paths = [args.log or _find_default_log()]
+        log_paths = [_find_default_log()]
 
     summary_collections: List[Dict[str, AlgoSummary]] = []
     total_concurrent_runtime_seconds: Optional[float] = 0.0
-    for log_path in log_paths:
-        summary_collections.append(parse_path(log_path))
-        concurrent_runtime_seconds = _compute_concurrent_runtime_seconds(log_path)
-        if concurrent_runtime_seconds is None:
-            total_concurrent_runtime_seconds = None
-        elif total_concurrent_runtime_seconds is not None:
-            total_concurrent_runtime_seconds += concurrent_runtime_seconds
+    if log_paths:
+        for log_path in log_paths:
+            summary_collections.append(parse_path(log_path))
+            concurrent_runtime_seconds = _compute_concurrent_runtime_seconds(log_path)
+            if concurrent_runtime_seconds is None:
+                total_concurrent_runtime_seconds = None
+            elif total_concurrent_runtime_seconds is not None:
+                total_concurrent_runtime_seconds += concurrent_runtime_seconds
 
-    merged_summaries = _merge_many_summaries(summary_collections)
-    _print_metadata(log_paths, output_format=args.output_format)
-    print_summary(
-        merged_summaries,
-        concurrent_runtime_seconds=total_concurrent_runtime_seconds,
-        output_format=args.output_format,
-    )
+        merged_summaries = _merge_many_summaries(summary_collections)
+        _print_metadata(log_paths, output_format=args.output_format)
+        print_summary(
+            merged_summaries,
+            concurrent_runtime_seconds=total_concurrent_runtime_seconds,
+            output_format=args.output_format,
+        )
+
+    if args.mem_compare_runs:
+        if not log_paths:
+            intro_paths = list(args.mem_compare_runs)
+            if args.base_mem is not None:
+                intro_paths = [args.base_mem] + intro_paths
+            _print_compare_runs_path_intro(
+                intro_paths,
+                "## Memory buffer comparison",
+                "Memory compare runs",
+                args.output_format,
+            )
+        print_mem_buffer_comparison(
+            list(args.mem_compare_runs),
+            output_format=args.output_format,
+            base_directory_path=args.base_mem,
+        )
+
+    if args.task_order_seed_compare_runs:
+        if not log_paths:
+            intro_paths = list(args.task_order_seed_compare_runs)
+            if args.base_seed is not None:
+                intro_paths = [args.base_seed] + intro_paths
+            _print_compare_runs_path_intro(
+                intro_paths,
+                "## Task order seed comparison",
+                "Task order seed compare runs",
+                args.output_format,
+            )
+        print_task_order_seed_comparison(
+            list(args.task_order_seed_compare_runs),
+            output_format=args.output_format,
+            base_directory_path=args.base_seed,
+        )
 
 
 def _merge_many_summaries(
