@@ -53,7 +53,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from collections import Counter
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -120,6 +120,16 @@ RUN_MEM_SUFFIX_RE = re.compile(r"_mem_(?P<mem>\d+)$")
 RUN_TASK_ORDER_SEED_SUFFIX_RE = re.compile(r"_task_order_seed_(?P<seed>\d+)$")
 BASE_SWEEP_LABEL = "base"
 SweepLabelValue = Union[int, str]
+SweepMetricValues = Tuple[
+    Optional[float],
+    Optional[float],
+    Optional[float],
+    Optional[float],
+    Optional[float],
+    Optional[float],
+    Optional[float],
+    Optional[float],
+]
 
 
 def _find_default_log() -> str:
@@ -920,6 +930,197 @@ def _print_sweep_algorithm_separator(
     print("-" * separator_width)
 
 
+def _metric_values_from_summary(summary: AlgoSummary) -> SweepMetricValues:
+    """Extract TR/TE sweep table metrics from an algorithm summary.
+
+    Args:
+        summary: Parsed algorithm summary.
+
+    Returns:
+        Tuple of train f1_c, det, fa, f1, then test f1_c, det, fa, f1.
+    """
+    train_f1_c = _classification_f1_from_recall_precision(
+        summary.cls_rec_tr, summary.cls_prec_tr
+    )
+    test_f1_c = _classification_f1_from_recall_precision(
+        summary.cls_rec_te, summary.cls_prec_te
+    )
+    return (
+        train_f1_c,
+        summary.det_tr,
+        summary.fa_tr,
+        summary.cls_f1_tr,
+        test_f1_c,
+        summary.det_te,
+        summary.fa_te,
+        summary.cls_f1_te,
+    )
+
+
+def _format_mean_plus_minus(values: Sequence[Optional[float]]) -> str:
+    """Format mean and sample standard deviation for a list of metric values.
+
+    Args:
+        values: Metric values from sweep runs (``None`` entries are skipped).
+
+    Returns:
+        ``mean±std`` when at least two values exist, else mean only, else ``  -``.
+
+    Usage:
+        >>> _format_mean_plus_minus([0.5, 0.6, 0.7])
+        '0.600±0.100'
+    """
+    numeric_values = [float(value) for value in values if value is not None]
+    if not numeric_values:
+        return "  -"
+    mean_value = float(np.mean(numeric_values))
+    if len(numeric_values) < 2:
+        return f"{mean_value:.3f}"
+    std_value = float(np.std(numeric_values, ddof=1))
+    return f"{mean_value:.3f}±{std_value:.3f}"
+
+
+def _aggregate_sweep_mean_pm_cells(
+    sweep_metric_rows: Sequence[SweepMetricValues],
+) -> List[str]:
+    """Compute mean± cells for each TR/TE metric column from sweep-only rows.
+
+    Args:
+        sweep_metric_rows: Per-run metric tuples (non-baseline sweep runs only).
+
+    Returns:
+        Eight formatted strings: TR f1_c, det, fa, f1, then TE f1_c, det, fa, f1.
+    """
+    if not sweep_metric_rows:
+        return [_format_mean_plus_minus([]) for _ in range(8)]
+    column_values = list(zip(*sweep_metric_rows))
+    return [_format_mean_plus_minus(column) for column in column_values]
+
+
+def _collect_sweep_metrics_by_algorithm(
+    table_rows: Sequence[Tuple[str, Optional[SweepLabelValue], str, AlgoSummary]],
+) -> Dict[str, List[SweepMetricValues]]:
+    """Group non-baseline sweep metric tuples by algorithm name.
+
+    Args:
+        table_rows: Rows from a sweep comparison table build.
+
+    Returns:
+        Mapping from algorithm name to sweep-run metric tuples (baseline excluded).
+    """
+    sweep_metrics_by_algorithm: Dict[str, List[SweepMetricValues]] = {}
+    for algorithm_name, sweep_label_value, _run_label, summary in table_rows:
+        if sweep_label_value == BASE_SWEEP_LABEL:
+            continue
+        sweep_metrics_by_algorithm.setdefault(algorithm_name, []).append(
+            _metric_values_from_summary(summary)
+        )
+    return sweep_metrics_by_algorithm
+
+
+def _mean_te_val_f1_for_sort(sweep_metric_rows: Sequence[SweepMetricValues]) -> float:
+    """Return mean TE validation F1 (``cls_f1_te``) for sorting; ``inf`` if missing.
+
+    Args:
+        sweep_metric_rows: Non-baseline sweep metric tuples for one algorithm.
+
+    Returns:
+        Mean TE F1, or positive infinity when no values exist.
+    """
+    te_f1_values = [metric_row[7] for metric_row in sweep_metric_rows]
+    numeric_values = [float(value) for value in te_f1_values if value is not None]
+    if not numeric_values:
+        return float("inf")
+    return float(np.mean(numeric_values))
+
+
+def _print_sweep_mean_pm_summary_table(
+    sweep_metrics_by_algorithm: Dict[str, List[SweepMetricValues]],
+    output_format: str,
+    *,
+    readable_title_line: str,
+    markdown_section_title: str,
+) -> None:
+    """Print a second table of per-algorithm mean± over non-baseline sweep runs.
+
+    Rows are sorted by ascending mean TE validation F1 (``cls_f1_te``).
+
+    Args:
+        sweep_metrics_by_algorithm: Sweep metrics grouped by algorithm (no baseline).
+        output_format: ``readable`` or ``markdown``.
+        readable_title_line: Title line for readable output.
+        markdown_section_title: Markdown subsection title.
+
+    Returns:
+        None.
+    """
+    sorted_algorithms = sorted(
+        sweep_metrics_by_algorithm.keys(),
+        key=lambda algorithm_name: _mean_te_val_f1_for_sort(
+            sweep_metrics_by_algorithm[algorithm_name]
+        ),
+    )
+    if not sorted_algorithms:
+        return
+
+    if output_format == "markdown":
+        print()
+        print(markdown_section_title)
+        print()
+        header_cells = [
+            "Algo",
+            "tr_f1_c",
+            "tr_det",
+            "tr_fa",
+            "tr_f1",
+            "te_f1_c",
+            "te_det",
+            "te_fa",
+            "te_f1",
+        ]
+        print("| " + " | ".join(header_cells) + " |")
+        print("| " + " | ".join(["---"] * len(header_cells)) + " |")
+        for algorithm_name in sorted_algorithms:
+            mean_pm_cells = _aggregate_sweep_mean_pm_cells(
+                sweep_metrics_by_algorithm[algorithm_name]
+            )
+            data_cells = [algorithm_name] + [cell.strip() for cell in mean_pm_cells]
+            print("| " + " | ".join(data_cells) + " |")
+        return
+
+    print()
+    print(readable_title_line)
+    width_algorithm = max(len(algorithm_name) for algorithm_name in sorted_algorithms)
+    width_algorithm = max(width_algorithm, len("Algo"))
+    width_numeric = 11
+    header_parts = [
+        f"{'Algo':<{width_algorithm}}",
+        f"{'f1_c':>{width_numeric}}",
+        f"{'det':>{width_numeric}}",
+        f"{'fa':>{width_numeric}}",
+        f"{'f1':>{width_numeric}}",
+        "|",
+        f"{'f1_c':>{width_numeric}}",
+        f"{'det':>{width_numeric}}",
+        f"{'fa':>{width_numeric}}",
+        f"{'f1':>{width_numeric}}",
+    ]
+    header_line = " ".join(header_parts)
+    print(header_line)
+    print("-" * len(header_line))
+    for algorithm_name in sorted_algorithms:
+        mean_pm_cells = _aggregate_sweep_mean_pm_cells(
+            sweep_metrics_by_algorithm[algorithm_name]
+        )
+        row_parts = [f"{algorithm_name:<{width_algorithm}}"]
+        for cell_index, formatted_cell in enumerate(mean_pm_cells):
+            stripped_cell = formatted_cell.strip()
+            if cell_index == 4:
+                row_parts.append("|")
+            row_parts.append(f"{stripped_cell:>{width_numeric}}")
+        print(" ".join(row_parts))
+
+
 def _print_compare_runs_path_intro(
     run_paths: List[str],
     markdown_heading: str,
@@ -979,12 +1180,15 @@ def _print_tr_te_sweep_comparison(
         empty_message: Printed when no algorithm rows are produced.
         base_run_directory_paths: Optional baseline runs (label ``base`` in the sweep
             column); only algorithms present in ``run_directory_paths`` are included.
+            When set, also prints a second table of per-algorithm ``mean±`` over
+            non-baseline sweep runs, sorted by ascending TE validation F1 mean.
         separate_algorithms: When True, print a dashed line between each algorithm's
             rows in the comparison table.
 
     Returns:
         None.
     """
+    show_sweep_statistics = bool(base_run_directory_paths)
     table_rows: List[Tuple[str, Optional[SweepLabelValue], str, AlgoSummary]] = []
     comparison_algorithm_names: Optional[set[str]] = None
     if base_run_directory_paths:
@@ -1025,6 +1229,10 @@ def _print_tr_te_sweep_comparison(
             label_width = max(label_width, len(str(sweep_label_value)))
     label_width = max(label_width, 6)
 
+    sweep_metrics_by_algorithm = (
+        _collect_sweep_metrics_by_algorithm(table_rows) if show_sweep_statistics else {}
+    )
+
     def row_sort_key(
         item: Tuple[str, Optional[SweepLabelValue], str, AlgoSummary],
     ) -> Tuple[str, Tuple[int, float | str], str]:
@@ -1057,13 +1265,7 @@ def _print_tr_te_sweep_comparison(
             if separate_algorithms and previous_algorithm_name is not None:
                 if algorithm_name != previous_algorithm_name:
                     _print_sweep_algorithm_separator(output_format, 0)
-            previous_algorithm_name = algorithm_name
-            train_f1_c = _classification_f1_from_recall_precision(
-                summary.cls_rec_tr, summary.cls_prec_tr
-            )
-            test_f1_c = _classification_f1_from_recall_precision(
-                summary.cls_rec_te, summary.cls_prec_te
-            )
+            metric_values = _metric_values_from_summary(summary)
             label_cell = (
                 str(sweep_label_value) if sweep_label_value is not None else "-"
             )
@@ -1073,82 +1275,81 @@ def _print_tr_te_sweep_comparison(
             ]
             if show_run_column:
                 data_cells.append(run_label)
-            data_cells += [
-                _fmt(train_f1_c).strip(),
-                _fmt(summary.det_tr).strip(),
-                _fmt(summary.fa_tr).strip(),
-                _fmt(summary.cls_f1_tr).strip(),
-                _fmt(test_f1_c).strip(),
-                _fmt(summary.det_te).strip(),
-                _fmt(summary.fa_te).strip(),
-                _fmt(summary.cls_f1_te).strip(),
-            ]
+            data_cells += [_fmt(value).strip() for value in metric_values]
             print("| " + " | ".join(data_cells) + " |")
-        return
-
-    print()
-    print(readable_title_line)
-    width_algorithm = max(len(item[0]) for item in table_rows)
-    width_algorithm = max(width_algorithm, len("Algo"))
-    width_run = max(len(item[2]) for item in table_rows) if show_run_column else 0
-    if show_run_column:
-        width_run = max(width_run, len("run_dir"))
-    width_numeric = 7
-    header_parts = [
-        f"{'Algo':<{width_algorithm}}",
-        f"{sweep_label_header:>{label_width}}",
-    ]
-    if show_run_column:
-        header_parts.append(f"{'run_dir':<{width_run}}")
-    header_parts += [
-        f"{'f1_c':>{width_numeric}}",
-        f"{'det':>{width_numeric}}",
-        f"{'fa':>{width_numeric}}",
-        f"{'f1':>{width_numeric}}",
-        "|",
-        f"{'f1_c':>{width_numeric}}",
-        f"{'det':>{width_numeric}}",
-        f"{'fa':>{width_numeric}}",
-        f"{'f1':>{width_numeric}}",
-    ]
-    header_line = " ".join(header_parts)
-    print(header_line)
-    print("-" * len(header_line))
-    previous_algorithm_name: Optional[str] = None
-    for algorithm_name, sweep_label_value, run_label, summary in table_rows:
-        if separate_algorithms and previous_algorithm_name is not None:
-            if algorithm_name != previous_algorithm_name:
-                _print_sweep_algorithm_separator(output_format, len(header_line))
-        previous_algorithm_name = algorithm_name
-        train_f1_c = _classification_f1_from_recall_precision(
-            summary.cls_rec_tr, summary.cls_prec_tr
-        )
-        test_f1_c = _classification_f1_from_recall_precision(
-            summary.cls_rec_te, summary.cls_prec_te
-        )
-        label_cell = (
-            f"{sweep_label_value:>{label_width}}"
-            if sweep_label_value is not None
-            else f"{'-':>{label_width}}"
-        )
-        row_parts = [
-            f"{algorithm_name:<{width_algorithm}}",
-            label_cell,
+            previous_algorithm_name = algorithm_name
+    else:
+        print()
+        print(readable_title_line)
+        width_algorithm = max(len(item[0]) for item in table_rows)
+        width_algorithm = max(width_algorithm, len("Algo"))
+        width_run = max(len(item[2]) for item in table_rows) if show_run_column else 0
+        if show_run_column:
+            width_run = max(width_run, len("run_dir"))
+        width_numeric = 7
+        header_parts = [
+            f"{'Algo':<{width_algorithm}}",
+            f"{sweep_label_header:>{label_width}}",
         ]
         if show_run_column:
-            row_parts.append(f"{run_label:<{width_run}}")
-        row_parts += [
-            f"{_fmt(train_f1_c):>{width_numeric}}",
-            f"{_fmt(summary.det_tr):>{width_numeric}}",
-            f"{_fmt(summary.fa_tr):>{width_numeric}}",
-            f"{_fmt(summary.cls_f1_tr):>{width_numeric}}",
+            header_parts.append(f"{'run_dir':<{width_run}}")
+        header_parts += [
+            f"{'f1_c':>{width_numeric}}",
+            f"{'det':>{width_numeric}}",
+            f"{'fa':>{width_numeric}}",
+            f"{'f1':>{width_numeric}}",
             "|",
-            f"{_fmt(test_f1_c):>{width_numeric}}",
-            f"{_fmt(summary.det_te):>{width_numeric}}",
-            f"{_fmt(summary.fa_te):>{width_numeric}}",
-            f"{_fmt(summary.cls_f1_te):>{width_numeric}}",
+            f"{'f1_c':>{width_numeric}}",
+            f"{'det':>{width_numeric}}",
+            f"{'fa':>{width_numeric}}",
+            f"{'f1':>{width_numeric}}",
         ]
-        print(" ".join(row_parts))
+        header_line = " ".join(header_parts)
+        print(header_line)
+        print("-" * len(header_line))
+        previous_algorithm_name = None
+        for algorithm_name, sweep_label_value, run_label, summary in table_rows:
+            if separate_algorithms and previous_algorithm_name is not None:
+                if algorithm_name != previous_algorithm_name:
+                    _print_sweep_algorithm_separator(output_format, len(header_line))
+            metric_values = _metric_values_from_summary(summary)
+            label_cell = (
+                f"{sweep_label_value:>{label_width}}"
+                if sweep_label_value is not None
+                else f"{'-':>{label_width}}"
+            )
+            row_parts = [
+                f"{algorithm_name:<{width_algorithm}}",
+                label_cell,
+            ]
+            if show_run_column:
+                row_parts.append(f"{run_label:<{width_run}}")
+            row_parts += [
+                f"{_fmt(metric_values[0]):>{width_numeric}}",
+                f"{_fmt(metric_values[1]):>{width_numeric}}",
+                f"{_fmt(metric_values[2]):>{width_numeric}}",
+                f"{_fmt(metric_values[3]):>{width_numeric}}",
+                "|",
+                f"{_fmt(metric_values[4]):>{width_numeric}}",
+                f"{_fmt(metric_values[5]):>{width_numeric}}",
+                f"{_fmt(metric_values[6]):>{width_numeric}}",
+                f"{_fmt(metric_values[7]):>{width_numeric}}",
+            ]
+            print(" ".join(row_parts))
+            previous_algorithm_name = algorithm_name
+
+    if show_sweep_statistics and sweep_metrics_by_algorithm:
+        _print_sweep_mean_pm_summary_table(
+            sweep_metrics_by_algorithm,
+            output_format,
+            readable_title_line=(
+                "Sweep mean± over non-baseline runs "
+                "(sorted by TE val F1 mean, low to high)"
+            ),
+            markdown_section_title=(
+                "### Sweep mean± (sorted by TE val F1 mean, low to high)"
+            ),
+        )
 
 
 def print_mem_buffer_comparison(
@@ -1166,6 +1367,7 @@ def print_mem_buffer_comparison(
             single coordinator run or a parent folder of runs (e.g.
             ``logs/full_experiments/full-til_10epochs_w-zs``); rows use sweep label
             ``base``. Only algorithms present in ``run_directory_paths`` are included.
+            Also prints a second ``mean±`` table over non-baseline buffer sizes.
 
     Returns:
         None.
@@ -1214,6 +1416,7 @@ def print_task_order_seed_comparison(
             single coordinator run or a parent directory of runs (e.g.
             ``logs/full_experiments/full-til_10epochs_w-zs``); rows use sweep label
             ``base``. Only algorithms present in ``run_directory_paths`` are included.
+            Also prints a second ``mean±`` table over non-baseline task-order seeds.
 
     Returns:
         None.
