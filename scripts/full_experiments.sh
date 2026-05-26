@@ -15,6 +15,7 @@ RERUN_PROBE=0
 ONE_SHOT=0
 SCHEDULE_JSON_OVERRIDE=""
 MODEL_MODE_OVERRIDE=""
+MODELS_OVERRIDE=()
 PASSTHROUGH_ARGS=()
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -25,16 +26,26 @@ while [ $# -gt 0 ]; do
         --mode|--model)
             if [ -z "${2:-}" ]; then
                 echo "Missing value for $1"
-                echo "Usage: $0 [--desc/-d DESCRIPTION] [--schedule-json PATH] [--mode til|cil]"
+                echo "Usage: $0 [--desc/-d DESCRIPTION] [--schedule-json PATH] [--mode til|cil] [--models M1,M2,...]"
                 exit 1
             fi
             MODEL_MODE_OVERRIDE="${2:-}"
             shift 2
             ;;
+        --models)
+            if [ -z "${2:-}" ]; then
+                echo "Missing value for --models"
+                echo "Usage: $0 [--models M1,M2,...]  (comma- or space-separated; overrides INCLUDED_ALL)"
+                exit 1
+            fi
+            tmp="${2//,/ }"
+            read -r -a MODELS_OVERRIDE <<< "$tmp"
+            shift 2
+            ;;
         --schedule-json|--schedule-file)
             if [ -z "${2:-}" ]; then
                 echo "Missing value for $1"
-                echo "Usage: $0 [--desc/-d DESCRIPTION] [--schedule-json PATH] [--mode til|cil]"
+                echo "Usage: $0 [--desc/-d DESCRIPTION] [--schedule-json PATH] [--mode til|cil] [--models M1,M2,...]"
                 exit 1
             fi
             SCHEDULE_JSON_OVERRIDE="${2:-}"
@@ -56,10 +67,11 @@ while [ $# -gt 0 ]; do
             done
             ;;
         -h|--help)
-            echo "Usage: $0 [--desc/-d DESCRIPTION] [--schedule-json PATH] [--mode til|cil] [--one-shot]"
+            echo "Usage: $0 [--desc/-d DESCRIPTION] [--schedule-json PATH] [--mode til|cil] [--models M1,M2,...] [--one-shot]"
             echo "  DESCRIPTION is used to label the logs folder (sanitized)."
             echo "  --schedule-json  use a specific host schedule JSON file."
             echo "  --mode/--model   select model mode: til or cil."
+            echo "  --models         comma- or space-separated algorithm names; overrides INCLUDED_ALL."
             echo "  --one-shot       force main.py runs to use --n_epochs 1 --inner_steps 2."
             echo "  --rerun-probe   regenerate host schedule split (serial timings cached)."
             echo "  unknown args are forwarded to main.py/main_single_round.py."
@@ -76,6 +88,9 @@ done
 INCLUDED_LNX_ELKK_1="ewc er_ring eralg4 gem cmaml bcl_dual agem icarl"
 INCLUDED_LNX_ELKK_2="lwf rwalk si ucl la-er lamaml smaml iid2 hat packnet ctn"
 INCLUDED_ALL="$INCLUDED_LNX_ELKK_1 $INCLUDED_LNX_ELKK_2"
+if [ "${#MODELS_OVERRIDE[@]}" -gt 0 ]; then
+  INCLUDED_ALL="${MODELS_OVERRIDE[*]}"
+fi
 
 # CONCURRENCY_OPTION:
 #   0 = run everything serially
@@ -142,6 +157,9 @@ log_msg "=== full_experiments.sh started ==="
 log_msg "REPO_ROOT=$REPO_ROOT"
 log_msg "LOG_FILE=$LOG_FILE"
 log_msg "INCLUDED_ALL=$INCLUDED_ALL"
+if [ "${#MODELS_OVERRIDE[@]}" -gt 0 ]; then
+    log_msg "MODELS_OVERRIDE=${MODELS_OVERRIDE[*]}"
+fi
 if [ -n "$EXPERIMENT_DESC" ]; then
     log_msg "EXPERIMENT_DESC=$EXPERIMENT_DESC"
 fi
