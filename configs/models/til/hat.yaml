@@ -1,7 +1,5 @@
-# Model-specific overrides for hat.
 model: hat
 loader: task_incremental_loader
-
 lr: 0.003
 gamma: 1
-smax: 100
+smax: 25
