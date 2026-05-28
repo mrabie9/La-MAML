@@ -9,7 +9,7 @@ import os
 import sys
 from contextlib import nullcontext
 from pathlib import Path
-from typing import List
+from typing import Any, Callable, List, Optional
 
 from tqdm import tqdm
 
@@ -25,6 +25,10 @@ from utils.training_metrics import (
     macro_precision_signal_only,
     macro_recall,
 )
+
+torch.backends.cudnn.benchmark = True
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
 
 
 def log_state(enabled, message):
@@ -669,6 +673,117 @@ def _model_forward_for_metric_loop(
         return model(x, task_index)  # type: ignore[operator]
 
 
+def _torch_profiler_activities(args: object) -> list[Any]:
+    """Return profiler activities for CPU and optionally CUDA."""
+    from torch.profiler import ProfilerActivity
+
+    activities: list[Any] = [ProfilerActivity.CPU]
+    if bool(getattr(args, "cuda", False)) and torch.cuda.is_available():
+        activities.append(ProfilerActivity.CUDA)
+    return activities
+
+
+def _torch_profiler_output_dir(args: object) -> str:
+    """Create and return ``log_dir/profiler`` for trace export."""
+    output_dir = os.path.join(getattr(args, "log_dir", "logs"), "profiler")
+    os.makedirs(output_dir, exist_ok=True)
+    return output_dir
+
+
+def _torch_profiler_uses_cuda(args: object) -> bool:
+    """True when CUDA profiling should be used for sorting/export."""
+    return bool(getattr(args, "cuda", False)) and torch.cuda.is_available()
+
+
+def _print_torch_profiler_summary(
+    prof: Any,
+    trace_label: str,
+    output_dir: str,
+    use_cuda: bool,
+) -> None:
+    """Print top operators and export a Chrome trace JSON file."""
+    sort_key = "cuda_time_total" if use_cuda else "cpu_time_total"
+    print(f"\n[torch-profile:{trace_label}] Top operators (sorted by {sort_key})")
+    print(prof.key_averages().table(sort_by=sort_key, row_limit=40))
+    trace_path = os.path.join(output_dir, f"{trace_label}.json")
+    prof.export_chrome_trace(trace_path)
+    print(f"[torch-profile:{trace_label}] Chrome trace: {trace_path}")
+
+
+def _start_torch_train_profiler(
+    args: object,
+) -> tuple[Any, int]:
+    """Start a scheduled train profiler on task 0 epoch 0.
+
+    Args:
+        args: CLI/config namespace with torch profiler settings.
+
+    Returns:
+        Tuple of (profiler context, total ``prof.step()`` calls needed).
+    """
+    from torch.profiler import profile, schedule
+
+    warmup_batches = max(0, int(getattr(args, "torch_profile_warmup_batches", 2)))
+    active_batches = max(1, int(getattr(args, "torch_profile_batches", 10)))
+    total_steps = warmup_batches + active_batches
+    output_dir = _torch_profiler_output_dir(args)
+    train_profiler = profile(
+        activities=_torch_profiler_activities(args),
+        schedule=schedule(
+            wait=0, warmup=warmup_batches, active=active_batches, repeat=1
+        ),
+        record_shapes=True,
+        profile_memory=True,
+        with_stack=True,
+    )
+    train_profiler.__enter__()
+    print(
+        "[torch-profile:train] Profiling {} warmup + {} active batches; output_dir={}".format(
+            warmup_batches,
+            active_batches,
+            output_dir,
+        )
+    )
+    return train_profiler, total_steps
+
+
+def _finish_torch_train_profiler(train_profiler: Any, args: object) -> None:
+    """Stop train profiler and write summary + trace."""
+    train_profiler.__exit__(None, None, None)
+    _print_torch_profiler_summary(
+        train_profiler,
+        "train",
+        _torch_profiler_output_dir(args),
+        _torch_profiler_uses_cuda(args),
+    )
+
+
+def _run_torch_profiler_eval(
+    evaluator: Callable[..., object],
+    model: torch.nn.Module,
+    test_task_loaders: list[object],
+    args: object,
+) -> None:
+    """Profile one full validation pass and export operator table + trace."""
+    from torch.profiler import profile
+
+    use_cuda = _torch_profiler_uses_cuda(args)
+    output_dir = _torch_profiler_output_dir(args)
+    print("[torch-profile:eval] Profiling one validation pass.")
+    model.eval()
+    with profile(
+        activities=_torch_profiler_activities(args),
+        record_shapes=True,
+        profile_memory=True,
+        with_stack=True,
+    ) as eval_profiler:
+        evaluator(model, test_task_loaders, args)
+        if use_cuda:
+            torch.cuda.synchronize()
+    _print_torch_profiler_summary(eval_profiler, "eval", output_dir, use_cuda)
+    model.train()
+
+
 def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
     model.eval()
     device = torch.device(
@@ -946,6 +1061,18 @@ def life_experience(model, inc_loader, args):
                 current_task, task_i + 1, inc_loader.n_tasks
             ),
         )
+        active_torch_profiler: Optional[Any] = None
+        torch_profile_steps_taken = 0
+        torch_profile_total_steps = 0
+        if (
+            bool(getattr(args, "torch_profile", False))
+            and task_i == 0
+            and not getattr(args, "_torch_profile_train_done", False)
+        ):
+            active_torch_profiler, torch_profile_total_steps = (
+                _start_torch_train_profiler(args)
+            )
+
         for ep in range(task_n_epochs):
             model.real_epoch = ep
             epoch_losses = []
@@ -1148,7 +1275,9 @@ def life_experience(model, inc_loader, args):
                     noise_label_for_metrics=noise_label_for_metric,
                 )
                 if profile_epoch_timing:
-                    epoch_metric_postproc_time += time.time() - metric_postproc_start_time
+                    epoch_metric_postproc_time += (
+                        time.time() - metric_postproc_start_time
+                    )
 
                 prog_bar.set_description(
                     "T{}| Ep: {}/{}| Loss: {}| Rec: {}| Prec: {}| F1: {}| DetRec: {}| DetFA: {}".format(
@@ -1165,6 +1294,20 @@ def life_experience(model, inc_loader, args):
                 )
                 if profile_epoch_timing:
                     last_batch_end_time = time.time()
+
+                if active_torch_profiler is not None and ep == 0:
+                    active_torch_profiler.step()
+                    torch_profile_steps_taken += 1
+                    if torch_profile_steps_taken >= torch_profile_total_steps:
+                        completed_profiler = active_torch_profiler
+                        active_torch_profiler = None
+                        _finish_torch_train_profiler(completed_profiler, args)
+                        args._torch_profile_train_done = True
+                        if not getattr(args, "_torch_profile_eval_done", False):
+                            _run_torch_profiler_eval(
+                                evaluator, model, test_task_loaders, args
+                            )
+                            args._torch_profile_eval_done = True
 
                 # prog_bar.set_description(
                 #     "Task: {} | Epoch: {}/{} | Iter: {} | Loss: {} | Acc: Total: {} Current Task: {} ".format(
@@ -1398,6 +1541,20 @@ def life_experience(model, inc_loader, args):
                         avg_eval_recall,
                     )
                 )
+            if active_torch_profiler is not None and ep == 0:
+                completed_profiler = active_torch_profiler
+                active_torch_profiler = None
+                print(
+                    "[torch-profile:train] Epoch ended early; captured {} / {} profiler steps.".format(
+                        torch_profile_steps_taken,
+                        torch_profile_total_steps,
+                    )
+                )
+                _finish_torch_train_profiler(completed_profiler, args)
+                args._torch_profile_train_done = True
+                if not getattr(args, "_torch_profile_eval_done", False):
+                    _run_torch_profiler_eval(evaluator, model, test_task_loaders, args)
+                    args._torch_profile_eval_done = True
         finalize_fn = getattr(model, "finalize_task_after_training", None)
         if callable(finalize_fn):
             finalize_fn(train_loader)
@@ -1899,6 +2056,15 @@ def main():
     print("n_outputs:", n_outputs, "\tn_tasks:", n_tasks)
 
     log_state(args.state_logging, "Logging to {}".format(args.log_dir))
+    if getattr(args, "torch_profile", False):
+        print(
+            "[torch-profile] Enabled: profiling task 0 epoch 0 train batches then one eval pass."
+        )
+        print(
+            "[torch-profile] Traces will be written under {}".format(
+                os.path.join(args.log_dir, "profiler")
+            )
+        )
 
     # load model
     Model = importlib.import_module("model." + args.model)

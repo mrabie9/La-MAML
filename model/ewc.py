@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
+import time
 import torch
 import torch.nn as nn
 
@@ -104,6 +105,22 @@ class Net(DetectionReplayMixin, nn.Module):
 
         self._fisher_accum: Optional[Dict[str, torch.Tensor]] = None
         self._fisher_count: int = 0
+        self.profile_observe_timing = bool(
+            getattr(args, "profile_epoch_timing", False)
+            or getattr(args, "profile_ewc_observe_timing", False)
+        )
+        self.profile_observe_timing_interval = int(
+            getattr(args, "profile_ewc_observe_timing_interval", 20)
+        )
+        self._observe_calls = 0
+        self._observe_timing_sums: Dict[str, float] = {
+            "total": 0.0,
+            "prep_forward_loss": 0.0,
+            "fisher_backward": 0.0,
+            "ewc_penalty": 0.0,
+            "train_backward": 0.0,
+            "clip_and_step": 0.0,
+        }
 
     # ------------------------------------------------------------------
     def forward(
@@ -130,6 +147,14 @@ class Net(DetectionReplayMixin, nn.Module):
 
     # ------------------------------------------------------------------
     def observe(self, x: torch.Tensor, y: torch.Tensor, t: int) -> Tuple[float, float]:
+        observe_start = time.perf_counter()
+        timing_totals = {
+            "prep_forward_loss": 0.0,
+            "fisher_backward": 0.0,
+            "ewc_penalty": 0.0,
+            "train_backward": 0.0,
+            "clip_and_step": 0.0,
+        }
         if self.current_task is None:
             self.current_task = t
         elif t != self.current_task:
@@ -152,6 +177,7 @@ class Net(DetectionReplayMixin, nn.Module):
         # if y_det is not None and self.det_memories > 0:
         #     self._update_det_memory(x, y_det)
         for _ in range(self.cfg.inner_steps):
+            prep_forward_start = time.perf_counter()
             y_cls = unpack_y_to_class_labels(y)
             cls_logits = self._forward_heads(x)[1]
             signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
@@ -177,12 +203,17 @@ class Net(DetectionReplayMixin, nn.Module):
                 cls_tr_rec = macro_recall(preds, y_cls[signal_mask].long())
             else:
                 cls_tr_rec = 0.0
+            timing_totals["prep_forward_loss"] += time.perf_counter() - prep_forward_start
 
             self.opt.zero_grad()
             if True:
-                torch.autograd.set_detect_anomaly(True)
+                fisher_backward_start = time.perf_counter()
+                # torch.autograd.set_detect_anomaly(True)
                 loss_ce.backward(retain_graph=True)
                 self._accumulate_fisher(int(y_cls.size(0)))
+                timing_totals["fisher_backward"] += (
+                    time.perf_counter() - fisher_backward_start
+                )
 
             # self.opt.zero_grad()
             # det_loss = self.det_loss(det_logits, y_det.float())
@@ -193,17 +224,61 @@ class Net(DetectionReplayMixin, nn.Module):
             #     mem_det_logits, _ = self._forward_heads(mem_x)
             #     mem_loss = self.det_loss(mem_det_logits, mem_y.float())
             #     det_loss = 0.5 * (det_loss + mem_loss)
+            ewc_penalty_start = time.perf_counter()
+            ewc_penalty_value = self._ewc_penalty()
+            timing_totals["ewc_penalty"] += time.perf_counter() - ewc_penalty_start
             loss = (
                 self.cls_lambda * loss_ce
                 # + self.det_lambda * det_loss
-                + 0.5 * self.lamb * self._ewc_penalty()
+                + 0.5 * self.lamb * ewc_penalty_value
             )
+            train_backward_start = time.perf_counter()
             loss.backward()
+            timing_totals["train_backward"] += (
+                time.perf_counter() - train_backward_start
+            )
 
+            clip_and_step_start = time.perf_counter()
             if self.clipgrad is not None:
                 torch.nn.utils.clip_grad_norm_(self.parameters(), self.clipgrad)
 
             self.opt.step()
+            timing_totals["clip_and_step"] += time.perf_counter() - clip_and_step_start
+
+        if self.profile_observe_timing:
+            observe_total = time.perf_counter() - observe_start
+            self._observe_calls += 1
+            self._observe_timing_sums["total"] += observe_total
+            for key, value in timing_totals.items():
+                self._observe_timing_sums[key] += value
+            if self._observe_calls % self.profile_observe_timing_interval == 0:
+                avg_total = self._observe_timing_sums["total"] / self._observe_calls
+                avg_prep = (
+                    self._observe_timing_sums["prep_forward_loss"] / self._observe_calls
+                )
+                avg_fisher_backward = (
+                    self._observe_timing_sums["fisher_backward"] / self._observe_calls
+                )
+                avg_ewc_penalty = (
+                    self._observe_timing_sums["ewc_penalty"] / self._observe_calls
+                )
+                avg_train_backward = (
+                    self._observe_timing_sums["train_backward"] / self._observe_calls
+                )
+                avg_clip_and_step = (
+                    self._observe_timing_sums["clip_and_step"] / self._observe_calls
+                )
+                print(
+                    "[ewc-timing] calls={} avg_total={:.4f}s prep_fwd_loss={:.4f}s fisher_backward={:.4f}s ewc_penalty={:.4f}s train_backward={:.4f}s clip_step={:.4f}s".format(
+                        self._observe_calls,
+                        avg_total,
+                        avg_prep,
+                        avg_fisher_backward,
+                        avg_ewc_penalty,
+                        avg_train_backward,
+                        avg_clip_and_step,
+                    )
+                )
 
         return float(loss.item()), cls_tr_rec
 

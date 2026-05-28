@@ -202,6 +202,27 @@ def get_parser():
             "metric post-processing, eval, and residual other time)."
         ),
     )
+    parser.add_argument(
+        "--torch_profile",
+        default=False,
+        action="store_true",
+        help=(
+            "Profile the first task's first epoch for N train batches plus one eval "
+            "pass; write Chrome traces and operator tables under log_dir/profiler/."
+        ),
+    )
+    parser.add_argument(
+        "--torch_profile_batches",
+        type=int,
+        default=10,
+        help="Active train batches to capture after warmup when --torch_profile is set.",
+    )
+    parser.add_argument(
+        "--torch_profile_warmup_batches",
+        type=int,
+        default=2,
+        help="Untimed warmup train batches before the active torch profiler window.",
+    )
 
     # data parameters
     parser.add_argument(
