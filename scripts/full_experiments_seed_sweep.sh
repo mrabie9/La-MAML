@@ -22,7 +22,7 @@ SEEDS=(55 39)
 
 overall_exit=0
 
-for n_mem in "${SEEDS[@]}"; do
+for seed in "${SEEDS[@]}"; do
   echo "[full_experiments_seed_sweep] === seed=${seed} ==="
   cmd=(
     "$SCRIPT_DIR/full_experiments.sh"
