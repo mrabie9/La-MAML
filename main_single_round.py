@@ -15,11 +15,14 @@ from main import (
     _split_labels,
     _noise_label_for_metrics,
     _false_alarm_rate,
-    _model_forward_for_metric_loop,
     eval_tasks,
     save_results,
     log_state,
     _split_eval_output,
+)
+from utils.training_forward import (
+    model_forward_for_metric_loop,
+    unpack_observe_result,
 )
 from metrics.metrics import confusion_matrix
 from utils import misc_utils
@@ -351,18 +354,23 @@ def run_single_round_training(
                 y_for_observe = y_cls.to(device)
 
             model.train()
-            loss, cls_tr_rec = model.observe(xb, y_for_observe, current_task_index)
+            observe_result = model.observe(xb, y_for_observe, current_task_index)
+            loss, cls_tr_rec, metric_logits = unpack_observe_result(observe_result)
 
             epoch_losses.append(float(loss))
 
-            model.eval()
-            with torch.no_grad():
-                logits = _model_forward_for_metric_loop(
-                    model, xb, current_task_index, args
-                )
-                predictions = torch.argmax(logits, dim=1).cpu()
+            if metric_logits is not None:
+                predictions = torch.argmax(metric_logits, dim=1).cpu()
                 det_logits = None
-            model.train()
+            else:
+                model.eval()
+                with torch.no_grad():
+                    logits = model_forward_for_metric_loop(
+                        model, xb, current_task_index, args
+                    )
+                    predictions = torch.argmax(logits, dim=1).cpu()
+                    det_logits = None
+                model.train()
 
             y_cls_for_metric = y_cls.cpu()
             noise_label = noise_label_for_task

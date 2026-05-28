@@ -356,6 +356,7 @@ class Net(DetectionReplayMixin, nn.Module):
             self.mem_cnt = 0
 
         cls_tr_rec = []
+        metric_logits = None
         for pass_itr in range(self.inner_steps):
             # copy x into memory with matching shape
 
@@ -479,6 +480,7 @@ class Net(DetectionReplayMixin, nn.Module):
                 overwrite_grad(self._ll_params, self.grads[:, t], self.grad_dims)
 
             self.opt.step()
+            metric_logits = logits_full.detach()
 
         x_for_storage = self._input_for_replay(x)
         xi = x_for_storage.data.cpu().numpy()
@@ -509,4 +511,4 @@ class Net(DetectionReplayMixin, nn.Module):
         #     self.det_opt.step()
 
         avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
-        return loss.item(), avg_cls_tr_rec
+        return loss.item(), avg_cls_tr_rec, metric_logits

@@ -378,6 +378,7 @@ class Net(DetectionReplayMixin, nn.Module):
             self.old_task = t
 
         cls_tr_rec = []
+        metric_logits = None
 
         for pass_itr in range(self.inner_steps):
             # push current batch once per batch (not each glance)
@@ -486,6 +487,7 @@ class Net(DetectionReplayMixin, nn.Module):
                     overwrite_grad(self._ll_params, self.grads[:, t], self.grad_dims)
 
             self.opt.step()
+            metric_logits = logits_full.detach()
         # if getattr(self, "det_enabled", True):
         #     self.det_opt.zero_grad()
         #     det_logits, _ = self.net.forward_heads(x_det)
@@ -500,4 +502,4 @@ class Net(DetectionReplayMixin, nn.Module):
         #     det_loss.backward()
         #     self.det_opt.step()
         avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
-        return loss.item(), avg_cls_tr_rec
+        return loss.item(), avg_cls_tr_rec, metric_logits

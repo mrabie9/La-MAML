@@ -341,4 +341,4 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
             #     self.opt_wt.step()
 
         avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
-        return meta_loss.item(), avg_cls_tr_rec
+        return meta_loss.item(), avg_cls_tr_rec, None

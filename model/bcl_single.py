@@ -427,4 +427,4 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         }
         self.net.load_state_dict(new_params)
         avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
-        return outer_loss.item(), avg_cls_tr_rec
+        return outer_loss.item(), avg_cls_tr_rec, None

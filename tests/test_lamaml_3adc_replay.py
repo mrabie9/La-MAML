@@ -70,9 +70,10 @@ def test_lamaml_3adc_replay_single_task():
     x = torch.randn(8, 3, 1024)
     y = _make_labels(batch_size=8, task_id=0)
 
-    loss, cls_tr_rec = model.observe(x, y, t=0)
+    loss, cls_tr_rec, metric_logits = model.observe(x, y, t=0)
     assert isinstance(loss, float)
     assert isinstance(cls_tr_rec, float)
+    assert metric_logits is None
 
     # Memory should contain canonical (2, 512) representations from _input_for_replay
     assert len(model.M_new) > 0
@@ -92,7 +93,7 @@ def test_lamaml_3adc_replay_across_tasks():
     # Task 0: fill memory with 3-ADC data
     x0 = torch.randn(10, 3, 1024)
     y0 = _make_labels(batch_size=10, task_id=0)
-    loss0, _ = model.observe(x0, y0, t=0)
+    loss0, _, _ = model.observe(x0, y0, t=0)
     assert isinstance(loss0, float)
     assert len(model.M_new) > 0
 
@@ -102,9 +103,10 @@ def test_lamaml_3adc_replay_across_tasks():
     # Task 1: new 3-ADC data should be combined with old memory in getBatch
     x1 = torch.randn(6, 3, 1024)
     y1 = _make_labels(batch_size=6, task_id=1)
-    loss1, cls_tr_rec1 = model.observe(x1, y1, t=1)
+    loss1, cls_tr_rec1, metric_logits1 = model.observe(x1, y1, t=1)
     assert isinstance(loss1, float)
     assert isinstance(cls_tr_rec1, float)
+    assert metric_logits1 is None
 
     # Explicitly build a replay batch to ensure shapes are homogeneous
     x1_replay = model._input_for_replay(x1)

@@ -133,7 +133,9 @@ class Net(DetectionReplayMixin, nn.Module):
         )
 
     # ------------------------------------------------------------------
-    def observe(self, x: torch.Tensor, y: torch.Tensor, t: int) -> Tuple[float, float]:
+    def observe(
+        self, x: torch.Tensor, y: torch.Tensor, t: int
+    ) -> Tuple[float, float, torch.Tensor | None]:
         if self.current_task is None:
             self.current_task = t
         elif t != self.current_task:
@@ -147,6 +149,7 @@ class Net(DetectionReplayMixin, nn.Module):
         # if class_counts is not None:
         #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
         #     noise_label = offset2 - 1
+        metric_logits = None
         for _ in range(self.cfg.inner_steps):
             self.opt.zero_grad()
             y_cls = unpack_y_to_class_labels(y)
@@ -198,8 +201,9 @@ class Net(DetectionReplayMixin, nn.Module):
                 torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.clipgrad)
             self.opt.step()
             self._update_running_statistics()
+            metric_logits = logits_for_loss.detach()
 
-        return float(loss.item()), cls_tr_rec
+        return float(loss.item()), cls_tr_rec, metric_logits
 
     # ------------------------------------------------------------------
     def on_task_end(self) -> None:

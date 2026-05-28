@@ -96,7 +96,7 @@ def _effective_cil_upto_for_loader(
 ) -> int | None:
     """Return the cumulative CIL task bound to honour, or None for TIL masking.
 
-    Aligns with ``main._model_forward_for_metric_loop``: only
+    Aligns with ``utils.training_forward.model_forward_for_metric_loop``: only
     ``class_incremental_loader`` uses cumulative (seen-so-far) masking. When
     ``loader`` is ``None``, ``cil_all_seen_upto_task`` is used as given (backward
     compatible with call sites that do not pass ``loader``).

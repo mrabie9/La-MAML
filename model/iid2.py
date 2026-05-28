@@ -131,7 +131,7 @@ class Net(torch.nn.Module):
         x: torch.Tensor,
         y: torch.Tensor,
         t: torch.Tensor | int,
-    ) -> tuple[float, float]:
+    ) -> tuple[float, float, torch.Tensor | None]:
         """Perform a single SGD step on IID data.
 
         Args:
@@ -148,6 +148,7 @@ class Net(torch.nn.Module):
         del t
 
         self.train()
+        metric_logits = None
         for _ in range(self.cfg.inner_steps):
             self.opt.zero_grad()
 
@@ -161,6 +162,7 @@ class Net(torch.nn.Module):
             )
             loss_tensor.backward()
             self.opt.step()
+            metric_logits = logits.detach()
 
             with torch.no_grad():
                 preds = torch.argmax(logits, dim=1)
@@ -172,7 +174,7 @@ class Net(torch.nn.Module):
                 else:
                     cls_tr_rec = 0.0
 
-        return float(loss_tensor.item()), float(cls_tr_rec)
+        return float(loss_tensor.item()), float(cls_tr_rec), metric_logits
 
 
 __all__ = ["Net"]

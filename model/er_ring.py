@@ -294,6 +294,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             self.current_task = t
 
         cls_tr_rec = []
+        metric_logits = None
 
         for _ in range(self.inner_steps):
             self.net.zero_grad()
@@ -336,6 +337,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             loss = loss1 + (self.memory_loss_lambda * loss2)
             loss.backward()
             self.opt.step()
+            metric_logits = logits.detach()
 
         avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
         # if getattr(self, "det_enabled", True):
@@ -351,4 +353,4 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         #     det_loss = self.det_lambda * det_loss
         #     det_loss.backward()
         #     self.det_opt.step()
-        return loss.item(), avg_cls_tr_rec
+        return loss.item(), avg_cls_tr_rec, metric_logits

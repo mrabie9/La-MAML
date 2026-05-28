@@ -80,7 +80,8 @@ def test_rwalk_observe_masks_global_noise_for_weighted_ce() -> None:
     batch = 16
     x = torch.randn(batch, 2, 64)
     y_cls = torch.tensor([0, 1, 2, 3, 4, 54, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4])
-    loss, rec = model.observe(x, y_cls, 0)
+    loss, rec, metric_logits = model.observe(x, y_cls, 0)
+    assert metric_logits is not None
     assert loss == loss and loss >= 0.0
     assert 0.0 <= rec <= 1.0
 
@@ -101,7 +102,8 @@ def test_rwalk_observe_accepts_two_column_iq_labels() -> None:
     y = torch.zeros(b, 2, dtype=torch.long)
     y[:, 0] = torch.tensor([0, 1, 2, 11, 3, 4, 11, 0])
     y[:, 1] = 1
-    loss, rec = model.observe(x, y, 0)
+    loss, rec, metric_logits = model.observe(x, y, 0)
+    assert metric_logits is not None
     assert loss == loss and loss >= 0.0
     assert 0.0 <= rec <= 1.0
 
@@ -116,7 +118,8 @@ def test_rwalk_all_noise_batch_trains_noise_class() -> None:
     model.train()
     x = torch.randn(4, 2, 32)
     y = torch.full((4,), 9, dtype=torch.long)
-    loss, rec = model.observe(x, y, 0)
+    loss, rec, metric_logits = model.observe(x, y, 0)
+    assert metric_logits is not None
     assert loss > 0.0
     assert loss == loss
     assert rec == 0.0

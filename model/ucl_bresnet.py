@@ -524,14 +524,11 @@ class Net(nn.Module):
         self.saved = False
         self.is_task_incremental: bool = True
         self._debug_step_counter = 0
-        self._last_observe_task_index: Optional[int] = None
-        self._last_observe_predictions_cpu: Optional[torch.Tensor] = None
-        self._last_observe_labels_cpu: Optional[torch.Tensor] = None
         self.noise_label: int | None = noise_label_from_args(args)
         self.incremental_loader_name = getattr(args, "loader", None)
-        # Per-task BN snapshotting is disabled: keep a single running BN state
-        # across tasks (matches historical runs that did not rely on snapshots).
-        self._use_task_bn_state = False
+        self._use_task_bn_state = bool(
+            self.split and self.incremental_loader_name == "task_incremental_loader"
+        )
         self._bn_modules: List[_BatchNorm] = [
             module for module in self.model.modules() if isinstance(module, _BatchNorm)
         ]
@@ -679,6 +676,10 @@ class Net(nn.Module):
             stats: Running-stat snapshots from :meth:`_capture_bn_state`.
             affine: Affine parameter snapshots from :meth:`_capture_bn_state`.
         """
+        if len(stats) != len(self._bn_modules) or len(affine) != len(self._bn_modules):
+            raise RuntimeError(
+                "BatchNorm state snapshot is out of sync with model BatchNorm modules."
+            )
         for batch_norm_module, (running_mean, running_var, num_batches) in zip(
             self._bn_modules, stats
         ):
@@ -703,7 +704,11 @@ class Net(nn.Module):
         if stats is None:
             self._reset_bn_stats()
             return
-        self._apply_bn_state(stats, affine if affine is not None else [])
+        if affine is None:
+            raise RuntimeError(
+                f"BatchNorm affine snapshot missing for task {task} despite saved stats."
+            )
+        self._apply_bn_state(stats, affine)
 
     def finalize_task_after_training(
         self,
@@ -844,7 +849,9 @@ class Net(nn.Module):
         cls_logits = self.model(x, sample=sample)
         return det_logits, cls_logits
 
-    def observe(self, x: torch.Tensor, y: torch.Tensor, t: int) -> Tuple[float, float]:
+    def observe(
+        self, x: torch.Tensor, y: torch.Tensor, t: int
+    ) -> Tuple[float, float, torch.Tensor | None]:
         y_cls, y_det = self._split_labels(y)
         if not torch.is_tensor(y_cls):
             y_cls = torch.as_tensor(y_cls)
@@ -910,6 +917,7 @@ class Net(nn.Module):
 
         self.train()
         # Let BatchNorm update running buffers so ``model.eval()`` matches training stats.
+        metric_logits = None
         for _ in range(self.cfg.inner_steps):
             outputs = self.model(x_cls, sample=True)
             logits = outputs[t] if self.split else outputs
@@ -921,9 +929,7 @@ class Net(nn.Module):
                 )
             else:
                 cls_tr_rec = 0.0
-            self._last_observe_task_index = int(t)
-            self._last_observe_predictions_cpu = preds.detach().cpu().long()
-            self._last_observe_labels_cpu = y_cls_filtered.detach().cpu().long()
+            metric_logits = logits.detach()
             self._maybe_log_training_debug(
                 task_index=t,
                 labels=y_cls_filtered,
@@ -954,7 +960,7 @@ class Net(nn.Module):
         #         torch.nn.utils.clip_grad_norm_(self.detector.parameters(), self.cfg.clipgrad)
         #     self.det_optimizer.step()
 
-        return float(loss.detach().cpu()), cls_tr_rec
+        return float(loss.detach().cpu()), cls_tr_rec, metric_logits
 
     def _maybe_log_training_debug(
         self,

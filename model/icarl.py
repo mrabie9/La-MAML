@@ -326,6 +326,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             self.net.cuda()
 
         cls_tr_rec = []
+        metric_logits = None
 
         for pass_itr in range(self.inner_steps):
 
@@ -418,6 +419,7 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 )
 
             self.opt.step()
+            metric_logits = logits_full.detach()
 
         # Check whether this is the last minibatch of the current task across
         # all configured epochs.
@@ -433,9 +435,8 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             #     self.examples_seen = 0
             # get labels from previous task; we assume labels are consecutive
             if self.memx is None or self.memy is None or self.memy.numel() == 0:
-                return float(loss.item()), (
-                    sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
-                )
+                avg_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
+                return float(loss.item()), avg_rec, metric_logits
 
             offset1, offset2 = self.compute_offsets(t)
             if self.gpu:
@@ -578,4 +579,4 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         #     f"| Det Loss: {det_loss.item():.4f} | Det Recall: {det_recall:.4f} | Det PFA: {det_pfa:.4f} "
         #     f"| Det_lambda: {self.det_lambda} | Memory Strength: {self.reg}"
         # )
-        return total_loss, avg_cls_tr_rec
+        return total_loss, avg_cls_tr_rec, metric_logits

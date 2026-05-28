@@ -258,4 +258,4 @@ class Net(nn.Module):
             avg_cls_tr_rec = macro_recall(stacked_preds, stacked_targets)
         else:
             avg_cls_tr_rec = 0.0
-        return total_loss / self.steps, avg_cls_tr_rec
+        return total_loss / self.steps, avg_cls_tr_rec, None

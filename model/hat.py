@@ -873,7 +873,9 @@ class Net(nn.Module):
             )
         print("\n".join(lines))
 
-    def observe(self, x: torch.Tensor, y: torch.Tensor, t: int) -> Tuple[float, float]:
+    def observe(
+        self, x: torch.Tensor, y: torch.Tensor, t: int
+    ) -> Tuple[float, float, torch.Tensor | None]:
 
         if self.current_task is None:
             self.current_task = t
@@ -901,6 +903,7 @@ class Net(nn.Module):
 
         self.bridge.set_bn_eval(False)
 
+        metric_logits = None
         for _ in range(self.cfg.inner_steps):
             self.opt.zero_grad(set_to_none=True)
             logits, masks = self.bridge.forward(
@@ -945,9 +948,10 @@ class Net(nn.Module):
 
             self.opt.step()
             self.bridge.clamp_embeddings()
+            metric_logits = logits_for_loss.detach()
 
         self._epoch_counts[t] += 1
-        return float(loss.detach().cpu()), cls_tr_rec
+        return float(loss.detach().cpu()), cls_tr_rec, metric_logits
 
     def on_epoch_end(self) -> None:
         pass

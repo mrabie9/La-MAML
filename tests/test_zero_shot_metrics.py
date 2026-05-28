@@ -59,7 +59,7 @@ class _TinyContinualModel(torch.nn.Module):
 
     def observe(
         self, v_x: torch.Tensor, v_y: torch.Tensor, task_id: int
-    ) -> Tuple[float, torch.Tensor]:
+    ) -> Tuple[float, float, torch.Tensor]:
         del task_id
         x_tensor = v_x if isinstance(v_x, torch.Tensor) else v_x.data  # type: ignore[union-attr]
         logits = self.forward(x_tensor, 0)
@@ -67,8 +67,7 @@ class _TinyContinualModel(torch.nn.Module):
         loss_value = float(
             torch.nn.functional.cross_entropy(logits, v_y.long()).detach()
         )
-        recall = torch.tensor(0.5, device=logits.device, dtype=torch.float32)
-        return loss_value, recall
+        return loss_value, 0.5, logits.detach()
 
 
 class _MockIncrementalLoader:

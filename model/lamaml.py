@@ -152,4 +152,4 @@ class Net(BaseNet):
             self.net.alpha_lr.zero_grad(set_to_none=True)
 
         avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
-        return meta_loss.mean().item(), avg_cls_tr_rec
+        return meta_loss.mean().item(), avg_cls_tr_rec, None

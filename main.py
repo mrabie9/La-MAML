@@ -25,6 +25,13 @@ from utils.training_metrics import (
     macro_precision_signal_only,
     macro_recall,
 )
+from utils.training_forward import (
+    model_forward_for_metric_loop,
+    unpack_observe_result,
+)
+
+# Backward-compatible alias for imports from ``main``.
+_model_forward_for_metric_loop = model_forward_for_metric_loop
 
 
 def log_state(enabled, message):
@@ -620,55 +627,6 @@ def _maybe_print_eval_detection_alignment_debug(
     )
 
 
-def _model_forward_for_metric_loop(
-    model: object, x: torch.Tensor, task_index: int, args: object
-) -> torch.Tensor:
-    """Run ``model`` forward for metric computation (validation, test, or train probe).
-
-    For ``class_incremental_loader``, passes ``cil_all_seen_upto_task`` so
-    :func:`utils.misc_utils.apply_task_incremental_logit_mask` is applied in
-    model code with the **cumulative** class boundary (true CIL inference). For
-    task-incremental loaders, no extra keyword is passed (per-task masking
-    only).
-
-    **iCaRL:** Metrics use ``netforward`` logits plus the same
-    :func:`utils.misc_utils.apply_task_incremental_logit_mask` call as
-    :meth:`model.icarl.Net.observe` (``cil_all_seen_upto_task=task_index`` and
-    ``global_noise_label``), not nearest-mean ``forward`` (which omits noise
-    before / without exemplars). This matches training for TIL and CIL runs,
-    because ``observe`` always passes ``cil_all_seen_upto_task=task_index``.
-
-    Args:
-        model: Continual-learning module with ``forward(x, task_index, ...)``.
-        x: Input batch on the correct device.
-        task_index: Zero-based continual task id (same as ``task_info['task']``).
-        args: Experiment arguments (``loader``, ``model`` id).
-
-    Returns:
-        Classifier logits tensor.
-    """
-    forward_kw: dict = {}
-    if getattr(args, "loader", "") == "class_incremental_loader":
-        forward_kw["cil_all_seen_upto_task"] = task_index
-    if getattr(args, "model", "") == "anml":
-        return model(x, fast_weights=None)  # type: ignore[operator]
-    if getattr(args, "model", "") == "icarl":
-        raw_logits = model.netforward(x)  # type: ignore[attr-defined]
-        return misc_utils.apply_task_incremental_logit_mask(
-            raw_logits,
-            task_index,
-            model.classes_per_task,  # type: ignore[attr-defined]
-            model.n_classes,  # type: ignore[attr-defined]
-            cil_all_seen_upto_task=task_index,
-            global_noise_label=getattr(model, "noise_label", None),
-            loader=getattr(args, "loader", None),
-        )
-    try:
-        return model(x, task_index, **forward_kw)  # type: ignore[operator]
-    except TypeError:
-        return model(x, task_index)  # type: ignore[operator]
-
-
 def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
     model.eval()
     device = torch.device(
@@ -710,7 +668,7 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
             if not torch.is_tensor(yb_cls):
                 yb_cls = torch.as_tensor(yb_cls)
 
-            logits = _model_forward_for_metric_loop(model, xb, t, args)
+            logits = model_forward_for_metric_loop(model, xb, t, args)
             pb = torch.argmax(logits, dim=1).cpu()
             yb_cls_cpu = yb_cls.detach().cpu()
             yb_cls_for_metrics = yb_cls_cpu
@@ -1034,9 +992,10 @@ def life_experience(model, inc_loader, args):
                     else nullcontext()
                 )
                 with amp_context:
-                    loss, cls_tr_rec = model.observe(
+                    observe_result = model.observe(
                         Variable(v_x), v_y, task_info["task"]
                     )
+                loss, cls_tr_rec, metric_logits = unpack_observe_result(observe_result)
                 observe_cls_tr_rec = float(cls_tr_rec)
                 # debug_noise_label = _noise_label_max_for_task(train_loader)
                 # model.eval()
@@ -1089,22 +1048,12 @@ def life_experience(model, inc_loader, args):
                     if noise_label_for_metric is not None:
                         noise_label_for_metric = noise_label_for_metric - offset1
 
-                cached_observe_task = getattr(model, "_last_observe_task_index", None)
-                cached_observe_predictions = getattr(
-                    model, "_last_observe_predictions_cpu", None
-                )
-                use_cached_observe_predictions = (
-                    cached_observe_task == task_info["task"]
-                    and torch.is_tensor(cached_observe_predictions)
-                    and int(cached_observe_predictions.numel())
-                    == int(y_cls_for_metric.numel())
-                )
-                if use_cached_observe_predictions:
-                    pb = cached_observe_predictions.detach().cpu().long()
+                if metric_logits is not None:
+                    pb = torch.argmax(metric_logits, dim=1).cpu()
                 else:
                     model.eval()
                     with torch.no_grad():
-                        logits = _model_forward_for_metric_loop(
+                        logits = model_forward_for_metric_loop(
                             model, v_x, task_info["task"], args
                         )
                         pb = torch.argmax(logits, dim=1).cpu()

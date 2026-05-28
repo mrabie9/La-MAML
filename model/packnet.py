@@ -134,7 +134,9 @@ class Net(nn.Module):
         )
 
     # ------------------------------------------------------------------
-    def observe(self, x: torch.Tensor, y: torch.Tensor, t: int) -> Tuple[float, float]:
+    def observe(
+        self, x: torch.Tensor, y: torch.Tensor, t: int
+    ) -> Tuple[float, float, torch.Tensor | None]:
         if self.current_task is None:
             self.current_task = t
             self._restore_bn_stats(t)
@@ -145,6 +147,7 @@ class Net(nn.Module):
             self._restore_bn_stats(t)
 
         self.net.train()
+        metric_logits = None
         for _ in range(self.cfg.inner_steps):
             logits = self.net(x)
             y_cls = unpack_y_to_class_labels(y)
@@ -179,8 +182,9 @@ class Net(nn.Module):
                 torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.clipgrad)
             self.opt.step()
             self._restore_frozen_weights()
+            metric_logits = logits_for_loss.detach()
 
-        return float(loss.item()), cls_tr_rec
+        return float(loss.item()), cls_tr_rec, metric_logits
 
     # ------------------------------------------------------------------
     def finalize_task_after_training(

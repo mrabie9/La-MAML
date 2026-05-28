@@ -442,4 +442,4 @@ class Net(torch.nn.Module):
             sum(train_acc_values) / len(train_acc_values) if train_acc_values else 0.0
         )
 
-        return meta_loss_return.item(), avg_cls_tr_rec
+        return meta_loss_return.item(), avg_cls_tr_rec, None

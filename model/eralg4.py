@@ -289,6 +289,7 @@ class Net(DetectionReplayMixin, nn.Module):
         if t != self.current_task:
             self.current_task = t
 
+        metric_logits = None
         if self.cfg.learn_lr:
             loss, cls_tr_rec = self.la_ER(raw_x_train, y, t)
         else:
@@ -325,6 +326,7 @@ class Net(DetectionReplayMixin, nn.Module):
                             continue
                         parameter.add_(parameter.grad, alpha=-self.cfg.lr)
             self.net.zero_grad(set_to_none=True)
+            metric_logits = live_logits.detach()
 
         for i in range(0, x.size()[0]):
             self.age += 1
@@ -351,7 +353,7 @@ class Net(DetectionReplayMixin, nn.Module):
         #     det_loss.backward()
         #     self.det_opt.step()
 
-        return loss.item(), cls_tr_rec
+        return loss.item(), cls_tr_rec, metric_logits
 
     def _batch_accuracy(self, bt, logits, labels):
         if len(bt) == 0:

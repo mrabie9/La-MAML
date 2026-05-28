@@ -590,4 +590,4 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             self.zero_grad()
 
         avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
-        return loss.item(), avg_cls_tr_rec
+        return loss.item(), avg_cls_tr_rec, None
