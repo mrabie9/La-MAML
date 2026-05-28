@@ -193,6 +193,15 @@ def get_parser():
         action="store_true",
         help="Print high-level state messages to stdout for debugging",
     )
+    parser.add_argument(
+        "--profile_epoch_timing",
+        default=False,
+        action="store_true",
+        help=(
+            "Print per-epoch runtime breakdown (data wait, observe, metric forward, "
+            "metric post-processing, eval, and residual other time)."
+        ),
+    )
 
     # data parameters
     parser.add_argument(

@@ -957,6 +957,12 @@ def life_experience(model, inc_loader, args):
             epoch_eval_mode_recalls = []
             epoch_start_time = time.time()
             epoch_eval_time = 0.0
+            profile_epoch_timing = bool(getattr(args, "profile_epoch_timing", False))
+            epoch_data_wait_time = 0.0
+            epoch_observe_time = 0.0
+            epoch_metric_forward_time = 0.0
+            epoch_metric_postproc_time = 0.0
+            last_batch_end_time = epoch_start_time
             log_state(
                 args.state_logging,
                 "Task {} Epoch {}/{}: entering train loop".format(
@@ -966,6 +972,9 @@ def life_experience(model, inc_loader, args):
 
             prog_bar = tqdm(train_loader, disable=not interactive_terminal)
             for i, (x, y) in enumerate(prog_bar):
+                if profile_epoch_timing:
+                    batch_start_time = time.time()
+                    epoch_data_wait_time += batch_start_time - last_batch_end_time
 
                 v_x = x
                 y_cls = _split_labels(y)
@@ -1003,10 +1012,13 @@ def life_experience(model, inc_loader, args):
                     if use_amp
                     else nullcontext()
                 )
+                observe_start_time = time.time()
                 with amp_context:
                     loss, cls_tr_rec = model.observe(
                         Variable(v_x), v_y, task_info["task"]
                     )
+                if profile_epoch_timing:
+                    epoch_observe_time += time.time() - observe_start_time
                 observe_cls_tr_rec = float(cls_tr_rec)
                 # debug_noise_label = _noise_label_max_for_task(train_loader)
                 # model.eval()
@@ -1072,6 +1084,7 @@ def life_experience(model, inc_loader, args):
                 if use_cached_observe_predictions:
                     pb = cached_observe_predictions.detach().cpu().long()
                 else:
+                    metric_forward_start_time = time.time()
                     model.eval()
                     with torch.no_grad():
                         logits = _model_forward_for_metric_loop(
@@ -1079,8 +1092,13 @@ def life_experience(model, inc_loader, args):
                         )
                         pb = torch.argmax(logits, dim=1).cpu()
                     model.train()
+                    if profile_epoch_timing:
+                        epoch_metric_forward_time += (
+                            time.time() - metric_forward_start_time
+                        )
                 det_logits = None
 
+                metric_postproc_start_time = time.time()
                 prec = macro_precision_signal_only(
                     pb, y_cls_for_metric, noise_label_for_metric
                 )
@@ -1129,6 +1147,8 @@ def life_experience(model, inc_loader, args):
                     labels_for_metrics=y_cls_for_metric,
                     noise_label_for_metrics=noise_label_for_metric,
                 )
+                if profile_epoch_timing:
+                    epoch_metric_postproc_time += time.time() - metric_postproc_start_time
 
                 prog_bar.set_description(
                     "T{}| Ep: {}/{}| Loss: {}| Rec: {}| Prec: {}| F1: {}| DetRec: {}| DetFA: {}".format(
@@ -1143,6 +1163,8 @@ def life_experience(model, inc_loader, args):
                         round(det_fa, 2),
                     )
                 )
+                if profile_epoch_timing:
+                    last_batch_end_time = time.time()
 
                 # prog_bar.set_description(
                 #     "Task: {} | Epoch: {}/{} | Iter: {} | Loss: {} | Acc: Total: {} Current Task: {} ".format(
@@ -1319,6 +1341,32 @@ def life_experience(model, inc_loader, args):
                         epoch_duration,
                         epoch_eval_time,
                         epoch_train_time,
+                    )
+                )
+            if profile_epoch_timing:
+                epoch_other_time = max(
+                    epoch_duration
+                    - (
+                        epoch_data_wait_time
+                        + epoch_observe_time
+                        + epoch_metric_forward_time
+                        + epoch_metric_postproc_time
+                        + epoch_eval_time
+                    ),
+                    0.0,
+                )
+                print(
+                    "[timing] T{} Ep {}/{} | total {:.2f}s | data_wait {:.2f}s | observe {:.2f}s | metric_fwd {:.2f}s | metric_post {:.2f}s | eval {:.2f}s | other {:.2f}s".format(
+                        task_info["task"],
+                        ep + 1,
+                        task_n_epochs,
+                        epoch_duration,
+                        epoch_data_wait_time,
+                        epoch_observe_time,
+                        epoch_metric_forward_time,
+                        epoch_metric_postproc_time,
+                        epoch_eval_time,
+                        epoch_other_time,
                     )
                 )
                 log_state(
@@ -1855,6 +1903,7 @@ def main():
     # load model
     Model = importlib.import_module("model." + args.model)
     model = Model.Net(n_inputs, n_outputs, n_tasks, args)
+    # model = torch.compile(model, mode="reduce-overhead")
     # print(model)
     if args.cuda:
         try:
