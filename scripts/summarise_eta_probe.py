@@ -14,6 +14,9 @@ import math
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
+# Algorithms omitted from CIL full-experiment schedules (TIL-only / not run in CIL).
+CIL_SCHEDULE_EXCLUDED_ALGORITHMS: frozenset[str] = frozenset({"ctn", "packnet", "hat"})
+
 
 def _load_json(path: Path) -> Dict[str, Any]:
     """Load a single JSON probe output file."""
@@ -49,6 +52,31 @@ def _parse_comma_list(value: str | None) -> set[str]:
     if not trimmed:
         return set()
     return {token.strip() for token in trimmed.split(",") if token.strip()}
+
+
+def _resolve_excluded_models(
+    exclude_algorithms: str | None,
+    *,
+    cil_schedule: bool,
+) -> set[str]:
+    """Merge CLI exclusions with optional CIL schedule defaults.
+
+    Args:
+        exclude_algorithms: Value of ``--exclude-algorithms`` (comma-separated).
+        cil_schedule: When true, also exclude ``CIL_SCHEDULE_EXCLUDED_ALGORITHMS``.
+
+    Returns:
+        Set of algorithm names to omit from generated schedules.
+
+    Usage:
+        >>> sorted(_resolve_excluded_models("iid2", cil_schedule=True))
+        ['ctn', 'hat', 'iid2', 'packnet']
+    """
+
+    excluded = _parse_comma_list(exclude_algorithms)
+    if cil_schedule:
+        excluded |= set(CIL_SCHEDULE_EXCLUDED_ALGORITHMS)
+    return excluded
 
 
 def _extract_comparison(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -633,9 +661,21 @@ def main() -> None:
             "generated schedule (e.g. 'iid2,rwalk')."
         ),
     )
+    parser.add_argument(
+        "--cil-schedule",
+        action="store_true",
+        default=False,
+        help=(
+            "CIL schedule preset: exclude ctn, packnet, and hat from the "
+            "generated schedule (merged with --exclude-algorithms)."
+        ),
+    )
     args = parser.parse_args()
 
-    excluded_models = _parse_comma_list(args.exclude_algorithms)
+    excluded_models = _resolve_excluded_models(
+        args.exclude_algorithms,
+        cil_schedule=bool(args.cil_schedule),
+    )
 
     if args.generate_queue_host_schedule:
         probe_path = Path(args.serial_probe_json)
