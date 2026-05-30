@@ -300,12 +300,20 @@ if [ "$needs_regen" -eq 1 ] || [ "$RERUN_PROBE" -eq 1 ]; then
   fi
 
   log_msg "Generating util high/low queue schedule JSON (cached)..."
-  python3 scripts/summarise_eta_probe.py \
-    --generate-queue-host-schedule \
-    --serial-probe-json "$SERIAL_PROBE_JSON_PATH" \
-    --schedule-out-json "$SCHEDULE_JSON_PATH" \
-    --host1 "lnx-elkk-1" \
-    --host2 "lnx-elkk-2" | tee -a "$LOG_FILE"
+  SCHEDULE_GEN_ARGS=(
+    --generate-queue-host-schedule
+    --serial-probe-json "$SERIAL_PROBE_JSON_PATH"
+    --schedule-out-json "$SCHEDULE_JSON_PATH"
+    --host1 "lnx-elkk-1"
+    --host2 "lnx-elkk-2"
+  )
+  if [ "${THREE_HOST_SCHEDULE:-0}" -eq 1 ]; then
+    SCHEDULE_GEN_ARGS+=(--three-host-schedule --host3 "${HOST3:-win-lbo-22410}")
+    if [ -n "${HOST3_SPEED_FACTOR:-}" ]; then
+      SCHEDULE_GEN_ARGS+=(--host3-speed-factor "$HOST3_SPEED_FACTOR")
+    fi
+  fi
+  python3 scripts/summarise_eta_probe.py "${SCHEDULE_GEN_ARGS[@]}" | tee -a "$LOG_FILE"
 else
   log_msg "Reusing existing schedule JSON."
 fi
@@ -328,6 +336,7 @@ HOST_PAIRS=()
 HOST_SINGLES=()
 HOST_HIGH=()
 HOST_LOW=()
+QUEUE_SERIAL_ONLY=0
 
 while IFS= read -r line; do
   kind="${line%% *}"
@@ -340,6 +349,8 @@ while IFS= read -r line; do
     HOST_HIGH+=("$rest")
   elif [ "$kind" = "LOW" ]; then
     HOST_LOW+=("$rest")
+  elif [ "$kind" = "SERIAL_ONLY" ]; then
+    QUEUE_SERIAL_ONLY=1
   fi
 done < <(HOST_KEY="$HOST_KEY" SCHEDULE_JSON_PATH="$SCHEDULE_JSON_PATH" python3 - <<'PY'
 import json
@@ -352,6 +363,8 @@ data = json.loads(path.read_text(encoding="utf-8"))
 host_obj = data["hosts"][host]
 
 if "slot_high" in host_obj or "slot_low" in host_obj:
+    if host_obj.get("serial_only"):
+        print("SERIAL_ONLY 1")
     for m in host_obj.get("slot_high") or []:
         print(f"HIGH {m}")
     for m in host_obj.get("slot_low") or []:
@@ -478,6 +491,15 @@ if [ "${#HOST_HIGH[@]}" -gt 0 ] || [ "${#HOST_LOW[@]}" -gt 0 ]; then
   log_msg "QUEUE_HIGH count=${#QUEUE_HIGH[@]}: ${QUEUE_HIGH[*]}"
   log_msg "QUEUE_LOW  count=${#QUEUE_LOW[@]}: ${QUEUE_LOW[*]}"
 
+  if [ "$QUEUE_SERIAL_ONLY" -eq 1 ]; then
+    log_msg "=== Serial queue phase on $HOST_KEY (no concurrent jobs) ==="
+    for m in "${QUEUE_HIGH[@]}"; do
+      run_job_sync "$m" || overall_exit=1
+    done
+    for m in "${QUEUE_LOW[@]}"; do
+      run_job_sync "$m" || overall_exit=1
+    done
+  else
   log_msg "=== Queue phase on $HOST_KEY (util high/low) ==="
 
   slot_high_pid=""
@@ -522,6 +544,7 @@ if [ "${#HOST_HIGH[@]}" -gt 0 ] || [ "${#HOST_LOW[@]}" -gt 0 ]; then
 
     sleep 1
   done
+  fi
 else
   # Pair mode: run one (A,B) pair at a time, concurrently within the pair.
   log_msg "=== Pair phase on $HOST_KEY ==="

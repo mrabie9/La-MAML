@@ -460,24 +460,21 @@ def _generate_host_schedule_from_probe(
     }
 
 
-def _generate_queue_host_schedule_from_serial_probe(
+def _models_from_serial_probe(
     probe_payload: Dict[str, Any],
-    host1: str,
-    host2: str,
     excluded_models: set[str],
-) -> Dict[str, Any]:
-    """Generate a 2-slot high/low queue schedule from serial probe JSON.
+) -> list[dict[str, Any]]:
+    """Extract per-model ETA and util from a serial-only probe JSON.
 
-    The algorithm ranks models by averaged GPU utilization during the
-    epoch-start->ETA-capture window (using `util_avg_epochstart_to_eta_capture_percent`
-    when available). It then:
-    - Splits models into `high` and `low` by count (high gets ceil(n/2)).
-    - Assigns each model to `host1` or `host2` to minimize the estimated
-      per-host makespan, where each host runs two sequential slots:
-      `slot_high` and `slot_low`.
+    Args:
+        probe_payload: Probe output dict with a `serial` mapping.
+        excluded_models: Model names to omit from the schedule.
 
     Returns:
-        A schedule dict suitable for `scripts/full_experiments.sh`.
+        List of dicts with keys `name`, `eta_seconds`, and `util_percent`.
+
+    Raises:
+        SystemExit: When required probe fields are missing.
     """
 
     serial_map = probe_payload.get("serial") or {}
@@ -516,13 +513,287 @@ def _generate_queue_host_schedule_from_serial_probe(
 
     if not models:
         raise SystemExit("No usable models found in serial probe JSON.")
+    return models
+
+
+def _split_models_by_util_tier(
+    models: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Split models into high- and low-util tiers (high gets ceil(n/2))."""
 
     models_sorted_by_util = sorted(
         models, key=lambda m: m["util_percent"], reverse=True
     )
     cut_high = int(math.ceil(len(models_sorted_by_util) / 2.0))
-    high_models = models_sorted_by_util[:cut_high]
-    low_models = models_sorted_by_util[cut_high:]
+    return models_sorted_by_util[:cut_high], models_sorted_by_util[cut_high:]
+
+
+def _fast_host_wall(high_sum: float, low_sum: float) -> float:
+    """Estimated wall time for a host with concurrent high/low slots."""
+
+    return max(high_sum, low_sum)
+
+
+def _three_host_makespan(
+    host_high_sum: dict[str, float],
+    host_low_sum: dict[str, float],
+    slow_host_serial_sum: float,
+    fast_hosts: tuple[str, str],
+    slow_host: str,
+) -> float:
+    """Global finish time across two fast hosts and one serial slow host."""
+
+    fast_walls = [
+        _fast_host_wall(host_high_sum[h], host_low_sum[h]) for h in fast_hosts
+    ]
+    return max(*fast_walls, slow_host_serial_sum)
+
+
+def _build_three_host_state_from_assignment(
+    assignment: dict[str, tuple[str, str]],
+    eta_by_name: dict[str, float],
+    host1: str,
+    host2: str,
+    slow_host: str,
+    slow_host_speed_factor: float,
+) -> tuple[
+    dict[str, list[str]],
+    dict[str, list[str]],
+    dict[str, float],
+    dict[str, float],
+    float,
+]:
+    """Rebuild slot queues and load sums from a model->(host, slot) assignment."""
+
+    host_slot_high: dict[str, list[str]] = {host1: [], host2: [], slow_host: []}
+    host_slot_low: dict[str, list[str]] = {host1: [], host2: [], slow_host: []}
+    host_high_sum = {host1: 0.0, host2: 0.0}
+    host_low_sum = {host1: 0.0, host2: 0.0}
+    slow_host_serial_sum = 0.0
+
+    for model_name, (host, slot) in assignment.items():
+        eta = eta_by_name[model_name]
+        if host == slow_host:
+            host_slot_high[slow_host].append(model_name)
+            slow_host_serial_sum += eta * slow_host_speed_factor
+            continue
+        if slot == "high":
+            host_slot_high[host].append(model_name)
+            host_high_sum[host] += eta
+        else:
+            host_slot_low[host].append(model_name)
+            host_low_sum[host] += eta
+
+    return (
+        host_slot_high,
+        host_slot_low,
+        host_high_sum,
+        host_low_sum,
+        slow_host_serial_sum,
+    )
+
+
+def _assign_three_host_queue_schedule(
+    high_models: list[dict[str, Any]],
+    low_models: list[dict[str, Any]],
+    host1: str,
+    host2: str,
+    slow_host: str,
+    slow_host_speed_factor: float,
+) -> tuple[
+    dict[str, list[str]],
+    dict[str, list[str]],
+    dict[str, float],
+    dict[str, float],
+    float,
+]:
+    """Assign models across three hosts to minimise estimated finish time.
+
+    Fast hosts (`host1`, `host2`) run util-ranked `slot_high` and `slot_low`
+    queues concurrently (two jobs at a time). The slow host runs jobs strictly
+    one after another; each job's ETA is scaled by `slow_host_speed_factor`.
+
+    Uses longest-processing-time greedy placement with a local-search pass.
+
+    Returns:
+        Tuple of (slot_high, slot_low, host_high_sum, host_low_sum,
+        slow_host_serial_sum).
+    """
+
+    if slow_host_speed_factor <= 0.0:
+        raise SystemExit("--host3-speed-factor must be positive.")
+
+    fast_hosts = (host1, host2)
+    all_models = high_models + low_models
+    eta_by_name = {m["name"]: float(m["eta_seconds"]) for m in all_models}
+    util_tier_by_name = {m["name"]: "high" for m in high_models} | {
+        m["name"]: "low" for m in low_models
+    }
+
+    assignment: dict[str, tuple[str, str]] = {}
+
+    def _state_from_assignment(
+        trial_assignment: dict[str, tuple[str, str]],
+    ) -> tuple[dict[str, float], dict[str, float], float]:
+        _, _, high_sum, low_sum, slow_sum = _build_three_host_state_from_assignment(
+            trial_assignment,
+            eta_by_name,
+            host1,
+            host2,
+            slow_host,
+            slow_host_speed_factor,
+        )
+        return high_sum, low_sum, slow_sum
+
+    def _makespan_for_assignment(trial_assignment: dict[str, tuple[str, str]]) -> float:
+        high_sum, low_sum, slow_sum = _state_from_assignment(trial_assignment)
+        return _three_host_makespan(high_sum, low_sum, slow_sum, fast_hosts, slow_host)
+
+    def _best_placement(
+        model_name: str,
+        util_tier: str,
+        base_assignment: dict[str, tuple[str, str]],
+    ) -> tuple[float, str, str]:
+        best: tuple[float, str, str] | None = None
+
+        if util_tier == "high":
+            for fast_host in fast_hosts:
+                trial = dict(base_assignment)
+                trial[model_name] = (fast_host, "high")
+                makespan = _makespan_for_assignment(trial)
+                if best is None or makespan < best[0]:
+                    best = (makespan, fast_host, "high")
+            trial = dict(base_assignment)
+            trial[model_name] = (slow_host, "high")
+            makespan = _makespan_for_assignment(trial)
+            if best is None or makespan < best[0]:
+                best = (makespan, slow_host, "high")
+        else:
+            for fast_host in fast_hosts:
+                trial = dict(base_assignment)
+                trial[model_name] = (fast_host, "low")
+                makespan = _makespan_for_assignment(trial)
+                if best is None or makespan < best[0]:
+                    best = (makespan, fast_host, "low")
+            trial = dict(base_assignment)
+            trial[model_name] = (slow_host, "low")
+            makespan = _makespan_for_assignment(trial)
+            if best is None or makespan < best[0]:
+                best = (makespan, slow_host, "low")
+
+        assert best is not None
+        return best
+
+    for util_tier, tier_models in (("high", high_models), ("low", low_models)):
+        ordered = sorted(tier_models, key=lambda m: m["eta_seconds"], reverse=True)
+        for model in ordered:
+            _, chosen_host, chosen_slot = _best_placement(
+                model["name"], util_tier, assignment
+            )
+            assignment[model["name"]] = (chosen_host, chosen_slot)
+
+    improved = True
+    while improved:
+        improved = False
+        baseline = _makespan_for_assignment(assignment)
+        for model_name in sorted(assignment.keys()):
+            util_tier = util_tier_by_name[model_name]
+            without = {k: v for k, v in assignment.items() if k != model_name}
+            makespan, chosen_host, chosen_slot = _best_placement(
+                model_name, util_tier, without
+            )
+            if makespan >= baseline:
+                continue
+            assignment[model_name] = (chosen_host, chosen_slot)
+            baseline = makespan
+            improved = True
+
+    return _build_three_host_state_from_assignment(
+        assignment,
+        eta_by_name,
+        host1,
+        host2,
+        slow_host,
+        slow_host_speed_factor,
+    )
+
+
+def _generate_queue_host_schedule_from_serial_probe(
+    probe_payload: Dict[str, Any],
+    host1: str,
+    host2: str,
+    excluded_models: set[str],
+    *,
+    host3: str | None = None,
+    host3_speed_factor: float = 1.7,
+) -> Dict[str, Any]:
+    """Generate a util-ranked high/low queue schedule from serial probe JSON.
+
+    With two fast hosts, each runs `slot_high` and `slot_low` concurrently.
+    When `host3` is set, a third slow host is included: jobs run serially there
+    with ETA scaled by `host3_speed_factor`, and the assignment minimises the
+    estimated global finish time across all three hosts.
+
+    Returns:
+        A schedule dict suitable for `scripts/full_experiments.sh`.
+    """
+
+    models = _models_from_serial_probe(probe_payload, excluded_models)
+    high_models, low_models = _split_models_by_util_tier(models)
+    models_sorted_by_util = sorted(
+        models, key=lambda m: m["util_percent"], reverse=True
+    )
+    serial_total_eta = sum(m["eta_seconds"] for m in models_sorted_by_util)
+
+    if host3 is not None:
+        host_slot_high, host_slot_low, host_high_sum, host_low_sum, slow_sum = (
+            _assign_three_host_queue_schedule(
+                high_models=high_models,
+                low_models=low_models,
+                host1=host1,
+                host2=host2,
+                slow_host=host3,
+                slow_host_speed_factor=host3_speed_factor,
+            )
+        )
+        host1_wall = _fast_host_wall(host_high_sum[host1], host_low_sum[host1])
+        host2_wall = _fast_host_wall(host_high_sum[host2], host_low_sum[host2])
+        host3_wall = slow_sum
+        makespan_est = max(host1_wall, host2_wall, host3_wall)
+        percent_time_saved = (
+            (serial_total_eta - makespan_est) / serial_total_eta * 100.0
+            if serial_total_eta > 0
+            else None
+        )
+        return {
+            "hosts": {
+                host1: {
+                    "slot_high": host_slot_high[host1],
+                    "slot_low": host_slot_low[host1],
+                    "estimated_host_wall_seconds": host1_wall,
+                },
+                host2: {
+                    "slot_high": host_slot_high[host2],
+                    "slot_low": host_slot_low[host2],
+                    "estimated_host_wall_seconds": host2_wall,
+                },
+                host3: {
+                    "slot_high": host_slot_high[host3],
+                    "slot_low": [],
+                    "serial_only": True,
+                    "estimated_host_wall_seconds": host3_wall,
+                },
+            },
+            "stats": {
+                "serial_total_eta_sum_seconds": serial_total_eta,
+                "parallel_makespan_estimated_seconds": makespan_est,
+                "percent_time_saved_parallel_vs_serial": percent_time_saved,
+                "high_count": len(high_models),
+                "low_count": len(low_models),
+                "host3_speed_factor": host3_speed_factor,
+            },
+            "mode": "util_high_low_queue_schedule_3host",
+        }
 
     host_high_sum: dict[str, float] = {host1: 0.0, host2: 0.0}
     host_low_sum: dict[str, float] = {host1: 0.0, host2: 0.0}
@@ -547,23 +818,20 @@ def _generate_queue_host_schedule_from_serial_probe(
         candidates_sorted = sorted(candidates, key=lambda x: (x[0], x[1]))
         return candidates_sorted[0][2]
 
-    # Keep the high slot queue in util-desc order.
     for m in high_models:
         chosen_host = _choose_host_for_high(m["eta_seconds"])
         host_slot_high[chosen_host].append(m["name"])
         host_high_sum[chosen_host] += float(m["eta_seconds"])
 
-    # Keep the low slot queue in util-desc order (still "low util" in absolute).
     for m in low_models:
         chosen_host = _choose_host_for_low(m["eta_seconds"])
         host_slot_low[chosen_host].append(m["name"])
         host_low_sum[chosen_host] += float(m["eta_seconds"])
 
-    host1_wall = max(host_high_sum[host1], host_low_sum[host1])
-    host2_wall = max(host_high_sum[host2], host_low_sum[host2])
+    host1_wall = _fast_host_wall(host_high_sum[host1], host_low_sum[host1])
+    host2_wall = _fast_host_wall(host_high_sum[host2], host_low_sum[host2])
     makespan_est = max(host1_wall, host2_wall)
 
-    serial_total_eta = sum(m["eta_seconds"] for m in models_sorted_by_util)
     percent_time_saved = (
         (serial_total_eta - makespan_est) / serial_total_eta * 100.0
         if serial_total_eta > 0
@@ -670,6 +938,30 @@ def main() -> None:
             "generated schedule (merged with --exclude-algorithms)."
         ),
     )
+    parser.add_argument(
+        "--three-host-schedule",
+        action="store_true",
+        default=False,
+        help=(
+            "Include a third slow host in the queue schedule (serial-only, no "
+            "concurrent jobs). Requires --host3."
+        ),
+    )
+    parser.add_argument(
+        "--host3",
+        type=str,
+        default="win-lbo-22410",
+        help="Slow host shortname for 3-host queue schedules.",
+    )
+    parser.add_argument(
+        "--host3-speed-factor",
+        type=float,
+        default=1.7,
+        help=(
+            "ETA multiplier on the slow host relative to probe timings "
+            "(default: 1.7)."
+        ),
+    )
     args = parser.parse_args()
 
     excluded_models = _resolve_excluded_models(
@@ -682,11 +974,14 @@ def main() -> None:
         if not probe_path.exists():
             raise SystemExit(f"Missing serial probe JSON: {probe_path}")
         payload = _load_json(probe_path)
+        host3 = args.host3 if args.three_host_schedule else None
         schedule = _generate_queue_host_schedule_from_serial_probe(
             probe_payload=payload,
             host1=args.host1,
             host2=args.host2,
             excluded_models=excluded_models,
+            host3=host3,
+            host3_speed_factor=float(args.host3_speed_factor),
         )
         schedule_out = Path(args.schedule_out_json)
         schedule_out.parent.mkdir(parents=True, exist_ok=True)
