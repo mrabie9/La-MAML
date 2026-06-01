@@ -3,21 +3,24 @@
 
 This utility inspects `job_logs/job_*.log` under a provided full-experiments run
 directory, extracts each job's `Logging to ...` path, and moves those job output
-directories into `<run_dir>/model-specific_logs/`.
+directories into a user-specified output directory.
 
 Usage:
     # Preview planned moves only.
     python scripts/move_model_specific_logs.py \
         --run-dir logs/full_experiments/full-til_10epochs_w-zs/full-til_A_run_20260403_111257_lnx-elkk-2 \
+        --output-dir logs/full_experiments/full-til_10epochs_w-zs/full-til_A_run_20260403_111257_lnx-elkk-2/model-specific_logs \
         --dry-run
 
     # Perform moves.
     python scripts/move_model_specific_logs.py \
-        --run-dir logs/full_experiments/full-til_10epochs_w-zs/full-til_A_run_20260403_111257_lnx-elkk-2
+        --run-dir logs/full_experiments/full-til_10epochs_w-zs/full-til_A_run_20260403_111257_lnx-elkk-2 \
+        --output-dir logs/full_experiments/full-til_10epochs_w-zs/full-til_A_run_20260403_111257_lnx-elkk-2/model-specific_logs
 
     # Overwrite existing destination directories if needed.
     python scripts/move_model_specific_logs.py \
         --run-dir logs/full_experiments/full-til_10epochs_w-zs/full-til_A_run_20260403_111257_lnx-elkk-2 \
+        --output-dir logs/full_experiments/full-til_10epochs_w-zs/full-til_A_run_20260403_111257_lnx-elkk-2/model-specific_logs \
         --overwrite
 """
 
@@ -39,7 +42,7 @@ class MoveCandidate:
 
     Attributes:
         source_directory: Existing model-specific directory to move.
-        destination_directory: Target path under model-specific_logs.
+        destination_directory: Target path under the output directory.
     """
 
     source_directory: Path
@@ -54,8 +57,7 @@ def parse_args() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(
         description=(
-            "Move model-specific job output directories into "
-            "<run_dir>/model-specific_logs."
+            "Move model-specific job output directories into a given output directory."
         )
     )
     parser.add_argument(
@@ -63,6 +65,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         required=True,
         help="Full-experiments run directory containing job_logs/job_*.log.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        required=True,
+        help="Destination root for relocated model-specific directories.",
     )
     parser.add_argument(
         "--dry-run",
@@ -152,7 +160,7 @@ def discover_move_candidates(
 
     Args:
         run_directory: Full global run directory.
-        destination_root: `<run_dir>/model-specific_logs` target directory.
+        destination_root: User-provided output directory for moves.
         repository_root: Repository root directory.
 
     Returns:
@@ -230,7 +238,7 @@ def execute_move_plan(
 
     Args:
         candidates: Planned unique move operations.
-        destination_root: `<run_dir>/model-specific_logs` directory.
+        destination_root: User-provided output directory for moves.
         dry_run: Whether to preview operations only.
         overwrite: Whether to replace existing destination directories.
 
@@ -320,14 +328,15 @@ def main() -> None:
     """Run the model-specific log relocation workflow.
 
     Usage:
-        python scripts/move_model_specific_logs.py --run-dir <path> --dry-run
+        python scripts/move_model_specific_logs.py \
+            --run-dir <path> --output-dir <path> --dry-run
     """
     args = parse_args()
     run_directory = args.run_dir.resolve()
     if not run_directory.is_dir():
         raise SystemExit(f"--run-dir is not a directory: {run_directory}")
 
-    destination_root = run_directory / "model-specific_logs"
+    destination_root = args.output_dir.resolve()
     repository_root = Path(__file__).resolve().parent.parent
     candidates, discovery_stats = discover_move_candidates(
         run_directory=run_directory,
