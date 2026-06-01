@@ -41,6 +41,10 @@ Task order seed sweep (same table layout; label from ``_task_order_seed_<n>``):
     python scripts/summarise_full_experiments.py --task-order-seed-compare-runs \\
         logs/full_experiments/run_*_task_order_seed_* \\
         --base-seed logs/full_experiments/full-til_10epochs_w-zs
+
+Multi-seed summary (mean± over seed-* folders; sharded runs merged per seed):
+    python scripts/summarise_full_experiments.py --multi-seed \\
+        logs/full_experiments/one-shot_til
 """
 
 from __future__ import annotations
@@ -118,6 +122,7 @@ LOGGING_TO_RE = re.compile(r"Logging to\s+(?P<path>\S+)")
 RESULTS_DICT_RE = re.compile(r"'log_dir':\s*'(?P<path>[^']+)'")
 RUN_MEM_SUFFIX_RE = re.compile(r"_mem_(?P<mem>\d+)$")
 RUN_TASK_ORDER_SEED_SUFFIX_RE = re.compile(r"_task_order_seed_(?P<seed>\d+)$")
+SEED_DIRECTORY_RE = re.compile(r"^seed[-_](?P<seed>\d+)$")
 BASE_SWEEP_LABEL = "base"
 SweepLabelValue = Union[int, str]
 SweepMetricValues = Tuple[
@@ -604,6 +609,91 @@ def _discover_coordinator_run_directories(parent_directory: str) -> List[str]:
             f"{parent_directory}"
         )
     return [str(coordinator_run) for coordinator_run in coordinator_runs]
+
+
+def _discover_seed_directories(parent_directory: str) -> List[Tuple[int, str]]:
+    """List immediate ``seed-<n>`` or ``seed_<n>`` subdirectories under a parent folder.
+
+    Args:
+        parent_directory: Parent folder containing per-seed experiment trees
+            (e.g. ``logs/full_experiments/one-shot_til``).
+
+    Returns:
+        Sorted list of ``(seed_value, seed_directory_path)`` pairs.
+
+    Raises:
+        SystemExit: If ``parent_directory`` is missing or has no seed subdirectories.
+
+    Usage:
+        >>> _discover_seed_directories("logs/full_experiments/one-shot_til")  # doctest: +SKIP
+    """
+    parent_path = Path(parent_directory)
+    if not parent_path.is_dir():
+        raise SystemExit(f"Not a directory: {parent_directory}")
+    seed_directories: List[Tuple[int, str]] = []
+    for child_path in sorted(parent_path.iterdir()):
+        if not child_path.is_dir():
+            continue
+        match = SEED_DIRECTORY_RE.match(child_path.name)
+        if match:
+            seed_directories.append((int(match.group("seed")), str(child_path)))
+    if not seed_directories:
+        raise SystemExit(
+            f"No seed-* or seed_* subdirectories found under: {parent_directory}"
+        )
+    return seed_directories
+
+
+def _discover_coordinator_runs_under(root_directory: str) -> List[str]:
+    """Recursively find coordinator run directories under a seed folder.
+
+    Args:
+        root_directory: Seed directory or any subtree to search.
+
+    Returns:
+        Sorted unique paths to directories containing ``full_experiments_*.log``.
+
+    Raises:
+        SystemExit: If no coordinator runs are found.
+
+    Usage:
+        >>> _discover_coordinator_runs_under(
+        ...     "logs/full_experiments/one-shot_til/seed-39"
+        ... )  # doctest: +SKIP
+    """
+    root_path = Path(root_directory)
+    if not root_path.is_dir():
+        raise SystemExit(f"Not a directory: {root_directory}")
+    run_directories: set[str] = set()
+    for log_file in root_path.rglob("full_experiments_*.log"):
+        run_directories.add(str(log_file.parent))
+    if not run_directories:
+        raise SystemExit(
+            f"No coordinator run directories (full_experiments_*.log) found under: "
+            f"{root_directory}"
+        )
+    return sorted(run_directories)
+
+
+def _summarize_seed_directory(seed_directory: str) -> Dict[str, AlgoSummary]:
+    """Parse and merge all coordinator runs under one seed directory.
+
+    Args:
+        seed_directory: Path to a ``seed-<n>`` folder (may contain sharded host runs).
+
+    Returns:
+        Merged algorithm summaries for that seed.
+
+    Usage:
+        >>> _summarize_seed_directory(
+        ...     "logs/full_experiments/one-shot_til/seed-39"
+        ... )  # doctest: +SKIP
+    """
+    coordinator_run_paths = _discover_coordinator_runs_under(seed_directory)
+    summary_collections = [
+        parse_run_directory(run_path) for run_path in coordinator_run_paths
+    ]
+    return _merge_many_summaries(summary_collections)
 
 
 def parse_run_directory(path: str) -> Dict[str, AlgoSummary]:
@@ -1450,6 +1540,56 @@ def print_task_order_seed_comparison(
     )
 
 
+def print_multi_seed_summary(
+    parent_directory: str,
+    output_format: str = "readable",
+) -> None:
+    """Print TR/TE mean± over random seeds from ``seed-*`` subdirectories.
+
+    Recursively collects coordinator and job logs under each seed folder, merges
+    sharded host runs per seed, then aggregates metrics across seeds.
+
+    Args:
+        parent_directory: Folder containing ``seed-<n>`` or ``seed_<n>`` children
+            (e.g. ``logs/full_experiments/one-shot_til``).
+        output_format: ``readable`` or ``markdown`` table style.
+
+    Returns:
+        None.
+
+    Usage:
+        >>> print_multi_seed_summary("logs/full_experiments/one-shot_til")  # doctest: +SKIP
+    """
+    seed_directories = _discover_seed_directories(parent_directory)
+    seed_values = [seed_value for seed_value, _ in seed_directories]
+    metrics_by_algorithm: Dict[str, List[SweepMetricValues]] = {}
+
+    for _seed_value, seed_directory in seed_directories:
+        seed_summaries = _summarize_seed_directory(seed_directory)
+        for algorithm_name, summary in seed_summaries.items():
+            metrics_by_algorithm.setdefault(algorithm_name, []).append(
+                _metric_values_from_summary(summary)
+            )
+
+    if not metrics_by_algorithm:
+        print("No algorithm runs found for multi-seed summary.")
+        return
+
+    seed_list_text = ", ".join(str(seed_value) for seed_value in seed_values)
+    seed_count = len(seed_values)
+    _print_sweep_mean_pm_summary_table(
+        metrics_by_algorithm,
+        output_format,
+        readable_title_line=(
+            f"Multi-seed results ({seed_count} seeds: {seed_list_text}; "
+            "mean± over seeds, sorted by TE f1 mean)"
+        ),
+        markdown_section_title=(
+            f"### Multi-seed results ({seed_count} seeds; mean± over seeds)"
+        ),
+    )
+
+
 def _print_metadata(log_paths: List[str], output_format: str) -> None:
     if output_format == "markdown":
         print("## Full Experiments Summary")
@@ -1472,6 +1612,46 @@ def _print_metadata(log_paths: List[str], output_format: str) -> None:
 def _parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Summarise full_experiments log file by algorithm performance."
+    )
+    sweep_group = parser.add_mutually_exclusive_group()
+    sweep_group.add_argument(
+        "--multi-seed",
+        type=str,
+        default=None,
+        metavar="PARENT_DIR",
+        help=(
+            "Parent folder with seed-* or seed_* subdirectories. Recursively collects "
+            "coordinator/job logs per seed (merging sharded runs), then prints only "
+            "the TR/TE mean± table aggregated across seeds "
+            "(see full_experiments_seed_sweep.sh)."
+        ),
+    )
+    sweep_group.add_argument(
+        "--mem-compare-runs",
+        type=str,
+        nargs="+",
+        default=None,
+        metavar="RUN_DIR",
+        help=(
+            "Coordinator run directories (typically logs/full_experiments/run_*_mem_*) "
+            "to compare TR and TE f1_c, det, fa, and f1 across buffer sizes. "
+            "Printed after the main summary when --log/--logs are also used; "
+            "buffer size is read from the directory name suffix _mem_<n> "
+            "(see full_experiments_mem_sweep.sh)."
+        ),
+    )
+    sweep_group.add_argument(
+        "--task-order-seed-compare-runs",
+        type=str,
+        nargs="+",
+        default=None,
+        metavar="RUN_DIR",
+        help=(
+            "Coordinator run directories (typically run_*_task_order_seed_<n>) "
+            "to compare TR and TE f1_c, det, fa, and f1 across task-order seeds. "
+            "Same table as --mem-compare-runs; seed is read from suffix "
+            "_task_order_seed_<n> (see full_experiments_task_order_seed_sweep.sh)."
+        ),
     )
     parser.add_argument(
         "--log",
@@ -1497,20 +1677,6 @@ def _parse_arguments() -> argparse.Namespace:
         help="Output format for the summary table.",
     )
     parser.add_argument(
-        "--mem-compare-runs",
-        type=str,
-        nargs="+",
-        default=None,
-        metavar="RUN_DIR",
-        help=(
-            "Coordinator run directories (typically logs/full_experiments/run_*_mem_*) "
-            "to compare TR and TE f1_c, det, fa, and f1 across buffer sizes. "
-            "Printed after the main summary when --log/--logs are also used; "
-            "buffer size is read from the directory name suffix _mem_<n> "
-            "(see full_experiments_mem_sweep.sh)."
-        ),
-    )
-    parser.add_argument(
         "--base-mem",
         type=str,
         default=None,
@@ -1520,19 +1686,6 @@ def _parse_arguments() -> argparse.Namespace:
             "buffer, no _mem_<n> suffix). May be one coordinator run or a parent "
             "folder of runs (e.g. logs/full_experiments/full-til_10epochs_w-zs). "
             "Adds rows labelled 'base' in the comparison table."
-        ),
-    )
-    parser.add_argument(
-        "--task-order-seed-compare-runs",
-        type=str,
-        nargs="+",
-        default=None,
-        metavar="RUN_DIR",
-        help=(
-            "Coordinator run directories (typically run_*_task_order_seed_<n>) "
-            "to compare TR and TE f1_c, det, fa, and f1 across task-order seeds. "
-            "Same table as --mem-compare-runs; seed is read from suffix "
-            "_task_order_seed_<n> (see full_experiments_task_order_seed_sweep.sh)."
         ),
     )
     parser.add_argument(
@@ -1552,6 +1705,13 @@ def _parse_arguments() -> argparse.Namespace:
 
 def main() -> None:
     args = _parse_arguments()
+
+    if args.multi_seed is not None:
+        print_multi_seed_summary(
+            args.multi_seed,
+            output_format=args.output_format,
+        )
+        return
 
     any_sweep_compare = (
         args.mem_compare_runs is not None
