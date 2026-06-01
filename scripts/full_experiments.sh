@@ -71,7 +71,8 @@ while [ $# -gt 0 ]; do
             echo "  DESCRIPTION is used to label the logs folder (sanitized)."
             echo "  --schedule-json  use a specific host schedule JSON file."
             echo "  --mode/--model   select model mode: til or cil."
-            echo "  --models         comma- or space-separated algorithm names; overrides INCLUDED_ALL."
+            echo "  --models         comma- or space-separated algorithm names; overrides INCLUDED_ALL"
+            echo "                   and skips host schedule JSON (models run serially on this host)."
             echo "  --one-shot       force main.py runs to use --n_epochs 1 --inner_steps 2."
             echo "  --rerun-probe   regenerate host schedule split (serial timings cached)."
             echo "  unknown args are forwarded to main.py/main_single_round.py."
@@ -90,6 +91,12 @@ INCLUDED_LNX_ELKK_2="lwf rwalk si ucl la-er lamaml smaml iid2 hat packnet ctn"
 INCLUDED_ALL="$INCLUDED_LNX_ELKK_1 $INCLUDED_LNX_ELKK_2"
 if [ "${#MODELS_OVERRIDE[@]}" -gt 0 ]; then
   INCLUDED_ALL="${MODELS_OVERRIDE[*]}"
+fi
+
+# When --models is set, run only those algorithms serially (no host schedule JSON).
+USE_HOST_SCHEDULE=1
+if [ "${#MODELS_OVERRIDE[@]}" -gt 0 ]; then
+  USE_HOST_SCHEDULE=0
 fi
 
 # CONCURRENCY_OPTION:
@@ -212,11 +219,16 @@ if [ -n "$SCHEDULE_JSON_OVERRIDE" ]; then
   SCHEDULE_JSON_PATH="$SCHEDULE_JSON_OVERRIDE"
 fi
 
-log_msg "Using SERIAL_PROBE_JSON_PATH=$SERIAL_PROBE_JSON_PATH"
-log_msg "Using SCHEDULE_JSON_PATH=$SCHEDULE_JSON_PATH"
 log_msg "HOST_KEY=$HOST_KEY"
 log_msg "MODEL_MODE=$MODEL_MODE"
+if [ "$USE_HOST_SCHEDULE" -eq 0 ]; then
+  log_msg "USE_HOST_SCHEDULE=0 (--models provided; host schedule JSON ignored)"
+else
+  log_msg "Using SERIAL_PROBE_JSON_PATH=$SERIAL_PROBE_JSON_PATH"
+  log_msg "Using SCHEDULE_JSON_PATH=$SCHEDULE_JSON_PATH"
+fi
 
+if [ "$USE_HOST_SCHEDULE" -eq 1 ]; then
 SERIAL_PROBE_INVALID=0
 if [ ! -f "$SERIAL_PROBE_JSON_PATH" ]; then
   SERIAL_PROBE_INVALID=1
@@ -331,6 +343,7 @@ print(val if val is not None else "NA")
 PY
 )"
 log_msg "Estimated time saved (parallel vs serial): ${percent_time_saved}%"
+fi
 
 HOST_PAIRS=()
 HOST_SINGLES=()
@@ -338,6 +351,7 @@ HOST_HIGH=()
 HOST_LOW=()
 QUEUE_SERIAL_ONLY=0
 
+if [ "$USE_HOST_SCHEDULE" -eq 1 ]; then
 while IFS= read -r line; do
   kind="${line%% *}"
   rest="${line#* }"
@@ -382,6 +396,7 @@ else:
         print(f"SINGLE {s}")
 PY
 )
+fi
 
 run_job_sync() {
   local name="$1"
@@ -473,7 +488,12 @@ run_job_bg() {
   return 0
 }
 
-if [ "${#HOST_HIGH[@]}" -gt 0 ] || [ "${#HOST_LOW[@]}" -gt 0 ]; then
+if [ "$USE_HOST_SCHEDULE" -eq 0 ]; then
+  log_msg "=== Direct model run on $HOST_KEY (serial; --models) ==="
+  for m in $INCLUDED_ALL; do
+    run_job_sync "$m" || overall_exit=1
+  done
+elif [ "${#HOST_HIGH[@]}" -gt 0 ] || [ "${#HOST_LOW[@]}" -gt 0 ]; then
   # Queue mode: run slot_high and slot_low concurrently (2 jobs max).
   QUEUE_HIGH=()
   for m in "${HOST_HIGH[@]}"; do
