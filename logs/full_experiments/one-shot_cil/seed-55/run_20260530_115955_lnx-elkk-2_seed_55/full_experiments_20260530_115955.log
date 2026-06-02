@@ -33,4 +33,7 @@
 [2026-05-31T03:34:16+01:00] --- Dispatching: base + ucl + ucl.yaml (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260530_115955_lnx-elkk-2_seed_55/job_logs/job_ucl_20260531_033416_647049462.log) ---
 [2026-05-31T03:34:16+01:00] START ucl
 [2026-05-31T06:19:44+01:00] Completed: ucl (exit 0)
+[2026-06-01T14:33:30+01:00] --- Dispatching: base + rwalk + rwalk.yaml (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260601_143330_lnx-elkk-2_seed_55/job_logs/job_rwalk_20260601_143330_836566134.log) ---
+[2026-06-01T14:33:30+01:00] START rwalk
+[2026-06-01T17:19:21+01:00] Completed: rwalk (exit 0)
 [2026-05-31T06:19:45+01:00] === full_experiments.sh finished: successful_runs=6 unsuccessful_runs=0 total_runtime=18:19:50 (65990s) ===
