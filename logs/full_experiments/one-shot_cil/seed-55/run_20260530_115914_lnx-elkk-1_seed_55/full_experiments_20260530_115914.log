@@ -30,4 +30,10 @@
 [2026-05-31T00:51:40+01:00] --- Dispatching: base + cmaml + cmaml.yaml (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260530_115914_lnx-elkk-1_seed_55/job_logs/job_cmaml_20260531_005140_202133316.log) ---
 [2026-05-31T00:51:40+01:00] START cmaml
 [2026-05-31T05:34:56+01:00] Completed: cmaml (exit 0)
+[2026-06-01T14:34:22+01:00] --- Dispatching: base + er_ring + er_ring.yaml (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260601_143422_lnx-elkk-1_seed_55/job_logs/job_er_ring_20260601_143422_810223103.log) ---
+[2026-06-01T14:34:22+01:00] START er_ring
+[2026-06-01T17:11:15+01:00] Completed: er_ring (exit 0)
+[2026-06-01T17:11:15+01:00] --- Dispatching: base + eralg4 + eralg4.yaml (job log: /home/lunet/wsmr11/repos/La-MAML/logs/full_experiments/run_20260601_143422_lnx-elkk-1_seed_55/job_logs/job_eralg4_20260601_171115_465372007.log) ---
+[2026-06-01T17:11:15+01:00] START eralg4
+[2026-06-01T20:25:14+01:00] Completed: eralg4 (exit 0)
 [2026-05-31T05:34:56+01:00] === full_experiments.sh finished: successful_runs=5 unsuccessful_runs=0 total_runtime=17:35:42 (63342s) ===
