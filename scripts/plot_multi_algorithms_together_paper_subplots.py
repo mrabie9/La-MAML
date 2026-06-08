@@ -141,6 +141,12 @@ def parse_args() -> argparse.Namespace:
             "an additional FWT figure is generated using scripts/plot_fwt_metrics.py."
         ),
     )
+    parser.add_argument(
+        "--shade-std",
+        action="store_true",
+        default=False,
+        help="Shade ±1 std across seeds in multi-seed mode (off by default).",
+    )
     return parser.parse_args()
 
 
@@ -274,6 +280,55 @@ def _save_independent_figure(fig: plt.Figure, output_path: Path, dpi: int) -> No
     fig.savefig(png_output_path, dpi=dpi, bbox_inches="tight", pad_inches=0.03)
     print(f"Saved subplot to {pdf_output_path} and {png_output_path}")
     plt.close(fig)
+
+
+def _discover_all_metrics_dirs_per_algo(
+    saved_models_root: Path,
+) -> Dict[str, list[Path]]:
+    """Return all metrics directories grouped by algorithm name.
+
+    Expected layout: <saved_models_root>/<algo>/.../<seed>/metrics/task*.npz.
+    All qualifying metrics dirs are returned (not just the latest), enabling
+    per-algorithm seed aggregation.
+    """
+    result: Dict[str, list[Path]] = {}
+    if not saved_models_root.is_dir():
+        return result
+    for algo_dir in sorted(saved_models_root.iterdir()):
+        if not algo_dir.is_dir():
+            continue
+        dirs: list[Path] = []
+        for metrics_dir in sorted(algo_dir.rglob("metrics")):
+            if metrics_dir.is_dir() and any(metrics_dir.glob("task*.npz")):
+                dirs.append(metrics_dir.resolve())
+        if dirs:
+            result[algo_dir.name] = dirs
+    return result
+
+
+def _aggregate_across_seeds(
+    seed_tasks_list: list[Any],
+    compute_fn: Any,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Compute mean and std of a per-task series across multiple seeds.
+
+    Returns (x, mean_y, std_y). Seeds with empty results are skipped.
+    x is taken from the first valid seed; all seeds are clipped to the
+    minimum length so that shapes align.
+    """
+    all_x: list[np.ndarray] = []
+    all_y: list[np.ndarray] = []
+    for tasks in seed_tasks_list:
+        x, y = compute_fn(tasks)
+        if x is None or (hasattr(x, "size") and x.size == 0):
+            continue
+        all_x.append(np.asarray(x, dtype=float))
+        all_y.append(np.asarray(y, dtype=float))
+    if not all_y:
+        return np.array([]), np.array([]), np.array([])
+    min_len = min(len(y) for y in all_y)
+    y_matrix = np.array([y[:min_len] for y in all_y], dtype=float)
+    return all_x[0][:min_len], np.nanmean(y_matrix, axis=0), np.nanstd(y_matrix, axis=0)
 
 
 def _build_experiment_prefix(run_source_dir: Path, runs: Sequence[Any]) -> str:
@@ -413,6 +468,7 @@ def main() -> None:
         _prepare_algo_runs,
         _resolve_train_x_axis_label,
         compute_average_forgetting,
+        load_metrics as _load_task_metrics,
     )
     from scripts.plot_fwt_metrics import (
         ALGORITHM_DISPLAY_NAMES,
@@ -483,6 +539,32 @@ def main() -> None:
     for run in runs:
         print(f"  {run.name}: {run.metrics_dir}")
 
+    # Multi-seed: auto-detect if saved_models layout has >1 metrics dir per algo.
+    _saved_models_candidate = (
+        run_source_dir
+        if run_source_dir.name == "saved_models"
+        else run_source_dir / "saved_models"
+    )
+    _all_metrics_dirs = _discover_all_metrics_dirs_per_algo(_saved_models_candidate)
+    _active_algo_names = {run.name for run in runs}
+    _all_metrics_dirs = {
+        algo: dirs
+        for algo, dirs in _all_metrics_dirs.items()
+        if algo in _active_algo_names
+    }
+    is_multi_seed = any(len(dirs) > 1 for dirs in _all_metrics_dirs.values())
+    algo_seed_tasks: Dict[str, list[list[Any]]] = {}
+    if is_multi_seed:
+        for algo_name, dirs in _all_metrics_dirs.items():
+            algo_seed_tasks[algo_name] = [_load_task_metrics(d) for d in dirs]
+        print(
+            f"Multi-seed mode: found multiple seeds for "
+            f"{sum(1 for v in _all_metrics_dirs.values() if len(v) > 1)} algorithm(s)"
+        )
+        for algo, seed_tasks in algo_seed_tasks.items():
+            if len(seed_tasks) > 1:
+                print(f"  {algo}: {len(seed_tasks)} seeds")
+
     label_list: list[str] | None = None
     if args.labels is not None:
         label_list = [part.strip() for part in args.labels.split(",") if part.strip()]
@@ -536,22 +618,48 @@ def main() -> None:
         run_label = run_labels[run_idx]
         if not run.tasks:
             continue
-        train_series, train_metric_label = _concat_train_metric_for_run(
-            run.tasks, args.train_metric
-        )
-        if train_series is None:
-            continue
-        if args.train_metric == "total_f1":
-            x_values = np.arange(1, len(train_series) + 1)
+        _, train_metric_label = _concat_train_metric_for_run(run.tasks, args.train_metric)
+        run_color = algorithm_colors.get(run.name, f"C{run_idx % 10}")
+        line_style = _line_style_for_index(algorithm_line_member_index.get(run.name, run_idx))
+        seed_tasks_list = algo_seed_tasks.get(run.name, [run.tasks])
+        if len(seed_tasks_list) > 1:
+            _, mean_train, std_train = _aggregate_across_seeds(
+                seed_tasks_list,
+                lambda tasks: (
+                    (
+                        np.arange(1, len(s) + 1) if args.train_metric == "total_f1"
+                        else np.arange(len(s)),
+                        s,
+                    )
+                    if (s := _concat_train_metric_for_run(tasks, args.train_metric)[0]) is not None
+                    else (np.array([]), np.array([]))
+                ),
+            )
+            if mean_train.size == 0:
+                continue
+            x_values = (
+                np.arange(1, len(mean_train) + 1)
+                if args.train_metric == "total_f1"
+                else np.arange(len(mean_train))
+            )
+            axis_train.plot(x_values, mean_train, label=run_label, color=run_color, **line_style)
+            if args.shade_std:
+                axis_train.fill_between(
+                    x_values, mean_train - std_train, mean_train + std_train,
+                    color=run_color, alpha=0.15,
+                )
         else:
-            x_values = np.arange(len(train_series))
-        axis_train.plot(
-            x_values,
-            train_series,
-            label=run_label,
-            color=algorithm_colors.get(run.name, f"C{run_idx % 10}"),
-            **_line_style_for_index(algorithm_line_member_index.get(run.name, run_idx)),
-        )
+            train_series, train_metric_label = _concat_train_metric_for_run(
+                seed_tasks_list[0], args.train_metric
+            )
+            if train_series is None:
+                continue
+            x_values = (
+                np.arange(1, len(train_series) + 1)
+                if args.train_metric == "total_f1"
+                else np.arange(len(train_series))
+            )
+            axis_train.plot(x_values, train_series, label=run_label, color=run_color, **line_style)
     axis_train.set_ylabel(train_metric_label, fontsize=16)
     axis_train.set_xlabel(
         _resolve_train_x_axis_label(args.train_metric),
@@ -587,10 +695,20 @@ def main() -> None:
     for run_idx, run in enumerate(runs):
         if not run.tasks:
             continue
-        last = run.tasks[-1]
-        mean_pfa = _mean_final_metric_for_run(last, "val_det_fa", len(run.tasks))
-        mean_det = _mean_final_metric_for_run(last, "val_det_acc", len(run.tasks))
-        mean_cls = _mean_final_metric_for_run(last, "val_acc", len(run.tasks))
+        seed_tasks_list = algo_seed_tasks.get(run.name, [run.tasks])
+
+        def _seed_final_metric(tasks: list[Any], key: str) -> float | None:
+            last = tasks[-1]
+            return _mean_final_metric_for_run(last, key, len(tasks))
+
+        def _mean_across_seeds(key: str) -> float | None:
+            vals = [_seed_final_metric(t, key) for t in seed_tasks_list]
+            vals = [v for v in vals if v is not None]
+            return float(np.mean(vals)) if vals else None
+
+        mean_pfa = _mean_across_seeds("val_det_fa")
+        mean_det = _mean_across_seeds("val_det_acc")
+        mean_cls = _mean_across_seeds("val_acc")
 
         x_center = run_idx
         width = 0.2
@@ -653,18 +771,34 @@ def main() -> None:
     fig_mean, axis_mean = plt.subplots(figsize=figure_size, dpi=dpi)
     mean_task_positions: set[int] = set()
     for run_idx, run in enumerate(runs):
-        x_vals, y_vals = _compute_mean_val_metric_over_tasks(run.tasks, first_key)
-        if x_vals.size == 0:
-            continue
-        zero_based_x_values = x_vals - 1
-        mean_task_positions.update(int(value) for value in zero_based_x_values.tolist())
-        axis_mean.plot(
-            zero_based_x_values,
-            y_vals,
-            label=run_labels[run_idx],
-            color=algorithm_colors.get(run.name, f"C{run_idx % 10}"),
-            **_line_style_for_index(algorithm_line_member_index.get(run.name, run_idx)),
-        )
+        run_color = algorithm_colors.get(run.name, f"C{run_idx % 10}")
+        line_style = _line_style_for_index(algorithm_line_member_index.get(run.name, run_idx))
+        seed_tasks_list = algo_seed_tasks.get(run.name, [run.tasks])
+        if len(seed_tasks_list) > 1:
+            x_vals, mean_y, std_y = _aggregate_across_seeds(
+                seed_tasks_list,
+                lambda tasks: _compute_mean_val_metric_over_tasks(tasks, first_key),
+            )
+            if x_vals.size == 0:
+                continue
+            zero_based_x = x_vals - 1
+            mean_task_positions.update(int(v) for v in zero_based_x.tolist())
+            axis_mean.plot(
+                zero_based_x, mean_y, label=run_labels[run_idx], color=run_color, **line_style
+            )
+            if args.shade_std:
+                axis_mean.fill_between(
+                    zero_based_x, mean_y - std_y, mean_y + std_y, color=run_color, alpha=0.15
+                )
+        else:
+            x_vals, y_vals = _compute_mean_val_metric_over_tasks(seed_tasks_list[0], first_key)
+            if x_vals.size == 0:
+                continue
+            zero_based_x = x_vals - 1
+            mean_task_positions.update(int(v) for v in zero_based_x.tolist())
+            axis_mean.plot(
+                zero_based_x, y_vals, label=run_labels[run_idx], color=run_color, **line_style
+            )
     axis_mean.set_xlabel("Task", fontsize=16, labelpad=X_LABEL_PAD)
     axis_mean.set_ylabel("F1 Score", fontsize=16)
     _set_task_axis_like_fwt(
@@ -701,18 +835,33 @@ def main() -> None:
     forgetting_task_positions: set[int] = set()
     for run_idx, run in enumerate(runs):
         val_metric_key, _ = _resolve_val_metric_for_run(args.val_metric, run)
-        x_vals, y_vals = compute_average_forgetting(run.tasks, val_metric_key)
-        if x_vals.size == 0:
-            continue
-        backward_transfer_values = -y_vals
-        forgetting_task_positions.update(int(value) for value in x_vals.tolist())
-        axis_forgetting.plot(
-            x_vals,
-            backward_transfer_values,
-            label=run_labels[run_idx],
-            color=algorithm_colors.get(run.name, f"C{run_idx % 10}"),
-            **_line_style_for_index(algorithm_line_member_index.get(run.name, run_idx)),
-        )
+        run_color = algorithm_colors.get(run.name, f"C{run_idx % 10}")
+        line_style = _line_style_for_index(algorithm_line_member_index.get(run.name, run_idx))
+        seed_tasks_list = algo_seed_tasks.get(run.name, [run.tasks])
+        if len(seed_tasks_list) > 1:
+            x_vals, mean_fgt, std_fgt = _aggregate_across_seeds(
+                seed_tasks_list,
+                lambda tasks: compute_average_forgetting(tasks, val_metric_key),
+            )
+            if x_vals.size == 0:
+                continue
+            forgetting_task_positions.update(int(v) for v in x_vals.tolist())
+            bwt_mean = -mean_fgt
+            axis_forgetting.plot(
+                x_vals, bwt_mean, label=run_labels[run_idx], color=run_color, **line_style
+            )
+            if args.shade_std:
+                axis_forgetting.fill_between(
+                    x_vals, bwt_mean - std_fgt, bwt_mean + std_fgt, color=run_color, alpha=0.15
+                )
+        else:
+            x_vals, y_vals = compute_average_forgetting(seed_tasks_list[0], val_metric_key)
+            if x_vals.size == 0:
+                continue
+            forgetting_task_positions.update(int(v) for v in x_vals.tolist())
+            axis_forgetting.plot(
+                x_vals, -y_vals, label=run_labels[run_idx], color=run_color, **line_style
+            )
     axis_forgetting.set_xlabel("Task", fontsize=16, labelpad=X_LABEL_PAD)
     axis_forgetting.set_ylabel("Backward Transfer", fontsize=16)
     _set_task_axis_like_fwt(
