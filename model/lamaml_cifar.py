@@ -7,7 +7,6 @@ from model.detection_replay import (
 )
 from utils.training_metrics import macro_recall
 from utils import misc_utils
-from utils.class_weighted_loss import classification_cross_entropy
 
 
 class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
@@ -207,10 +206,6 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
             # x_det = x
             # x = x[signal_mask]
             # y = y_cls[signal_mask]
-            raw_x = x
-            input_was_3adc = (x.dim() == 3 and x.size(1) == 3) or (
-                x.dim() == 4 and x.size(1) == 3 and x.size(2) == 2
-            )
             # Train with differentiable canonicalized inputs; use detached tensors for replay writes.
             x_train = self._canonicalize_input(x, detach=False)
             x_for_storage = self._input_for_replay(x)
@@ -234,10 +229,30 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
             # computing meta-loss
             y_np = unpack_y_to_class_labels(y).long().cpu().numpy()
             bx, by, bt = self.getBatch(x.detach().cpu().numpy(), y_np, t)
+            # ``getBatch`` round-trips through detached NumPy, which severs the
+            # input adapter's graph for the current rows. Re-attach the live,
+            # adapter-differentiable current batch (the trailing ``x.size(0)``
+            # rows ``getBatch`` appends after the replay rows) so the single
+            # ``meta_loss.backward()`` below also trains the adapter via the
+            # standard La-MAML weight update -- no separate adapter-only forward
+            # and manual SGD step needed. ``inner_update`` uses
+            # ``autograd.grad(..., inputs=fast_weights)``, which prunes the
+            # adapter subgraph (off the output->inputs path), so it survives for
+            # the meta backward.
+            n_current = x.size(0)
+            if n_current > 0:
+                bx = torch.cat([bx[:-n_current], x], dim=0)
 
             for i in range(n_batches):
 
-                batch_x = x[i * rough_sz : (i + 1) * rough_sz]
+                # Detach the inner-update input: its grad w.r.t. ``fast_weights``
+                # depends only on ``batch_x``'s values, not its graph. Keeping the
+                # adapter graph out of ``inner_update``'s ``autograd.grad`` (which
+                # frees it with ``retain_graph=False``) leaves ``x_train``'s live
+                # graph solely in the spliced meta batch, consumed by exactly one
+                # ``meta_loss.backward()`` -- so the adapter trains without a
+                # double backward.
+                batch_x = x[i * rough_sz : (i + 1) * rough_sz].detach()
                 batch_y = y[i * rough_sz : (i + 1) * rough_sz]
 
                 # assuming labels for inner update are from the same
@@ -295,34 +310,6 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
             else:
                 self._async_weight_update()
 
-            # Ensure the input adapter is explicitly optimized on the current
-            # differentiable 3-ADC batch.
-            if input_was_3adc and x_train.dim() == 3 and x_train.size(1) == 2:
-                _offset1, _offset2 = self.compute_offsets(t)
-                self.net.zero_grad(set_to_none=True)
-                live_logits = misc_utils.apply_task_incremental_logit_mask(
-                    self.net.forward(raw_x.detach()),
-                    t,
-                    self.classes_per_task,
-                    self.n_outputs,
-                    cil_all_seen_upto_task=t,
-                    global_noise_label=self.noise_label,
-                    loader=self.incremental_loader_name,
-                )
-                y_live = unpack_y_to_class_labels(y).long()
-                live_loss = classification_cross_entropy(
-                    live_logits,
-                    y_live,
-                    class_weighted_ce=self.class_weighted_ce,
-                )
-                live_loss.backward()
-                adapter_module = getattr(self.net.model, "input_adapter", None)
-                if adapter_module is not None:
-                    with torch.no_grad():
-                        for parameter in adapter_module.parameters():
-                            if parameter.grad is None:
-                                continue
-                            parameter.add_(parameter.grad, alpha=-self.cfg.opt_wt)
             self.net.zero_grad()
             self.net.alpha_lr.zero_grad()
 

@@ -25,6 +25,7 @@ from model.resnet1d import ResNet1D
 from model.detection_replay import (
     DetectionReplayMixin,
     noise_label_from_args,
+    signal_mask_exclude_noise,
     unpack_y_to_class_labels,
 )
 from utils.training_metrics import macro_recall
@@ -141,18 +142,20 @@ class Net(DetectionReplayMixin, nn.Module):
             yield param
 
     def take_multitask_loss(self, bt, logits, y):
-        if len(bt) == 0:
+        # Global (unmasked) cross-entropy over the full ``n_outputs`` vector.
+        # ``bt`` is unused for the loss itself (each row already carries its
+        # global label); it is retained for signature parity with callers.
+        if logits.size(0) == 0:
             return torch.zeros((), device=logits.device, dtype=logits.dtype)
-        loss = torch.zeros((), device=logits.device, dtype=logits.dtype)
-        for i, _ti in enumerate(bt):
-            row = logits[i : i + 1]
-            y_i = int(y[i].item())
-            loss = loss + classification_cross_entropy(
-                row,
-                torch.tensor([y_i], device=logits.device, dtype=torch.long),
-                class_weighted_ce=self.class_weighted_ce,
-            )
-        return loss / len(bt)
+        # The per-sample loop this replaces fed single-element batches through
+        # ``classification_cross_entropy``, where inverse-frequency weights
+        # collapse to 1.0; that is plain (unweighted) mean CE, which a single
+        # batched call reproduces exactly while avoiding the Python loop.
+        return classification_cross_entropy(
+            logits,
+            y.long(),
+            class_weighted_ce=False,
+        )
 
     def forward(self, x, t, *, cil_all_seen_upto_task=None):
         output = self.net.forward(x)
@@ -278,66 +281,37 @@ class Net(DetectionReplayMixin, nn.Module):
 
         # x = x[signal_mask]
         # y = y_cls[signal_mask]
-        # Keep a detached leaf copy so each inner/meta step can rebuild a fresh
-        # canonicalized graph for 3-channel adapter inputs.
-        raw_x_train = x.detach().requires_grad_(True)
+        # Detached canonical (B, 2, L) tensor for reservoir storage only. The
+        # current minibatch is trained on the *live* graph below (adapter
+        # differentiable), so storage no longer feeds the training forward.
         x_for_storage = self._input_for_replay(x)
-        xi = x_for_storage.data.cpu().numpy()
         y_work = unpack_y_to_class_labels(y).long()
-        yi = y_work.data.cpu().numpy()
 
         if t != self.current_task:
             self.current_task = t
 
-        metric_logits = None
         if self.cfg.learn_lr:
-            loss, cls_tr_rec = self.la_ER(raw_x_train, y, t)
+            # Keep a detached leaf copy so each inner/meta step can rebuild a
+            # fresh canonicalized graph for 3-channel adapter inputs.
+            raw_x_train = x.detach().requires_grad_(True)
+            loss, cls_tr_rec, metric_logits = self.la_ER(raw_x_train, y, t)
         else:
-            loss, cls_tr_rec = self.ER(xi, yi, t)
+            loss, cls_tr_rec, metric_logits = self.ER(x, y_work, t)
 
-        # Ensure the adapter is explicitly trained on the current differentiable
-        # 3-ADC/4D batch even when replay path uses detached storage tensors.
-        if (x.dim() == 3 and x.size(1) == 3) or (
-            x.dim() == 4 and x.size(1) == 3 and x.size(2) == 2
-        ):
-            self.net.zero_grad(set_to_none=True)
-            live_x_train = self._canonicalize_input(x.detach(), detach=False)
-            live_logits = misc_utils.apply_task_incremental_logit_mask(
-                self.net.forward(live_x_train),
-                t,
-                self.classes_per_task,
-                self.n_outputs,
-                cil_all_seen_upto_task=t,
-                global_noise_label=self.noise_label,
-                loader=self.incremental_loader_name,
-            )
-            targets = y_work.long()
-            live_loss = classification_cross_entropy(
-                live_logits,
-                targets,
-                class_weighted_ce=self.class_weighted_ce,
-            )
-            live_loss.backward()
-            adapter_module = getattr(self.net.model, "input_adapter", None)
-            if adapter_module is not None:
-                with torch.no_grad():
-                    for parameter in adapter_module.parameters():
-                        if parameter.grad is None:
-                            continue
-                        parameter.add_(parameter.grad, alpha=-self.cfg.lr)
-            self.net.zero_grad(set_to_none=True)
-            metric_logits = live_logits.detach()
-
+        # Reservoir-sampling memory update. Store detached canonical tensors on
+        # CPU so the buffer holds pre-adapted (2, L) IQ rows (no grad through the
+        # adapter for replayed samples is fine).
+        x_store = x_for_storage.detach().cpu()
+        y_store = y_work.detach().cpu()
         for i in range(0, x.size()[0]):
             self.age += 1
-            # Reservoir sampling memory update:
             if len(self.M) < self.memories:
-                self.M.append([xi[i], yi[i], t])
+                self.M.append([x_store[i], y_store[i], t])
 
             else:
                 p = random.randint(0, self.age)
                 if p < self.memories:
-                    self.M[p] = [xi[i], yi[i], t]
+                    self.M[p] = [x_store[i], y_store[i], t]
 
         # if getattr(self, "det_enabled", True):
         #     self.det_opt.zero_grad()
@@ -376,21 +350,94 @@ class Net(DetectionReplayMixin, nn.Module):
         stacked_targets = torch.stack(target_list).view(-1)
         return macro_recall(stacked_preds, stacked_targets)
 
+    def _sample_replay(self, device):
+        """Sample a replay minibatch from the reservoir buffer ``M``.
+
+        Returns pre-canonicalized ``(N, 2, L)`` GPU tensors plus their global
+        labels and task ids, or ``None`` when no eligible samples exist. No
+        gradient flows through the adapter for replayed (pre-adapted) rows.
+        """
+        if len(self.M) == 0:
+            return None
+        osize = min(self.batchSize, len(self.M))
+        # The original loop reshuffled the full index list once per draw and took
+        # position ``j``; that is uniform sampling-with-replacement of ``osize``
+        # indices. ``random.choices`` reproduces it without the O(N * osize)
+        # Python shuffling that dominated the replay hot path.
+        indices = random.choices(range(len(self.M)), k=osize)
+        replay_x = []
+        replay_y = []
+        replay_t = []
+        for k in indices:
+            xi, yi, ti = self.M[k]
+            yi_scalar = int(torch.as_tensor(yi).long().flatten()[0].item())
+            if self.noise_label is not None and yi_scalar == self.noise_label:
+                continue
+            replay_x.append(torch.as_tensor(xi))
+            replay_y.append(yi_scalar)
+            replay_t.append(int(ti))
+        if not replay_x:
+            return None
+        bx = torch.stack(replay_x).float().to(device, non_blocking=True)
+        by = torch.tensor(replay_y, dtype=torch.long, device=device)
+        bt = torch.tensor(replay_t, dtype=torch.long, device=device)
+        return bx, by, bt
+
     def ER(self, x, y, t):
+        """Single training step per inner step on the live current minibatch.
+
+        ``x`` is the raw current batch (3-ADC/4D or canonical IQ) and flows
+        through the adapter with ``detach=False`` via ``net.forward``, so one
+        ``loss.backward()`` + ``opt_wt.step()`` updates the backbone and the
+        input adapter together. Replay rows are pre-canonicalized tensors drawn
+        from the reservoir buffer (no adapter grad for old samples).
+        """
         cls_tr_rec = []
+        metric_logits = None
+        current_t = torch.full((x.size(0),), int(t), dtype=torch.long, device=x.device)
         for pass_itr in range(self.inner_steps):
 
             self.net.zero_grad()
 
-            # Draw batch from buffer:
-            bx, by, bt, replay_count = self.getBatch(x, y, t)
+            # Current minibatch: live forward through the adapter. Unmasked
+            # logits use global CE targets indexing the full ``n_outputs``
+            # vector (including any shared noise class).
+            current_logits = self.net.forward(x)
+            current_loss = self.take_multitask_loss(current_t, current_logits, y)
 
-            bx = bx.squeeze()
-            # Unmasked logits: replay rows may span tasks; global CE targets index
-            # the full ``n_outputs`` vector (including shared noise class).
-            prediction = self.net.forward(bx)
-            loss = self._weighted_multitask_loss(prediction, by, bt, replay_count)
-            cls_tr_rec.append(self._batch_accuracy(bt, prediction, by))
+            # Replay minibatch: pre-canonicalized rows from the buffer.
+            replay = self._sample_replay(x.device)
+            if replay is not None:
+                replay_x, replay_y, replay_t = replay
+                replay_logits = self.net.forward(replay_x)
+                replay_loss = self.take_multitask_loss(
+                    replay_t, replay_logits, replay_y
+                )
+            else:
+                replay_loss = torch.zeros(
+                    (), device=current_logits.device, dtype=current_logits.dtype
+                )
+
+            loss = current_loss + (self.memory_loss_lambda * replay_loss)
+
+            # Progress-bar metric: masked task-incremental logits on the current
+            # task, matching er_ring / icarl.
+            masked_logits = misc_utils.apply_task_incremental_logit_mask(
+                current_logits,
+                t,
+                self.classes_per_task,
+                self.n_outputs,
+                cil_all_seen_upto_task=t,
+                global_noise_label=self.noise_label,
+                loader=self.incremental_loader_name,
+            )
+            signal_mask = signal_mask_exclude_noise(y, self.noise_label)
+            if signal_mask.any():
+                preds = torch.argmax(masked_logits[signal_mask], dim=1)
+                cls_tr_rec.append(macro_recall(preds, y.long()[signal_mask]))
+            else:
+                cls_tr_rec.append(0.0)
+            metric_logits = masked_logits.detach()
 
             loss.backward()
             if self.cfg.grad_clip_norm:
@@ -401,7 +448,7 @@ class Net(DetectionReplayMixin, nn.Module):
             self.opt_wt.step()
 
         avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
-        return loss, avg_cls_tr_rec
+        return loss, avg_cls_tr_rec, metric_logits
 
     def inner_update(self, x, fast_weights, y, t):
         """
@@ -489,6 +536,9 @@ class Net(DetectionReplayMixin, nn.Module):
 
         """
         cls_tr_rec = []
+        # Class labels aligned with ``raw_x`` (before any per-pass shuffle), used
+        # for the live current-batch weight-update loss below.
+        current_labels = unpack_y_to_class_labels(y).long()
         for pass_itr in range(self.inner_steps):
             # Rebuild a fresh canonicalized tensor each round; previous
             # autograd.grad/backward calls free the old graph.
@@ -562,10 +612,33 @@ class Net(DetectionReplayMixin, nn.Module):
             # update weights
             self.net.zero_grad()
 
-            # compute ER loss for network weights
-            prediction = self.net.forward(bx)
-            loss = self._weighted_multitask_loss(prediction, by, bt, replay_count)
-            cls_tr_rec.append(self._batch_accuracy(bt, prediction, by))
+            # Compute the ER loss for the network weights. The current rows flow
+            # through a freshly canonicalized, adapter-differentiable forward on
+            # ``raw_x`` (the per-pass ``x`` graph was already consumed by the
+            # meta backward above), so the input adapter receives gradients in
+            # the same backward as the backbone. Replay rows reuse the
+            # pre-canonicalized buffer tensors.
+            x_live = self._canonicalize_input(raw_x, detach=False)
+            current_t = torch.full(
+                (x_live.size(0),), int(t), dtype=torch.long, device=x_live.device
+            )
+            current_logits = self.net.forward(x_live)
+            current_loss = self.take_multitask_loss(
+                current_t, current_logits, current_labels
+            )
+            if replay_count > 0:
+                replay_logits = self.net.forward(bx[:replay_count])
+                replay_loss = self.take_multitask_loss(
+                    bt[:replay_count], replay_logits, by[:replay_count]
+                )
+            else:
+                replay_loss = torch.zeros(
+                    (), device=current_logits.device, dtype=current_logits.dtype
+                )
+            loss = current_loss + (self.memory_loss_lambda * replay_loss)
+            cls_tr_rec.append(
+                self._batch_accuracy(current_t, current_logits, current_labels)
+            )
 
             loss.backward()
 
@@ -584,4 +657,7 @@ class Net(DetectionReplayMixin, nn.Module):
             self.net.alpha_lr.zero_grad()
 
         avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
-        return loss, avg_cls_tr_rec
+        # The meta path computes its metric on the combined replay+current batch
+        # via ``_batch_accuracy``; no current-batch masked logits are exposed for
+        # the progress bar, so ``main.py`` falls back to a separate eval forward.
+        return loss, avg_cls_tr_rec, None
