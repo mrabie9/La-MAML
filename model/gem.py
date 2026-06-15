@@ -115,18 +115,31 @@ def project2cone2(gradient, memories, margin=0.5, eps=1e-3):
     input:  gradient, p-vector
     input:  memories, (t * p)-vector
     output: x, p-vector
+
+    The O(parameters) algebra (building ``P``/``q`` and reconstructing the
+    update) runs on ``gradient``'s device in float64, matching the original
+    NumPy double precision. Only the tiny ``t x t`` QP is shipped to quadprog
+    on CPU, so the parameter-sized buffer never crosses the host<->device
+    boundary -- avoiding a per-step sync that dominates on large models.
     """
-    memories_np = memories.cpu().t().double().numpy()
-    gradient_np = gradient.cpu().contiguous().view(-1).double().numpy()
-    t = memories_np.shape[0]
-    P = np.dot(memories_np, memories_np.transpose())
-    P = 0.5 * (P + P.transpose()) + np.eye(t) * eps
-    q = np.dot(memories_np, gradient_np) * -1
+    memories_d = memories.to(dtype=torch.float64)  # (p, t)
+    gradient_d = gradient.contiguous().view(-1).to(dtype=torch.float64)  # (p,)
+    t = memories_d.size(1)
+
+    P = memories_d.t().mm(memories_d)  # (t, t)
+    P = 0.5 * (P + P.t()) + torch.eye(t, dtype=P.dtype, device=P.device) * eps
+    q = memories_d.t().mv(gradient_d).neg()  # (t,)
+
+    # Solve the t x t dual QP on CPU (quadprog is CPU-only); t is tiny.
+    P_np = P.cpu().numpy()
+    q_np = q.cpu().numpy()
     G = np.eye(t)
     h = np.zeros(t) + margin
-    v = quadprog.solve_qp(P, q, G, h)[0]
-    x = np.dot(v, memories_np) + gradient_np
-    gradient.copy_(torch.Tensor(x).view(-1, 1))
+    v = quadprog.solve_qp(P_np, q_np, G, h)[0]
+
+    v_d = torch.as_tensor(v, dtype=memories_d.dtype, device=memories_d.device)
+    x = memories_d.mv(v_d) + gradient_d  # (p,)
+    gradient.copy_(x.view(-1, 1))
 
 
 class Net(DetectionReplayMixin, nn.Module):
