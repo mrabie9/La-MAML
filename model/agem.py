@@ -9,7 +9,6 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.autograd import Variable
 
 import random
 
@@ -205,8 +204,12 @@ class Net(DetectionReplayMixin, nn.Module):
         for param in self._ll_params():
             self.grad_dims.append(param.data.numel())
         self.grads = torch.Tensor(sum(self.grad_dims), n_tasks)
+        # Single reference gradient buffer for the averaged A-GEM constraint,
+        # computed from one mixed-buffer batch (not one column per past task).
+        self.ref_grad = torch.Tensor(sum(self.grad_dims))
         if self.gpu:
             self.grads = self.grads.cuda()
+            self.ref_grad = self.ref_grad.cuda()
 
         # allocate counters
         self.observed_tasks = []
@@ -219,6 +222,21 @@ class Net(DetectionReplayMixin, nn.Module):
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
+
+        # Per-task signal-class offsets, precomputed for vectorised per-sample
+        # logit masking of mixed-task reference batches.
+        task_offset1, task_offset2 = [], []
+        for task_index in range(n_tasks):
+            off1, off2 = compute_offsets(
+                task_index, self.classes_per_task, self.is_cifar
+            )
+            task_offset1.append(off1)
+            task_offset2.append(off2)
+        self._task_offset1 = torch.tensor(task_offset1, dtype=torch.long)
+        self._task_offset2 = torch.tensor(task_offset2, dtype=torch.long)
+        if self.gpu:
+            self._task_offset1 = self._task_offset1.cuda()
+            self._task_offset2 = self._task_offset2.cuda()
         self.noise_label = noise_label_from_args(args)
         self.incremental_loader_name = getattr(args, "loader", None)
 
@@ -292,6 +310,72 @@ class Net(DetectionReplayMixin, nn.Module):
             if name.startswith("det_head"):
                 continue
             yield param
+
+    def _forward_features_no_mask(self, x):
+        """Run the backbone with the same reshape as ``forward`` but no logit mask.
+
+        Mixed-task reference batches span several tasks at once, so the single
+        ``task_index`` TIL mask in :meth:`forward` does not apply; per-sample
+        masking is done separately by :meth:`_mask_logits_per_sample`.
+        """
+        if self.cfg.dataset == "tinyimagenet":
+            x = x.view(-1, 3, 64, 64)
+        elif self.cfg.dataset == "cifar100":
+            x = x.view(-1, 3, 32, 32)
+        elif self.is_iq:
+            x = self._ensure_iq_shape(x)
+        return self.net.forward(x)
+
+    def _mask_logits_per_sample(self, logits, task_ids):
+        """Restrict each row's logits to its own task's signal-class block.
+
+        Mirrors the ``[:, offset1:offset2]`` slice the per-task path used, but
+        vectorised across a batch whose rows belong to different tasks so a
+        single forward/backward can cover the whole reference batch.
+        """
+        offset1 = self._task_offset1[task_ids].unsqueeze(1)
+        offset2 = self._task_offset2[task_ids].unsqueeze(1)
+        cols = torch.arange(logits.size(1), device=logits.device).unsqueeze(0)
+        valid = (cols >= offset1) & (cols < offset2)
+        return logits.masked_fill(~valid, -10e10)
+
+    def _sample_reference_batch(self, current_task, batch_size):
+        """Sample one mixed batch uniformly over all stored past-task exemplars.
+
+        This is the A-GEM reference batch: a single draw from the union of every
+        past task's memory, weighted by how many exemplars each task holds so
+        every stored example is equally likely. Returns ``(x, y_global, tasks)``
+        with noise-labelled exemplars removed, or ``None`` if nothing is stored.
+        """
+        device = self.memory_data.device
+        valid_tasks, counts = [], []
+        for past_task in self.observed_tasks:
+            if past_task == current_task:
+                continue
+            filled = int(self.task_mem_filled[past_task].item())
+            if filled > 0:
+                valid_tasks.append(past_task)
+                counts.append(filled)
+        if not valid_tasks:
+            return None
+
+        valid_tasks_t = torch.tensor(valid_tasks, device=device, dtype=torch.long)
+        counts_t = torch.tensor(counts, device=device, dtype=torch.float)
+        # P(task) ∝ exemplars stored, so P(any single exemplar) is uniform.
+        task_pick = torch.multinomial(
+            counts_t / counts_t.sum(), batch_size, replacement=True
+        )
+        task_ids = valid_tasks_t[task_pick]
+        counts_per_pick = counts_t[task_pick]
+        slot_ids = (torch.rand(batch_size, device=device) * counts_per_pick).long()
+        slot_ids = torch.minimum(slot_ids, counts_per_pick.long() - 1)
+
+        ref_x = self.memory_data[task_ids, slot_ids]
+        ref_y = unpack_y_to_class_labels(self.memory_labs[task_ids, slot_ids]).long()
+        signal_mask = signal_mask_exclude_noise(ref_y, self.noise_label)
+        if not signal_mask.any():
+            return None
+        return ref_x[signal_mask], ref_y[signal_mask], task_ids[signal_mask]
 
     def observe(self, x, y, t):
 
@@ -394,36 +478,22 @@ class Net(DetectionReplayMixin, nn.Module):
                     else:
                         self.task_mem_filled[t] = self.mem_cnt
 
-            # compute gradient on previous tasks
+            # compute the single A-GEM reference gradient on one mixed batch
+            # sampled across all past tasks (not one gradient per past task)
+            have_reference_grad = False
             if len(self.observed_tasks) > 1:
-                for tt in range(len(self.observed_tasks) - 1):
+                reference_batch = self._sample_reference_batch(
+                    current_task=t, batch_size=y_work.data.size(0)
+                )
+                if reference_batch is not None:
+                    ref_x, ref_y, ref_tasks = reference_batch
                     self.zero_grad()
-                    # fwd/bwd on the examples in the memory
-                    past_task = self.observed_tasks[tt]
-
-                    offset1, offset2 = compute_offsets(
-                        past_task, self.classes_per_task, self.is_cifar
+                    ref_logits = self._mask_logits_per_sample(
+                        self._forward_features_no_mask(ref_x), ref_tasks
                     )
-                    filled = int(self.task_mem_filled[past_task].item())
-                    if filled == 0:
-                        continue
-                    mem_x = Variable(self.memory_data[past_task, :filled])
-                    mem_y = Variable(self.memory_labs[past_task, :filled])
-                    mem_y_flat = unpack_y_to_class_labels(mem_y.data).long()
-                    signal_mask_mem = signal_mask_exclude_noise(
-                        mem_y_flat, self.noise_label
-                    )
-                    if not signal_mask_mem.any():
-                        continue
-                    mem_y_task = mem_y_flat - offset1
-                    mem_x = mem_x[signal_mask_mem]
-                    mem_y_task = mem_y_task[signal_mask_mem]
-                    logits = self.forward(mem_x, past_task)[:, offset1:offset2]
-                    if logits.numel() == 0:
-                        continue
                     memory_loss = classification_cross_entropy(
-                        logits,
-                        mem_y_task,
+                        ref_logits,
+                        ref_y,
                         class_weighted_ce=self.class_weighted_ce,
                     )
                     ptloss = self.memory_loss_lambda * memory_loss
@@ -432,8 +502,13 @@ class Net(DetectionReplayMixin, nn.Module):
                         torch.nn.utils.clip_grad_norm_(
                             self.net.parameters(), self.cfg.grad_clip_norm
                         )
-
-                    store_grad(self._ll_params, self.grads, self.grad_dims, past_task)
+                    store_grad(
+                        self._ll_params,
+                        self.ref_grad.unsqueeze(1),
+                        self.grad_dims,
+                        0,
+                    )
+                    have_reference_grad = True
 
             # now compute the grad on the current minibatch
             self.zero_grad()
@@ -457,23 +532,13 @@ class Net(DetectionReplayMixin, nn.Module):
                     self.net.parameters(), self.cfg.grad_clip_norm
                 )
 
-            # check if gradient violates constraints
-            if len(self.observed_tasks) > 1:
-                # copy gradient
+            # project the current gradient against the single reference gradient
+            # if it violates the averaged A-GEM constraint (g · g_ref < 0)
+            if have_reference_grad:
                 store_grad(self._ll_params, self.grads, self.grad_dims, t)
-                # Build index tensor on the same device as stored gradients.
-                indx_device = (
-                    self.grads.device if hasattr(self.grads, "device") else None
-                )
-                indx = torch.tensor(
-                    self.observed_tasks[:-1],
-                    dtype=torch.long,
-                    device=indx_device,
-                )
-
                 projectgrad(
                     self.grads[:, t].unsqueeze(1),
-                    self.grads.index_select(1, indx),
+                    self.ref_grad.unsqueeze(1),
                     oiter=self.iter,
                 )
                 # copy gradients back

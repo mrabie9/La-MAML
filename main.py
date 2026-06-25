@@ -1627,38 +1627,217 @@ def life_experience(model, inc_loader, args):
 def estimate_memory_buffer_size_bytes(model: torch.nn.Module) -> int:
     """Estimate total bytes used by replay/memory buffers in a model.
 
-    This scans all modules for tensor attributes whose names suggest they are
-    part of a replay or memory buffer (for example, attributes containing
-    ``\"mem\"``) while excluding tensors already counted as parameters and
-    avoiding double-counting shared storages.
+    Uses the same categorisation and walk as
+    :func:`summarise_persistent_state_bytes` (``replay`` category), including
+    exemplars stored as NumPy arrays inside reservoir lists such as ER's
+    ``M`` / ``M_new``.
 
     Args:
         model: Torch module whose memory/replay buffers will be inspected.
 
     Returns:
-        Total number of bytes occupied by the matching tensors.
+        Total number of bytes occupied by replay buffers.
 
     Usage:
         buffer_bytes = estimate_memory_buffer_size_bytes(model)
     """
-    parameter_data_ids = {id(parameter.data) for parameter in model.parameters()}
-    seen_tensor_ids: set[int] = set()
-    total_bytes = 0
+    return summarise_persistent_state_bytes(model)["replay"]
+
+
+# Attribute names whose value is a full snapshot of the live network (an
+# ``nn.Module``). Their parameters/buffers are persistent regularization state,
+# not part of the deployable model, even though PyTorch registers them as
+# submodules so they would otherwise inflate the trainable-parameter count
+# (e.g. LWF's distillation ``teacher``, UCL's previous-task ``model_old``).
+SNAPSHOT_MODULE_ATTRIBUTE_NAMES = frozenset(
+    {"teacher", "model_old", "old_model", "old_net", "prev_model", "prev_net"}
+)
+
+# Ordered persistent-state categories reported by
+# :func:`summarise_persistent_state_bytes`.
+PERSISTENT_STATE_CATEGORIES = (
+    "model_params",
+    "replay",
+    "regularization",
+    "arch_mask",
+    "other",
+)
+
+
+def _persistent_storage_byte_size(value: torch.Tensor | np.ndarray) -> int:
+    """Return the size in bytes of a tensor or NumPy array backing store.
+
+    Args:
+        value: A :class:`torch.Tensor` or :class:`numpy.ndarray`.
+
+    Returns:
+        Number of bytes occupied by the array storage.
+    """
+    if torch.is_tensor(value):
+        return value.numel() * value.element_size()
+    return int(value.nbytes)
+
+
+def _persistent_storage_pointer(value: torch.Tensor | np.ndarray) -> int:
+    """Return a stable data pointer for deduplicating persistent storage.
+
+    Args:
+        value: A :class:`torch.Tensor` or :class:`numpy.ndarray`.
+
+    Returns:
+        Integer address of the underlying data buffer.
+    """
+    if torch.is_tensor(value):
+        return value.data_ptr()
+    return int(value.__array_interface__["data"][0])
+
+
+def _iter_state_tensors(value: object):
+    """Yield every tensor or NumPy array reachable inside a nested container.
+
+    Args:
+        value: A tensor, ndarray, or a list/tuple/set/dict that may contain
+            them at any depth (for example ER reservoir entries in ``M``).
+
+    Yields:
+        Each :class:`torch.Tensor` or :class:`numpy.ndarray` found by walking
+        the container.
+    """
+    if torch.is_tensor(value):
+        yield value
+    elif isinstance(value, np.ndarray):
+        yield value
+    elif isinstance(value, np.generic):
+        yield np.asarray(value)
+    elif isinstance(value, dict):
+        for inner_value in value.values():
+            yield from _iter_state_tensors(inner_value)
+    elif isinstance(value, (list, tuple, set)):
+        for inner_value in value:
+            yield from _iter_state_tensors(inner_value)
+
+
+def _categorize_state_attribute(attribute_name: str) -> str:
+    """Classify a non-parameter persistent tensor by its attribute name.
+
+    Args:
+        attribute_name: Name of the module attribute or registered buffer that
+            holds the tensor (e.g. ``"memory_data"``, ``"fisher"``,
+            ``"weight_owner"``).
+
+    Returns:
+        One of ``"replay"``, ``"regularization"``, ``"arch_mask"`` or
+        ``"other"``.
+
+    Usage:
+        >>> _categorize_state_attribute("memory_labs")
+        'replay'
+        >>> _categorize_state_attribute("conv_weight_si_omega")
+        'regularization'
+    """
+    if attribute_name in ("M", "M_new"):
+        return "replay"
+    lowered_name = attribute_name.lower()
+    replay_keywords = ("mem", "exemplar", "replay")
+    if any(keyword in lowered_name for keyword in replay_keywords):
+        return "replay"
+    regularization_keywords = (
+        "fisher",
+        "omega",
+        "importance",
+        "star",
+        "si_prev",
+        "si_p_old",
+        "si_w",
+    )
+    if any(keyword in lowered_name for keyword in regularization_keywords):
+        return "regularization"
+    architecture_keywords = ("owner", "frozen", "mask")
+    if any(keyword in lowered_name for keyword in architecture_keywords):
+        return "arch_mask"
+    return "other"
+
+
+def summarise_persistent_state_bytes(model: torch.nn.Module) -> dict[str, int]:
+    """Break a model's persistent storage footprint down by category, in bytes.
+
+    This walks every module and accounts for all persistent tensor and NumPy
+    state, including replay/exemplar buffers stored in Python lists or dicts
+    (for example ``eralg4``'s ``M``), regularization state (Fisher information,
+    Synaptic Intelligence buffers, weight snapshots), and architecture masks
+    (e.g. PackNet ``*_owner`` / ``*_frozen`` buffers). Snapshot submodules such
+    as a distillation teacher are attributed to ``regularization`` rather than
+    ``model_params``.
+
+    Each underlying storage is counted once (deduplicated by data pointer) and
+    optimizer state is not inspected.
+
+    Args:
+        model: Model to inspect, ideally at the end of training when replay and
+            regularization buffers are populated.
+
+    Returns:
+        Mapping from each category in :data:`PERSISTENT_STATE_CATEGORIES` to the
+        number of bytes it occupies (always includes every key, possibly zero).
+
+    Usage:
+        breakdown = summarise_persistent_state_bytes(model)
+        total_gb = sum(breakdown.values()) / (1024**3)
+    """
+    parameter_storage_pointers = {
+        parameter.data_ptr() for parameter in model.parameters()
+    }
+
+    snapshot_module_ids: set[int] = set()
+    for attribute_name in SNAPSHOT_MODULE_ATTRIBUTE_NAMES:
+        snapshot_candidate = getattr(model, attribute_name, None)
+        if isinstance(snapshot_candidate, torch.nn.Module):
+            for snapshot_submodule in snapshot_candidate.modules():
+                snapshot_module_ids.add(id(snapshot_submodule))
+
+    category_bytes: dict[str, int] = {
+        category: 0 for category in PERSISTENT_STATE_CATEGORIES
+    }
+    seen_storage_pointers: set[int] = set()
 
     for module in model.modules():
-        for attribute_name, value in vars(module).items():
-            if not torch.is_tensor(value):
-                continue
-            if "mem" not in attribute_name.lower():
-                continue
-            tensor_data = value
-            tensor_id = id(tensor_data)
-            if tensor_id in seen_tensor_ids or tensor_id in parameter_data_ids:
-                continue
-            seen_tensor_ids.add(tensor_id)
-            total_bytes += tensor_data.numel() * tensor_data.element_size()
+        module_is_snapshot = id(module) in snapshot_module_ids
 
-    return total_bytes
+        for parameter in module.parameters(recurse=False):
+            storage_pointer = parameter.data_ptr()
+            if storage_pointer in seen_storage_pointers:
+                continue
+            seen_storage_pointers.add(storage_pointer)
+            parameter_bytes = parameter.numel() * parameter.element_size()
+            target_category = "regularization" if module_is_snapshot else "model_params"
+            category_bytes[target_category] += parameter_bytes
+
+        named_state_arrays: list[tuple[str, torch.Tensor | np.ndarray]] = []
+        for attribute_name, attribute_value in module.__dict__.items():
+            if attribute_name in ("_parameters", "_buffers", "_modules"):
+                continue
+            for state_array in _iter_state_tensors(attribute_value):
+                named_state_arrays.append((attribute_name, state_array))
+        for buffer_name, buffer_tensor in module._buffers.items():
+            if buffer_tensor is not None:
+                named_state_arrays.append((buffer_name, buffer_tensor))
+
+        for attribute_name, state_array in named_state_arrays:
+            storage_pointer = _persistent_storage_pointer(state_array)
+            if storage_pointer in parameter_storage_pointers:
+                continue
+            if storage_pointer in seen_storage_pointers:
+                continue
+            seen_storage_pointers.add(storage_pointer)
+            array_bytes = _persistent_storage_byte_size(state_array)
+            if module_is_snapshot:
+                category_bytes["regularization"] += array_bytes
+            else:
+                category_bytes[
+                    _categorize_state_attribute(attribute_name)
+                ] += array_bytes
+
+    return category_bytes
 
 
 def save_results(
@@ -1673,6 +1852,22 @@ def save_results(
     buffer_gb = buffer_bytes / (1024**3)
     print("Model size: {:.4f} GB".format(size_gb))
     print("Memory buffer size: {:.4f} GB".format(buffer_gb))
+
+    state_breakdown_bytes = summarise_persistent_state_bytes(model)
+    state_breakdown_gb = {
+        category: byte_count / (1024**3)
+        for category, byte_count in state_breakdown_bytes.items()
+    }
+    total_state_gb = sum(state_breakdown_gb.values())
+    state_breakdown_text = " ".join(
+        "{}={:.4f}".format(category, state_breakdown_gb[category])
+        for category in PERSISTENT_STATE_CATEGORIES
+    )
+    print(
+        "Persistent state sizes (GB): {} total={:.4f}".format(
+            state_breakdown_text, total_state_gb
+        )
+    )
 
     # save confusion matrix and print one line of stats
     val_stats = confusion_matrix(
@@ -1689,6 +1884,9 @@ def save_results(
         )
         one_liner += " # test: " + " ".join(["%.3f" % stat for stat in test_stats])
     one_liner += " # sizes: model_gb={:.4f} mem_gb={:.4f}".format(size_gb, buffer_gb)
+    one_liner += " # state_gb: {} total={:.4f}".format(
+        state_breakdown_text, total_state_gb
+    )
 
     print(fname + ": " + one_liner + " # " + str(spent_time))
 

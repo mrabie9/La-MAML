@@ -2,5 +2,5 @@
 model: agem
 loader: task_incremental_loader
 
-lr: 0.01
+lr: 0.003
 memory_loss_lambda: 5.0
