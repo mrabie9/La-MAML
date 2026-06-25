@@ -104,9 +104,9 @@ class BayesianLinear(BayesianLayer):
         nn.init.uniform_(self.weight_mu, -bound, bound)
 
         rho_init = float(math.log(math.expm1(noise_std)))
-        self.weight_rho = nn.Parameter(
-            torch.full((out_features, in_features), rho_init)
-        )
+        # Tie sigma per output node: the incoming weights to node ``i`` share one
+        # rho_i (paper Sec. 3.3). Shape (out, 1) broadcasts across ``in_features``.
+        self.weight_rho = nn.Parameter(torch.full((out_features, 1), rho_init))
 
         self.bias = nn.Parameter(torch.zeros(out_features))
         self.weight = Gaussian(self.weight_mu, self.weight_rho)
@@ -154,7 +154,10 @@ class BayesianConv1d(BayesianLayer):
         nn.init.uniform_(self.weight_mu, -bound, bound)
 
         rho_init = float(math.log(math.expm1(noise_std)))
-        self.weight_rho = nn.Parameter(torch.full(weight_shape, rho_init))
+        # Tie sigma per output channel (filter): one rho per filter, shared across
+        # input channels and kernel taps (paper Supp. Sec. 5.1.2). Shape
+        # (out_channels, 1, 1) broadcasts over the full weight tensor.
+        self.weight_rho = nn.Parameter(torch.full((out_channels, 1, 1), rho_init))
 
         self.weight = Gaussian(self.weight_mu, self.weight_rho)
 
@@ -1073,9 +1076,12 @@ class Net(nn.Module):
 
         mu_bias_reg = torch.zeros_like(mu_weight_reg)
         l1_mu_bias_reg = torch.zeros_like(mu_weight_reg)
-        regularized_parameter_count = (
-            trainer_weight_mu.numel() + trainer_weight_sigma.numel()
-        )
+        # Node/channel tying collapses weight_sigma.numel() from out*in to out,
+        # which would roughly halve the normaliser and double the effective
+        # strength of every reg term. Count the sigma contribution at the full
+        # per-weight resolution (weight_mu.numel()) to preserve the pre-tying
+        # meaning of cfg.alpha and cfg.beta.
+        regularized_parameter_count = 2 * trainer_weight_mu.numel()
         trainer_bias = getattr(new_layer, "bias", None)
         saver_bias = getattr(old_layer, "bias", None)
         if trainer_bias is not None and saver_bias is not None:
