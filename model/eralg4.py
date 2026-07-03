@@ -17,7 +17,6 @@ from torch.autograd import Variable
 import numpy as np
 
 import random
-from random import shuffle
 import warnings
 import math
 
@@ -47,6 +46,7 @@ class ErAlgConfig:
     grad_clip_norm: Optional[float] = 2.0
     second_order: bool = False
     meta_batches: int = 3
+    eralg4_masked_loss: bool = True
 
     arch: str = "resnet1d"
     dataset: str = "tinyimagenet"
@@ -142,20 +142,48 @@ class Net(DetectionReplayMixin, nn.Module):
             yield param
 
     def take_multitask_loss(self, bt, logits, y):
-        # Global (unmasked) cross-entropy over the full ``n_outputs`` vector.
-        # ``bt`` is unused for the loss itself (each row already carries its
-        # global label); it is retained for signature parity with callers.
+        """Batched CE over global labels, per-sample task-masked by default.
+
+        Masking (``eralg4_masked_loss``, default on) confines each row's softmax
+        to its own task's classes, matching er_ring / lamaml_cifar; the legacy
+        unmasked global softmax (cross-task interference) is kept only as an
+        ablation (`--eralg4_unmasked_loss`). Class weights are inverse-frequency
+        over this batch (``class_weighted_ce``) — the historical per-row loop
+        collapsed them to 1.0, so weighting only became effective with the
+        batched call.
+        """
         if logits.size(0) == 0:
             return torch.zeros((), device=logits.device, dtype=logits.dtype)
-        # The per-sample loop this replaces fed single-element batches through
-        # ``classification_cross_entropy``, where inverse-frequency weights
-        # collapse to 1.0; that is plain (unweighted) mean CE, which a single
-        # batched call reproduces exactly while avoiding the Python loop.
+        if self.cfg.eralg4_masked_loss:
+            logits = self._mask_logits_for_sample_tasks(logits, bt)
         return classification_cross_entropy(
             logits,
             y.long(),
-            class_weighted_ce=False,
+            class_weighted_ce=self.class_weighted_ce,
         )
+
+    def _mask_logits_for_sample_tasks(
+        self, raw_logits: torch.Tensor, sample_task_indices: torch.Tensor
+    ) -> torch.Tensor:
+        """Apply TIL/CIL masking per sample task id (mirrors lamaml_cifar.meta_loss)."""
+        if sample_task_indices.numel() == 0:
+            return raw_logits
+        masked_logits = raw_logits.clone()
+        for task_id in torch.unique(sample_task_indices).tolist():
+            row_selector = sample_task_indices == int(task_id)
+            if not torch.any(row_selector):
+                continue
+            masked_logits[row_selector] = misc_utils.apply_task_incremental_logit_mask(
+                raw_logits[row_selector],
+                int(task_id),
+                self.classes_per_task,
+                self.n_outputs,
+                cil_all_seen_upto_task=int(task_id),
+                global_noise_label=self.noise_label,
+                fill_value=-10e10,
+                loader=self.incremental_loader_name,
+            )
+        return masked_logits
 
     def forward(self, x, t, *, cil_all_seen_upto_task=None):
         output = self.net.forward(x)
@@ -190,11 +218,11 @@ class Net(DetectionReplayMixin, nn.Module):
         current_t = []
 
         if len(self.M) > 0:
-            order = [i for i in range(0, len(self.M))]
             osize = min(self.batchSize, len(self.M))
-            for j in range(0, osize):
-                shuffle(order)
-                k = order[j]
+            # The original loop reshuffled the full index list once per draw and
+            # took position ``j`` — uniform sampling-with-replacement, which
+            # ``random.choices`` reproduces without O(N * osize) shuffling.
+            for k in random.choices(range(len(self.M)), k=osize):
                 x, y, t = self.M[k]
                 xi = np.array(x)
                 yi_scalar = int(torch.as_tensor(y).long().flatten()[0].item())
@@ -399,9 +427,9 @@ class Net(DetectionReplayMixin, nn.Module):
 
             self.net.zero_grad()
 
-            # Current minibatch: live forward through the adapter. Unmasked
-            # logits use global CE targets indexing the full ``n_outputs``
-            # vector (including any shared noise class).
+            # Current minibatch: live forward through the adapter. Raw logits;
+            # per-sample task masking happens inside ``take_multitask_loss``
+            # (global CE targets index the full ``n_outputs`` vector).
             current_logits = self.net.forward(x)
             current_loss = self.take_multitask_loss(current_t, current_logits, y)
 
