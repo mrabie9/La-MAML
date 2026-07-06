@@ -4,6 +4,7 @@ import importlib
 import datetime
 import argparse
 import atexit
+import json
 import time
 import os
 import sys
@@ -1497,6 +1498,13 @@ def life_experience(model, inc_loader, args):
             return sum(float(v) for v in x) / len(x)
         return float(x)
 
+    # Headline classification F1 (cls_f1) values, stashed on args so main() can
+    # record them for the cross-seed sweep summary. Both default to None.
+    args.final_val_cls_f1 = None
+    args.final_tr_cls_f1 = None
+    args.final_val_det = None
+    args.final_val_fa = None
+
     if (
         last_tr_cls_rec is not None
         or last_tr_cls_prec is not None
@@ -1505,6 +1513,7 @@ def life_experience(model, inc_loader, args):
         tr_rec = float(last_tr_cls_rec) if last_tr_cls_rec is not None else None
         tr_prec = float(last_tr_cls_prec) if last_tr_cls_prec is not None else None
         tr_f1 = float(last_tr_cls_f1) if last_tr_cls_f1 is not None else None
+        args.final_tr_cls_f1 = tr_f1
         tr_det = last_tr_det
         tr_fa = last_tr_fa
         parts = []
@@ -1525,8 +1534,11 @@ def life_experience(model, inc_loader, args):
         te_rec = _mean(result_val_a[-1])
         te_prec = _mean(result_val_prec[-1]) if result_val_prec else None
         te_f1 = _mean(result_val_f1[-1]) if result_val_f1 else None
+        args.final_val_cls_f1 = te_f1
         te_det = _mean(result_val_det_a[-1]) if result_val_det_a else None
         te_fa = _mean(result_val_det_fa[-1]) if result_val_det_fa else None
+        args.final_val_det = te_det
+        args.final_val_fa = te_fa
         parts = ["cls_rec={:.4f}".format(te_rec)]
         if te_prec is not None:
             parts.append("cls_prec={:.4f}".format(te_prec))
@@ -1931,6 +1943,287 @@ def _default_main_config_chain() -> List[str]:
     return chain
 
 
+def _parse_seed_list(raw: str) -> List[int]:
+    """Parse a comma-separated seed string like "0,39,55" into a list of ints."""
+    seeds: List[int] = []
+    for token in raw.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        seeds.append(int(token))
+    return seeds
+
+
+# Classification F1 fields recorded per seed, paired with display labels.
+SWEEP_F1_FIELDS = [
+    ("val_cls_f1", "Validation cls_f1"),
+    ("tr_cls_f1", "Training cls_f1"),
+]
+
+# Detection fields (detection recall ``det`` and false-alarm rate ``fa``)
+# recorded per seed, paired with display labels.
+SWEEP_DET_FIELDS = [
+    ("val_det", "Validation det"),
+    ("val_fa", "Validation fa"),
+]
+
+
+def _write_seed_metrics(args, spent_time):
+    """Write a small machine-readable metrics file into the seed's log dir.
+
+    Records the headline classification F1 (cls_f1) values stashed on ``args``
+    by life_experience. The multi-seed launcher reads these back to build the
+    cross-seed summary.
+    """
+    payload = {
+        "seed": args.seed,
+        "val_cls_f1": getattr(args, "final_val_cls_f1", None),
+        "tr_cls_f1": getattr(args, "final_tr_cls_f1", None),
+        "val_det": getattr(args, "final_val_det", None),
+        "val_fa": getattr(args, "final_val_fa", None),
+        "runtime_seconds": float(spent_time),
+    }
+    path = os.path.join(args.log_dir, "seed_metrics.json")
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+    except OSError:
+        pass
+
+
+def _write_sweep_summary(experiment_root, seeds):
+    """Aggregate per-seed cls_f1 into a cross-seed results.txt summary.
+
+    Reads each seed's seed_metrics.json and writes mean +/- std of the
+    classification F1 (and runtime) to ``<experiment_root>/results.txt``.
+    """
+    per_seed = []
+    for seed in seeds:
+        path = os.path.join(experiment_root, str(seed), "seed_metrics.json")
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                per_seed.append(json.load(f))
+        except (OSError, ValueError):
+            per_seed.append({"seed": seed})
+
+    def _summary_line(field, label):
+        """Build a 'mean +/- std [per-seed]' line for one metric, or None."""
+        vals = [
+            m.get(field) for m in per_seed if isinstance(m.get(field), (int, float))
+        ]
+        if not vals:
+            return None
+        mean = sum(vals) / len(vals)
+        if len(vals) > 1:
+            var = sum((x - mean) ** 2 for x in vals) / (len(vals) - 1)
+            std = var**0.5
+        else:
+            std = 0.0
+        per_seed_str = ", ".join("{:.4f}".format(x) for x in vals)
+        return "  {:<20} (n={}): {:.4f} +/- {:.4f}   [{}]".format(
+            label, len(vals), mean, std, per_seed_str
+        )
+
+    lines = [
+        "Seed-sweep summary (classification F1)",
+        "Seeds: {}".format(", ".join(str(s) for s in seeds)),
+        "Runs:  {}".format(len(seeds)),
+        "",
+        "cls_f1 mean +/- std:",
+    ]
+
+    for field, label in SWEEP_F1_FIELDS:
+        line = _summary_line(field, label)
+        if line is not None:
+            lines.append(line)
+    lines.append("")
+
+    det_lines = [
+        line
+        for field, label in SWEEP_DET_FIELDS
+        if (line := _summary_line(field, label)) is not None
+    ]
+    if det_lines:
+        lines.append("detection (det / fa) mean +/- std:")
+        lines.extend(det_lines)
+        lines.append("")
+
+    runtimes = [
+        m.get("runtime_seconds")
+        for m in per_seed
+        if isinstance(m.get("runtime_seconds"), (int, float))
+    ]
+    if runtimes:
+        lines.append(
+            "Total runtime (all seeds): {:.2f} hours".format(sum(runtimes) / 3600.0)
+        )
+        lines.append(
+            "Per-seed runtime hours: {}".format(
+                ", ".join("{:.2f}".format(r / 3600.0) for r in runtimes)
+            )
+        )
+
+    out = os.path.join(experiment_root, "results.txt")
+    try:
+        with open(out, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        print("[seed-sweep] wrote cross-seed summary to {}".format(out))
+    except OSError:
+        pass
+
+
+def _parse_seed_gpu_ids(raw: str) -> List[str]:
+    """Parse a comma-separated GPU id string like "0,1,2" into a list of strings.
+
+    Empty or whitespace-only input yields an empty list, signalling that
+    ``CUDA_VISIBLE_DEVICES`` should be left untouched for child processes.
+    """
+    ids: List[str] = []
+    for token in (raw or "").split(","):
+        token = token.strip()
+        if token:
+            ids.append(token)
+    return ids
+
+
+def _run_seeds_sequential(executable, script, base_argv, seeds, shared_timestamp):
+    """Run each seed one after another, aborting the sweep on the first failure.
+
+    Args:
+        executable: Path to the Python interpreter (``sys.executable``).
+        script: Path to this script (``sys.argv[0]``).
+        base_argv: Argv (without seed/timestamp flags) shared by every child.
+        seeds: Ordered list of integer seeds to run.
+        shared_timestamp: Timestamp shared by all children so they group under
+            one experiment directory.
+    """
+    import subprocess
+
+    for index, seed in enumerate(seeds):
+        child_argv = _build_seed_child_argv(base_argv, seed, shared_timestamp)
+        print(
+            "[seed-sweep] launching seed {} ({} of {})".format(
+                seed, index + 1, len(seeds)
+            )
+        )
+        code = subprocess.call([executable, script, *child_argv])
+        if code != 0:
+            raise SystemExit(
+                "[seed-sweep] seed {} failed with exit code {}; "
+                "aborting remaining seeds.".format(seed, code)
+            )
+
+
+def _run_seeds_parallel(
+    executable, script, base_argv, seeds, shared_timestamp, max_parallel, gpu_ids
+):
+    """Run seeds concurrently, up to ``max_parallel`` child processes at a time.
+
+    Each worker is optionally pinned to a GPU by round-robin assignment of
+    ``gpu_ids`` via ``CUDA_VISIBLE_DEVICES``. All seeds are attempted; if any
+    child exits non-zero the sweep raises ``SystemExit`` after the rest finish.
+
+    Args:
+        executable: Path to the Python interpreter (``sys.executable``).
+        script: Path to this script (``sys.argv[0]``).
+        base_argv: Argv (without seed/timestamp flags) shared by every child.
+        seeds: Ordered list of integer seeds to run.
+        shared_timestamp: Timestamp shared by all children so they group under
+            one experiment directory.
+        max_parallel: Maximum number of concurrent child processes.
+        gpu_ids: GPU ids to distribute workers across, or empty to leave
+            ``CUDA_VISIBLE_DEVICES`` untouched.
+    """
+    import subprocess
+
+    pending = list(enumerate(seeds))
+    running = {}  # subprocess.Popen -> seed
+    failures = []
+    worker_slot = 0
+
+    while pending or running:
+        while pending and len(running) < max_parallel:
+            index, seed = pending.pop(0)
+            child_argv = _build_seed_child_argv(base_argv, seed, shared_timestamp)
+            env = os.environ.copy()
+            if gpu_ids:
+                env["CUDA_VISIBLE_DEVICES"] = gpu_ids[worker_slot % len(gpu_ids)]
+                worker_slot += 1
+            print(
+                "[seed-sweep] launching seed {} ({} of {}){}".format(
+                    seed,
+                    index + 1,
+                    len(seeds),
+                    " on GPU {}".format(env["CUDA_VISIBLE_DEVICES"]) if gpu_ids else "",
+                )
+            )
+            process = subprocess.Popen([executable, script, *child_argv], env=env)
+            running[process] = seed
+
+        finished = None
+        while finished is None:
+            for process in list(running):
+                code = process.poll()
+                if code is not None:
+                    finished = process
+                    break
+            if finished is None:
+                time.sleep(1.0)
+
+        seed = running.pop(finished)
+        if finished.returncode != 0:
+            failures.append((seed, finished.returncode))
+            print(
+                "[seed-sweep] seed {} failed with exit code {}.".format(
+                    seed, finished.returncode
+                )
+            )
+
+    if failures:
+        detail = ", ".join(
+            "seed {} (exit {})".format(seed, code) for seed, code in failures
+        )
+        raise SystemExit(
+            "[seed-sweep] {} seed(s) failed: {}".format(len(failures), detail)
+        )
+
+
+def _build_seed_child_argv(base_argv, seed, shared_timestamp):
+    """Append the per-seed single-run flags to the shared base argv."""
+    return base_argv + [
+        "--single-seed",
+        "--seed",
+        str(seed),
+        "--timestamp",
+        shared_timestamp,
+    ]
+
+
+def _strip_argv_flags(argv: List[str], flags: set) -> List[str]:
+    """Drop the given flags (and their values) from an argv list.
+
+    Handles both ``--flag value`` and ``--flag=value`` forms. ``--single-seed``
+    is a boolean flag with no value; the others consume the following token.
+    """
+    boolean_flags = {"--single-seed"}
+    result: List[str] = []
+    i = 0
+    while i < len(argv):
+        tok = argv[i]
+        name = tok.split("=", 1)[0]
+        if name in flags:
+            # Skip the following value token for non-boolean flags using the
+            # space-separated form (i.e. no "=" embedded in this token).
+            if name not in boolean_flags and "=" not in tok:
+                i += 2
+            else:
+                i += 1
+            continue
+        result.append(tok)
+        i += 1
+    return result
+
+
 def main():
     config_parser = argparse.ArgumentParser(add_help=False)
     config_parser.add_argument(
@@ -1966,12 +2259,71 @@ def main():
     parser = file_parser.get_parser()
     args = parser.parse_args(remaining, namespace=base_args)
 
+    # Resolve the seed list. --single-seed forces the legacy single-run path
+    # (one seed = args.seed); otherwise --seeds (default "0,39,55") drives a sweep.
+    if getattr(args, "single_seed", False):
+        seeds = [args.seed]
+    else:
+        seeds = _parse_seed_list(getattr(args, "seeds", "") or "")
+        if not seeds:
+            seeds = [args.seed]
+
+    # When more than one seed is requested, act as a launcher: re-invoke this
+    # script once per seed in a fresh process so each run starts with clean RNG,
+    # CUDA, and global state. Each child is forced single-seed and shares one
+    # timestamp so all seeds group under the same experiment directory.
+    if len(seeds) > 1:
+        shared_timestamp = misc_utils.get_date_time()
+        # Reconstruct the shared experiment directory (parent of the per-seed
+        # dirs) using the same layout as misc_utils.log_dir().
+        sweep_config_name = Path(config_chain[-1]).stem if config_chain else None
+        dir_name = sweep_config_name if sweep_config_name else args.model
+        experiment_root = os.path.join(
+            args.log_dir, dir_name, "{}-{}".format(args.expt_name, shared_timestamp)
+        )
+        base_argv = _strip_argv_flags(
+            sys.argv[1:],
+            {"--seeds", "--seed", "--single-seed", "--timestamp", "--parallel-seeds"},
+        )
+        max_parallel = max(1, int(getattr(args, "parallel_seeds", 1) or 1))
+        if max_parallel > 1:
+            gpu_ids = _parse_seed_gpu_ids(getattr(args, "seed_gpu_ids", "") or "")
+            print(
+                "[seed-sweep] running {} seeds with up to {} in parallel{}".format(
+                    len(seeds),
+                    min(max_parallel, len(seeds)),
+                    " across GPUs {}".format(",".join(gpu_ids)) if gpu_ids else "",
+                )
+            )
+            _run_seeds_parallel(
+                sys.executable,
+                sys.argv[0],
+                base_argv,
+                seeds,
+                shared_timestamp,
+                max_parallel,
+                gpu_ids,
+            )
+        else:
+            _run_seeds_sequential(
+                sys.executable, sys.argv[0], base_argv, seeds, shared_timestamp
+            )
+        _write_sweep_summary(experiment_root, seeds)
+        raise SystemExit(0)
+
+    # Single-seed run: ensure args.seed reflects the resolved seed.
+    args.seed = seeds[0]
+
     # Scale learning rate based on batch size (reference batch size = 128).
     # This applies uniformly across all models that rely on args.lr.
     args.lr = misc_utils.scale_learning_rate_for_batch_size(args.lr, args.batch_size)
 
     # Setup logging early so we can mirror all prints to a log file.
-    timestamp = misc_utils.get_date_time()
+    # Honor a timestamp passed down from the multi-seed launcher so all seeds
+    # in a sweep share one experiment directory.
+    timestamp = (
+        getattr(args, "timestamp", "") or ""
+    ).strip() or misc_utils.get_date_time()
     config_name = Path(config_chain[-1]).stem if config_chain else None
     args.log_dir, args.tf_dir = misc_utils.log_dir(args, timestamp, config_name)
     if getattr(args, "state_logging", False):
@@ -2108,6 +2460,9 @@ def main():
     except OSError:
         # If results.txt cannot be written, fail silently to avoid breaking experiments.
         pass
+
+    # Emit a machine-readable per-seed cls_f1 file for the sweep summary.
+    _write_seed_metrics(args, spent_time)
 
 
 if __name__ == "__main__":
