@@ -367,7 +367,7 @@ class Net(nn.Module):
             )
             frozen_name = f"{key}_frozen"  # Name of buffer ...
             self.register_buffer(
-                owner_name, torch.full_like(param, fill_value=-1, dtype=torch.long)
+                owner_name, torch.full_like(param, fill_value=-1, dtype=torch.int8)
             )
             self.register_buffer(frozen_name, param.detach().clone())
             self._param_to_buffers[name] = (
