@@ -95,6 +95,12 @@ def get_parser():
         help="number of total memories stored in a reservoir sampling based buffer",
     )
     parser.add_argument(
+        "--use_ring_buffer",
+        default=False,
+        action="store_true",
+        help="Store La-MAML replay exemplars in a per-task ring buffer (FIFO) instead of the default reservoir sampler.",
+    )
+    parser.add_argument(
         "--lr", type=float, default=1e-3, help="learning rate (For baselines)"
     )
     parser.add_argument(

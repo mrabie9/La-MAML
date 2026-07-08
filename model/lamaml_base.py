@@ -15,6 +15,7 @@ class LamamlBaseConfig:
     opt_lr: float = 1e-1
     inner_steps: int = 1
     memories: int = 5120
+    use_ring_buffer: bool = False
     replay_batch_size: int = 20
     cuda: bool = True
     use_old_task_memory: bool = False
@@ -92,6 +93,15 @@ class BaseNet(torch.nn.Module):
         self.memories = self.cfg.memories
         self.batchSize = int(self.cfg.replay_batch_size)
 
+        # Replay-buffer storage strategy: reservoir sampling (default) or a
+        # per-task ring buffer that overwrites its own oldest slot (FIFO). The
+        # ring buffer splits the total ``memories`` budget evenly across tasks.
+        self.n_tasks = int(n_tasks)
+        self.use_ring_buffer = bool(self.cfg.use_ring_buffer)
+        self.mem_per_task = max(1, self.memories // max(1, self.n_tasks))
+        self._ring_positions: dict[int, list[int]] = {}
+        self._ring_write_ptr: dict[int, int] = {}
+
         self.use_cuda = self.cfg.cuda
         if self.use_cuda:
             self.net = self.net.cuda()
@@ -117,9 +127,11 @@ class BaseNet(torch.nn.Module):
         )
 
     def push_to_mem(self, batch_x, batch_y, t):
-        """
-        Reservoir sampling to push subsampled stream
-        of data points to replay/memory buffer
+        """Push a subsampled stream of data points into the replay buffer.
+
+        Dispatches to reservoir sampling (default) or a per-task ring buffer
+        depending on ``use_ring_buffer``. Both strategies write into the flat
+        ``self.M_new`` list consumed by :meth:`getBatch`.
         """
 
         if self.real_epoch > 0 or self.pass_itr > 0:
@@ -128,6 +140,19 @@ class BaseNet(torch.nn.Module):
         batch_y = unpack_y_to_class_labels(batch_y).long().cpu()
         t = t.cpu()
 
+        if self.use_ring_buffer:
+            self._push_ring_buffer(batch_x, batch_y, t)
+        else:
+            self._push_reservoir(batch_x, batch_y, t)
+
+    def _push_reservoir(
+        self, batch_x: torch.Tensor, batch_y: torch.Tensor, t: torch.Tensor
+    ) -> None:
+        """Reservoir-sample the incoming stream into a single fixed-size buffer.
+
+        Every example seen so far is retained with equal probability, so the
+        buffer approximates a uniform sample over the whole task stream.
+        """
         for i in range(batch_x.shape[0]):
             self.age += 1
             if len(self.M_new) < self.memories:
@@ -136,6 +161,30 @@ class BaseNet(torch.nn.Module):
                 p = random.randint(0, self.age)
                 if p < self.memories:
                     self.M_new[p] = [batch_x[i], batch_y[i], t]
+
+    def _push_ring_buffer(
+        self, batch_x: torch.Tensor, batch_y: torch.Tensor, t: torch.Tensor
+    ) -> None:
+        """Write the incoming stream into a per-task FIFO ring buffer.
+
+        Each task owns ``self.mem_per_task`` slots inside the flat ``M_new``
+        list. Slots fill sequentially, then the task's own write pointer wraps
+        around and overwrites its oldest exemplar, keeping the most recent
+        ``mem_per_task`` examples for that task.
+        """
+        task_key = int(t)
+        capacity = self.mem_per_task
+        task_positions = self._ring_positions.setdefault(task_key, [])
+        for i in range(batch_x.shape[0]):
+            self.age += 1
+            sample = [batch_x[i], batch_y[i], t]
+            if len(task_positions) < capacity:
+                task_positions.append(len(self.M_new))
+                self.M_new.append(sample)
+            else:
+                write_slot = self._ring_write_ptr.get(task_key, 0)
+                self.M_new[task_positions[write_slot]] = sample
+                self._ring_write_ptr[task_key] = (write_slot + 1) % capacity
 
     def getBatch(self, x, y, t, batch_size=None):
         """
