@@ -184,37 +184,28 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         return output
 
     def memory_sampling(self, t):
-        filled_counts = [int(self.task_mem_filled[i].item()) for i in range(t)]
-        total = sum(filled_counts)
-        if total == 0:
+        # Vectorized construction of valid (task, slot) replay indices. The
+        # row-major ``nonzero`` ordering (task-major, then slot) is identical to
+        # the original nested Python loop, so ``np.random.choice`` selects the
+        # same rows — but without one GPU sync per filled slot.
+        device = self.memx.device
+        filled = self.task_mem_filled[:t]
+        if int(filled.sum().item()) == 0:
             return None
-        cum = np.cumsum([0] + filled_counts)
-        valid_flat: list[int] = []
-        for task_idx in range(t):
-            for sample_idx in range(filled_counts[task_idx]):
-                lab = int(self.memy[task_idx, sample_idx].item())
-                if lab < 0:
-                    continue
-                if self.noise_label is not None and lab == self.noise_label:
-                    continue
-                valid_flat.append(int(cum[task_idx] + sample_idx))
-        if not valid_flat:
+        labs = self.memy[:t]
+        slot_ids = torch.arange(labs.size(1), device=device).unsqueeze(0)
+        valid = (slot_ids < filled.unsqueeze(1)) & (labs >= 0)
+        if self.noise_label is not None:
+            valid &= labs != self.noise_label
+        tk, sm = torch.nonzero(valid, as_tuple=True)
+        n_valid = int(tk.numel())
+        if n_valid == 0:
             return None
-        sz = int(min(len(valid_flat), self.sz))
-        flat_indices = np.random.choice(len(valid_flat), sz, replace=False)
-        chosen = [valid_flat[i] for i in flat_indices]
-
-        # map flat indices to task/sample indices
-        t_idx_list = []
-        s_idx_list = []
-        for fi in chosen:
-            task_idx = max(i for i in range(len(cum) - 1) if cum[i] <= fi)
-            sample_idx = fi - cum[task_idx]
-            t_idx_list.append(task_idx)
-            s_idx_list.append(sample_idx)
-
-        t_idx = torch.tensor(t_idx_list, dtype=torch.long, device=self.memx.device)
-        s_idx = torch.tensor(s_idx_list, dtype=torch.long, device=self.memx.device)
+        sz = int(min(n_valid, self.sz))
+        flat_indices = np.random.choice(n_valid, sz, replace=False)
+        sel = torch.as_tensor(flat_indices, device=device, dtype=torch.long)
+        t_idx = tk[sel]
+        s_idx = sm[sel]
 
         offsets = torch.tensor(
             [self.compute_offsets(int(i)) for i in t_idx.tolist()],
