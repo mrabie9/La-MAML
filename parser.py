@@ -185,6 +185,57 @@ def get_parser():
     parser.set_defaults(cudnn_benchmark=True)
     parser.add_argument("--seed", type=int, default=0, help="random seed of model")
     parser.add_argument(
+        "--seeds",
+        type=str,
+        default="0,39,55",
+        help=(
+            "Comma-separated list of random seeds to sweep. When more than one "
+            "seed is given, main.py re-invokes itself once per seed (fresh "
+            "process each). Ignored when --single-seed is set."
+        ),
+    )
+    parser.add_argument(
+        "--single-seed",
+        action="store_true",
+        help=(
+            "Run a single seed (the value of --seed), ignoring --seeds. "
+            "Reproduces the legacy single-run behavior."
+        ),
+    )
+    parser.add_argument(
+        "--parallel-seeds",
+        dest="parallel_seeds",
+        type=int,
+        default=1,
+        help=(
+            "Maximum number of seed subprocesses to run concurrently during a "
+            "multi-seed sweep. 1 (default) runs seeds sequentially. Values >1 "
+            "launch that many child processes at once; use --seed-gpu-ids to "
+            "pin each worker to a distinct GPU and avoid contention."
+        ),
+    )
+    parser.add_argument(
+        "--seed-gpu-ids",
+        dest="seed_gpu_ids",
+        type=str,
+        default="",
+        help=(
+            "Comma-separated GPU ids to distribute parallel seed workers across "
+            "(round-robin via CUDA_VISIBLE_DEVICES), e.g. '0,1,2'. Only used when "
+            "--parallel-seeds > 1. Empty leaves CUDA_VISIBLE_DEVICES untouched."
+        ),
+    )
+    parser.add_argument(
+        "--timestamp",
+        type=str,
+        default="",
+        help=(
+            "Internal: shared run timestamp passed from the multi-seed launcher "
+            "to each child so all seeds group under one experiment directory. "
+            "Not normally set by users."
+        ),
+    )
+    parser.add_argument(
         "--log_every",
         type=int,
         default=100,
