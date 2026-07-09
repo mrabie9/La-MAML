@@ -511,6 +511,7 @@ def run_single_trial(
             (
                 result_val_t,
                 result_val_a,
+                _result_val_prec,
                 result_test_t,
                 result_test_a,
                 result_val_det_a,

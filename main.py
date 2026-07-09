@@ -19,7 +19,7 @@ import torch
 from torch.autograd import Variable
 
 import parser as file_parser
-from metrics.metrics import confusion_matrix
+from metrics.metrics import confusion_matrix, signal_class_f1_summary
 from utils import misc_utils
 from utils.training_metrics import (
     macro_f1_including_noise,
@@ -1626,6 +1626,7 @@ def life_experience(model, inc_loader, args):
     return (
         torch.Tensor(result_val_t),
         _pad_results(result_val_a),
+        _pad_results(result_val_prec),
         torch.Tensor(result_test_t),
         _pad_results(result_test_a),
         _pad_results(result_val_det_a),
@@ -1853,7 +1854,14 @@ def summarise_persistent_state_bytes(model: torch.nn.Module) -> dict[str, int]:
 
 
 def save_results(
-    args, result_val_t, result_val_a, result_test_t, result_test_a, model, spent_time
+    args,
+    result_val_t,
+    result_val_a,
+    result_val_prec,
+    result_test_t,
+    result_test_a,
+    model,
+    spent_time,
 ):
     fname = os.path.join(args.log_dir, "results")
     log_state(args.state_logging, "Saving results to {}".format(fname))
@@ -1895,6 +1903,30 @@ def save_results(
             result_test_t, result_test_a, args.log_dir, "results.txt"
         )
         one_liner += " # test: " + " ".join(["%.3f" % stat for stat in test_stats])
+
+    # Append signal-class F1 (from cls_rec and cls_prec) and its BWT to results.txt.
+    f1_summary = signal_class_f1_summary(result_val_t, result_val_a, result_val_prec)
+    if f1_summary is not None:
+        reduced_f1, final_f1, bwt_f1 = f1_summary
+        results_path = os.path.join(args.log_dir, "results.txt")
+        try:
+            with open(results_path, "a", encoding="utf-8") as results_file:
+                print("", file=results_file)
+                print(
+                    "Signal-class F1 (harmonic mean of cls_rec and cls_prec):",
+                    file=results_file,
+                )
+                for row in range(reduced_f1.size(0)):
+                    print(
+                        " ".join(["%.4f" % value for value in reduced_f1[row]]),
+                        file=results_file,
+                    )
+                print("Final Signal-class F1: %.4f" % final_f1, file=results_file)
+                print("Backward Signal-class F1: %.4f" % bwt_f1, file=results_file)
+        except OSError:
+            pass
+        one_liner += " # signal_f1: final={:.4f} bwt={:.4f}".format(final_f1, bwt_f1)
+
     one_liner += " # sizes: model_gb={:.4f} mem_gb={:.4f}".format(size_gb, buffer_gb)
     one_liner += " # state_gb: {} total={:.4f}".format(
         state_breakdown_text, total_state_gb
@@ -2425,6 +2457,7 @@ def main():
         (
             result_val_t,
             result_val_a,
+            result_val_prec,
             result_test_t,
             result_test_a,
             _,
@@ -2441,6 +2474,7 @@ def main():
             args,
             result_val_t,
             result_val_a,
+            result_val_prec,
             result_test_t,
             result_test_a,
             model,

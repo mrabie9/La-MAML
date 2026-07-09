@@ -28,6 +28,53 @@ def task_changes(result_t):
     return n_tasks, changes
 
 
+def signal_class_f1_summary(result_t, result_recall, result_precision):
+    """Compute the signal-class F1 confusion matrix from recall and precision.
+
+    The signal-class F1 is the elementwise harmonic mean of the per-task recall
+    (``cls_rec``) and precision (``cls_prec``) matrices, i.e.
+    ``2 * prec * rec / (prec + rec)`` — it is *not* the tracked ``f1_cls`` metric.
+    The same task-boundary reduction as :func:`confusion_matrix` is applied so
+    that final F1 and backward transfer (BWT) are directly comparable.
+
+    Args:
+        result_t: 1D tensor of task ids, one entry per evaluation round.
+        result_recall: 2D tensor (rounds x tasks) of per-task recall scores.
+        result_precision: 2D tensor (rounds x tasks) of per-task precision scores.
+
+    Returns:
+        A tuple ``(f1_matrix, final_f1, bwt_f1)`` where ``f1_matrix`` is the
+        reduced task-by-task F1 matrix, ``final_f1`` is the mean F1 over all
+        tasks after training the last task, and ``bwt_f1`` is the mean backward
+        transfer of the signal-class F1. Returns ``None`` when the recall and
+        precision matrices are empty or their shapes disagree.
+
+    Usage:
+        summary = signal_class_f1_summary(result_val_t, result_val_a, result_val_prec)
+    """
+    if result_recall.numel() == 0 or result_precision.numel() == 0:
+        return None
+    if result_recall.shape != result_precision.shape:
+        return None
+
+    denominator = result_precision + result_recall
+    f1_matrix = torch.where(
+        denominator > 0,
+        2.0 * result_precision * result_recall / denominator,
+        torch.zeros_like(denominator),
+    )
+
+    number_of_tasks, changes = task_changes(result_t)
+    change_indices = torch.LongTensor(changes + [f1_matrix.size(0)]) - 1
+    reduced_f1 = f1_matrix[change_indices]
+
+    diagonal_f1 = reduced_f1.diag()
+    final_f1 = reduced_f1[number_of_tasks - 1]
+    backward_transfer_f1 = final_f1 - diagonal_f1
+
+    return reduced_f1, final_f1.mean(), backward_transfer_f1.mean()
+
+
 def confusion_matrix(result_t, result_a, log_dir, fname=None):
     nt, changes = task_changes(result_t)
     fname = os.path.join(log_dir, fname)
