@@ -180,11 +180,11 @@ _TABLE_COLUMNS = [
 
 
 def _fmt_cell(mean: float, std: float) -> str:
-    """Format a "mean±std" cell, falling back to "nan" when undefined."""
+    """Format a "mean±std%" cell (values scaled x100, 1dp), falling back to "nan" when undefined."""
     if math.isnan(mean):
         return "nan"
-    std_s = "nan" if math.isnan(std) else f"{std:.4f}"
-    return f"{mean:.4f}±{std_s}"
+    std_s = "nan" if math.isnan(std) else f"{std * 100:.1f}"
+    return f"{mean * 100:.1f}±{std_s}%"
 
 
 def print_algo_table(entries: list[tuple[str, dict]], tag: str) -> None:
@@ -202,6 +202,12 @@ def print_algo_table(entries: list[tuple[str, dict]], tag: str) -> None:
         + "".join(f"{header:>{col_width}}" for header, _ in columns)
         + f"{'n':>5}"
     )
+
+    def _f1_cl_sort_key(entry: tuple[str, dict]) -> float:
+        mean, _ = entry[1]["stats"].get("cls_f1", (float("nan"), float("nan")))
+        return math.inf if math.isnan(mean) else mean
+
+    entries = sorted(entries, key=_f1_cl_sort_key)
 
     print(f"Seed-sweep summary ({split}, SUMMARY_{tag})")
     print(header_row)
