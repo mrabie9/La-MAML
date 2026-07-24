@@ -55,12 +55,28 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
             loader=self.incremental_loader_name,
         )
 
-    def meta_loss(self, x, fast_weights, y, bt, t):
+    def meta_loss(self, x, fast_weights, y, bt, t, replay_count=None):
         """
         differentiate the loss through the network updates wrt alpha
+
+        The meta batch ``x`` is the replay rows followed by the current-task rows
+        (see ``getBatch`` and the live-batch splice in ``observe``). Forwarding it
+        in a single pass makes backbone BatchNorm normalize the replay rows with
+        statistics pooled over the current-task mixture, which corrupts the
+        retention (replay) term of the meta loss while leaving the current-task
+        term unaffected -- the deficit grows with task count. Forward the replay
+        and current blocks in separate passes so each is normalized with its own
+        statistics, then concatenate the logits (replay-first, keeping alignment
+        with ``bt``/``y``) and score with the identical mask + single CE.
         """
 
-        raw = self.net.forward(x, fast_weights)
+        if replay_count is not None and 0 < int(replay_count) < x.size(0):
+            rc = int(replay_count)
+            replay_raw = self.net.forward(x[:rc], fast_weights)
+            current_raw = self.net.forward(x[rc:], fast_weights)
+            raw = torch.cat([replay_raw, current_raw], dim=0)
+        else:
+            raw = self.net.forward(x, fast_weights)
         logits = self._mask_logits_for_sample_tasks(raw, bt)
         loss_q = self.take_multitask_loss(bt, t, logits, y)
 
@@ -239,6 +255,10 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
             n_current = x.size(0)
             if n_current > 0:
                 bx = torch.cat([bx[:-n_current], x], dim=0)
+            # Replay rows are the leading block of ``bx`` (getBatch appends the
+            # current rows after them); used to split the meta-loss forward so
+            # BatchNorm does not mix replay and current statistics.
+            replay_count = max(0, bx.size(0) - n_current)
 
             for i in range(n_batches):
 
@@ -262,7 +282,9 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
                         batch_y,
                         torch.tensor(t),
                     )
-                meta_loss, logits = self.meta_loss(bx, fast_weights, by, bt, t)
+                meta_loss, logits = self.meta_loss(
+                    bx, fast_weights, by, bt, t, replay_count=replay_count
+                )
                 with torch.no_grad():
                     # Vectorized equivalent of the per-sample argmax loop: for
                     # each row, argmax within its own task's class slice
