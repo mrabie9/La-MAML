@@ -67,7 +67,10 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
         term unaffected -- the deficit grows with task count. Forward the replay
         and current blocks in separate passes so each is normalized with its own
         statistics, then concatenate the logits (replay-first, keeping alignment
-        with ``bt``/``y``) and score with the identical mask + single CE.
+        with ``bt``/``y``) and score with the identical mask.
+
+        The two blocks are also *scored* separately, as eralg4 does -- see
+        ``_combine_replay_current_loss``.
         """
 
         if replay_count is not None and 0 < int(replay_count) < x.size(0):
@@ -78,9 +81,37 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
         else:
             raw = self.net.forward(x, fast_weights)
         logits = self._mask_logits_for_sample_tasks(raw, bt)
-        loss_q = self.take_multitask_loss(bt, t, logits, y)
+        loss_q = self._combine_replay_current_loss(bt, t, logits, y, replay_count)
 
         return loss_q, logits
+
+    def _combine_replay_current_loss(self, bt, t, logits, y, replay_count):
+        """Score the replay and current blocks separately, as eralg4 does.
+
+        Returns ``current_loss + memory_loss_lambda * replay_loss`` (two
+        separately normalized CEs), which pins replay's share of the loss at 1:1.
+
+        The single pooled CE this replaces looked like a neutral bookkeeping
+        choice but was not: the inverse-frequency class weights are derived from
+        the pooled batch, where the current rows span one task's classes while
+        the replay rows spread over every task seen so far. Old-task classes are
+        therefore rare and collect much larger per-row weights, so replay's share
+        of the loss escalated with task count -- measured 0.34 at task 0 rising
+        to 0.85 by task 9, at which point the current task received 15% of the
+        gradient. Pinning it recovers ~3 F1 of plasticity in single-epoch TIL
+        (n=6, every seed; sister-repo docs/cmaml_vs_reser_til.md).
+        """
+        rc = (
+            0
+            if replay_count is None
+            else max(0, min(int(replay_count), logits.size(0)))
+        )
+        if rc == 0 or rc == logits.size(0):
+            return self.take_multitask_loss(bt, t, logits, y)
+
+        replay_loss = self.take_multitask_loss(bt[:rc], t, logits[:rc], y[:rc])
+        current_loss = self.take_multitask_loss(bt[rc:], t, logits[rc:], y[rc:])
+        return current_loss + float(self.cfg.memory_loss_lambda) * replay_loss
 
     def _mask_logits_for_sample_tasks(
         self, raw_logits: torch.Tensor, sample_task_indices: torch.Tensor
@@ -293,9 +324,7 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
                     # argmax exact, avoiding one GPU sync per sample.
                     by_dev = by.long().view(-1)
                     bt_list = bt.long().view(-1).tolist()
-                    offsets = {
-                        tid: self.compute_offsets(tid) for tid in set(bt_list)
-                    }
+                    offsets = {tid: self.compute_offsets(tid) for tid in set(bt_list)}
                     o1 = torch.tensor(
                         [offsets[tid][0] for tid in bt_list],
                         device=logits.device,
@@ -315,9 +344,7 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
                     if self.noise_label is not None:
                         keep &= by_dev != self.noise_label
                     if keep.any():
-                        cls_tr_rec.append(
-                            macro_recall(preds[keep], targets[keep])
-                        )
+                        cls_tr_rec.append(macro_recall(preds[keep], targets[keep]))
 
                 meta_losses[i] += meta_loss
 
