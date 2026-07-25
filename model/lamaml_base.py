@@ -30,6 +30,9 @@ class LamamlBaseConfig:
     n_layers: int = 2
     n_hiddens: int = 100
     input_channels: int = 1
+    # Weight on the replay term of the meta loss, matching eralg4's
+    # ``current_loss + memory_loss_lambda * replay_loss``.
+    memory_loss_lambda: float = 1.0
 
     @staticmethod
     def from_args(args: object) -> "LamamlBaseConfig":
