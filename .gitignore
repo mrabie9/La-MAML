@@ -14,5 +14,7 @@ utils/plot_logs.py
 CLAUDE.md
 # Transient local analysis and training logs
 plots/
+docs/
+analysis/
 *.png
 *.pdf
