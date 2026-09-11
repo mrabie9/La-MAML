@@ -40,7 +40,6 @@ class LwfConfig:
     optimizer: str = "sgd"
     momentum: float = 0.9
     weight_decay: float = 0.0
-    clipgrad: Optional[float] = 100.0
     cls_lambda: float = 1.0
 
     @staticmethod

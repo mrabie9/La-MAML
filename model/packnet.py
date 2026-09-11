@@ -35,7 +35,6 @@ class PackNetConfig:
     optimizer: str = "sgd"
     n_tasks: int = 3
     prune_perc: float = 0.75  # fraction of currently used weights to prune
-    clipgrad: Optional[float] = 100.0
     # Extra SGD passes on task data after packing; gradients only on owner==task.
     post_prune_epochs: int = 0
 
