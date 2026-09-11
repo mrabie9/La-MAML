@@ -1,9 +1,9 @@
-[STATE 2026-05-29 20:29:54] Enabling terminal logging to logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/terminal.log
+[STATE 2026-06-15 21:34:24] Enabling terminal logging to logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/terminal.log
 New Experiment Starting...
 Running model:  agem
-[STATE 2026-05-29 20:29:54] Experiment 'seed-sweep_one-shot_til' starting with model 'agem' (seed 39)
+[STATE 2026-06-15 21:34:24] Experiment 'full-tasks_CIL_all' starting with model 'agem' (seed 39)
 Set seed 39
-[STATE 2026-05-29 20:29:54] Runtime accel: cudnn.benchmark=False amp=True amp_dtype=bfloat16
+[STATE 2026-06-15 21:34:24] Runtime accel: cudnn.benchmark=False amp=True amp_dtype=bfloat16
 t2-rcn.npz train: x=(50362, 1024), y=(50362, 2)
 t2-rcn.npz test: x=(16787, 1024), y=(16787, 2)
 t2-rcn.npz: applied data scaling mode 'normalize'.
@@ -72,161 +72,162 @@ Noise labels ratio in t2-deeprad.npz train: 0.25, test: 0.25
 Loaded t2-deeprad.npz: Remapped labels: [58 59 60 61 62 63]. Size: 17340)
 Built classes_per_task: [6, 7, 6, 7, 7, 6, 6, 6, 7, 6]
 Classes per task: [6, 7, 6, 7, 7, 6, 6, 6, 7, 6]
-[STATE 2026-05-29 20:30:56] Loader 'task_incremental_loader' ready: 1024 inputs, 64 outputs, 10 tasks
+[STATE 2026-06-15 21:35:29] Loader 'task_incremental_loader' ready: 1024 inputs, 64 outputs, 10 tasks
 n_outputs: 64 	n_tasks: 10
-[STATE 2026-05-29 20:30:56] Logging to logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39
+[STATE 2026-06-15 21:35:29] Logging to logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39
 True
 Model device: cuda:0
-[STATE 2026-05-29 20:30:56] Model initialized on device cuda:0
-[STATE 2026-05-29 20:30:56] Invoking continual life experience flow
-[STATE 2026-05-29 20:30:56] Life experience start: 10 tasks queued
-[STATE 2026-05-29 20:30:56] Legacy epoch behavior enabled: using n_epochs=1 for all tasks
+[STATE 2026-06-15 21:35:30] Model initialized on device cuda:0
+[STATE 2026-06-15 21:35:30] Invoking continual life experience flow
+[STATE 2026-06-15 21:35:30] Life experience start: 10 tasks queued
+[STATE 2026-06-15 21:35:30] Legacy epoch behavior enabled: using n_epochs=1 for all tasks
 Task 0: 50362 training samples, 16787 test samples.
-[STATE 2026-05-29 20:30:56] Task 0: zero-shot validation (pre-train)
----- Zero-shot (pre-train) task 0: rec_cls 0.1719 | prec_cls 0.1097 | f1_cls 0.0668 | det 0.4980 | pfa 0.9833 | total_f1 0.0668 ----
-[STATE 2026-05-29 20:31:01] Starting task 0 (1/10)
-[STATE 2026-05-29 20:31:01] Task 0 Epoch 1/1: entering train loop
-[STATE 2026-05-29 20:32:24] Task 0 Epoch 1/1: running validation (end of epoch)
----- Eval at Epoch 0: cls [0.8825245389143871] | det_recall [0.8760827780583962] | det_fa [0.2305687786897951] ----
-T0 Ep 1/1 | L 0.6651 | Train Acc 0.76 | Prec 0.78 | F1 0.70 | Det Rec 0.84 | Det FA 0.29 | Epoch Time 87.66s (Eval 5.01s, Train 82.65s)
-[STATE 2026-05-29 20:32:29] T0 Ep 1/1 complete: Prec 0.7755 F1 0.7015 DetRec 0.8386 DetFA 0.2871 | 87.66s total (5.01s eval/82.65s train)
-[STATE 2026-05-29 20:32:29] Task 0: running final validation.
-Saved task checkpoint: logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/checkpoints/task_0.pt
-[STATE 2026-05-29 20:32:34] Saved task checkpoint to logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/checkpoints/task_0.pt
-[STATE 2026-05-29 20:32:34] Completed task 0 (1/10)
+[STATE 2026-06-15 21:35:30] Task 0: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 0: rec_cls 0.1699 | prec_cls 0.1052 | f1_cls 0.0654 | det 0.4973 | pfa 0.9837 | total_f1 0.0654 ----
+[STATE 2026-06-15 21:35:38] Starting task 0 (1/10)
+[STATE 2026-06-15 21:35:38] Task 0 Epoch 1/1: entering train loop
+[STATE 2026-06-15 21:37:30] Task 0 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.8703803703045784] | det_recall [0.8770680844201821] | det_fa [0.2261190594306715] ----
+T0 Ep 1/1 | L 0.7147 | Train Acc 0.73 | Prec 0.75 | F1 0.68 | Det Rec 0.84 | Det FA 0.28 | Epoch Time 119.63s (Eval 7.90s, Train 111.73s)
+[STATE 2026-06-15 21:37:38] T0 Ep 1/1 complete: Prec 0.7493 F1 0.6809 DetRec 0.8411 DetFA 0.2775 | 119.63s total (7.90s eval/111.73s train)
+[STATE 2026-06-15 21:37:38] Task 0: running final validation.
+Saved task checkpoint: logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/checkpoints/task_0.pt
+[STATE 2026-06-15 21:37:46] Saved task checkpoint to logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/checkpoints/task_0.pt
+[STATE 2026-06-15 21:37:46] Completed task 0 (1/10)
 Task 1: 51916 training samples, 17305 test samples.
-[STATE 2026-05-29 20:32:34] Task 1: zero-shot validation (pre-train)
----- Zero-shot (pre-train) task 1: rec_cls 0.0011 | prec_cls 0.0269 | f1_cls 0.0895 | det 0.5120 | pfa 0.1155 | total_f1 0.4618 ----
-[STATE 2026-05-29 20:32:44] Starting task 1 (2/10)
-[STATE 2026-05-29 20:32:44] Task 1 Epoch 1/1: entering train loop
-[STATE 2026-05-29 20:35:13] Task 1 Epoch 1/1: running validation (end of epoch)
----- Eval at Epoch 0: cls [0.8169996830384363, 0.8143669516980501] | det_recall [0.8501044315223272, 0.860128203800815] | det_fa [0.2719149742807027, 0.24128632323666904] ----
-T1 Ep 1/1 | L 0.7563 | Train Acc 0.72 | Prec 0.77 | F1 0.62 | Det Rec 0.73 | Det FA 0.46 | Epoch Time 159.43s (Eval 10.49s, Train 148.94s)
-[STATE 2026-05-29 20:35:24] T1 Ep 1/1 complete: Prec 0.7729 F1 0.6200 DetRec 0.7336 DetFA 0.4554 | 159.43s total (10.49s eval/148.94s train)
-[STATE 2026-05-29 20:35:24] Task 1: running final validation.
-Saved task checkpoint: logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/checkpoints/task_1.pt
-[STATE 2026-05-29 20:35:34] Saved task checkpoint to logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/checkpoints/task_1.pt
-[STATE 2026-05-29 20:35:34] Completed task 1 (2/10)
+[STATE 2026-06-15 21:37:46] Task 1: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 1: rec_cls 0.0283 | prec_cls 0.0498 | f1_cls 0.1162 | det 0.5321 | pfa 0.0905 | total_f1 0.4732 ----
+[STATE 2026-06-15 21:38:02] Starting task 1 (2/10)
+[STATE 2026-06-15 21:38:02] Task 1 Epoch 1/1: entering train loop
+[STATE 2026-06-15 21:41:48] Task 1 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.8109073070375371, 0.8204915130668543] | det_recall [0.8541044168529535, 0.8264535680488964] | det_fa [0.28288996318516463, 0.2972428654471445] ----
+T1 Ep 1/1 | L 0.7601 | Train Acc 0.72 | Prec 0.77 | F1 0.62 | Det Rec 0.73 | Det FA 0.47 | Epoch Time 242.26s (Eval 15.96s, Train 226.30s)
+[STATE 2026-06-15 21:42:04] T1 Ep 1/1 complete: Prec 0.7737 F1 0.6198 DetRec 0.7307 DetFA 0.4743 | 242.26s total (15.96s eval/226.30s train)
+[STATE 2026-06-15 21:42:04] Task 1: running final validation.
+Saved task checkpoint: logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/checkpoints/task_1.pt
+[STATE 2026-06-15 21:42:20] Saved task checkpoint to logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/checkpoints/task_1.pt
+[STATE 2026-06-15 21:42:20] Completed task 1 (2/10)
 Task 2: 350028 training samples, 175014 test samples.
-[STATE 2026-05-29 20:35:35] Task 2: zero-shot validation (pre-train)
----- Zero-shot (pre-train) task 2: rec_cls 0.1959 | prec_cls 0.1927 | f1_cls 0.1263 | det 0.4898 | pfa 0.9893 | total_f1 0.5553 ----
-[STATE 2026-05-29 20:36:38] Starting task 2 (3/10)
-[STATE 2026-05-29 20:36:38] Task 2 Epoch 1/1: entering train loop
-[STATE 2026-05-29 21:01:08] Task 2 Epoch 1/1: running validation (end of epoch)
----- Eval at Epoch 0: cls [0.5827272206567964, 0.46653161822821543, 0.7275715595095603] | det_recall [0.8024955531877161, 0.7310970466850817, 0.8498414900516252] | det_fa [0.29533046540798125, 0.40937505330214485, 0.2305115178622097] ----
-T2 Ep 1/1 | L 0.9244 | Train Acc 0.59 | Prec 0.62 | F1 0.59 | Det Rec 0.82 | Det FA 0.30 | Epoch Time 1533.48s (Eval 63.40s, Train 1470.07s)
-[STATE 2026-05-29 21:02:12] T2 Ep 1/1 complete: Prec 0.6216 F1 0.5904 DetRec 0.8238 DetFA 0.2973 | 1533.48s total (63.40s eval/1470.07s train)
-[STATE 2026-05-29 21:02:12] Task 2: running final validation.
-Saved task checkpoint: logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/checkpoints/task_2.pt
-[STATE 2026-05-29 21:03:15] Saved task checkpoint to logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/checkpoints/task_2.pt
-[STATE 2026-05-29 21:03:15] Completed task 2 (3/10)
+[STATE 2026-06-15 21:42:22] Task 2: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 2: rec_cls 0.1924 | prec_cls 0.2108 | f1_cls 0.1119 | det 0.4993 | pfa 0.9805 | total_f1 0.5410 ----
+[STATE 2026-06-15 21:44:00] Starting task 2 (3/10)
+[STATE 2026-06-15 21:44:00] Task 2 Epoch 1/1: entering train loop
+[STATE 2026-06-15 22:10:14] Task 2 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.6294724686109484, 0.4855437752630883, 0.7017321370472029] | det_recall [0.8227442544399698, 0.7506933019059236, 0.8342673294831343] | det_fa [0.3143041660803782, 0.3868233107056356, 0.28187054927770394] ----
+T2 Ep 1/1 | L 0.9903 | Train Acc 0.57 | Prec 0.59 | F1 0.56 | Det Rec 0.81 | Det FA 0.34 | Epoch Time 1676.35s (Eval 103.29s, Train 1573.06s)
+[STATE 2026-06-15 22:11:57] T2 Ep 1/1 complete: Prec 0.5930 F1 0.5635 DetRec 0.8071 DetFA 0.3351 | 1676.35s total (103.29s eval/1573.06s train)
+[STATE 2026-06-15 22:11:57] Task 2: running final validation.
+Saved task checkpoint: logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/checkpoints/task_2.pt
+[STATE 2026-06-15 22:13:38] Saved task checkpoint to logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/checkpoints/task_2.pt
+[STATE 2026-06-15 22:13:38] Completed task 2 (3/10)
 Task 3: 24480 training samples, 8160 test samples.
-[STATE 2026-05-29 21:03:15] Task 3: zero-shot validation (pre-train)
----- Zero-shot (pre-train) task 3: rec_cls 0.2414 | prec_cls 0.1878 | f1_cls 0.1242 | det 0.4905 | pfa 1.0000 | total_f1 0.4672 ----
-[STATE 2026-05-29 21:04:21] Starting task 3 (4/10)
-[STATE 2026-05-29 21:04:21] Task 3 Epoch 1/1: entering train loop
-[STATE 2026-05-29 21:06:55] Task 3 Epoch 1/1: running validation (end of epoch)
----- Eval at Epoch 0: cls [0.4447422194195718, 0.42090306414083273, 0.46908117707867336, 0.6063154130726012] | det_recall [0.8193702897907128, 0.6955843058107022, 0.7935676855407195, 0.9996349286878345] | det_fa [0.28434786470800766, 0.499761525747696, 0.38741582741864783, 0.00023946360153256704] ----
-T3 Ep 1/1 | L 0.8912 | Train Acc 0.56 | Prec 0.56 | F1 0.60 | Det Rec 0.99 | Det FA 0.01 | Epoch Time 219.62s (Eval 65.94s, Train 153.67s)
-[STATE 2026-05-29 21:08:01] T3 Ep 1/1 complete: Prec 0.5614 F1 0.6006 DetRec 0.9910 DetFA 0.0136 | 219.62s total (65.94s eval/153.67s train)
-[STATE 2026-05-29 21:08:01] Task 3: running final validation.
-Saved task checkpoint: logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/checkpoints/task_3.pt
-[STATE 2026-05-29 21:09:07] Saved task checkpoint to logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/checkpoints/task_3.pt
-[STATE 2026-05-29 21:09:07] Completed task 3 (4/10)
+[STATE 2026-06-15 22:13:38] Task 3: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 3: rec_cls 0.2164 | prec_cls 0.1220 | f1_cls 0.1108 | det 0.4737 | pfa 0.9971 | total_f1 0.4651 ----
+[STATE 2026-06-15 22:15:25] Starting task 3 (4/10)
+[STATE 2026-06-15 22:15:25] Task 3 Epoch 1/1: entering train loop
+[STATE 2026-06-15 22:17:14] Task 3 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.3367472501020239, 0.3895310516988906, 0.5456575811178593, 0.6080706783680255] | det_recall [0.7764602035251822, 0.651685980816072, 0.7829040602080247, 0.9972274645017027] | det_fa [0.28863462180598304, 0.520591494188423, 0.3611224944770702, 0.005307428411043027] ----
+T3 Ep 1/1 | L 0.9132 | Train Acc 0.56 | Prec 0.56 | F1 0.59 | Det Rec 0.98 | Det FA 0.03 | Epoch Time 211.23s (Eval 102.19s, Train 109.04s)
+[STATE 2026-06-15 22:18:57] T3 Ep 1/1 complete: Prec 0.5582 F1 0.5934 DetRec 0.9848 DetFA 0.0263 | 211.23s total (102.19s eval/109.04s train)
+[STATE 2026-06-15 22:18:57] Task 3: running final validation.
+Saved task checkpoint: logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/checkpoints/task_3.pt
+[STATE 2026-06-15 22:20:39] Saved task checkpoint to logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/checkpoints/task_3.pt
+[STATE 2026-06-15 22:20:39] Completed task 3 (4/10)
 Task 4: 24480 training samples, 8160 test samples.
-[STATE 2026-05-29 21:09:07] Task 4: zero-shot validation (pre-train)
----- Zero-shot (pre-train) task 4: rec_cls 0.1225 | prec_cls 0.0543 | f1_cls 0.0530 | det 0.4249 | pfa 1.0000 | total_f1 0.4089 ----
-[STATE 2026-05-29 21:10:15] Starting task 4 (5/10)
-[STATE 2026-05-29 21:10:15] Task 4 Epoch 1/1: entering train loop
-[STATE 2026-05-29 21:13:51] Task 4 Epoch 1/1: running validation (end of epoch)
----- Eval at Epoch 0: cls [0.43984868830598967, 0.399465835007027, 0.4629641295984248, 0.5522003237628323, 0.44998493473207607] | det_recall [0.8279585851429727, 0.7437674627771128, 0.7563027309776749, 0.9973489001800069, 1.0] | det_fa [0.28443021968537896, 0.3996759069396638, 0.47719183304513274, 0.004811520617187875, 0.0] ----
-T4 Ep 1/1 | L 1.0491 | Train Acc 0.39 | Prec 0.36 | F1 0.42 | Det Rec 0.99 | Det FA 0.01 | Epoch Time 284.46s (Eval 68.53s, Train 215.93s)
-[STATE 2026-05-29 21:15:00] T4 Ep 1/1 complete: Prec 0.3604 F1 0.4196 DetRec 0.9938 DetFA 0.0104 | 284.46s total (68.53s eval/215.93s train)
-[STATE 2026-05-29 21:15:00] Task 4: running final validation.
-Saved task checkpoint: logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/checkpoints/task_4.pt
-[STATE 2026-05-29 21:16:08] Saved task checkpoint to logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/checkpoints/task_4.pt
-[STATE 2026-05-29 21:16:08] Completed task 4 (5/10)
+[STATE 2026-06-15 22:20:39] Task 4: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 4: rec_cls 0.1664 | prec_cls 0.0383 | f1_cls 0.0370 | det 0.5000 | pfa 1.0000 | total_f1 0.3925 ----
+[STATE 2026-06-15 22:22:25] Starting task 4 (5/10)
+[STATE 2026-06-15 22:22:25] Task 4 Epoch 1/1: entering train loop
+[STATE 2026-06-15 22:24:14] Task 4 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.36787258791406874, 0.40669290936842867, 0.45809574976514017, 0.5398237009856077, 0.4241983368474241] | det_recall [0.7944789403731961, 0.7003976659400358, 0.7017214161460575, 0.9974887339912183, 1.0] | det_fa [0.32235762024089826, 0.4132300663065321, 0.5170086610920412, 0.003088568365619694, 0.0] ----
+T4 Ep 1/1 | L 1.0603 | Train Acc 0.37 | Prec 0.36 | F1 0.42 | Det Rec 0.99 | Det FA 0.02 | Epoch Time 220.74s (Eval 111.63s, Train 109.12s)
+[STATE 2026-06-15 22:26:06] T4 Ep 1/1 complete: Prec 0.3609 F1 0.4157 DetRec 0.9903 DetFA 0.0194 | 220.74s total (111.63s eval/109.12s train)
+[STATE 2026-06-15 22:26:06] Task 4: running final validation.
+Saved task checkpoint: logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/checkpoints/task_4.pt
+[STATE 2026-06-15 22:27:57] Saved task checkpoint to logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/checkpoints/task_4.pt
+[STATE 2026-06-15 22:27:57] Completed task 4 (5/10)
 Task 5: 201410 training samples, 100705 test samples.
-[STATE 2026-05-29 21:16:09] Task 5: zero-shot validation (pre-train)
----- Zero-shot (pre-train) task 5: rec_cls 0.0987 | prec_cls 0.2264 | f1_cls 0.1589 | det 0.5759 | pfa 0.2779 | total_f1 0.4315 ----
-[STATE 2026-05-29 21:17:47] Starting task 5 (6/10)
-[STATE 2026-05-29 21:17:47] Task 5 Epoch 1/1: entering train loop
-[STATE 2026-05-29 21:56:40] Task 5 Epoch 1/1: running validation (end of epoch)
----- Eval at Epoch 0: cls [0.2827058787678447, 0.34300059565428004, 0.3146117631695112, 0.5115521652408982, 0.34987690926366494, 0.8286228909271001] | det_recall [0.6368328614718126, 0.5558806460713787, 0.7600259773695136, 0.9763094808772217, 0.9986737843203735, 0.8843189721480235] | det_fa [0.4605936379854842, 0.8055653878451704, 0.4444265330574838, 0.03646054694527978, 0.0, 0.2090168429495017] ----
-T5 Ep 1/1 | L 0.5970 | Train Acc 0.75 | Prec 0.75 | F1 0.73 | Det Rec 0.88 | Det FA 0.20 | Epoch Time 2430.94s (Eval 98.35s, Train 2332.59s)
-[STATE 2026-05-29 21:58:18] T5 Ep 1/1 complete: Prec 0.7540 F1 0.7295 DetRec 0.8758 DetFA 0.2011 | 2430.94s total (98.35s eval/2332.59s train)
-[STATE 2026-05-29 21:58:18] Task 5: running final validation.
-Saved task checkpoint: logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/checkpoints/task_5.pt
-[STATE 2026-05-29 21:59:57] Saved task checkpoint to logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/checkpoints/task_5.pt
-[STATE 2026-05-29 21:59:57] Completed task 5 (6/10)
+[STATE 2026-06-15 22:28:10] Task 5: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 5: rec_cls 0.1072 | prec_cls 0.1761 | f1_cls 0.1146 | det 0.4409 | pfa 0.7400 | total_f1 0.3958 ----
+[STATE 2026-06-15 22:30:49] Starting task 5 (6/10)
+[STATE 2026-06-15 22:30:49] Task 5 Epoch 1/1: entering train loop
+[STATE 2026-06-15 22:45:49] Task 5 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.2612137659228839, 0.24752772252275607, 0.28807457507856454, 0.40807606694809734, 0.27487026803728437, 0.8041214737469288] | det_recall [0.6415924693021238, 0.6262989314401917, 0.7609843188423868, 0.9914218255959902, 0.9729998016600913, 0.8677385487958217] | det_fa [0.5384870687878612, 0.46877751067726464, 0.34165356029137073, 0.005732401467633683, 0.0, 0.24252878376167006] ----
+T5 Ep 1/1 | L 0.6497 | Train Acc 0.73 | Prec 0.74 | F1 0.71 | Det Rec 0.85 | Det FA 0.24 | Epoch Time 1054.30s (Eval 154.37s, Train 899.93s)
+[STATE 2026-06-15 22:48:23] T5 Ep 1/1 complete: Prec 0.7366 F1 0.7053 DetRec 0.8530 DetFA 0.2398 | 1054.30s total (154.37s eval/899.93s train)
+[STATE 2026-06-15 22:48:23] Task 5: running final validation.
+Saved task checkpoint: logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/checkpoints/task_5.pt
+[STATE 2026-06-15 22:50:58] Saved task checkpoint to logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/checkpoints/task_5.pt
+[STATE 2026-06-15 22:50:58] Completed task 5 (6/10)
 Task 6: 17340 training samples, 6800 test samples.
-[STATE 2026-05-29 21:59:57] Task 6: zero-shot validation (pre-train)
----- Zero-shot (pre-train) task 6: rec_cls 0.1127 | prec_cls 0.2857 | f1_cls 0.2181 | det 0.8084 | pfa 0.1536 | total_f1 0.4089 ----
-[STATE 2026-05-29 22:01:37] Starting task 6 (7/10)
-[STATE 2026-05-29 22:01:37] Task 6 Epoch 1/1: entering train loop
-[STATE 2026-05-29 22:05:30] Task 6 Epoch 1/1: running validation (end of epoch)
----- Eval at Epoch 0: cls [0.4323462780381374, 0.38123825078347173, 0.2971577864992297, 0.5756141426090768, 0.3587476448545555, 0.7151541513753102, 0.5566847464934984] | det_recall [0.7962524247241034, 0.6084102214007994, 0.7559542057982418, 0.9956599293535496, 1.0, 0.827595653955447, 1.0] | det_fa [0.2814513769656836, 0.7026020262254135, 0.4294325957534232, 0.0011588029099020658, 0.0, 0.3415781801854545, 0.0] ----
-T6 Ep 1/1 | L 0.8935 | Train Acc 0.52 | Prec 0.52 | F1 0.57 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 357.72s (Eval 124.19s, Train 233.53s)
-[STATE 2026-05-29 22:07:35] T6 Ep 1/1 complete: Prec 0.5245 F1 0.5726 DetRec 0.9971 DetFA 0.0008 | 357.72s total (124.19s eval/233.53s train)
-[STATE 2026-05-29 22:07:35] Task 6: running final validation.
-Saved task checkpoint: logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/checkpoints/task_6.pt
-[STATE 2026-05-29 22:09:37] Saved task checkpoint to logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/checkpoints/task_6.pt
-[STATE 2026-05-29 22:09:37] Completed task 6 (7/10)
+[STATE 2026-06-15 22:50:58] Task 6: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 6: rec_cls 0.1088 | prec_cls 0.1290 | f1_cls 0.2162 | det 0.8511 | pfa 0.0058 | total_f1 0.3720 ----
+[STATE 2026-06-15 22:53:43] Starting task 6 (7/10)
+[STATE 2026-06-15 22:53:43] Task 6 Epoch 1/1: entering train loop
+[STATE 2026-06-15 22:54:59] Task 6 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.17004657337823398, 0.21618116973550464, 0.2305826114100716, 0.4039574521903825, 0.2870181658588288, 0.6904957126113656, 0.5615217711498673] | det_recall [0.558294740096504, 0.5976828785513026, 0.6118346199557656, 0.9885144919847936, 1.0, 0.7512065906112513, 1.0] | det_fa [0.6404478872558987, 0.5674206815404208, 0.5466769412424025, 0.00021701388888888888, 0.0, 0.44441180762951515, 0.0] ----
+T6 Ep 1/1 | L 0.8763 | Train Acc 0.52 | Prec 0.52 | F1 0.58 | Det Rec 1.00 | Det FA 0.00 | Epoch Time 234.23s (Eval 157.42s, Train 76.82s)
+[STATE 2026-06-15 22:57:37] T6 Ep 1/1 complete: Prec 0.5222 F1 0.5849 DetRec 0.9956 DetFA 0.0002 | 234.23s total (157.42s eval/76.82s train)
+[STATE 2026-06-15 22:57:37] Task 6: running final validation.
+Saved task checkpoint: logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/checkpoints/task_6.pt
+[STATE 2026-06-15 23:00:14] Saved task checkpoint to logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/checkpoints/task_6.pt
+[STATE 2026-06-15 23:00:14] Completed task 6 (7/10)
 Task 7: 188050 training samples, 94025 test samples.
-[STATE 2026-05-29 22:09:38] Task 7: zero-shot validation (pre-train)
----- Zero-shot (pre-train) task 7: rec_cls 0.1454 | prec_cls 0.1037 | f1_cls 0.1342 | det 0.5174 | pfa 0.5562 | total_f1 0.4414 ----
-[STATE 2026-05-29 22:11:50] Starting task 7 (8/10)
-[STATE 2026-05-29 22:11:50] Task 7 Epoch 1/1: entering train loop
-[STATE 2026-05-29 23:00:07] Task 7 Epoch 1/1: running validation (end of epoch)
----- Eval at Epoch 0: cls [0.3073748587733928, 0.3348379514037352, 0.3115539087364786, 0.5349973262257766, 0.36420707265195834, 0.6171423242401265, 0.4938348510673303, 0.8198201597456276] | det_recall [0.7425562919756964, 0.5954886913863502, 0.7770068777141687, 0.9896986315241976, 0.9994055023060295, 0.8835115366496803, 0.9962529847976883, 0.8709962429048216] | det_fa [0.34404305525619905, 0.7238734487233321, 0.4025096349041074, 0.00842340861870805, 0.0, 0.1671787080688778, 0.0074940304046233145, 0.19910598637502475] ----
-T7 Ep 1/1 | L 0.5371 | Train Acc 0.77 | Prec 0.79 | F1 0.76 | Det Rec 0.87 | Det FA 0.20 | Epoch Time 3026.64s (Eval 129.55s, Train 2897.09s)
-[STATE 2026-05-29 23:02:17] T7 Ep 1/1 complete: Prec 0.7931 F1 0.7568 DetRec 0.8684 DetFA 0.1986 | 3026.64s total (129.55s eval/2897.09s train)
-[STATE 2026-05-29 23:02:17] Task 7: running final validation.
-Saved task checkpoint: logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/checkpoints/task_7.pt
-[STATE 2026-05-29 23:04:26] Saved task checkpoint to logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/checkpoints/task_7.pt
-[STATE 2026-05-29 23:04:26] Completed task 7 (8/10)
+[STATE 2026-06-15 23:00:25] Task 7: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 7: rec_cls 0.1058 | prec_cls 0.1784 | f1_cls 0.1295 | det 0.5323 | pfa 0.4002 | total_f1 0.3445 ----
+[STATE 2026-06-15 23:03:47] Starting task 7 (8/10)
+[STATE 2026-06-15 23:03:47] Task 7 Epoch 1/1: entering train loop
+[STATE 2026-06-15 23:17:51] Task 7 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.1658058407547854, 0.2315485237031909, 0.2326470769146112, 0.4619522528570273, 0.2939088581877758, 0.6057733010852334, 0.47183699730228235, 0.7859850210779824] | det_recall [0.4298228539901367, 0.4999310750893414, 0.7275538405160339, 0.990398334711834, 0.9824100108203774, 0.8339732022091613, 0.9980653220790788, 0.8590000436825028] | det_fa [0.7962337209177104, 0.6990910752190765, 0.3652382876230158, 0.01217162328526378, 0.0, 0.28012555345897583, 0.0038693558418421876, 0.2217224398881001] ----
+T7 Ep 1/1 | L 0.6216 | Train Acc 0.73 | Prec 0.75 | F1 0.72 | Det Rec 0.85 | Det FA 0.24 | Epoch Time 1046.30s (Eval 202.00s, Train 844.30s)
+[STATE 2026-06-15 23:21:13] T7 Ep 1/1 complete: Prec 0.7549 F1 0.7176 DetRec 0.8487 DetFA 0.2356 | 1046.30s total (202.00s eval/844.30s train)
+[STATE 2026-06-15 23:21:13] Task 7: running final validation.
+Saved task checkpoint: logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/checkpoints/task_7.pt
+[STATE 2026-06-15 23:24:35] Saved task checkpoint to logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/checkpoints/task_7.pt
+[STATE 2026-06-15 23:24:35] Completed task 7 (8/10)
 Task 8: 36658 training samples, 12220 test samples.
-[STATE 2026-05-29 23:04:26] Task 8: zero-shot validation (pre-train)
----- Zero-shot (pre-train) task 8: rec_cls 0.1373 | prec_cls 0.1405 | f1_cls 0.0597 | det 0.4907 | pfa 0.9330 | total_f1 0.4473 ----
-[STATE 2026-05-29 23:06:40] Starting task 8 (9/10)
-[STATE 2026-05-29 23:06:40] Task 8 Epoch 1/1: entering train loop
-[STATE 2026-05-29 23:16:41] Task 8 Epoch 1/1: running validation (end of epoch)
----- Eval at Epoch 0: cls [0.6549867835369775, 0.6297977759650171, 0.2467784649872612, 0.52189542177185, 0.308353106512986, 0.29892264819989245, 0.463672426815192, 0.4074341638542666, 0.822594616460888] | det_recall [0.8526194192461206, 0.6840007596967803, 0.6311430434657038, 0.9923423425918851, 0.9913371173297871, 0.5478451885803396, 0.99597080447539, 0.5684542889278026, 0.8025477481460919] | det_fa [0.2669562708995825, 0.5568666869148645, 0.6871062642014125, 0.00021701388888888888, 0.0, 0.8932277762894112, 0.0, 0.8254042384067756, 0.3634729842776805] ----
-T8 Ep 1/1 | L 0.7860 | Train Acc 0.72 | Prec 0.73 | F1 0.57 | Det Rec 0.75 | Det FA 0.46 | Epoch Time 734.24s (Eval 133.20s, Train 601.03s)
-[STATE 2026-05-29 23:18:54] T8 Ep 1/1 complete: Prec 0.7304 F1 0.5747 DetRec 0.7508 DetFA 0.4572 | 734.24s total (133.20s eval/601.03s train)
-[STATE 2026-05-29 23:18:54] Task 8: running final validation.
-Saved task checkpoint: logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/checkpoints/task_8.pt
-[STATE 2026-05-29 23:21:08] Saved task checkpoint to logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/checkpoints/task_8.pt
-[STATE 2026-05-29 23:21:08] Completed task 8 (9/10)
+[STATE 2026-06-15 23:24:36] Task 8: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 8: rec_cls 0.1364 | prec_cls 0.0831 | f1_cls 0.0510 | det 0.4883 | pfa 0.9633 | total_f1 0.3783 ----
+[STATE 2026-06-15 23:28:04] Starting task 8 (9/10)
+[STATE 2026-06-15 23:28:04] Task 8 Epoch 1/1: entering train loop
+[STATE 2026-06-15 23:30:45] Task 8 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.33083472616604065, 0.38695177029928624, 0.21732287962757024, 0.44145146708345734, 0.27797251429476966, 0.38486086280241943, 0.44082893295105524, 0.35214226383692, 0.8351093039739044] | det_recall [0.4223008730895925, 0.5148855917685844, 0.48325191990109617, 0.9804972326637214, 0.9735726679715125, 0.5411832239721135, 1.0, 0.5053372241114683, 0.7889611438788684] | det_fa [0.8467250134382311, 0.8632337250585616, 0.944588333566409, 0.0009229538532982922, 0.0, 0.8529192816360386, 0.0, 0.889962924050998, 0.4019994038772552] ----
+T8 Ep 1/1 | L 0.8036 | Train Acc 0.71 | Prec 0.73 | F1 0.58 | Det Rec 0.76 | Det FA 0.44 | Epoch Time 368.55s (Eval 207.79s, Train 160.75s)
+[STATE 2026-06-15 23:34:12] T8 Ep 1/1 complete: Prec 0.7261 F1 0.5817 DetRec 0.7588 DetFA 0.4394 | 368.55s total (207.79s eval/160.75s train)
+[STATE 2026-06-15 23:34:12] Task 8: running final validation.
+Saved task checkpoint: logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/checkpoints/task_8.pt
+[STATE 2026-06-15 23:37:40] Saved task checkpoint to logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/checkpoints/task_8.pt
+[STATE 2026-06-15 23:37:40] Completed task 8 (9/10)
 Task 9: 17340 training samples, 6800 test samples.
-[STATE 2026-05-29 23:21:08] Task 9: zero-shot validation (pre-train)
----- Zero-shot (pre-train) task 9: rec_cls 0.2005 | prec_cls 0.0999 | f1_cls 0.1122 | det 0.6428 | pfa 0.7122 | total_f1 0.4257 ----
-[STATE 2026-05-29 23:23:23] Starting task 9 (10/10)
-[STATE 2026-05-29 23:23:23] Task 9 Epoch 1/1: entering train loop
-[STATE 2026-05-29 23:28:40] Task 9 Epoch 1/1: running validation (end of epoch)
----- Eval at Epoch 0: cls [0.5600693522207638, 0.5802979452049718, 0.2575237178181962, 0.5333483971145836, 0.3850202050241839, 0.2819271762435987, 0.49005729030368067, 0.3577809716947716, 0.47330288363156375, 0.45852396838039017] | det_recall [0.8556503866693107, 0.6729796817264172, 0.7004396003338506, 0.9917932188780328, 1.0, 0.6081638314898286, 1.0, 0.6180376820941873, 0.7995984063918141, 1.0] | det_fa [0.21960768357895422, 0.586642484754554, 0.5104145037712616, 0.0, 0.0, 0.764797835963018, 0.0, 0.7285425669841803, 0.1914541828150433, 0.0] ----
-T9 Ep 1/1 | L 0.9295 | Train Acc 0.42 | Prec 0.38 | F1 0.44 | Det Rec 0.99 | Det FA 0.01 | Epoch Time 452.53s (Eval 135.34s, Train 317.20s)
-[STATE 2026-05-29 23:30:56] T9 Ep 1/1 complete: Prec 0.3836 F1 0.4449 DetRec 0.9950 DetFA 0.0100 | 452.53s total (135.34s eval/317.20s train)
-[STATE 2026-05-29 23:30:56] Task 9: running final validation.
-Saved task checkpoint: logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/checkpoints/task_9.pt
-[STATE 2026-05-29 23:33:11] Saved task checkpoint to logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/checkpoints/task_9.pt
-[STATE 2026-05-29 23:33:11] Completed task 9 (10/10)
+[STATE 2026-06-15 23:37:40] Task 9: zero-shot validation (pre-train)
+---- Zero-shot (pre-train) task 9: rec_cls 0.0377 | prec_cls 0.0882 | f1_cls 0.0237 | det 0.1989 | pfa 1.0000 | total_f1 0.3310 ----
+[STATE 2026-06-15 23:41:11] Starting task 9 (10/10)
+[STATE 2026-06-15 23:41:11] Task 9 Epoch 1/1: entering train loop
+[STATE 2026-06-15 23:42:28] Task 9 Epoch 1/1: running validation (end of epoch)
+---- Eval at Epoch 0: cls [0.23542781608569893, 0.3186520903932983, 0.22435168511000225, 0.45371355202443464, 0.36745724327095886, 0.39724237730384, 0.395516045013737, 0.3848535240669639, 0.4798055578489928, 0.4678757077765668] | det_recall [0.37763256311321436, 0.5537596965582386, 0.49623253701272413, 0.987056260708774, 0.999764226342711, 0.5251987272036142, 1.0, 0.5200461875401029, 0.7954190825306416, 1.0] | det_fa [0.8332957428508094, 0.7302533813095472, 0.9016186465420065, 0.0006510416666666666, 0.0, 0.8890812204839805, 0.0, 0.8925820043315112, 0.3122626238503166, 0.0] ----
+T9 Ep 1/1 | L 0.9650 | Train Acc 0.41 | Prec 0.39 | F1 0.45 | Det Rec 0.98 | Det FA 0.03 | Epoch Time 287.90s (Eval 211.07s, Train 76.83s)
+[STATE 2026-06-15 23:45:59] T9 Ep 1/1 complete: Prec 0.3931 F1 0.4514 DetRec 0.9771 DetFA 0.0294 | 287.90s total (211.07s eval/76.83s train)
+[STATE 2026-06-15 23:45:59] Task 9: running final validation.
+Saved task checkpoint: logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/checkpoints/task_9.pt
+[STATE 2026-06-15 23:49:30] Saved task checkpoint to logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/checkpoints/task_9.pt
+[STATE 2026-06-15 23:49:30] Completed task 9 (10/10)
 ####Final Validation Accuracy####
 Final Results:- 
- Total Recall: 0.4361531262335491 
- Individual Recall: [0.5617570029006469, 0.5787291477783166, 0.2565862313436613, 0.5315467588464461, 0.38248396100684207, 0.2806641565524919, 0.4899552376884455, 0.35871834765401867, 0.4688558241684903, 0.45223459439613206]
+ Total Recall: 0.3689760770161562 
+ Individual Recall: [0.22847295130761128, 0.3100730636509455, 0.22478856546557968, 0.44652629130590943, 0.3694317022794272, 0.3964063890210638, 0.3894944700776452, 0.38692380281894123, 0.47512718727494346, 0.46251634695949473]
 Final Detection Results:- 
- Total Detection: 0.8250273980655667 
- Individual Detection: [0.8567862324785048, 0.6729409376898587, 0.7022986886732457, 0.9918652180225892, 1.0, 0.6077589761488468, 1.0, 0.6185792929013448, 0.800044634741277, 1.0]
+ Total Detection: 0.7247094446058104 
+ Individual Detection: [0.37511003067987286, 0.5508108311558733, 0.49743156842945135, 0.9863107553072594, 0.9998867753623188, 0.5253312778743047, 1.0, 0.5197144052307003, 0.7924988020183238, 1.0]
 Final Detection False Alarm:- 
- Total False Alarm: 0.2995953270125412 
- Individual False Alarm: [0.21800254222358717, 0.5843571075814696, 0.5067716750105207, 0.0002358490566037736, 0.0, 0.7664420645280831, 0.0, 0.7278427703074388, 0.19230126141770865, 0.0]
-SUMMARY_TR cls_rec=0.4153 cls_prec=0.3836 cls_f1=0.4449 det=0.8247 fa=0.3001
-SUMMARY_TE cls_rec=0.4362 cls_prec=0.4739 cls_f1=0.4441 det=0.8250 fa=0.2996
-[STATE 2026-05-29 23:33:11] Saving results to logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/results
+ Total False Alarm: 0.4562862691493277 
+ Individual False Alarm: [0.8336159207194783, 0.7321194267889013, 0.8998608109089048, 0.00045286294549266246, 0.0, 0.8890433851526379, 0.0, 0.8930778642639471, 0.314692420713915, 0.0]
+SUMMARY_TR cls_rec=0.4087 cls_prec=0.3931 cls_f1=0.4514 det=0.7255 fa=0.4560
+SUMMARY_TE cls_rec=0.3690 cls_prec=0.4206 cls_f1=0.3480 det=0.7247 fa=0.4563
+[STATE 2026-06-15 23:49:31] Saving results to logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/results
 Model size: 0.0289 GB
-Memory buffer size: 0.0196 GB
-logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/results: {'expt_name': 'seed-sweep_one-shot_til', 'model': 'agem', 'arch': 'resnet1d', 'n_hiddens': 100, 'n_layers': 2, 'xav_init': False, 'debug': False, 'use_detector_arch': False, 'use_groupnorm': False, 'inner_steps': 2, 'n_epochs': 1, 'batch_size': 256, 'replay_batch_size': 128, 'memories': 5120, 'lr': 0.01, 'optimizer': 'sgd', 'prune_perc': 0.75, 'post_prune_epochs': 0, 'class_weighted_ce': True, 'cuda': True, 'amp': True, 'amp_dtype': 'bfloat16', 'cudnn_benchmark': True, 'seed': 39, 'log_every': 10, 'log_dir': 'logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39', 'tf_dir': 'logs//agem/seed-sweep_one-shot_til-2026-05-29_20-29-54-4123/39/tfdir', 'calc_test_accuracy': False, 'state_logging': True, 'data_path': 'data/rff/radar/full', 'task_order_files': 't2-rcn,t0-rcn,t2-uclresm-25noise,t0-deeprad,t1-deeprad,t1-uclresm-25noise,t3-deeprad,t0-uclresm-25noise,t1-rcn,t2-deeprad', 'loader': 'task_incremental_loader', 'samples_per_task': -1, 'task_order_seed': None, 'classes_per_it': 6, 'iterations': 5000, 'dataset': 'iq', 'workers': 0, 'validation': 0.5, 'data_scaling': 'normalize', 'use_iq_aug_features': False, 'iq_aug_feature_type': 'power', 'class_order': 'random', 'increment': 5, 'test_batch_size': 512, 'nc_per_task': None, 'nc_per_task_list': '', 'val_rate': 1000, 'opt_lr': 0.1, 'opt_wt': 0.1, 'alpha_init': 0.001, 'momentum': 0.0, 'learn_lr': False, 'sync_update': False, 'grad_clip_norm': 5.0, 'meta_batches': 3, 'use_old_task_memory': False, 'second_order': False, 'n_memories': 5120, 'memory_strength': 0, 'memory_loss_lambda': 5.0, 'steps_per_sample': 1, 'bgd_optimizer': 'sgd', 'optimizer_params': '{}', 'train_mc_iters': 5, 'std_init': 0.05, 'mean_eta': 1, 'fisher_gamma': 0.95, 'rln': 7, 'meta_lr': 0.001, 'update_lr': 0.1, 'ctx_lr': 0.05, 'n_meta': 1, 'temperature': 5.0, 'task_emb': 64, 'classes_per_task': [6, 7, 6, 7, 7, 6, 6, 6, 7, 6], 'get_samples_per_task': <bound method IncrementalLoader.get_samples_per_task of <dataloaders.task_incremental_loader.IncrementalLoader object at 0x78e2bdaab4d0>>, 'task_epoch_schedule': {}} # val: 0.697 0.436 -0.261 0.000 # sizes: model_gb=0.0289 mem_gb=0.0196 # 10935.16497850418
-[STATE 2026-05-29 23:33:11] results.pt components (approx): state_dict 29.6 MB, result_val_t 0.1 KB, result_val_a 0.8 KB
-[STATE 2026-05-29 23:33:11] Results saved; total runtime 3.04h
-Total runtime: 3.04 hours
+Memory buffer size: 0.0391 GB
+Persistent state sizes (GB): model_params=0.0289 replay=0.0391 regularization=0.0000 arch_mask=0.0000 other=0.1589 total=0.2269
+logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/results: {'expt_name': 'full-tasks_CIL_all', 'model': 'agem', 'arch': 'resnet1d', 'n_hiddens': 100, 'n_layers': 2, 'xav_init': False, 'debug': False, 'use_detector_arch': False, 'use_groupnorm': False, 'inner_steps': 2, 'n_epochs': 1, 'batch_size': 256, 'replay_batch_size': 128, 'memories': 5120, 'lr': 0.003, 'optimizer': 'sgd', 'prune_perc': 0.75, 'post_prune_epochs': 0, 'class_weighted_ce': True, 'cuda': True, 'amp': True, 'amp_dtype': 'bfloat16', 'cudnn_benchmark': True, 'seed': 39, 'log_every': 10, 'log_dir': 'logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39', 'tf_dir': 'logs//agem/full-tasks_CIL_all-2026-06-15_21-34-24-2248/39/tfdir', 'calc_test_accuracy': False, 'state_logging': True, 'data_path': 'data/rff/radar/full', 'task_order_files': 't2-rcn,t0-rcn,t2-uclresm-25noise,t0-deeprad,t1-deeprad,t1-uclresm-25noise,t3-deeprad,t0-uclresm-25noise,t1-rcn,t2-deeprad', 'loader': 'task_incremental_loader', 'samples_per_task': -1, 'task_order_seed': None, 'classes_per_it': 6, 'iterations': 5000, 'dataset': 'iq', 'workers': 0, 'validation': 0.5, 'data_scaling': 'normalize', 'use_iq_aug_features': False, 'iq_aug_feature_type': 'power', 'class_order': 'random', 'increment': 5, 'test_batch_size': 512, 'nc_per_task': None, 'nc_per_task_list': '', 'val_rate': 1000, 'opt_lr': 0.1, 'opt_wt': 0.1, 'alpha_init': 0.001, 'momentum': 0.0, 'learn_lr': False, 'sync_update': False, 'grad_clip_norm': 5.0, 'meta_batches': 3, 'use_old_task_memory': False, 'second_order': False, 'n_memories': 5120, 'memory_strength': 0, 'memory_loss_lambda': 5.0, 'steps_per_sample': 1, 'bgd_optimizer': 'sgd', 'optimizer_params': '{}', 'train_mc_iters': 5, 'std_init': 0.05, 'mean_eta': 1, 'fisher_gamma': 0.95, 'rln': 7, 'meta_lr': 0.001, 'update_lr': 0.1, 'ctx_lr': 0.05, 'n_meta': 1, 'temperature': 5.0, 'task_emb': 64, 'classes_per_task': [6, 7, 6, 7, 7, 6, 6, 6, 7, 6], 'get_samples_per_task': <bound method IncrementalLoader.get_samples_per_task of <dataloaders.task_incremental_loader.IncrementalLoader object at 0x7a2804cfdc30>>, 'task_epoch_schedule': {}} # val: 0.688 0.369 -0.319 0.000 # sizes: model_gb=0.0289 mem_gb=0.0391 # state_gb: model_params=0.0289 replay=0.0391 regularization=0.0000 arch_mask=0.0000 other=0.1589 total=0.2269 # 8040.305855512619
+[STATE 2026-06-15 23:49:31] results.pt components (approx): state_dict 29.6 MB, result_val_t 0.1 KB, result_val_a 0.8 KB
+[STATE 2026-06-15 23:49:31] Results saved; total runtime 2.23h
+Total runtime: 2.23 hours
