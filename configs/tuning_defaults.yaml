@@ -29,7 +29,7 @@ temperature: 5
 n_epochs: 5
 optimizer: sgd
 batch_size: 256
-replay_batch_size: 64
+replay_batch_size: 128
 clipgrad: 5.0
 grad_clip_norm: 5.0
 
