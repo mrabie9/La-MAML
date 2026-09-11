@@ -65,7 +65,11 @@ from matplotlib.ticker import MultipleLocator  # noqa: E402
 from matplotlib.transforms import Bbox  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from utils.metric_keys import extract_metric, first_present_key  # noqa: E402
+from utils.metric_keys import (  # noqa: E402
+    extract_metric,
+    first_present_key,
+    metric_aliases,
+)
 
 try:
     # Reuse the same plot styling config (til/cil sizing & legend layout)
@@ -355,13 +359,19 @@ def load_metrics(metrics_dir: Path) -> List[TaskMetrics]:
     for path in task_files:
         data = np.load(path, allow_pickle=True)
         task_data: TaskMetrics = {key: np.asarray(data[key]) for key in data.files}
-        # Truncate validation metrics (e.g. val_acc, val_f1) in the same way as
-        # scripts/plot_metrics.py so that only the final per-task values remain.
+        # Truncate validation metrics (e.g. val_macro_rec, val_macro_f1) in the
+        # same way as scripts/plot_metrics.py so that only the final per-task
+        # values remain. val_macro_f1 in particular accumulates across the
+        # whole run (never reset per task in life_experience), so without this
+        # the same early entries get read back for every task and forgetting
+        # comes out as 0. Walk both canonical and legacy key names so runs
+        # produced before the cls_* -> macro_* rename still load correctly.
         task_idx = _task_index(path.name)
         num_tasks_seen = task_idx + 1
-        for key in ("val_acc", "val_f1"):
-            if key in task_data and len(task_data[key]) > num_tasks_seen:
-                task_data[key] = task_data[key][-num_tasks_seen:]
+        for canonical_key in ("val_macro_rec", "val_macro_f1"):
+            for key in metric_aliases(canonical_key):
+                if key in task_data and len(task_data[key]) > num_tasks_seen:
+                    task_data[key] = task_data[key][-num_tasks_seen:]
         tasks.append(task_data)
     return tasks
 
