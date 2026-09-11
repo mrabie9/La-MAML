@@ -19,10 +19,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from model.resnet1d import ResNet1D
-from model.detection_replay import (
-    DetectionReplayMixin,
-    noise_label_from_args,
-    signal_mask_exclude_noise,
+from model.replay_utils import (
+    ReplayInputMixin,
     unpack_y_to_class_labels,
 )
 from utils.training_metrics import macro_recall
@@ -43,10 +41,7 @@ class LwfConfig:
     momentum: float = 0.9
     weight_decay: float = 0.0
     clipgrad: Optional[float] = 100.0
-    det_lambda: float = 1.0
     cls_lambda: float = 1.0
-    det_memories: int = 2000
-    det_replay_batch: int = 64
 
     @staticmethod
     def from_args(args: object) -> "LwfConfig":
@@ -57,7 +52,7 @@ class LwfConfig:
         return cfg
 
 
-class Net(DetectionReplayMixin, nn.Module):
+class Net(ReplayInputMixin, nn.Module):
     """LwF learner that plugs directly into the repository training loop."""
 
     def __init__(
@@ -89,13 +84,7 @@ class Net(DetectionReplayMixin, nn.Module):
         self.temperature = float(self.cfg.temperature)
         self.distill_lambda = float(self.cfg.distill_lambda)
         self.clipgrad = self.cfg.clipgrad
-        self.det_lambda = float(self.cfg.det_lambda)
         self.cls_lambda = float(self.cfg.cls_lambda)
-        self._init_det_replay(
-            self.cfg.det_memories,
-            self.cfg.det_replay_batch,
-            enabled=bool(getattr(args, "use_detector_arch", False)),
-        )
 
         self.current_task: Optional[int] = None
         self.teacher: Optional[nn.Module] = None
@@ -104,7 +93,6 @@ class Net(DetectionReplayMixin, nn.Module):
         # contiguous class blocks per task.
         self.task_class_ids: Dict[int, List[int]] = {}
         self.task_label_maps: Dict[int, Dict[int, int]] = {}
-        self.noise_label: int | None = noise_label_from_args(args)
         self.incremental_loader_name = getattr(args, "loader", None)
 
     # ------------------------------------------------------------------
@@ -133,7 +121,6 @@ class Net(DetectionReplayMixin, nn.Module):
                 self.classes_per_task,
                 self.n_outputs,
                 cil_all_seen_upto_task=cil,
-                global_noise_label=self.noise_label,
                 loader=self.incremental_loader_name,
             )
         class_ids = self.task_class_ids.get(t)
@@ -161,51 +148,22 @@ class Net(DetectionReplayMixin, nn.Module):
             self.current_task = t
 
         self.net.train()
-        # class_counts = getattr(self, "classes_per_task", None)
-        # noise_label = None
-        # if class_counts is not None:
-        #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
-        #     noise_label = offset2 - 1
-        # y_cls, y_det = self._unpack_labels(
-        #     y,
-        #     noise_label=noise_label,
-        #     use_detector_arch=bool(getattr(self, "det_enabled", False)),
-        # )
-        # if y_det is not None and self.det_memories > 0:
-        #     self._update_det_memory(x, y_det)
         metric_logits = None
         for _ in range(self.cfg.inner_steps):
             y_cls = unpack_y_to_class_labels(y)
-            cls_logits = self.net.forward_heads(x)[1]
-            signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
+            cls_logits = self.net(x)
             class_ids = self._update_task_classes(t, y_cls)
             current_logits = self._select_task_logits(cls_logits, class_ids)
             targets = self._map_labels_to_local(y_cls, t)
             loss_ce = classification_cross_entropy(
                 current_logits, targets, class_weighted_ce=self.class_weighted_ce
             )
-            if signal_mask.any():
-                preds = torch.argmax(current_logits[signal_mask], dim=1)
-                cls_tr_rec = macro_recall(preds, targets[signal_mask])
-            else:
-                cls_tr_rec = 0.0
-
+            preds = torch.argmax(current_logits, dim=1)
+            cls_tr_rec = macro_recall(preds, targets)
             prev_class_ids = self._collect_previous_class_ids(t)
             distill_loss = self._distillation_loss(cls_logits, x, prev_class_ids)
 
-            # det_loss = self.det_loss(det_logits, y_det.float())
-            # det_replay = self._sample_det_memory()
-            # if det_replay is not None:
-            #     mem_x, mem_y = det_replay
-            #     mem_det_logits, _ = self.net.forward_heads(mem_x)
-            #     mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-            #     det_loss = 0.5 * (det_loss + mem_loss)
-
-            loss = (
-                self.cls_lambda * loss_ce
-                # + self.det_lambda * det_loss
-                + self.distill_lambda * distill_loss
-            )
+            loss = self.cls_lambda * loss_ce + self.distill_lambda * distill_loss
 
             self.opt.zero_grad()
             loss.backward()

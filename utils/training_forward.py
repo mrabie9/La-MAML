@@ -22,9 +22,8 @@ def model_forward_for_metric_loop(
 
     **iCaRL:** Metrics use ``netforward`` logits plus the same
     :func:`utils.misc_utils.apply_task_incremental_logit_mask` call as
-    :meth:`model.icarl.Net.observe` (``cil_all_seen_upto_task=task_index`` and
-    ``global_noise_label``), not nearest-mean ``forward`` (which omits noise
-    before / without exemplars). This matches training for TIL and CIL runs,
+    :meth:`model.icarl.Net.observe` (``cil_all_seen_upto_task=task_index``),
+    not nearest-mean ``forward``. This matches training for TIL and CIL runs,
     because ``observe`` always passes ``cil_all_seen_upto_task=task_index``.
 
     Args:
@@ -52,7 +51,6 @@ def model_forward_for_metric_loop(
             model.classes_per_task,  # type: ignore[attr-defined]
             model.n_classes,  # type: ignore[attr-defined]
             cil_all_seen_upto_task=task_index,
-            global_noise_label=getattr(model, "noise_label", None),
             loader=getattr(args, "loader", None),
         )
     try:

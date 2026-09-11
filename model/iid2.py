@@ -4,11 +4,7 @@ import sys
 import torch
 
 from model.resnet1d import ResNet1D
-from model.detection_replay import (
-    noise_label_from_args,
-    signal_mask_exclude_noise,
-    unpack_y_to_class_labels,
-)
+from model.replay_utils import unpack_y_to_class_labels
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 from utils.class_weighted_loss import classification_cross_entropy
@@ -86,7 +82,6 @@ class Net(torch.nn.Module):
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
-        self.noise_label: int | None = noise_label_from_args(args)
         self.incremental_loader_name = getattr(args, "loader", None)
 
         if self.cfg.arch != "resnet1d":
@@ -122,7 +117,6 @@ class Net(torch.nn.Module):
             self.classes_per_task,
             self.n_outputs,
             cil_all_seen_upto_task=cil,
-            global_noise_label=self.noise_label,
             loader=self.incremental_loader_name,
         )
 
@@ -154,7 +148,6 @@ class Net(torch.nn.Module):
 
             logits = self.net(x)
             targets = unpack_y_to_class_labels(y).long()
-            signal_mask = signal_mask_exclude_noise(targets, self.noise_label)
             loss_tensor = classification_cross_entropy(
                 logits,
                 targets,
@@ -166,14 +159,10 @@ class Net(torch.nn.Module):
 
             with torch.no_grad():
                 preds = torch.argmax(logits, dim=1)
-                if signal_mask.any():
-                    cls_tr_rec = macro_recall(
-                        preds[signal_mask].detach().cpu(),
-                        targets[signal_mask].detach().cpu(),
-                    )
-                else:
-                    cls_tr_rec = 0.0
-
+                cls_tr_rec = macro_recall(
+                    preds.detach().cpu(),
+                    targets.detach().cpu(),
+                )
         return float(loss_tensor.item()), float(cls_tr_rec), metric_logits
 
 

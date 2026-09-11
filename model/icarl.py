@@ -15,10 +15,8 @@ import random
 
 import sys
 from model.resnet1d import ResNet1D
-from model.detection_replay import (
-    DetectionReplayMixin,
-    noise_label_from_args,
-    signal_mask_exclude_noise,
+from model.replay_utils import (
+    ReplayInputMixin,
     unpack_y_to_class_labels,
 )
 
@@ -47,10 +45,7 @@ class IcarlConfig:
     input_channels: int = 2
     alpha_init: float = 1e-3
     samples_per_task: int = -1
-    det_lambda: float = 1.0
     cls_lambda: float = 1.0
-    det_memories: int = 2000
-    det_replay_batch: int = 64
     icarl_feature_chunk_size: int = 512
 
     @staticmethod
@@ -62,7 +57,7 @@ class IcarlConfig:
         return cfg
 
 
-class Net(DetectionReplayMixin, torch.nn.Module):
+class Net(ReplayInputMixin, torch.nn.Module):
     # Re-implementation of
     # S.-A. Rebuffi, A. Kolesnikov, G. Sperl, and C. H. Lampert.
     # iCaRL: Incremental classifier and representation learning.
@@ -106,23 +101,14 @@ class Net(DetectionReplayMixin, torch.nn.Module):
 
         # setup optimizer
         self.opt = torch.optim.SGD(self._ll_params(), lr=self.cfg.lr, momentum=0.9)
-        self.det_opt = torch.optim.SGD(
-            self.net.det_head.parameters(), lr=self.cfg.lr, momentum=0.9
-        )
 
         self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
         # Use batchmean to follow KL definition and avoid PyTorch warning
         self.kl = torch.nn.KLDivLoss(reduction="batchmean")  # for distillation
         self.lsm = torch.nn.LogSoftmax(dim=1)
         self.sm = torch.nn.Softmax(dim=1)
-        self.det_lambda = float(self.cfg.det_lambda)
         self.cls_lambda = float(self.cfg.cls_lambda)
-        print(self.n_memories, self.reg, self.det_lambda, self.samples_per_task)
-        self._init_det_replay(
-            self.cfg.det_memories,
-            self.cfg.det_replay_batch,
-            enabled=bool(getattr(args, "use_detector_arch", False)),
-        )
+        print(self.n_memories, self.reg, self.samples_per_task)
 
         # memory
         self.memx = None  # stores canonical replay inputs
@@ -140,7 +126,6 @@ class Net(DetectionReplayMixin, torch.nn.Module):
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
         self.n_outputs = n_outputs
-        self.noise_label: int | None = noise_label_from_args(args)
         self.incremental_loader_name = getattr(args, "loader", None)
 
     def _ensure_iq_shape(self, x):
@@ -300,8 +285,6 @@ class Net(DetectionReplayMixin, torch.nn.Module):
 
     def _ll_params(self):
         for name, param in self.net.named_parameters():
-            if name.startswith("det_head"):
-                continue
             yield param
 
     def forward_training(self, x, t):
@@ -359,16 +342,11 @@ class Net(DetectionReplayMixin, torch.nn.Module):
                 self.classes_per_task,
                 self.n_classes,
                 cil_all_seen_upto_task=t,
-                global_noise_label=self.noise_label,
                 loader=self.incremental_loader_name,
             )
-            signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
             targets = y_cls.long()
-            if signal_mask.any():
-                preds = torch.argmax(logits_full[signal_mask], dim=1)
-                cls_tr_rec.append(macro_recall(preds, targets[signal_mask]))
-            else:
-                cls_tr_rec.append(0.0)
+            preds = torch.argmax(logits_full, dim=1)
+            cls_tr_rec.append(macro_recall(preds, targets))
             loss = classification_cross_entropy(
                 logits_full,
                 targets,
@@ -444,32 +422,18 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             else:
                 all_labs = torch.LongTensor(np.unique(self.memy.numpy()))
 
-            # Per-task signal slice plus global noise (same id across IQ tasks) when present.
+            # Per-task class slice.
             in_task = (all_labs >= offset1) & (all_labs < offset2)
-            signal_labs = all_labs[in_task]
-            noise_key = self.noise_label
-            has_noise_exemplars = (
-                noise_key is not None
-                and 0 <= int(noise_key) < self.n_classes
-                and (all_labs == int(noise_key)).any()
-            )
-            if has_noise_exemplars:
-                noise_tensor = signal_labs.new_tensor(
-                    [int(noise_key)], dtype=signal_labs.dtype
-                )
-                task_labs = torch.cat([signal_labs, noise_tensor])
-            else:
-                task_labs = signal_labs
-            task_labs, _ = torch.sort(task_labs)
+            task_labs, _ = torch.sort(all_labs[in_task])
             num_classes = task_labs.size(0)
 
             # print("num_classes", num_classes, "nc_per_task", self.nc_per_task, "offsets",
             #       offset1, offset2)
             current_task_classes = self.classes_per_task[t]
-            if signal_labs.size(0) != current_task_classes:
+            if num_classes != current_task_classes:
                 print(
                     "[WARNING][iCaRL] Task {} expected {} classes, found {} in memory.".format(
-                        t, current_task_classes, signal_labs.size(0)
+                        t, current_task_classes, num_classes
                     )
                 )
             if num_classes > 0:
@@ -546,37 +510,5 @@ class Net(DetectionReplayMixin, torch.nn.Module):
             # print(len(self.mem_class_x[0]))
 
         avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
-        det_loss_value = 0.0
-        # if getattr(self, "det_enabled", True):
-        #     self.det_opt.zero_grad()
-        #     det_logits, _ = self.net.forward_heads(x_det)
-        #     det_loss = self.det_loss(det_logits, y_det.float())
-        #     det_replay = self._sample_det_memory()
-        #     if det_replay is not None:
-        #         mem_x, mem_y = det_replay
-        #         mem_det_logits, _ = self.net.forward_heads(mem_x)
-        #         mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-        #         det_loss = 0.5 * (det_loss + mem_loss)
-        #     det_loss = self.det_lambda * det_loss
-        #     det_loss.backward()
-        #     self.det_opt.step()
-        #     det_loss_value = float(det_loss.item())
-        total_loss = float(loss.item()) + det_loss_value
-        # det_pred = (det_logits >= 0).long()
-        # det_recall = macro_recall(det_pred, y_det.long())
-        # neg_mask = y_det == 0
-        # if neg_mask.any():
-        #     neg_preds = det_pred[neg_mask]
-        #     fp = (neg_preds == 1).sum().item()
-        #     tn = (neg_preds == 0).sum().item()
-        #     denom = fp + tn
-        #     det_pfa = float(fp / denom) if denom > 0 else 0.0
-        # else:
-        #     det_pfa = 0.0
-        # score = avg_cls_tr_rec * det_recall * (1.0 - det_pfa)
-        # print(
-        #     f"Task {t} | Score: {score:.4f} | Loss: {total_loss:.4f} | Cls Loss: {loss.item():.4f} "
-        #     f"| Det Loss: {det_loss.item():.4f} | Det Recall: {det_recall:.4f} | Det PFA: {det_pfa:.4f} "
-        #     f"| Det_lambda: {self.det_lambda} | Memory Strength: {self.reg}"
-        # )
+        total_loss = float(loss.item())
         return total_loss, avg_cls_tr_rec, metric_logits

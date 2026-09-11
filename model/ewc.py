@@ -17,10 +17,8 @@ import torch
 import torch.nn as nn
 
 from model.resnet1d import ResNet1D
-from model.detection_replay import (
-    DetectionReplayMixin,
-    noise_label_from_args,
-    signal_mask_exclude_noise,
+from model.replay_utils import (
+    ReplayInputMixin,
     unpack_y_to_class_labels,
 )
 from utils.training_metrics import macro_recall
@@ -37,10 +35,7 @@ class EwcConfig:
     optimizer: str = "sgd"
     lamb: float = 1.0
     clipgrad: float = 5.0
-    det_lambda: float = 1.0
     cls_lambda: float = 1.0
-    det_memories: int = 2000
-    det_replay_batch: int = 32
 
     @staticmethod
     def from_args(args: object) -> "EwcConfig":
@@ -56,7 +51,7 @@ class EwcConfig:
         return cfg
 
 
-class Net(DetectionReplayMixin, nn.Module):
+class Net(ReplayInputMixin, nn.Module):
     """EWC continual learner built on top of ``ResNet1D``."""
 
     def __init__(
@@ -83,18 +78,11 @@ class Net(DetectionReplayMixin, nn.Module):
 
         self.opt = self._build_optimizer()
         self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
-        self.noise_label: int | None = noise_label_from_args(args)
         self.incremental_loader_name = getattr(args, "loader", None)
 
         self.lamb = float(self.cfg.lamb)
         self.clipgrad = float(self.cfg.clipgrad) if self.cfg.clipgrad > 0 else None
-        self.det_lambda = float(self.cfg.det_lambda)
         self.cls_lambda = float(self.cfg.cls_lambda)
-        self._init_det_replay(
-            self.cfg.det_memories,
-            self.cfg.det_replay_batch,
-            enabled=bool(getattr(args, "use_detector_arch", False)),
-        )
 
         self.current_task: Optional[int] = None
         self._tasks_consolidated = 0
@@ -110,23 +98,17 @@ class Net(DetectionReplayMixin, nn.Module):
         self,
         x: torch.Tensor,
         t: int,
-        return_det: bool = False,
         *,
         cil_all_seen_upto_task: int | None = None,
     ) -> torch.Tensor:
-        det_logits, cls_logits = self._forward_heads(x)
-        masked = misc_utils.apply_task_incremental_logit_mask(
-            cls_logits,
+        return misc_utils.apply_task_incremental_logit_mask(
+            self.net(x),
             t,
             self.classes_per_task,
             self.n_outputs,
             cil_all_seen_upto_task=cil_all_seen_upto_task,
-            global_noise_label=self.noise_label,
             loader=self.incremental_loader_name,
         )
-        if return_det:
-            return det_logits, masked
-        return masked
 
     # ------------------------------------------------------------------
     def observe(
@@ -140,24 +122,10 @@ class Net(DetectionReplayMixin, nn.Module):
 
         self.net.train()
 
-        # class_counts = getattr(self, "classes_per_task", None)
-        # noise_label = None
-        # if class_counts is not None:
-        #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
-        #     noise_label = offset2 - 1
-        # y_cls, y_det = self._unpack_labels(
-        #     y,
-        #     noise_label=noise_label,
-        #     use_detector_arch=bool(getattr(self, "det_enabled", False)),
-        # )
-        # if y_det is None: print("Warning: y_det is None in Observe().")
-        # if y_det is not None and self.det_memories > 0:
-        #     self._update_det_memory(x, y_det)
         metric_logits = None
         for _ in range(self.cfg.inner_steps):
             y_cls = unpack_y_to_class_labels(y)
-            cls_logits = self._forward_heads(x)[1]
-            signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
+            cls_logits = self.net(x)
             logits_for_loss = cls_logits
             if self.is_task_incremental:
                 logits_for_loss = misc_utils.apply_task_incremental_logit_mask(
@@ -166,7 +134,6 @@ class Net(DetectionReplayMixin, nn.Module):
                     self.classes_per_task,
                     self.n_outputs,
                     cil_all_seen_upto_task=t,
-                    global_noise_label=self.noise_label,
                     loader=self.incremental_loader_name,
                 )
             targets_for_loss = y_cls.long()
@@ -175,32 +142,15 @@ class Net(DetectionReplayMixin, nn.Module):
                 targets_for_loss,
                 class_weighted_ce=self.class_weighted_ce,
             )
-            if signal_mask.any():
-                preds = torch.argmax(logits_for_loss[signal_mask], dim=1)
-                cls_tr_rec = macro_recall(preds, y_cls[signal_mask].long())
-            else:
-                cls_tr_rec = 0.0
-
+            preds = torch.argmax(logits_for_loss, dim=1)
+            cls_tr_rec = macro_recall(preds, y_cls.long())
             self.opt.zero_grad()
             if True:
                 torch.autograd.set_detect_anomaly(True)
                 loss_ce.backward(retain_graph=True)
                 self._accumulate_fisher(int(y_cls.size(0)))
 
-            # self.opt.zero_grad()
-            # det_loss = self.det_loss(det_logits, y_det.float())
-            # det_replay = self._sample_det_memory()
-            # if det_replay is not None:
-            #     print("det_replay:", det_replay[0].shape, det_replay[1].shape)
-            #     mem_x, mem_y = det_replay
-            #     mem_det_logits, _ = self._forward_heads(mem_x)
-            #     mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-            #     det_loss = 0.5 * (det_loss + mem_loss)
-            loss = (
-                self.cls_lambda * loss_ce
-                # + self.det_lambda * det_loss
-                + 0.5 * self.lamb * self._ewc_penalty()
-            )
+            loss = self.cls_lambda * loss_ce + 0.5 * self.lamb * self._ewc_penalty()
             loss.backward()
 
             if self.clipgrad is not None:
@@ -231,23 +181,18 @@ class Net(DetectionReplayMixin, nn.Module):
     def _device(self) -> torch.device:
         return next(self.net.parameters()).device
 
-    def _forward_heads(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        return self.net.forward_heads(x)
-
     # ------------------------------------------------------------------
     def _accumulate_fisher(self, batch_size: int) -> None:
         if self._fisher_accum is None:
             self._fisher_accum = {
                 name: torch.zeros_like(param, device=param.device)
                 for name, param in self.net.named_parameters()
-                if param.requires_grad and not name.startswith("det_head")
+                if param.requires_grad
             }
             self._fisher_count = 0
 
         for name, param in self.net.named_parameters():
             if not param.requires_grad:
-                continue
-            if name.startswith("det_head"):
                 continue
             grad = param.grad
             if grad is None:
@@ -264,8 +209,6 @@ class Net(DetectionReplayMixin, nn.Module):
         scale = 1.0 / float(self._fisher_count)
         for name, param in self.net.named_parameters():
             if not param.requires_grad:
-                continue
-            if name.startswith("det_head"):
                 continue
             fisher_est = self._fisher_accum.get(name)
             if fisher_est is None:

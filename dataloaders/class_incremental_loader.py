@@ -16,6 +16,7 @@ from dataloaders.task_incremental_loader import (
     _maybe_move_sample_axis,
     _normalize_label_array,
     _resolve_task_file_order,
+    drop_noise_samples,
     permute_task_sequence,
 )
 
@@ -36,7 +37,7 @@ class _SharedCumulativeIQTestDataset(torch.utils.data.Dataset):
     Sample identity and ordering are unchanged versus ``np.concatenate`` of the
     order-corrected per-task chunks, so batches (and therefore metrics) are
     bit-identical. A real ``y`` label array is exposed because the evaluation
-    helpers (``_extract_task_labels`` / noise-label inference) introspect
+    helpers (``_extract_task_labels``) introspect
     ``loader.dataset.y``; ``ConcatDataset`` alone does not provide it.
     """
 
@@ -80,7 +81,6 @@ class IncrementalLoader:
         self.increment = opt.increment
 
         self.task_names: list[str] = []
-        self.noise_label: int | None = None
         self.sample_permutations: list = []
 
         self._iq = dataset_name.lower() == "iq"
@@ -409,6 +409,28 @@ class IncrementalLoader:
         )[0]
         return int(len(idxes))
 
+    def _assert_no_noise_slot(self, n_outputs: int) -> None:
+        """Fail fast if the label space still reserves a slot beyond signal classes.
+
+        With noise samples dropped at load time, the global label space must be
+        exactly the concatenation of the per-task signal-class blocks.
+
+        Args:
+            n_outputs: Output width derived from the maximum observed label.
+
+        Raises:
+            ValueError: If ``n_outputs`` disagrees with the per-task increments.
+        """
+        increments = getattr(self, "increments", None)
+        if not increments:
+            return
+        expected = int(sum(increments))
+        if n_outputs != expected:
+            raise ValueError(
+                f"n_outputs ({n_outputs}) != sum(increments) ({expected}); "
+                "the label space still reserves a non-signal slot."
+            )
+
     def get_dataset_info(self):
         def _max_label_value(labels):
             if isinstance(labels, np.ndarray):
@@ -446,6 +468,7 @@ class IncrementalLoader:
                 n_outputs = max(n_outputs, _max_label_value(self.iq_test[i][1]))
             self.n_outputs = n_outputs
             n_task = len(self.increments)
+            self._assert_no_noise_slot(n_outputs + 1)
             return n_inputs, n_outputs + 1, n_task
         else:
             if self._opt.dataset == "tinyimagenet":
@@ -658,8 +681,6 @@ class IncrementalLoader:
         self.class_order = []
         self.sample_permutations = []
 
-        collapse_noise_across_tasks = True
-
         data_files = [f for f in os.listdir(data_path) if f.endswith(".npz")]
         data_files = _resolve_task_file_order(
             data_files, getattr(self._opt, "task_order_files", "") or ""
@@ -777,98 +798,21 @@ class IncrementalLoader:
             y_train = np.asarray(y_train, dtype=np.int64)
             y_test = np.asarray(y_test, dtype=np.int64)
 
-            print(
-                f"Noise labels ratio in {fname} train: {(y_train < 0).mean():.2f}, "
-                f"test: {(y_test < 0).mean():.2f}"
+            x_train, y_train = drop_noise_samples(x_train, y_train, f"{fname} train")
+            x_test, y_test = drop_noise_samples(x_test, y_test, f"{fname} test")
+
+            unique_labels = np.unique(y_train)
+            needs_remap = unique_labels.size > 0 and not np.array_equal(
+                unique_labels, np.arange(unique_labels.size)
             )
-
-            if y_train.ndim == 2 and y_train.shape[1] == 2:
-                y_train_cls = y_train[:, 0]
-                y_train_det = y_train[:, 1]
-                y_test_cls = y_test[:, 0]
-                y_test_det = y_test[:, 1]
-                use_detector_arch = bool(getattr(self._opt, "use_detector_arch", False))
-                has_negatives = (y_train_cls < 0).any() or (y_test_cls < 0).any()
-
-                unique_labels = np.unique(y_train_cls[y_train_cls >= 0])
-                needs_remap = unique_labels.size > 0 and not np.array_equal(
-                    unique_labels, np.arange(unique_labels.size)
-                )
-                y_train_cls_remap = y_train_cls.copy()
-                y_test_cls_remap = y_test_cls.copy()
-                mask_train = y_train_cls >= 0
-                mask_test = y_test_cls >= 0
-                if needs_remap:
-                    y_train_cls_remap[mask_train] = (
-                        unique_labels.searchsorted(y_train_cls[mask_train])
-                        + labels_offset
-                    )
-                    y_test_cls_remap[mask_test] = (
-                        unique_labels.searchsorted(y_test_cls[mask_test])
-                        + labels_offset
-                    )
-                else:
-                    y_train_cls_remap[mask_train] = (
-                        y_train_cls[mask_train] + labels_offset
-                    )
-                    y_test_cls_remap[mask_test] = y_test_cls[mask_test] + labels_offset
-                extra_class = 0
-                if (not use_detector_arch) and has_negatives:
-                    if collapse_noise_across_tasks:
-                        y_train_cls_remap[~mask_train] = -1
-                        y_test_cls_remap[~mask_test] = -1
-                    else:
-                        extra_class = 1
-                        neg_label = labels_offset + unique_labels.size
-                        y_train_cls_remap[~mask_train] = neg_label
-                        y_test_cls_remap[~mask_test] = neg_label
-                if use_detector_arch:
-                    y_train = np.stack([y_train_cls_remap, y_train_det], axis=1)
-                    y_test = np.stack([y_test_cls_remap, y_test_det], axis=1)
-                else:
-                    y_train = y_train_cls_remap
-                    y_test = y_test_cls_remap
+            if needs_remap:
+                y_train = unique_labels.searchsorted(y_train) + labels_offset
+                y_test = unique_labels.searchsorted(y_test) + labels_offset
             else:
-                use_detector_arch = bool(getattr(self._opt, "use_detector_arch", False))
-                has_negatives = (y_train < 0).any() or (y_test < 0).any()
-                unique_labels = np.unique(y_train[y_train >= 0])
-                needs_remap = unique_labels.size > 0 and not np.array_equal(
-                    unique_labels, np.arange(unique_labels.size)
-                )
-                y_train_remap = y_train.copy()
-                y_test_remap = y_test.copy()
-                mask_train = y_train >= 0
-                mask_test = y_test >= 0
-                if needs_remap:
-                    y_train_remap[mask_train] = (
-                        unique_labels.searchsorted(y_train[mask_train]) + labels_offset
-                    )
-                    y_test_remap[mask_test] = (
-                        unique_labels.searchsorted(y_test[mask_test]) + labels_offset
-                    )
-                else:
-                    y_train_remap[mask_train] = y_train[mask_train] + labels_offset
-                    y_test_remap[mask_test] = y_test[mask_test] + labels_offset
-                extra_class = 0
-                if (not use_detector_arch) and has_negatives:
-                    if collapse_noise_across_tasks:
-                        y_train_remap[~mask_train] = -1
-                        y_test_remap[~mask_test] = -1
-                    else:
-                        extra_class = 1
-                        neg_label = labels_offset + unique_labels.size
-                        y_train_remap[~mask_train] = neg_label
-                        y_test_remap[~mask_test] = neg_label
-                y_train = y_train_remap
-                y_test = y_test_remap
-            if collapse_noise_across_tasks:
-                labels_offset += unique_labels.size
-            else:
-                labels_offset += unique_labels.size + extra_class
-            if y_train.ndim == 2 and y_train.shape[1] == 2:
-                remapped = np.unique(y_train[:, 0])
-            else:
-                remapped = np.unique(y_train)
+                y_train = y_train + labels_offset
+                y_test = y_test + labels_offset
+            labels_offset += unique_labels.size
+            remapped = np.unique(y_train)
             print(
                 f"Loaded {fname}: Remapped labels: {remapped}. Size: {x_train.shape[0]})"
             )
@@ -878,43 +822,8 @@ class IncrementalLoader:
         if not raw_datasets:
             raise ValueError("No IQ datasets were loaded. Please check the data path.")
 
-        if collapse_noise_across_tasks:
-            global_noise_label = int(labels_offset)
-            self.noise_label = global_noise_label
-            self._opt.noise_label = global_noise_label
-            for task_index in range(len(raw_datasets)):
-                x_tr, y_tr, x_te, y_te = raw_datasets[task_index]
-                if y_tr.ndim == 2 and y_tr.shape[1] == 2:
-                    y_tr = y_tr.copy()
-                    noise_mask = y_tr[:, 0] < 0
-                    if noise_mask.any():
-                        y_tr[noise_mask, 0] = global_noise_label
-                    y_te = y_te.copy()
-                    noise_mask_te = y_te[:, 0] < 0
-                    if noise_mask_te.any():
-                        y_te[noise_mask_te, 0] = global_noise_label
-                else:
-                    y_tr = y_tr.copy()
-                    noise_mask = y_tr < 0
-                    if noise_mask.any():
-                        y_tr[noise_mask] = global_noise_label
-                    y_te = y_te.copy()
-                    noise_mask_te = y_te < 0
-                    if noise_mask_te.any():
-                        y_te[noise_mask_te] = global_noise_label
-                raw_datasets[task_index] = (
-                    x_tr,
-                    y_tr.astype(np.int64),
-                    x_te,
-                    y_te.astype(np.int64),
-                )
-
         def _task_class_count(y_labels: np.ndarray) -> int:
-            labels = y_labels
-            if labels.ndim == 2 and labels.shape[1] == 2:
-                labels = labels[:, 0]
-            labels = labels[(labels >= 0) & (labels != self.noise_label)]
-            return int(np.unique(labels).size)
+            return int(np.unique(y_labels).size)
 
         for x_train, y_train, x_test, y_test in raw_datasets:
             if validation_split > 0.0:

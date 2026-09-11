@@ -10,7 +10,6 @@ task-specific outputs.
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 from dataclasses import dataclass
 import math
 import os
@@ -19,13 +18,8 @@ from typing import Iterable, List, Optional, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.modules.batchnorm import _BatchNorm
-from model.resnet1d import AdcIqAdapter, ResNet1D
-from model.detection_replay import (
-    noise_label_from_args,
-    signal_mask_exclude_noise,
-    unpack_y_to_class_labels,
-)
+from model.resnet1d import AdcIqAdapter
+from model.replay_utils import unpack_y_to_class_labels
 from utils.iq_features import append_iq_augmented_features
 from utils.training_metrics import macro_recall
 from utils import misc_utils
@@ -352,7 +346,6 @@ class UCLConfig:
     beta: float = 0.0002
     alpha: float = 0.3
     ratio: float = 0.125
-    det_lambda: float = 1.0
 
     split: bool = True
     eval_samples: int = 1
@@ -484,101 +477,14 @@ class Net(nn.Module):
             or getattr(args, "nc_per_task", None),
             classes_per_task=getattr(args, "classes_per_task", None),
         )
-        self.classes_per_task = self._extend_cil_heads_with_global_noise(
-            self.classes_per_task
-        )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
 
         self.model = BayesianClassifier(
             n_outputs, n_tasks, self.cfg, args, self.classes_per_task
         )
         self.split = self.cfg.split
-        in_channels = getattr(args, "in_channels", 2)
-        self.detector = ResNet1D(num_classes=1, args=args, in_channels=in_channels)
-        self.det_loss = nn.BCEWithLogitsLoss()
-        self.det_lambda = float(self.cfg.det_lambda)
-        self.det_optimizer = torch.optim.SGD(
-            self.detector.parameters(),
-            lr=self.cfg.lr,
-            momentum=0.9,
-            weight_decay=0.0,
-        )
-
-        mu_params: List[nn.Parameter] = []
-        rho_params: List[nn.Parameter] = []
-
-        for module in self._iter_bayesian_modules(self.model):
-            mu_params.extend(module.mu_parameters())
-            rho_params.extend(module.rho_parameters())
-        mu_params.extend(self.model.input_adapter.parameters())
-
-        self.optimizer = torch.optim.SGD(
-            [
-                {"params": mu_params, "lr": self.cfg.lr},
-                {"params": rho_params, "lr": self.cfg.lr_rho},
-            ],
-            lr=self.cfg.lr,
-            momentum=0.9,
-            weight_decay=0.0,
-        )
-
-        self.current_task: Optional[int] = None
-        self.model_old: Optional[BayesianClassifier] = None
-        self.saved = False
-        self.is_task_incremental: bool = True
-        self._debug_step_counter = 0
-        self.noise_label: int | None = noise_label_from_args(args)
-        self.incremental_loader_name = getattr(args, "loader", None)
-        self._use_task_bn_state = bool(
-            self.split and self.incremental_loader_name == "task_incremental_loader"
-        )
-        self._bn_modules: List[_BatchNorm] = [
-            module for module in self.model.modules() if isinstance(module, _BatchNorm)
-        ]
-        self._bn_task_stats: dict[int, List[Tuple[torch.Tensor, torch.Tensor, int]]] = (
-            {}
-        )
-        self._bn_task_affine: dict[
-            int, List[Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]]
-        ] = {}
         self._bn_finalized_tasks: set[int] = set()
 
-    def _extend_cil_heads_with_global_noise(
-        self, classes_per_task: List[int]
-    ) -> List[int]:
-        """Ensure CIL concatenated heads include a slot for global noise labels.
-
-        In IQ CIL mode, `class_incremental_loader` remaps noise targets to a
-        single global class id (typically the last label). UCL uses per-task
-        heads and concatenates them when `split=False`; if head widths only sum
-        to signal classes, CE receives out-of-range noise targets.
-
-        This method adds one class slot to the final head only when needed.
-
-        Args:
-            classes_per_task: Per-task class counts used to size UCL heads.
-
-        Returns:
-            Possibly adjusted per-task class counts.
-        """
-
-        is_cil = not bool(self.cfg.split)
-        if not is_cil:
-            return classes_per_task
-
-        total_classes = int(sum(classes_per_task))
-        if total_classes >= int(self.n_outputs):
-            return classes_per_task
-
-        missing_classes = int(self.n_outputs) - total_classes
-        if missing_classes <= 0:
-            return classes_per_task
-
-        adjusted = list(classes_per_task)
-        adjusted[-1] += missing_classes
-        return adjusted
-
-    @contextmanager
     def _temporarily_enable_bn_training(self):
         bn_modules: List[nn.BatchNorm1d] = []
         states: List[bool] = []
@@ -839,30 +745,15 @@ class Net(nn.Module):
                 self.classes_per_task,
                 self.n_outputs,
                 cil_all_seen_upto_task=cil_all_seen_upto_task,
-                global_noise_label=self.noise_label,
                 fill_value=-10e10,
                 loader=self.incremental_loader_name,
             )
         return logits
 
-    def forward_heads(
-        self, x: torch.Tensor, sample: bool = False
-    ) -> Tuple[torch.Tensor, List[torch.Tensor] | torch.Tensor]:
-        det_logits = self.detector.forward_detection(self.detector.forward_features(x))
-        cls_logits = self.model(x, sample=sample)
-        return det_logits, cls_logits
-
     def observe(
         self, x: torch.Tensor, y: torch.Tensor, t: int
     ) -> Tuple[float, float, torch.Tensor | None]:
-        y_cls, y_det = self._split_labels(y)
-        if not torch.is_tensor(y_cls):
-            y_cls = torch.as_tensor(y_cls)
-        if y_det is not None and not torch.is_tensor(y_det):
-            y_det = torch.as_tensor(y_det)
-        y_cls_glob = unpack_y_to_class_labels(
-            (y_cls, y_det) if y_det is not None else y_cls
-        ).long()
+        y_cls_glob = unpack_y_to_class_labels(y).long()
         if (self.current_task is None) or (t != self.current_task):
             if self.current_task is not None:
                 if (
@@ -879,44 +770,22 @@ class Net(nn.Module):
 
         x_cls = x
         y_cls_filtered = y_cls_glob
-        # if y_det is not None:
-        #     signal_mask = (y_det == 1) & (y_cls >= 0)
-        #     if not signal_mask.any():
-        #         x = x.to(device)
-        #         y_det = y_det.to(device)
-        #         self.detector.train()
-        #         det_logits = self.detector.forward_detection(self.detector.forward_features(x))
-        #         det_loss = self.det_loss(det_logits, y_det.float())
-        #         self.det_optimizer.zero_grad(set_to_none=True)
-        #         det_loss = self.det_lambda * det_loss
-        #         det_loss.backward()
-        #         if self.cfg.clipgrad > 0:
-        #             torch.nn.utils.clip_grad_norm_(self.detector.parameters(), self.cfg.clipgrad)
-        #         self.det_optimizer.step()
-        #         return float(det_loss.detach().cpu()), 0.0
-        #     x_cls = x[signal_mask]
-        #     y_cls_filtered = y_cls[signal_mask]
-
-        signal_mask = signal_mask_exclude_noise(y_cls_filtered, self.noise_label)
         if self.split:
             offset1, _ = self.compute_offsets(t)
             y_local = y_cls_filtered.clone() - offset1
             task_classes = self.classes_per_task[t]
-            if signal_mask.any():
-                y_sig = y_local[signal_mask]
-                if (y_sig.min() < 0) or (y_sig.max() >= task_classes):
-                    raise ValueError(
-                        f"Labels out of range for task {t}: expected in [0, {task_classes - 1}] after offset, got "
-                        f"[{int(y_sig.min())}, {int(y_sig.max())}]"
-                    )
+            if y_local.numel() and (
+                (y_local.min() < 0) or (y_local.max() >= task_classes)
+            ):
+                raise ValueError(
+                    f"Labels out of range for task {t}: expected in [0, {task_classes - 1}] after offset, got "
+                    f"[{int(y_local.min())}, {int(y_local.max())}]"
+                )
             y_cls_filtered = y_local
 
         x = x.to(device)
         x_cls = x_cls.to(device)
         y_cls_filtered = y_cls_filtered.to(device)
-        signal_mask = signal_mask.to(device)
-        if y_det is not None:
-            y_det = y_det.to(device)
 
         self.train()
         # Let BatchNorm update running buffers so ``model.eval()`` matches training stats.
@@ -926,12 +795,7 @@ class Net(nn.Module):
             logits = outputs[t] if self.split else outputs
 
             preds = torch.argmax(logits, dim=1)
-            if signal_mask.any():
-                cls_tr_rec = macro_recall(
-                    preds[signal_mask], y_cls_filtered[signal_mask]
-                )
-            else:
-                cls_tr_rec = 0.0
+            cls_tr_rec = macro_recall(preds, y_cls_filtered)
             metric_logits = logits.detach()
             self._maybe_log_training_debug(
                 task_index=t,
@@ -951,17 +815,6 @@ class Net(nn.Module):
             if self.cfg.clipgrad > 0:
                 torch.nn.utils.clip_grad_norm_(self.parameters(), self.cfg.clipgrad)
             self.optimizer.step()
-
-        # if y_det is not None:
-        #     self.detector.train()
-        #     det_logits = self.detector.forward_detection(self.detector.forward_features(x))
-        #     det_loss = self.det_loss(det_logits, y_det.float())
-        #     self.det_optimizer.zero_grad(set_to_none=True)
-        #     det_loss = self.det_lambda * det_loss
-        #     det_loss.backward()
-        #     if self.cfg.clipgrad > 0:
-        #         torch.nn.utils.clip_grad_norm_(self.detector.parameters(), self.cfg.clipgrad)
-        #     self.det_optimizer.step()
 
         return float(loss.detach().cpu()), cls_tr_rec, metric_logits
 
@@ -1200,16 +1053,6 @@ class Net(nn.Module):
         for sub in module.modules():
             if isinstance(sub, BayesianLayer):
                 yield sub
-
-    def _split_labels(
-        self, y: torch.Tensor | Tuple[torch.Tensor, torch.Tensor] | dict
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        if isinstance(y, (tuple, list)) and len(y) == 2:
-            return y[0], y[1]
-        if isinstance(y, dict):
-            y_cls = y.get("y_cls", y.get("y"))
-            return y_cls, y.get("y_det")
-        return y, None
 
     @torch.no_grad()
     def mc_epistemic_classification(self, x, t, S=20, temperature=1.0, clamp_eps=1e-8):

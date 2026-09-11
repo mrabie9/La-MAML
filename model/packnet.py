@@ -19,11 +19,7 @@ import torch
 import torch.nn as nn
 from torch.nn.modules.batchnorm import _BatchNorm
 
-from model.detection_replay import (
-    noise_label_from_args,
-    signal_mask_exclude_noise,
-    unpack_y_to_class_labels,
-)
+from model.replay_utils import unpack_y_to_class_labels
 from model.resnet1d import ResNet1D
 from utils.training_metrics import macro_recall
 from utils import misc_utils
@@ -81,7 +77,6 @@ class Net(nn.Module):
         self._named_modules = dict(self.net.named_modules())
         self._non_prunable_params = self._compute_non_prunable_params()
         self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
-        self.noise_label: int | None = noise_label_from_args(args)
         self.incremental_loader_name = getattr(args, "loader", None)
         self.opt = self._build_optimizer()
         self.clipgrad = self.cfg.clipgrad
@@ -129,7 +124,6 @@ class Net(nn.Module):
             self.classes_per_task,
             self.n_outputs,
             cil_all_seen_upto_task=cil,
-            global_noise_label=self.noise_label,
             loader=self.incremental_loader_name,
         )
 
@@ -151,7 +145,6 @@ class Net(nn.Module):
         for _ in range(self.cfg.inner_steps):
             logits = self.net(x)
             y_cls = unpack_y_to_class_labels(y)
-            signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
             logits_for_loss = logits
             if self.is_task_incremental:
                 logits_for_loss = misc_utils.apply_task_incremental_logit_mask(
@@ -160,7 +153,6 @@ class Net(nn.Module):
                     self.classes_per_task,
                     self.n_outputs,
                     cil_all_seen_upto_task=t,
-                    global_noise_label=self.noise_label,
                     loader=self.incremental_loader_name,
                 )
             targets_for_loss = y_cls.long()
@@ -169,12 +161,8 @@ class Net(nn.Module):
                 targets_for_loss,
                 class_weighted_ce=self.class_weighted_ce,
             )
-            if signal_mask.any():
-                preds = torch.argmax(logits_for_loss[signal_mask], dim=1)
-                cls_tr_rec = macro_recall(preds, y_cls[signal_mask].long())
-            else:
-                cls_tr_rec = 0.0
-
+            preds = torch.argmax(logits_for_loss, dim=1)
+            cls_tr_rec = macro_recall(preds, y_cls.long())
             self.opt.zero_grad()
             loss.backward()
             self._zero_frozen_grads()
@@ -248,7 +236,6 @@ class Net(nn.Module):
                                     self.classes_per_task,
                                     self.n_outputs,
                                     cil_all_seen_upto_task=task_id,
-                                    global_noise_label=self.noise_label,
                                     loader=self.incremental_loader_name,
                                 )
                             )

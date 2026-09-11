@@ -370,7 +370,6 @@ class ResNet1D(nn.Module):
             iq_aug_feature_type=self.iq_aug_feature_type,
         )
         self.feature_dim = self.model.fc.in_features
-        self.det_head = nn.Linear(self.feature_dim, 1)
 
         # Ordered names for mapping fast weights
         self.param_names = [n for n, _ in self.model.named_parameters()]
@@ -433,15 +432,6 @@ class ResNet1D(nn.Module):
         return self.forward(
             feats, vars=vars, bn_training=bn_training, classify_feats=True
         )
-
-    def forward_detection(self, feats: torch.Tensor) -> torch.Tensor:
-        return self.det_head(feats).squeeze(1)
-
-    def forward_heads(self, x: torch.Tensor, vars=None, bn_training: bool = True):
-        feats = self.forward_features(x, vars=vars, bn_training=bn_training)
-        det_logits = self.forward_detection(feats)
-        cls_logits = self.forward_classifier(feats, vars=vars, bn_training=bn_training)
-        return det_logits, cls_logits
 
     # Expose only the underlying model parameters, excluding alpha lrs
     def parameters(self, recurse: bool = True):
