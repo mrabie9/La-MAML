@@ -20,3 +20,5 @@ icarl3.txt
 icarl4.txtplots/
 *.png
 *.pdf
+analysis/
+.claude/
