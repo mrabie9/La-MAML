@@ -29,6 +29,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.lines import Line2D
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from utils.metric_keys import first_present_key  # noqa: E402
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 PlotStyle = Dict[str, Any]
@@ -105,15 +108,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--train-metric",
         type=str,
-        choices=("total_f1", "cls_recall"),
-        default="cls_recall",
+        choices=("macro_f1", "macro_rec"),
+        default="macro_rec",
         help="Training metric used in the first panel (train vs step).",
     )
     parser.add_argument(
         "--val-metric",
         type=str,
-        choices=("total_f1", "cls_recall"),
-        default="total_f1",
+        choices=("macro_f1", "macro_rec"),
+        default="macro_f1",
         help="Validation metric used in mean-val and average-forgetting panels.",
     )
     parser.add_argument(
@@ -173,18 +176,25 @@ def _resolve_val_metric_for_run(choice: str, run: Any) -> tuple[str, str]:
 
     Mirrors the behavior in `plot_multi_algorithms.py`.
     """
-    if choice == "cls_recall":
-        return "val_acc", "Cls recall"
+    recall_key = next(
+        (k for task in run.tasks if (k := first_present_key(task, ["val_macro_rec"]))),
+        "val_macro_rec",
+    )
+    if choice == "macro_rec":
+        return recall_key, "Macro recall"
 
-    has_f1 = any("val_f1" in t for t in run.tasks)
-    if has_f1:
-        return "val_f1", "Total F1"
+    f1_key = next(
+        (k for task in run.tasks if (k := first_present_key(task, ["val_macro_f1"]))),
+        None,
+    )
+    if f1_key is not None:
+        return f1_key, "Macro F1"
 
     print(
-        f"[WARN] Requested val-metric=total_f1 but run '{run.name}' at {run.metrics_dir} "
-        "has no 'val_f1'; falling back to cls recall ('val_acc')."
+        f"[WARN] Requested val-metric=macro_f1 but run '{run.name}' at {run.metrics_dir} "
+        "has no macro-F1 key; falling back to macro recall."
     )
-    return "val_acc", "Cls recall"
+    return recall_key, "Macro recall"
 
 
 def _case_insensitive_detect_style(runs: Sequence[Any]) -> PlotStyle:
@@ -809,7 +819,7 @@ def main() -> None:
                     (
                         (
                             np.arange(1, len(s) + 1)
-                            if args.train_metric == "total_f1"
+                            if args.train_metric == "macro_f1"
                             else np.arange(len(s))
                         ),
                         s,
@@ -823,7 +833,7 @@ def main() -> None:
                 continue
             x_values = (
                 np.arange(1, len(mean_train) + 1)
-                if args.train_metric == "total_f1"
+                if args.train_metric == "macro_f1"
                 else np.arange(len(mean_train))
             )
             axis_train.plot(
@@ -845,7 +855,7 @@ def main() -> None:
                 continue
             x_values = (
                 np.arange(1, len(train_series) + 1)
-                if args.train_metric == "total_f1"
+                if args.train_metric == "macro_f1"
                 else np.arange(len(train_series))
             )
             axis_train.plot(
@@ -881,7 +891,7 @@ def main() -> None:
         dpi,
     )
 
-    # Figure 2: final validation metrics (bars for Pfa/Det/Cls recall).
+    # Figure 2: final validation metrics (bars for macro recall / macro F1).
     fig_final, axis_final = plt.subplots(figsize=figure_size, dpi=dpi)
     for run_idx, run in enumerate(runs):
         if not run.tasks:
@@ -897,39 +907,28 @@ def main() -> None:
             vals = [v for v in vals if v is not None]
             return float(np.mean(vals)) if vals else None
 
-        mean_pfa = _mean_across_seeds("val_det_fa")
-        mean_det = _mean_across_seeds("val_det_acc")
-        mean_cls = _mean_across_seeds("val_acc")
+        mean_rec = _mean_across_seeds("val_macro_rec")
+        mean_f1 = _mean_across_seeds("val_macro_f1")
 
         x_center = run_idx
-        width = 0.2
-        if mean_pfa is not None:
+        width = 0.3
+        if mean_rec is not None:
             axis_final.bar(
-                x_center - width,
-                mean_pfa,
+                x_center - width / 2,
+                mean_rec,
                 width=width,
-                label="Pfa" if run_idx == 0 else None,
+                label="Macro recall" if run_idx == 0 else None,
                 color=algorithm_colors.get(run.name, f"C{run_idx % 10}"),
-                hatch="//",
                 alpha=0.8,
             )
-        if mean_det is not None:
+        if mean_f1 is not None:
             axis_final.bar(
-                x_center,
-                mean_det,
+                x_center + width / 2,
+                mean_f1,
                 width=width,
-                label="Det recall" if run_idx == 0 else None,
+                label="Macro F1" if run_idx == 0 else None,
                 color=algorithm_colors.get(run.name, f"C{run_idx % 10}"),
                 hatch="..",
-                alpha=0.8,
-            )
-        if mean_cls is not None:
-            axis_final.bar(
-                x_center + width,
-                mean_cls,
-                width=width,
-                label="Cls recall" if run_idx == 0 else None,
-                color=algorithm_colors.get(run.name, f"C{run_idx % 10}"),
                 alpha=0.8,
             )
     axis_final.set_ylabel("Metric value", fontsize=16)
@@ -1229,7 +1228,7 @@ def main() -> None:
         try:
             fwt_records = load_metrics(fwt_json_path)
             fwt_series_by_algorithm = build_series_by_algo(
-                fwt_records, "forward_transfer_total_f1_zs"
+                fwt_records, "forward_transfer_total_macro_f1_zs"
             )
             if not args.include_iid2:
                 fwt_series_by_algorithm.pop("iid2", None)
@@ -1253,7 +1252,7 @@ def main() -> None:
                 fwt_plot_style["figsize"] = figure_size
                 plot_series(
                     series_by_algorithm=fwt_series_by_algorithm,
-                    metric_name="forward_transfer_total_f1_zs",
+                    metric_name="forward_transfer_total_macro_f1_zs",
                     output_path=fwt_output_path,
                     plot_style=fwt_plot_style,
                     task_index_to_dataset_name_override=task_index_to_dataset_name,

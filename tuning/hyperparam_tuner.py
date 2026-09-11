@@ -24,6 +24,7 @@ sys.path.append("/home/lunet/wsmr11/repos/La-MAML")  # to import from parent dir
 import parser as file_parser
 from main import life_experience
 from utils import misc_utils
+from utils.metric_keys import extract_metric
 
 Grid = Dict[str, List[Any]]
 TypeHints = Dict[str, type]
@@ -407,25 +408,23 @@ def compute_mean(values: Sequence[float]) -> float:
     return float(sum(values) / len(values)) if values else float("nan")
 
 
-def extract_total_f1_mean_from_trial_logs(
-    log_dir: str | Path, fallback_num_tasks: int
-) -> float:
-    """Extract final mean total F1 from the latest trial metrics file.
+def extract_macro_f1_mean_from_trial_logs(log_dir: str | Path, num_tasks: int) -> float:
+    """Extract the final mean macro F1 from the latest trial metrics file.
 
-    This reads the latest ``task*.npz`` produced by a training run and resolves
-    ``val_f1`` to a single run-level score by taking the last ``n_tasks``
-    entries when needed.
+    Reads the latest ``task*.npz`` produced by a training run and resolves the
+    stored validation macro F1 to a single run-level score, taking the last
+    ``num_tasks`` entries when the array holds every per-epoch evaluation.
 
     Args:
         log_dir: Trial output directory containing ``task*.npz`` files.
-        fallback_num_tasks: Fallback task count when detection vectors are
-            unavailable in metrics.
+        num_tasks: Number of continual tasks in the run, used to slice the
+            final evaluation out of a flattened per-eval array.
 
     Returns:
-        Final mean total F1 score, or NaN when it cannot be recovered.
+        Final mean macro F1, or NaN when it cannot be recovered.
 
     Usage:
-        f1_score = extract_total_f1_mean_from_trial_logs("/tmp/run", 3)
+        f1_score = extract_macro_f1_mean_from_trial_logs("/tmp/run", 3)
     """
     candidate_dir = Path(log_dir)
     metrics_dir = (
@@ -438,30 +437,18 @@ def extract_total_f1_mean_from_trial_logs(
         return float("nan")
 
     latest_metrics = np.load(task_files[-1], allow_pickle=False)
-    if "val_f1" not in latest_metrics:
+    macro_f1_values = extract_metric(latest_metrics, "val_macro_f1")
+    if macro_f1_values is None:
         return float("nan")
 
-    val_f1_array = np.asarray(latest_metrics["val_f1"], dtype=float).reshape(-1)
-    if val_f1_array.size == 0:
+    macro_f1_array = np.asarray(macro_f1_values, dtype=float).reshape(-1)
+    if macro_f1_array.size == 0:
         return float("nan")
 
-    inferred_num_tasks = 0
-    if "val_det_acc" in latest_metrics:
-        inferred_num_tasks = max(
-            inferred_num_tasks, int(np.asarray(latest_metrics["val_det_acc"]).size)
-        )
-    if "val_det_fa" in latest_metrics:
-        inferred_num_tasks = max(
-            inferred_num_tasks, int(np.asarray(latest_metrics["val_det_fa"]).size)
-        )
-    if inferred_num_tasks <= 0:
-        inferred_num_tasks = max(int(fallback_num_tasks), 1)
-
-    if val_f1_array.size >= inferred_num_tasks:
-        final_slice = val_f1_array[-inferred_num_tasks:]
-        return float(np.mean(final_slice))
-
-    return float(np.mean(val_f1_array))
+    final_num_tasks = max(int(num_tasks), 1)
+    if macro_f1_array.size > final_num_tasks:
+        return float(np.mean(macro_f1_array[-final_num_tasks:]))
+    return float(np.mean(macro_f1_array))
 
 
 def run_single_trial(
@@ -550,15 +537,6 @@ def run_single_trial(
             # main_single_round does not compute separate test metrics.
             result_test_t = torch.empty((0,), dtype=torch.long)
             result_test_a = torch.empty((0, 0), dtype=torch.float)
-            result_test_det_a = torch.empty((0,), dtype=torch.float)
-            result_test_det_fa = torch.empty((0,), dtype=torch.float)
-
-            result_val_det_a = torch.as_tensor(
-                metrics_payload.get("val_det_acc", []), dtype=torch.float
-            )
-            result_val_det_fa = torch.as_tensor(
-                metrics_payload.get("val_det_fa", []), dtype=torch.float
-            )
         else:
             (
                 result_val_t,
@@ -566,10 +544,6 @@ def run_single_trial(
                 _result_val_prec,
                 result_test_t,
                 result_test_a,
-                result_val_det_a,
-                result_val_det_fa,
-                result_test_det_a,
-                result_test_det_fa,
                 spent,
             ) = life_experience(model, loader, args)
     finally:
@@ -578,24 +552,18 @@ def run_single_trial(
 
     val_scores = extract_final_scores(result_val_a)
     test_scores = extract_final_scores(result_test_a)
-    val_det_scores = extract_final_scores(result_val_det_a)
-    val_pfa_scores = extract_final_scores(result_val_det_fa)
-    test_det_scores = extract_final_scores(result_test_det_a)
-    test_pfa_scores = extract_final_scores(result_test_det_fa)
 
     val_mean = compute_mean(val_scores)
-    val_f1_mean = extract_total_f1_mean_from_trial_logs(log_dir, len(val_scores))
-    det_mean = compute_mean(val_det_scores)
-    pfa_mean = compute_mean(val_pfa_scores)
-    if np.isnan(val_f1_mean):
+    val_macro_f1_mean = extract_macro_f1_mean_from_trial_logs(log_dir, len(val_scores))
+    if np.isnan(val_macro_f1_mean):
         print(
-            "[WARN] Trial {} has no usable val_f1 in {}. Falling back to val_mean ({:.4f}) for tuning score.".format(
+            "[WARN] Trial {} has no usable macro F1 in {}. Falling back to val_mean ({:.4f}) for tuning score.".format(
                 trial_idx, log_dir, val_mean
             )
         )
         score = val_mean
     else:
-        score = val_f1_mean
+        score = val_macro_f1_mean
 
     return {
         "status": "ok",
@@ -607,17 +575,9 @@ def run_single_trial(
         "fixed_params": dict(constant_overrides),
         "val_per_task": val_scores,
         "val_mean": val_mean,
-        "val_f1_mean": val_f1_mean,
-        "val_det_per_task": val_det_scores,
-        "val_det_mean": det_mean,
-        "val_pfa_per_task": val_pfa_scores,
-        "val_pfa_mean": pfa_mean,
+        "val_macro_f1_mean": val_macro_f1_mean,
         "test_per_task": test_scores,
         "test_mean": compute_mean(test_scores),
-        "test_det_per_task": test_det_scores,
-        "test_det_mean": compute_mean(test_det_scores),
-        "test_pfa_per_task": test_pfa_scores,
-        "test_pfa_mean": compute_mean(test_pfa_scores),
         "score": score,
         "duration_sec": float(spent),
     }
@@ -664,21 +624,13 @@ def aggregate_seed_results(
     """
     scalar_keys = [
         "val_mean",
-        "val_f1_mean",
-        "val_det_mean",
-        "val_pfa_mean",
+        "val_macro_f1_mean",
         "test_mean",
-        "test_det_mean",
-        "test_pfa_mean",
         "score",
     ]
     list_keys = [
         "val_per_task",
-        "val_det_per_task",
-        "val_pfa_per_task",
         "test_per_task",
-        "test_det_per_task",
-        "test_pfa_per_task",
     ]
 
     aggregated = dict(per_seed_results[0])
@@ -765,7 +717,8 @@ def run_trial_over_seeds(
         )
         print(
             f"  seed {seed}: score={outcome['score']:.4f}"
-            f" (val_f1={outcome['val_f1_mean']:.4f}, val={outcome['val_mean']:.4f})"
+            f" (val_macro_f1={outcome['val_macro_f1_mean']:.4f},"
+            f" val={outcome['val_mean']:.4f})"
         )
         per_seed_results.append(outcome)
     return aggregate_seed_results(per_seed_results, seeds)
@@ -786,11 +739,8 @@ def dump_summary(
         "trial",
         "score",
         "val_mean",
-        "val_det_mean",
-        "val_pfa_mean",
+        "val_macro_f1_mean",
         "test_mean",
-        "test_det_mean",
-        "test_pfa_mean",
         "duration_sec",
         "log_dir",
     ]
@@ -810,11 +760,8 @@ def dump_summary(
                 "trial": trial["trial"],
                 "score": trial.get("score"),
                 "val_mean": trial.get("val_mean"),
-                "val_det_mean": trial.get("val_det_mean"),
-                "val_pfa_mean": trial.get("val_pfa_mean"),
+                "val_macro_f1_mean": trial.get("val_macro_f1_mean"),
                 "test_mean": trial.get("test_mean"),
-                "test_det_mean": trial.get("test_det_mean"),
-                "test_pfa_mean": trial.get("test_pfa_mean"),
                 "duration_sec": trial["duration_sec"],
                 "log_dir": trial["log_dir"],
             }

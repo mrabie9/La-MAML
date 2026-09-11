@@ -360,9 +360,9 @@ def _evaluate_final_model_f1_by_task(
     )
     with torch.no_grad():
         eval_output = evaluator(model, list(task_loaders), run_args)
-    _cls_rec, _cls_prec, cls_f1, _det, _fa = _split_eval_output(eval_output)
+    _macro_rec, _macro_prec, macro_f1 = _split_eval_output(eval_output)
     return {
-        task_index: _extract_metric_at_index(cls_f1, task_index)
+        task_index: _extract_metric_at_index(macro_f1, task_index)
         for task_index in range(len(task_loaders))
     }
 

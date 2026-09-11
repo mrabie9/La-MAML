@@ -8,19 +8,17 @@ aggregates the final metrics printed on the ``SUMMARY_TE`` / ``SUMMARY_TR``
 lines. When multiple run directories are given (e.g. one per algorithm),
 results are printed side by side as rows of a single table.
 
-The headline number is **signal-class F1** (``F1_cls``), computed as the
-harmonic mean of ``cls_rec`` and ``cls_prec`` (the signal-only macro
-recall/precision). This is deliberately *not* the ``cls_f1`` field
-(``F1_CL`` below), which is the mean per-class F1 over all classes including
-noise (i.e. f1_total) and does not equal the harmonic mean of the reported
-recall/precision.
+The headline number is **macro F1** over signal classes, read straight from the
+``macro_f1`` field of the ``SUMMARY_TR`` / ``SUMMARY_TE`` line. Run logs written
+before the detection-metric removal spell these fields ``cls_rec`` / ``cls_prec``
+/ ``cls_f1``; those names are still accepted, and any trailing ``det=`` / ``fa=``
+tokens they carry are ignored.
 
 Table columns:
-    F1_cls  -- signal-class F1 (harmonic mean of cls_rec, cls_prec)
-    pd      -- probability of detection (detection recall)
-    pfa     -- probability of false alarm
-    F1_CL   -- continual-learning headline F1 (f1_total, all classes)
-    BWT     -- backward transfer (validation split only)
+    Rec   -- macro recall over signal classes
+    Prec  -- macro precision over signal classes
+    F1    -- macro F1 over signal classes
+    BWT   -- backward transfer (validation split only)
 
 Usage:
     python scripts/summarise_seed_runs.py logs/lamaml/<run-dir>
@@ -83,15 +81,6 @@ def _read_bwt(seed_dir: str) -> float:
     return float("nan")
 
 
-def _signal_f1(rec: float | None, prec: float | None) -> float:
-    """Harmonic mean of signal recall and precision (0 if undefined)."""
-    if rec is None or prec is None:
-        return float("nan")
-    if math.isnan(rec) or math.isnan(prec) or (rec + prec) == 0:
-        return 0.0 if (rec == 0 and prec == 0) else float("nan")
-    return 2.0 * rec * prec / (rec + prec)
-
-
 def _infer_algo_label(run_dir: str) -> str:
     """Infer an algorithm label from a run dir's parent (e.g. logs/lamaml/<run> -> "lamaml")."""
     parent = os.path.basename(os.path.dirname(os.path.abspath(run_dir.rstrip(os.sep))))
@@ -142,16 +131,24 @@ def summarise(run_dir: str, tag: str) -> dict:
         )
 
     seeds = [name for name, _ in runs]
-    # Per-seed derived signal F1 plus the raw fields we care about.
-    per_seed_signal_f1 = [
-        _signal_f1(f.get("cls_rec"), f.get("cls_prec")) for _, f in runs
-    ]
 
     # Columns to report straight from the summary line (order preserved).
-    raw_keys = ["cls_rec", "cls_prec", "det", "fa", "cls_f1"]
-    columns: dict[str, list[float]] = {"signal_f1": per_seed_signal_f1}
-    for key in raw_keys:
-        columns[key] = [f.get(key, float("nan")) for _, f in runs]
+    # ``macro_*`` is the current spelling; ``cls_*`` is the pre-removal name and
+    # is accepted so older run logs still summarise.
+    raw_keys = {
+        "macro_rec": ("macro_rec", "cls_rec"),
+        "macro_prec": ("macro_prec", "cls_prec"),
+        "macro_f1": ("macro_f1", "cls_f1"),
+    }
+    columns: dict[str, list[float]] = {}
+    for column_name, aliases in raw_keys.items():
+        columns[column_name] = [
+            next(
+                (f[alias] for alias in aliases if alias in f),
+                float("nan"),
+            )
+            for _, f in runs
+        ]
 
     # BWT lives in each seed's results.txt (validation recall matrix), so it is
     # only meaningful for the validation split.
@@ -171,10 +168,9 @@ def summarise(run_dir: str, tag: str) -> dict:
 
 # Table columns for the multi-algorithm summary: (header, underlying column key).
 _TABLE_COLUMNS = [
-    ("F1_cls", "signal_f1"),
-    ("pd", "det"),
-    ("pfa", "fa"),
-    ("F1_CL", "cls_f1"),
+    ("Rec", "macro_rec"),
+    ("Prec", "macro_prec"),
+    ("F1", "macro_f1"),
     ("BWT", "bwt"),
 ]
 

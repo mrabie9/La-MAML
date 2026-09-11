@@ -9,7 +9,7 @@ Usage:
 
     python scripts/plot_fwt_metrics.py \
         --json-path logs/full_experiments/one-shot_cil/fwt_metrics.json \
-        --metric forward_transfer_total_f1_zs \
+        --metric forward_transfer_total_macro_f1_zs \
         --output-path logs/full_experiments/one-shot_cil/fwt_metrics_plot.png
 """
 
@@ -312,7 +312,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--metric",
         type=str,
-        default="forward_transfer_total_f1_zs",
+        default="forward_transfer_total_macro_f1_zs",
         help="Metric key to plot from each record.",
     )
     parser.add_argument(
