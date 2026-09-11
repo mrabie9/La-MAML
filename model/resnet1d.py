@@ -12,6 +12,7 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 from torch.func import functional_call
+from model.adab1n import AdaB1N
 from utils.iq_features import append_iq_augmented_features
 
 
@@ -502,6 +503,18 @@ class ResNet1D(nn.Module):
 
     # ------------------------------------------------------------------
     def _build_norm_factory(self, args):
+        """Build the per-channel normalization layer factory for this backbone.
+
+        Selected via ``args.norm_type`` (``"batchnorm"`` (default),
+        ``"groupnorm"``, or ``"adab1n"``); ``args.use_groupnorm`` remains
+        supported as a legacy alias for ``norm_type="groupnorm"``.
+
+        Args:
+            args: Experiment arguments, or ``None`` for the BatchNorm1d default.
+
+        Returns:
+            A callable mapping a channel count to a fresh normalization module.
+        """
         if args is None:
             return lambda channels: nn.BatchNorm1d(channels)
 
@@ -523,7 +536,34 @@ class ResNet1D(nn.Module):
 
             return gn_factory
 
+        if norm_type in {"adab1n", "ada_b1n", "adab2n"}:
+            return self._build_adab1n_factory(args)
+
         return lambda c: nn.BatchNorm1d(c)
+
+    def _build_adab1n_factory(self, args):
+        """Build an :class:`~model.adab1n.AdaB1N` factory sized from ``args``.
+
+        Args:
+            args: Experiment arguments; reads ``n_tasks``, ``kappa`` and
+                ``adab1n_init_weight`` when present.
+
+        Returns:
+            A callable mapping a channel count to a fresh ``AdaB1N`` module.
+        """
+        num_tasks = max(1, int(getattr(args, "n_tasks", 1) or 1))
+        kappa = float(getattr(args, "kappa", 1.0) or 1.0)
+        init_weight = float(getattr(args, "adab1n_init_weight", 0.0) or 0.0)
+
+        def adab1n_factory(channels: int):
+            return AdaB1N(
+                channels,
+                num_tasks=num_tasks,
+                kappa=kappa,
+                init_weight=init_weight,
+            )
+
+        return adab1n_factory
 
 
 __all__ = ["ResNet1D"]
