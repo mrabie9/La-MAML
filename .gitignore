@@ -11,12 +11,8 @@ la-maml_env/
 logs/*
 .vscode/
 utils/plot_logs.py
-AGENTS.md
+CLAUDE.md
 # Transient local analysis and training logs
-flo.md
-icarl.txt
-icarl2.txt
-icarl3.txt
-icarl4.txtplots/
+plots/
 *.png
 *.pdf
