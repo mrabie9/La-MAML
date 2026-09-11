@@ -48,6 +48,7 @@ COMMON_TYPE_HINTS: Dict[str, type] = {
     "clipgrad_norm": float,
     "optimizer": str,
     "smax": float,
+    "memory_loss_lambda": float,
 }
 
 
@@ -512,17 +513,35 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
             {
                 "alpha_init": {
                     "kind": "float",
-                    "factors": (0.5, 1.0, 2.0),
-                    "min": 1e-4,
-                    "fallback": 0.1,
-                    "values": [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3],
+                    "factors": (0.3, 1.0, 3.0),
+                    "min": 1e-5,
+                    "fallback": 1e-2,
+                    "values": [
+                        0.03,
+                        0.01,
+                        0.003,
+                        0.001,
+                        0.0003,
+                        0.0001,
+                        0.00003,
+                        0.00001,
+                    ],
                 },
                 "opt_lr": {
                     "kind": "float",
-                    "factors": (0.5, 1.0, 2.0),
-                    "min": 1e-4,
-                    "fallback": 0.1,
-                    "values": [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3],
+                    "factors": (0.3, 1.0, 3.0),
+                    "min": 1e-5,
+                    "fallback": 1e-2,
+                    "values": [
+                        0.03,
+                        0.01,
+                        0.003,
+                        0.001,
+                        0.0003,
+                        0.0001,
+                        0.00003,
+                        0.00001,
+                    ],
                 },
             }
         ),
@@ -589,7 +608,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
-                "lr": {
+                "opt_lr": {
                     "kind": "float",
                     "factors": (0.3, 1.0, 3.0),
                     "min": 1e-5,
@@ -604,14 +623,6 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                         0.00003,
                         0.00001,
                     ],
-                },
-                "learn_lr": {"kind": "bool", "values": [True]},
-                "opt_lr": {
-                    "kind": "float",
-                    "factors": (0.5, 1.0, 2.0),
-                    "min": 1e-4,
-                    "fallback": 0.1,
-                    "values": [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3],
                 },
             }
         ),
