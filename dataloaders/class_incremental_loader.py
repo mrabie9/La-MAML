@@ -364,10 +364,12 @@ class IncrementalLoader:
             x_test, y_test = self.iq_test[i]
             p_te = self.sample_permutations[i][1]
             x_test, y_test = x_test[p_te], y_test[p_te]
-            self.test_tasks.append(self._get_loader(x_test, y_test, mode="test"))
-            if validation_split > 0.0 and self.iq_val[i] is not None:
-                x_val, y_val = self.iq_val[i]
-                self.val_tasks.append(self._get_loader(x_val, y_val, mode="test"))
+            test_loader = self._get_loader(x_test, y_test, mode="test")
+            self.test_tasks.append(test_loader)
+            # iq_val no longer carves a held-out chunk off x_train (see
+            # _setup_iq_tasks); "val" mirrors "test" here, matching
+            # task_incremental_loader's get_tasks("val") behavior.
+            self.val_tasks.append(test_loader)
 
     def get_tasks(self, dataset_type="test"):
         if dataset_type == "val":
@@ -826,14 +828,11 @@ class IncrementalLoader:
             return int(np.unique(y_labels).size)
 
         for x_train, y_train, x_test, y_test in raw_datasets:
-            if validation_split > 0.0:
-                x_val, y_val, x_train, y_train = self._split_per_class(
-                    x_train, y_train, validation_split
-                )
-                self.iq_val.append((x_val, y_val))
-            else:
-                self.iq_val.append(None)
-
+            # No extra held-out split off x_train: validation_split already sized
+            # x_test above, and task_incremental_loader trains on the full
+            # x_train for parity. Carving another validation_split fraction off
+            # x_train here used to halve the CIL training set relative to TIL.
+            self.iq_val.append(None)
             self.iq_train.append((x_train, y_train))
             self.iq_test.append((x_test, y_test))
 
