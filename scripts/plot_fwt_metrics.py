@@ -86,7 +86,7 @@ PLOT_STYLES_BY_EXPERIMENT: Dict[str, PlotStyle] = {
     },
     "til": {
         "figsize": IEEE_DOUBLE_COLUMN_FIGSIZE,
-        "ylim": None,
+        "ylim": (-0.06, 0.15),
     },
 }
 ALGORITHM_DISPLAY_NAMES: Dict[str, str] = {
@@ -454,6 +454,7 @@ def plot_series(
     output_path: Path,
     plot_style: PlotStyle,
     title: Optional[str] = None,
+    task_index_to_dataset_name_override: Optional[Dict[int, str]] = None,
 ) -> None:
     """Create and save the metric line plot.
 
@@ -462,6 +463,10 @@ def plot_series(
         metric_name: Metric key being plotted.
         output_path: Where to save the PNG.
         title: Optional custom chart title.
+        task_index_to_dataset_name_override: Ready-made x-axis dataset labels.
+            Callers that discovered the runs themselves (and therefore read
+            ``metrics/task_order.txt``) should pass them so the labels do not
+            depend on the metrics JSON carrying ``task_name``.
 
     Usage:
         >>> plot_series({"algo": [(0, 0.1, "t0")]}, "metric", Path("out.png"))
@@ -471,6 +476,8 @@ def plot_series(
     sorted_task_indices, task_index_to_dataset_name = _extract_task_axis_metadata(
         series_by_algorithm
     )
+    if task_index_to_dataset_name_override:
+        task_index_to_dataset_name = dict(task_index_to_dataset_name_override)
     total_lines = sum(len(member_names) for _, member_names in ordered_groups)
     maximum_group_size = max(
         (len(member_names) for _, member_names in ordered_groups), default=0
