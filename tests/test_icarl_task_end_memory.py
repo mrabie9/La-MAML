@@ -41,11 +41,7 @@ def _make_args() -> object:
     args.task_emb = 16
     args.samples_per_task = 8
     args.n_epochs = 1
-    args.det_lambda = 1.0
     args.cls_lambda = 1.0
-    args.det_memories = 0
-    args.det_replay_batch = 0
-    args.use_detector_arch = False
     args.arch = "resnet1d"
     args.dataset = "iq"
     args.class_weighted_ce = False

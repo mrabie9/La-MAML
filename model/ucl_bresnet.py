@@ -10,6 +10,7 @@ task-specific outputs.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 import math
 import os
@@ -18,6 +19,7 @@ from typing import Iterable, List, Optional, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.modules.batchnorm import _BatchNorm
 from model.resnet1d import AdcIqAdapter
 from model.replay_utils import unpack_y_to_class_labels
 from utils.iq_features import append_iq_augmented_features
@@ -483,8 +485,46 @@ class Net(nn.Module):
             n_outputs, n_tasks, self.cfg, args, self.classes_per_task
         )
         self.split = self.cfg.split
+
+        mu_params: List[nn.Parameter] = []
+        rho_params: List[nn.Parameter] = []
+
+        for module in self._iter_bayesian_modules(self.model):
+            mu_params.extend(module.mu_parameters())
+            rho_params.extend(module.rho_parameters())
+        mu_params.extend(self.model.input_adapter.parameters())
+
+        self.optimizer = torch.optim.SGD(
+            [
+                {"params": mu_params, "lr": self.cfg.lr},
+                {"params": rho_params, "lr": self.cfg.lr_rho},
+            ],
+            lr=self.cfg.lr,
+            momentum=0.9,
+            weight_decay=0.0,
+        )
+
+        self.current_task: Optional[int] = None
+        self.model_old: Optional[BayesianClassifier] = None
+        self.saved = False
+        self.is_task_incremental: bool = True
+        self._debug_step_counter = 0
+        self.incremental_loader_name = getattr(args, "loader", None)
+        self._use_task_bn_state = bool(
+            self.split and self.incremental_loader_name == "task_incremental_loader"
+        )
+        self._bn_modules: List[_BatchNorm] = [
+            module for module in self.model.modules() if isinstance(module, _BatchNorm)
+        ]
+        self._bn_task_stats: dict[int, List[Tuple[torch.Tensor, torch.Tensor, int]]] = (
+            {}
+        )
+        self._bn_task_affine: dict[
+            int, List[Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]]
+        ] = {}
         self._bn_finalized_tasks: set[int] = set()
 
+    @contextmanager
     def _temporarily_enable_bn_training(self):
         bn_modules: List[nn.BatchNorm1d] = []
         states: List[bool] = []
