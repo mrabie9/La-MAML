@@ -24,9 +24,9 @@ calc_test_accuracy: false
 state_logging: false
 
 n_meta: 1
-inner_steps: 1
+inner_steps: 2
 temperature: 5
-n_epochs: 5
+n_epochs: 1
 optimizer: sgd
 batch_size: 256
 replay_batch_size: 64
