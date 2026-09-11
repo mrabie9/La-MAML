@@ -640,14 +640,20 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
     if class_counts is None:
         class_counts = getattr(args, "classes_per_task", None)
 
+    # ``specific_task`` selects a single task, but the model must still be
+    # queried with that task's *true* id (head selection / label offsets),
+    # not the position 0 it now occupies in the trimmed list.
     if specific_task is not None:
+        task_ids = [int(specific_task)]
         tasks = [tasks[specific_task]]
+    else:
+        task_ids = list(range(len(tasks)))
 
     det_results = []
     det_fa_results = []
     det_metrics_active = False
     for task_position, task in enumerate(tasks):
-        t = task_position
+        t = task_ids[task_position]
         recalls = []
         precisions = []
         f1s = []
@@ -857,8 +863,10 @@ def life_experience(model, inc_loader, args):
         if getattr(args, "amp_dtype", "bfloat16") == "bfloat16"
         else torch.float16
     )
-    use_amp = bool(getattr(args, "amp", False) and args.cuda and not getattr(args, "no-amp", False))
-    print("use amp:",use_amp)
+    use_amp = bool(
+        getattr(args, "amp", False) and args.cuda and not getattr(args, "no-amp", False)
+    )
+    print("use amp:", use_amp)
     log_state(
         args.state_logging,
         "Life experience start: {} tasks queued".format(inc_loader.n_tasks),
