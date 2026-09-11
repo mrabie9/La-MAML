@@ -1255,13 +1255,11 @@ def _print_tr_te_sweep_comparison(
         if show_run_column:
             header_cells.append("run_dir")
         header_cells += [
-            "tr_f1_c",
-            "tr_det",
-            "tr_fa",
+            "tr_rec",
+            "tr_prec",
             "tr_f1",
-            "te_f1_c",
-            "te_det",
-            "te_fa",
+            "te_rec",
+            "te_prec",
             "te_f1",
         ]
         print("| " + " | ".join(header_cells) + " |")
@@ -1300,14 +1298,12 @@ def _print_tr_te_sweep_comparison(
         if show_run_column:
             header_parts.append(f"{'run_dir':<{width_run}}")
         header_parts += [
-            f"{'f1_c':>{width_numeric}}",
-            f"{'det':>{width_numeric}}",
-            f"{'fa':>{width_numeric}}",
+            f"{'rec':>{width_numeric}}",
+            f"{'prec':>{width_numeric}}",
             f"{'f1':>{width_numeric}}",
             "|",
-            f"{'f1_c':>{width_numeric}}",
-            f"{'det':>{width_numeric}}",
-            f"{'fa':>{width_numeric}}",
+            f"{'rec':>{width_numeric}}",
+            f"{'prec':>{width_numeric}}",
             f"{'f1':>{width_numeric}}",
         ]
         header_line = " ".join(header_parts)
@@ -1334,12 +1330,10 @@ def _print_tr_te_sweep_comparison(
                 f"{_fmt(metric_values[0]):>{width_numeric}}",
                 f"{_fmt(metric_values[1]):>{width_numeric}}",
                 f"{_fmt(metric_values[2]):>{width_numeric}}",
-                f"{_fmt(metric_values[3]):>{width_numeric}}",
                 "|",
+                f"{_fmt(metric_values[3]):>{width_numeric}}",
                 f"{_fmt(metric_values[4]):>{width_numeric}}",
                 f"{_fmt(metric_values[5]):>{width_numeric}}",
-                f"{_fmt(metric_values[6]):>{width_numeric}}",
-                f"{_fmt(metric_values[7]):>{width_numeric}}",
             ]
             print(" ".join(row_parts))
             previous_algorithm_name = algorithm_name
@@ -1550,7 +1544,7 @@ def _parse_arguments() -> argparse.Namespace:
         metavar="RUN_DIR",
         help=(
             "Coordinator run directories (typically logs/full_experiments/run_*_mem_*) "
-            "to compare TR and TE f1_c, det, fa, and f1 across buffer sizes. "
+            "to compare TR and TE rec, prec, and f1 across buffer sizes. "
             "Printed after the main summary when --log/--logs are also used; "
             "buffer size is read from the directory name suffix _mem_<n> "
             "(see full_experiments_mem_sweep.sh)."
@@ -1564,7 +1558,7 @@ def _parse_arguments() -> argparse.Namespace:
         metavar="RUN_DIR",
         help=(
             "Coordinator run directories (typically run_*_task_order_seed_<n>) "
-            "to compare TR and TE f1_c, det, fa, and f1 across task-order seeds. "
+            "to compare TR and TE rec, prec, and f1 across task-order seeds. "
             "Same table as --mem-compare-runs; seed is read from suffix "
             "_task_order_seed_<n> (see full_experiments_task_order_seed_sweep.sh)."
         ),
