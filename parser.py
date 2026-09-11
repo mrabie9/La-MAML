@@ -471,11 +471,16 @@ def get_parser():
         "--steps_per_sample", default=1, type=int, help="training steps per batch"
     )
 
+    parser.add_argument(
+        "--beta",
+        type=float,
+        default=1.0,
+        help="beta learning rate parameter (bcl_dual meta update weight)",
+    )
+
     # # parameters specific to MER
     # parser.add_argument('--gamma', type=float, default=1.0,
     #                     help='gamma learning rate parameter')
-    # parser.add_argument('--beta', type=float, default=1.0,
-    #                     help='beta learning rate parameter')
     # parser.add_argument('--s', type=float, default=1,
     #                     help='current example learning rate multiplier (s)')
     # parser.add_argument('--batches_per_example', type=float, default=1,
