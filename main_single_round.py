@@ -12,9 +12,6 @@ from torch.utils.data import ConcatDataset, DataLoader
 
 import parser as file_parser
 from main import (
-    _split_labels,
-    _noise_label_for_metrics,
-    _false_alarm_rate,
     eval_tasks,
     save_results,
     log_state,
@@ -27,8 +24,8 @@ from utils.training_forward import (
 from metrics.metrics import confusion_matrix
 from utils import misc_utils
 from utils.training_metrics import (
-    macro_f1_including_noise,
-    macro_precision_signal_only,
+    macro_f1,
+    macro_precision,
     macro_recall,
 )
 
@@ -298,17 +295,12 @@ def run_single_round_training(
     per_epoch_train_precisions: List[float] = []
     per_epoch_val_cls_rec: List[float] = []
     per_epoch_val_cls_prec: List[float] = []
-    per_epoch_train_det_rec: List[float] = []
-    per_epoch_train_det_pfa: List[float] = []
-    per_epoch_val_det_rec: List[float] = []
-    per_epoch_val_det_pfa: List[float] = []
     per_epoch_train_f1: List[float] = []
     per_epoch_val_f1: List[float] = []
 
     time_start = time.time()
 
     current_task_index = 0
-    noise_label_for_task = _noise_label_for_metrics(args, train_loader)
 
     for epoch in range(args.n_epochs):
         model.real_epoch = epoch
@@ -316,8 +308,6 @@ def run_single_round_training(
         epoch_recalls: List[float] = []
         epoch_precisions: List[float] = []
         epoch_f1s: List[float] = []
-        epoch_det_recalls: List[float] = []
-        epoch_det_fas: List[float] = []
 
         progress_bar = tqdm(train_loader, disable=not interactive_terminal)
         for batch in progress_bar:
@@ -329,29 +319,9 @@ def run_single_round_training(
                 raise ValueError("Unexpected batch structure in single-round training.")
 
             xb = xb.to(device)
-            y_cls = _split_labels(yb)
-            if not torch.is_tensor(y_cls):
-                y_cls = torch.as_tensor(y_cls)
+            y_cls = yb if torch.is_tensor(yb) else torch.as_tensor(yb)
 
-            if getattr(args, "use_detector_arch", False):
-                if isinstance(yb, (tuple, list)) and len(yb) == 2:
-                    cls_part, det_part = yb[0], yb[1]
-                    if not torch.is_tensor(cls_part):
-                        cls_part = torch.as_tensor(cls_part)
-                    if not torch.is_tensor(det_part):
-                        det_part = torch.as_tensor(det_part)
-                    y_for_observe = (cls_part.to(device), det_part.to(device))
-                elif torch.is_tensor(yb) and yb.dim() == 2 and yb.size(1) == 2:
-                    y_for_observe = (yb[:, 0].to(device), yb[:, 1].to(device))
-                elif isinstance(yb, np.ndarray) and yb.ndim == 2 and yb.shape[1] == 2:
-                    y_for_observe = (
-                        torch.as_tensor(yb[:, 0]).to(device),
-                        torch.as_tensor(yb[:, 1]).to(device),
-                    )
-                else:
-                    y_for_observe = y_cls.to(device)
-            else:
-                y_for_observe = y_cls.to(device)
+            y_for_observe = y_cls.to(device)
 
             model.train()
             observe_result = model.observe(xb, y_for_observe, current_task_index)
@@ -361,7 +331,6 @@ def run_single_round_training(
 
             if metric_logits is not None:
                 predictions = torch.argmax(metric_logits, dim=1).cpu()
-                det_logits = None
             else:
                 model.eval()
                 with torch.no_grad():
@@ -369,48 +338,20 @@ def run_single_round_training(
                         model, xb, current_task_index, args
                     )
                     predictions = torch.argmax(logits, dim=1).cpu()
-                    det_logits = None
                 model.train()
 
             y_cls_for_metric = y_cls.cpu()
-            noise_label = noise_label_for_task
             if getattr(model, "split", False):
                 offset1, _ = model.compute_offsets(current_task_index)
                 y_cls_for_metric = y_cls_for_metric - offset1
-                if noise_label is not None:
-                    noise_label = noise_label - offset1
 
-            precision = macro_precision_signal_only(
-                predictions, y_cls_for_metric, noise_label
-            )
-            f1 = macro_f1_including_noise(predictions, y_cls_for_metric)
-            if noise_label is not None:
-                cls_mask = y_cls_for_metric != noise_label
-                if cls_mask.any():
-                    cls_tr_rec = macro_recall(
-                        predictions[cls_mask], y_cls_for_metric[cls_mask]
-                    )
-                else:
-                    cls_tr_rec = 0.0
-            else:
-                cls_tr_rec = macro_recall(predictions, y_cls_for_metric)
-
-            det_rec = 0.0
-            det_fa = 0.0
-            if noise_label is not None:
-                det_targets = (y_cls_for_metric != noise_label).long()
-                if det_logits is not None:
-                    det_pred = (det_logits >= 0).long().cpu()
-                else:
-                    det_pred = (predictions != noise_label).long()
-                det_rec = macro_recall(det_pred, det_targets)
-                det_fa = _false_alarm_rate(det_pred, det_targets)
+            precision = macro_precision(predictions, y_cls_for_metric)
+            f1 = macro_f1(predictions, y_cls_for_metric)
+            cls_tr_rec = macro_recall(predictions, y_cls_for_metric)
 
             epoch_recalls.append(float(cls_tr_rec))
             epoch_precisions.append(float(precision))
             epoch_f1s.append(float(f1))
-            epoch_det_recalls.append(float(det_rec))
-            epoch_det_fas.append(float(det_fa))
 
             progress_bar.set_description(
                 "Ep: {}/{} | Loss: {:.3f} | Rec: {:.3f} | Prec: {:.3f} | F1: {:.3f}".format(
@@ -426,29 +367,15 @@ def run_single_round_training(
         # Validation at end of epoch on the combined test loader.
         val_loaders = [test_loader]
         val_outputs = eval_tasks(model, val_loaders, args)
-        val_acc, val_prec, val_f1, val_det_acc, val_det_fa = _split_eval_output(
-            val_outputs
-        )
+        val_acc, val_prec, val_f1 = _split_eval_output(val_outputs)
         if isinstance(val_acc, (list, tuple)):
             val_acc_values = [float(v) for v in val_acc]
             cur_val_acc = float(val_acc[0])
         else:
             val_acc_values = [float(val_acc)]
             cur_val_acc = float(val_acc)
-        cur_val_det_rec = None
-        cur_val_det_fa = None
         cur_val_f1 = None
         cur_val_prec = None
-        if val_det_acc is not None:
-            if isinstance(val_det_acc, (list, tuple)):
-                cur_val_det_rec = float(val_det_acc[0])
-            else:
-                cur_val_det_rec = float(val_det_acc)
-        if val_det_fa is not None:
-            if isinstance(val_det_fa, (list, tuple)):
-                cur_val_det_fa = float(val_det_fa[0])
-            else:
-                cur_val_det_fa = float(val_det_fa)
         if val_f1 is not None:
             if isinstance(val_f1, (list, tuple)):
                 cur_val_f1 = float(val_f1[0])
@@ -469,46 +396,30 @@ def run_single_round_training(
             float(np.mean(epoch_precisions)) if epoch_precisions else float("nan")
         )
         avg_f1 = float(np.mean(epoch_f1s)) if epoch_f1s else float("nan")
-        avg_det_rec = (
-            float(np.mean(epoch_det_recalls)) if epoch_det_recalls else float("nan")
-        )
-        avg_det_fa = float(np.mean(epoch_det_fas)) if epoch_det_fas else float("nan")
 
         per_epoch_losses.append(avg_loss)
         per_epoch_train_recalls.append(avg_rec)
         per_epoch_train_precisions.append(avg_prec)
-        per_epoch_train_det_rec.append(avg_det_rec)
-        per_epoch_train_det_pfa.append(avg_det_fa)
         per_epoch_val_cls_rec.append(
             cur_val_acc if cur_val_acc is not None else float("nan")
         )
         per_epoch_val_cls_prec.append(
             cur_val_prec if cur_val_prec is not None else float("nan")
         )
-        per_epoch_val_det_rec.append(
-            cur_val_det_rec if cur_val_det_rec is not None else float("nan")
-        )
-        per_epoch_val_det_pfa.append(
-            cur_val_det_fa if cur_val_det_fa is not None else float("nan")
-        )
         per_epoch_train_f1.append(avg_f1)
         per_epoch_val_f1.append(cur_val_f1 if cur_val_f1 is not None else float("nan"))
 
         print(
-            "Epoch {}/{} | Avg Loss {:.4f} | Avg Rec {:.4f} | Avg Prec {:.4f} | Avg F1 {:.4f} | Avg Det Rec {:.4f} | Avg Det FA {:.4f} | Val Rec {} | Val Prec {:.4f} | Val F1 {:.4f} | Val Det Rec {:.4f} | Val Det FA {:.4f}".format(
+            "Epoch {}/{} | Avg Loss {:.4f} | Avg Rec {:.4f} | Avg Prec {:.4f} | Avg F1 {:.4f} | Val Rec {} | Val Prec {:.4f} | Val F1 {:.4f}".format(
                 epoch + 1,
                 args.n_epochs,
                 avg_loss,
                 avg_rec,
                 avg_prec,
                 avg_f1,
-                avg_det_rec,
-                avg_det_fa,
                 val_acc_values,
                 cur_val_prec if cur_val_prec is not None else float("nan"),
                 cur_val_f1 if cur_val_f1 is not None else float("nan"),
-                cur_val_det_rec if cur_val_det_rec is not None else float("nan"),
-                cur_val_det_fa if cur_val_det_fa is not None else float("nan"),
             )
         )
 
@@ -526,25 +437,16 @@ def run_single_round_training(
 
     metrics_payload: Dict[str, np.ndarray] = {
         "losses": np.asarray(per_epoch_losses, dtype=float),
-        "cls_tr_rec": np.asarray(per_epoch_train_recalls, dtype=float),
-        "train_cls_prec": np.asarray(per_epoch_train_precisions, dtype=float),
-        "val_acc": np.asarray(per_epoch_val_cls_rec, dtype=float),
-        "val_cls_prec": np.asarray(per_epoch_val_cls_prec, dtype=float),
-        "train_det_rec": np.asarray(per_epoch_train_det_rec, dtype=float),
-        "train_det_pfa": np.asarray(per_epoch_train_det_pfa, dtype=float),
-        "val_det_rec": np.asarray(per_epoch_val_det_rec, dtype=float),
-        "val_det_pfa": np.asarray(per_epoch_val_det_pfa, dtype=float),
-        "train_f1": np.asarray(per_epoch_train_f1, dtype=float),
-        "val_f1_per_epoch": np.asarray(per_epoch_val_f1, dtype=float),
+        "tr_macro_rec": np.asarray(per_epoch_train_recalls, dtype=float),
+        "train_macro_prec": np.asarray(per_epoch_train_precisions, dtype=float),
+        "val_macro_rec": np.asarray(per_epoch_val_cls_rec, dtype=float),
+        "val_macro_prec_per_epoch": np.asarray(per_epoch_val_cls_prec, dtype=float),
+        "train_macro_rec": np.asarray(per_epoch_train_recalls, dtype=float),
+        "train_macro_f1": np.asarray(per_epoch_train_f1, dtype=float),
+        "val_macro_f1_per_epoch": np.asarray(per_epoch_val_f1, dtype=float),
         # For compatibility with scripts that expect a final-task vector.
-        "val_f1": np.asarray(
+        "val_macro_f1": np.asarray(
             [per_epoch_val_f1[-1]] if per_epoch_val_f1 else [], dtype=float
-        ),
-        "val_det_acc": np.asarray(
-            [per_epoch_val_det_rec[-1]] if per_epoch_val_det_rec else [], dtype=float
-        ),
-        "val_det_fa": np.asarray(
-            [per_epoch_val_det_pfa[-1]] if per_epoch_val_det_pfa else [], dtype=float
         ),
     }
 
@@ -671,39 +573,27 @@ def main() -> None:
     summary_tr_parts: List[str] = []
     summary_te_parts: List[str] = []
 
-    train_cls_rec = _safe_last(metrics_payload.get("cls_tr_rec"))
-    train_cls_prec = _safe_last(metrics_payload.get("train_cls_prec"))
-    train_cls_f1 = _safe_last(metrics_payload.get("train_f1"))
-    train_det = _safe_last(metrics_payload.get("train_det_rec"))
-    train_fa = _safe_last(metrics_payload.get("train_det_pfa"))
-    if train_cls_rec is not None:
-        summary_tr_parts.append("cls_rec={:.4f}".format(train_cls_rec))
-    if train_cls_prec is not None:
-        summary_tr_parts.append("cls_prec={:.4f}".format(train_cls_prec))
-    if train_cls_f1 is not None:
-        summary_tr_parts.append("cls_f1={:.4f}".format(train_cls_f1))
-    if train_det is not None:
-        summary_tr_parts.append("det={:.4f}".format(train_det))
-    if train_fa is not None:
-        summary_tr_parts.append("fa={:.4f}".format(train_fa))
+    train_macro_rec = _safe_last(metrics_payload.get("tr_macro_rec"))
+    train_macro_prec = _safe_last(metrics_payload.get("train_macro_prec"))
+    train_macro_f1 = _safe_last(metrics_payload.get("train_macro_f1"))
+    if train_macro_rec is not None:
+        summary_tr_parts.append("macro_rec={:.4f}".format(train_macro_rec))
+    if train_macro_prec is not None:
+        summary_tr_parts.append("macro_prec={:.4f}".format(train_macro_prec))
+    if train_macro_f1 is not None:
+        summary_tr_parts.append("macro_f1={:.4f}".format(train_macro_f1))
     if summary_tr_parts:
         print("SUMMARY_TR " + " ".join(summary_tr_parts))
 
-    val_cls_rec = _safe_last(metrics_payload.get("val_acc"))
-    val_cls_prec = _safe_last(metrics_payload.get("val_cls_prec"))
-    val_cls_f1 = _safe_last(metrics_payload.get("val_f1_per_epoch"))
-    val_det = _safe_last(metrics_payload.get("val_det_rec"))
-    val_fa = _safe_last(metrics_payload.get("val_det_pfa"))
-    if val_cls_rec is not None:
-        summary_te_parts.append("cls_rec={:.4f}".format(val_cls_rec))
-    if val_cls_prec is not None:
-        summary_te_parts.append("cls_prec={:.4f}".format(val_cls_prec))
-    if val_cls_f1 is not None:
-        summary_te_parts.append("cls_f1={:.4f}".format(val_cls_f1))
-    if val_det is not None:
-        summary_te_parts.append("det={:.4f}".format(val_det))
-    if val_fa is not None:
-        summary_te_parts.append("fa={:.4f}".format(val_fa))
+    val_macro_rec = _safe_last(metrics_payload.get("val_macro_rec"))
+    val_macro_prec = _safe_last(metrics_payload.get("val_macro_prec_per_epoch"))
+    val_macro_f1 = _safe_last(metrics_payload.get("val_macro_f1_per_epoch"))
+    if val_macro_rec is not None:
+        summary_te_parts.append("macro_rec={:.4f}".format(val_macro_rec))
+    if val_macro_prec is not None:
+        summary_te_parts.append("macro_prec={:.4f}".format(val_macro_prec))
+    if val_macro_f1 is not None:
+        summary_te_parts.append("macro_f1={:.4f}".format(val_macro_f1))
     if summary_te_parts:
         print("SUMMARY_TE " + " ".join(summary_te_parts))
 
