@@ -21,6 +21,9 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from utils.metric_keys import extract_metric  # noqa: E402
+
 import matplotlib.pyplot as plt
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -436,7 +439,7 @@ def build_series_by_algo(
             continue
         task_index = int(record.get("task_index", -1))
         task_name = str(record.get("task_name", f"task_{task_index}"))
-        raw_metric_value = record.get(metric_name, None)
+        raw_metric_value = extract_metric(record, metric_name)
         metric_value = float(raw_metric_value) if raw_metric_value is not None else None
 
         series_by_algorithm.setdefault(algorithm_name, []).append(
