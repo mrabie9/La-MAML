@@ -4,7 +4,7 @@ arch: resnet1d
 loader: task_incremental_loader
 data_path: data/rff/radar/full
 data_scaling: normalize
-task_order_files: "t2-rcn,t0-rcn,t2-uclresm-25noise,t0-deeprad,t1-deeprad,t1-uclresm-25noise,t3-deeprad,t0-uclresm-25noise,t1-rcn,t2-deeprad"
+task_order_files: "deeprad_task_01,deeprad_task_02,deeprad_task_03,deeprad_task_04,radchar_snr_-10_10_ds5,radnist_task_01,radnist_task_02,uclresm_degraded_task_01,uclresm_degraded_task_02,uclresm_degraded_task_03"
 dataset: iq
 classes_per_it: 6
 val_rate: 1000
