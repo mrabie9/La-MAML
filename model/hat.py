@@ -60,7 +60,7 @@ class HatConfig:
     lr: float = 1e-4
     gamma: float = 0.75
     smax: float = 50
-    grad_clip_norm: float = 10.0
+    grad_clip_norm: float = 0.0
     anneal_schedule: str = "linear"  # "linear" or "geometric" (original paper)
 
     cuda: bool = True

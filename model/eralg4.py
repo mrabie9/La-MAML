@@ -47,7 +47,7 @@ class ErAlgConfig:
     inner_steps: int = 1
     memories: int = 5120
     replay_batch_size: int = 20
-    grad_clip_norm: Optional[float] = 2.0
+    grad_clip_norm: Optional[float] = 0.0
     second_order: bool = False
     meta_batches: int = 3
     eralg4_masked_loss: bool = True

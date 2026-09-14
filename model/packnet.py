@@ -37,7 +37,7 @@ class PackNetConfig:
     prune_perc: float = 0.75  # fraction of currently used weights to prune
     # Extra SGD passes on task data after packing; gradients only on owner==task.
     post_prune_epochs: int = 0
-    clipgrad: Optional[float] = 100.0
+    clipgrad: Optional[float] = 0.0
     # "task_specific": snapshot/restore BN running stats + affine params per task
     # (default, matches PackNet's per-task BN freezing). "shared": a single BN
     # instance is trained continuously across all tasks, never snapshotted.

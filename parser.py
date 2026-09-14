@@ -459,8 +459,8 @@ def get_parser():
     parser.add_argument(
         "--grad_clip_norm",
         type=float,
-        default=2.0,
-        help="Clip the gradients by this value",
+        default=0.0,
+        help="Clip gradients to this norm. 0 disables clipping (the default).",
     )
     parser.add_argument(
         "--meta_batches",

@@ -34,7 +34,9 @@ memories: 5120
 replay_batch_size: 128
 temperature: 5.0
 alpha_init: 0.001
-grad_clip_norm: 5.0
+# 0 disables gradient clipping for every model (both the grad_clip_norm and
+# clipgrad knobs); set a positive norm to re-enable it.
+grad_clip_norm: 0
 optimizer: sgd
 bgd_optimizer: sgd
 

@@ -34,7 +34,7 @@ class EwcConfig:
     lr: float = 0.03
     optimizer: str = "sgd"
     lamb: float = 1.0
-    clipgrad: float = 5.0
+    clipgrad: float = 0.0
     cls_lambda: float = 1.0
 
     @staticmethod
