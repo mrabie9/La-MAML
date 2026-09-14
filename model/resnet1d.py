@@ -249,13 +249,9 @@ class _ResNet1D(nn.Module):
         self.maxpool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
 
         self.layer1 = self._make_layer(block, 64, layers[0])
-        self.drop1 = nn.Dropout(p=0.2)
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
-        self.drop2 = nn.Dropout(p=0.2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
-        self.drop3 = nn.Dropout(p=0.2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
-        self.drop4 = nn.Dropout(p=0.2)
 
         self.avgpool = nn.AdaptiveAvgPool1d(1)
         out_dim = 512 * block.expansion
@@ -327,13 +323,9 @@ class _ResNet1D(nn.Module):
             x = self.maxpool(x)
 
             x = self.layer1(x)
-            x = self.drop1(x)
             x = self.layer2(x)
-            x = self.drop2(x)
             x = self.layer3(x)
-            x = self.drop3(x)
             x = self.layer4(x)
-            x = self.drop4(x)
 
             if return_h4:
                 return x
