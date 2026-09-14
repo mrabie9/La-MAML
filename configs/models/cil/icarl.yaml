@@ -2,5 +2,4 @@
 model: icarl
 loader: class_incremental_loader
 
-lr: 0.01
 memory_strength: 1

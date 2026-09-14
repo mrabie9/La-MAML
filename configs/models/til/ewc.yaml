@@ -2,5 +2,4 @@
 model: ewc
 loader: task_incremental_loader
 
-lr: 0.003
 lamb: 1
