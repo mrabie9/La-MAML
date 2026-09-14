@@ -9,7 +9,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from model.adab1n import AdaB1N
-from model.resnet1d import ResNet1D
+from model.resnet1d import ADAB1N_MAX_TASKS, ResNet1D
 
 
 def test_adab1n_train_eval_shapes():
@@ -85,7 +85,11 @@ def test_resnet1d_builds_with_adab1n_norm_type():
     model = ResNet1D(num_classes=4, args=args)
     norm_modules = [m for m in model.modules() if isinstance(m, AdaB1N)]
     assert len(norm_modules) > 0
-    assert all(m.num_tasks == 3 for m in norm_modules)
+    # num_tasks is a ceiling, not an exact count: unused task_weight entries are
+    # sliced out of the forward, so the backbone allocates ADAB1N_MAX_TASKS and
+    # only grows it when an experiment declares more tasks than that.
+    assert all(m.num_tasks == ADAB1N_MAX_TASKS for m in norm_modules)
+    assert all(m.num_tasks >= args.n_tasks for m in norm_modules)
 
     x = torch.randn(2, 2, 32)
     out = model(x)

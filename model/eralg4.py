@@ -20,6 +20,12 @@ import random
 import warnings
 import math
 
+from model.adab1n import (
+    adab1n_layers,
+    clear_batch_task_counts,
+    end_task_all,
+    set_batch_task_counts,
+)
 from model.resnet1d import ResNet1D
 from model.replay_utils import (
     ReplayInputMixin,
@@ -101,6 +107,11 @@ class Net(ReplayInputMixin, nn.Module):
         self.use_cuda = self.cfg.cuda
         if self.use_cuda:
             self.net = self.net.cuda()
+
+        # Empty unless --norm_type adab1n, which makes every AdaB1N call below a
+        # no-op and leaves the default BatchNorm path bit-identical.
+        self._adab1n = adab1n_layers(self.net)
+        self._steps_since_boundary = 0
 
         self.n_outputs = n_outputs
         self.classes_per_task = misc_utils.build_task_class_list(
@@ -258,6 +269,7 @@ class Net(ReplayInputMixin, nn.Module):
 
         x_for_storage = self._input_for_replay(x)
         y_work = unpack_y_to_class_labels(y).long()
+        self._steps_since_boundary += 1
 
         if t != self.current_task:
             self.current_task = t
@@ -286,6 +298,20 @@ class Net(ReplayInputMixin, nn.Module):
                     self.M[p] = [x_store[i], y_store[i], t]
 
         return loss.item(), cls_tr_rec, metric_logits
+
+    def finalize_task_after_training(self, train_loader=None) -> None:
+        """Advance AdaB1N's task counter at the end of a task (no-op otherwise).
+
+        Called by ``main.py`` once per task. ``cur_tasks`` must equal the active
+        task index while that task trains, so this runs after the task's epochs
+        and before the next task's first ``observe``. Idempotent: advancing twice
+        for one boundary would misalign every later batch's task metadata, so a
+        repeat call with no training in between does nothing.
+        """
+        if not self._adab1n or self._steps_since_boundary == 0:
+            return
+        end_task_all(self._adab1n)
+        self._steps_since_boundary = 0
 
     def _batch_accuracy(self, bt, logits, labels):
         if len(bt) == 0:
@@ -362,6 +388,9 @@ class Net(ReplayInputMixin, nn.Module):
             # Current minibatch: live forward through the adapter. Raw logits;
             # per-sample task masking happens inside ``take_multitask_loss``
             # (global CE targets index the full ``n_outputs`` vector).
+            # The current batch is single-task, so AdaB1N's reweighting collapses
+            # to uniform here; the replay batch below is where it does work.
+            set_batch_task_counts(self._adab1n, current_t)
             current_logits = self.net.forward(x)
             current_loss = self.take_multitask_loss(current_t, current_logits, y)
 
@@ -369,6 +398,7 @@ class Net(ReplayInputMixin, nn.Module):
             replay = self._sample_replay(x.device)
             if replay is not None:
                 replay_x, replay_y, replay_t = replay
+                set_batch_task_counts(self._adab1n, replay_t)
                 replay_logits = self.net.forward(replay_x)
                 replay_loss = self.take_multitask_loss(
                     replay_t, replay_logits, replay_y
@@ -401,6 +431,10 @@ class Net(ReplayInputMixin, nn.Module):
                 )
 
             self.opt_wt.step()
+
+            # Stale metadata would mis-weight any later forward whose batch size
+            # differs (eval, la_ER, inner_update).
+            clear_batch_task_counts(self._adab1n)
 
         avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
         return loss, avg_cls_tr_rec, metric_logits

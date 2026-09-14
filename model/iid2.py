@@ -3,6 +3,7 @@ import sys
 
 import torch
 
+from model.adab1n import adab1n_layers, end_task_all
 from model.resnet1d import ResNet1D
 from model.replay_utils import unpack_y_to_class_labels
 from utils.training_metrics import macro_recall
@@ -95,6 +96,13 @@ class Net(torch.nn.Module):
         # Optimiser and loss.
         self.opt = torch.optim.SGD(self.parameters(), lr=self.cfg.lr, momentum=0.9)
 
+        # Empty unless --norm_type adab1n. Batches here are single-task, so
+        # AdaB1N's cross-task reweighting cannot engage and the layer reduces to
+        # BatchNorm1d with a kappa-scheduled running-stat momentum; only the task
+        # counter is advanced, which keeps this a clean control arm.
+        self._adab1n = adab1n_layers(self.net)
+        self._steps_since_boundary = 0
+
     def forward(
         self,
         x: torch.Tensor,
@@ -141,6 +149,7 @@ class Net(torch.nn.Module):
         """
         del t
 
+        self._steps_since_boundary += 1
         self.train()
         metric_logits = None
         for _ in range(self.cfg.inner_steps):
@@ -164,6 +173,17 @@ class Net(torch.nn.Module):
                     targets.detach().cpu(),
                 )
         return float(loss_tensor.item()), float(cls_tr_rec), metric_logits
+
+    def finalize_task_after_training(self, train_loader=None) -> None:
+        """Advance AdaB1N's task counter at the end of a task (no-op otherwise).
+
+        Idempotent: a repeat call with no training in between does nothing, since
+        double-advancing would misalign later batches' task metadata.
+        """
+        if not self._adab1n or self._steps_since_boundary == 0:
+            return
+        end_task_all(self._adab1n)
+        self._steps_since_boundary = 0
 
 
 __all__ = ["Net"]

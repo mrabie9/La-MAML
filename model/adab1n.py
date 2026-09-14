@@ -37,9 +37,10 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Iterable, List, Optional
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import BatchNorm1d, Parameter
@@ -182,6 +183,10 @@ class AdaB1N(BatchNorm1d):
             concentration = (
                 self.task_weight[: self.cur_tasks + 1].exp() + self.task_counts_extended
             )
+            # Only tasks with rows in this batch may hold weight: otherwise the
+            # absent tasks' share is lost and the weighted mean shrinks toward
+            # zero, worsening with every task (44% of true mean by task 9).
+            concentration = concentration * (self.task_counts_extended > 0)
             task_weights = concentration / concentration.sum()
             sample_weights = (
                 task_weights[self.sample_task_indices] / self.sample_task_counts
@@ -243,4 +248,75 @@ class AdaB1N(BatchNorm1d):
         return self.eval_forward(input)
 
 
-__all__ = ["AdaB1N"]
+def adab1n_layers(root: nn.Module) -> List[AdaB1N]:
+    """Collect every :class:`AdaB1N` layer inside ``root``."""
+    return [m for m in root.modules() if isinstance(m, AdaB1N)]
+
+
+def set_batch_task_counts(
+    layers: Iterable[AdaB1N], sample_task_indices: Tensor
+) -> bool:
+    """Broadcast per-row task metadata for the next forward to ``layers``.
+
+    Derives ``sample_task_counts`` and ``task_counts_extended`` from
+    ``sample_task_indices`` and hands them to each layer's
+    :meth:`AdaB1N.set_counts`, sized to that layer's ``cur_tasks``. Callers
+    holding a backbone should cache :func:`adab1n_layers` once rather than
+    re-walking the module tree on every step.
+
+    Args:
+        layers: AdaB1N layers to configure; an empty iterable is a no-op.
+        sample_task_indices: Task id for each row of the upcoming batch.
+
+    Returns:
+        ``True`` when at least one layer was configured, else ``False`` (so
+        callers can skip the rest of their AdaB1N-specific bookkeeping).
+
+    Raises:
+        ValueError: If a row's task id exceeds a layer's ``cur_tasks``, which
+            means :func:`end_task_all` was not called at a task boundary.
+
+    Usage:
+        >>> layer = AdaB1N(num_features=4, num_tasks=3)
+        >>> set_batch_task_counts([layer], torch.tensor([0, 0, 0]))
+        True
+    """
+    layers = list(layers)
+    if not layers:
+        return False
+
+    indices = sample_task_indices.reshape(-1).long()
+    highest = int(indices.max().item()) if indices.numel() else 0
+    for layer in layers:
+        span = int(layer.cur_tasks.item()) + 1
+        if highest >= span:
+            raise ValueError(
+                f"batch contains task id {highest} but AdaB1N has seen "
+                f"cur_tasks={span - 1}; call end_task_all() at task boundaries."
+            )
+        counts = torch.bincount(indices, minlength=span).to(
+            device=indices.device, dtype=layer.task_weight.dtype
+        )
+        layer.set_counts(indices, counts[indices], counts)
+    return True
+
+
+def clear_batch_task_counts(layers: Iterable[AdaB1N]) -> None:
+    """Drop per-row task metadata so subsequent forwards use unweighted stats."""
+    for layer in layers:
+        layer.set_counts(None, None, None)
+
+
+def end_task_all(layers: Iterable[AdaB1N]) -> None:
+    """Advance each layer's task counter at a task boundary."""
+    for layer in layers:
+        layer.end_task()
+
+
+__all__ = [
+    "AdaB1N",
+    "adab1n_layers",
+    "set_batch_task_counts",
+    "clear_batch_task_counts",
+    "end_task_all",
+]
