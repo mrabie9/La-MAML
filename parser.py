@@ -623,7 +623,15 @@ def _expanded_config_paths(config_sources: Sequence[str] | None) -> List[Path]:
 def _apply_config_overrides(
     args: argparse.Namespace, config_paths: Iterable[Path]
 ) -> argparse.Namespace:
-    """Apply YAML overrides from the provided config files to the namespace."""
+    """Apply YAML overrides from the provided config files to the namespace.
+
+    Every key is applied, including keys with no ``get_parser`` argument.
+    Model-specific hyper-parameters (``lamb``, ``si_c``, ``distill_lambda``,
+    ``smax``, ...) are read by each model's config dataclass through
+    ``hasattr(args, field)`` and have no CLI flag, so filtering on the parser's
+    namespace used to drop them silently and every model ran on its dataclass
+    defaults instead of the tuned YAML values.
+    """
 
     for path in config_paths:
         with path.open("r", encoding="utf-8") as handle:
@@ -635,8 +643,7 @@ def _apply_config_overrides(
             if key == "update_steps":
                 setattr(args, "inner_steps", value)
                 continue
-            if hasattr(args, key):
-                setattr(args, key, value)
+            setattr(args, key, value)
     return args
 
 
