@@ -15,6 +15,9 @@ from torch.func import functional_call
 from model.adab1n import AdaB1N
 from utils.iq_features import append_iq_augmented_features
 
+# Ceiling for AdaB1N's per-task concentration logits, not an exact task count.
+ADAB1N_MAX_TASKS = 20
+
 
 class BasicBlock1D(nn.Module):
     """1D version of the standard ResNet ``BasicBlock``."""
@@ -392,12 +395,22 @@ class ResNet1D(nn.Module):
         self,
         x: torch.Tensor,
         vars=None,
-        bn_training: bool = True,
+        bn_training: bool | None = None,
         classify_feats=False,
         ret_feats=False,
     ) -> torch.Tensor:
+        """Run the backbone.
+
+        Args:
+            bn_training: Overrides the normalisation layers' train/eval mode for
+                this call, for meta-learning inner loops that need to suppress or
+                force running-stat updates. ``None`` (the default) leaves the
+                ambient mode alone, so ``eval()`` normalises with the tracked
+                running statistics instead of the current batch's.
+        """
         prev = self.model.training
-        self.model.train(bn_training)
+        if bn_training is not None:
+            self.model.train(bn_training)
         try:
             if not classify_feats:
                 # print(f"Input shape: {tuple(x.shape)}")
@@ -419,16 +432,17 @@ class ResNet1D(nn.Module):
                     {"return_features": ret_feats, "classify_feats": classify_feats},
                 )
         finally:
-            self.model.train(prev)
+            if bn_training is not None:
+                self.model.train(prev)
         return out
 
     def forward_features(
-        self, x: torch.Tensor, vars=None, bn_training: bool = True
+        self, x: torch.Tensor, vars=None, bn_training: bool | None = None
     ) -> torch.Tensor:
         return self.forward(x, vars=vars, bn_training=bn_training, ret_feats=True)
 
     def forward_classifier(
-        self, feats: torch.Tensor, vars=None, bn_training: bool = True
+        self, feats: torch.Tensor, vars=None, bn_training: bool | None = None
     ) -> torch.Tensor:
         return self.forward(
             feats, vars=vars, bn_training=bn_training, classify_feats=True
@@ -551,7 +565,10 @@ class ResNet1D(nn.Module):
         Returns:
             A callable mapping a channel count to a fresh ``AdaB1N`` module.
         """
-        num_tasks = max(1, int(getattr(args, "n_tasks", 1) or 1))
+        # num_tasks only needs to be a ceiling: unused ``task_weight`` entries are
+        # sliced out of the forward and never receive gradient, so over-allocating
+        # is numerically inert, while under-allocating makes end_task() raise.
+        num_tasks = max(ADAB1N_MAX_TASKS, int(getattr(args, "n_tasks", 1) or 1))
         kappa = float(getattr(args, "kappa", 1.0) or 1.0)
         init_weight = float(getattr(args, "adab1n_init_weight", 0.0) or 0.0)
 
