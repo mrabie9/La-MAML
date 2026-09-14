@@ -20,6 +20,7 @@ from torch.autograd import Variable
 
 import parser as file_parser
 from metrics.metrics import confusion_matrix, signal_class_f1_summary
+from model import task_bn
 from utils import misc_utils
 from utils.training_metrics import (
     macro_f1,
@@ -704,6 +705,7 @@ def life_experience(model, inc_loader, args):
                     v_x = v_x.cuda()
                     v_y = v_y.cuda()
                 model.train()
+                task_bn.set_active_task(model, task_info["task"])
                 amp_context = (
                     torch.autocast(device_type="cuda", dtype=amp_dtype)
                     if use_amp
@@ -1911,6 +1913,10 @@ def main():
     # load model
     Model = importlib.import_module("model." + args.model)
     model = Model.Net(n_inputs, n_outputs, n_tasks, args)
+    # Per-task BatchNorm running statistics for task-incremental runs. Must run
+    # before ``.cuda()`` and after the model built its optimizer (the converted
+    # layers reuse the existing affine Parameters, so param groups stay valid).
+    task_bn.install(model, args, n_tasks)
     # print(model)
     if args.cuda:
         try:

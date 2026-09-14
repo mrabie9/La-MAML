@@ -31,6 +31,7 @@ from model.replay_utils import (
     ReplayInputMixin,
     unpack_y_to_class_labels,
 )
+from model.task_bn import frozen_running_stats
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 from utils.class_weighted_loss import classification_cross_entropy
@@ -399,7 +400,10 @@ class Net(ReplayInputMixin, nn.Module):
             if replay is not None:
                 replay_x, replay_y, replay_t = replay
                 set_batch_task_counts(self._adab1n, replay_t)
-                replay_logits = self.net.forward(replay_x)
+                # Mixed-task rows: normalize with this batch's own statistics but
+                # do not fold them into the current task's running statistics.
+                with frozen_running_stats(self):
+                    replay_logits = self.net.forward(replay_x)
                 replay_loss = self.take_multitask_loss(
                     replay_t, replay_logits, replay_y
                 )
@@ -573,7 +577,10 @@ class Net(ReplayInputMixin, nn.Module):
                     batch_x, fast_weights, batch_y, t
                 )
 
-                prediction = self.net.forward(bx, fast_weights)
+                # ``bx`` packs replay rows ahead of current rows, so it spans
+                # several tasks: normalize it without writing running statistics.
+                with frozen_running_stats(self):
+                    prediction = self.net.forward(bx, fast_weights)
                 meta_loss = self._weighted_multitask_loss(
                     prediction, by, bt, replay_count
                 )
@@ -615,7 +622,8 @@ class Net(ReplayInputMixin, nn.Module):
                 current_t, current_logits, current_labels
             )
             if replay_count > 0:
-                replay_logits = self.net.forward(bx[:replay_count])
+                with frozen_running_stats(self):
+                    replay_logits = self.net.forward(bx[:replay_count])
                 replay_loss = self.take_multitask_loss(
                     bt[:replay_count], replay_logits, by[:replay_count]
                 )

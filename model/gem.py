@@ -23,9 +23,9 @@ import quadprog
 from model.resnet1d import ResNet1D
 from model.replay_utils import (
     ReplayInputMixin,
-    classification_loss_zero_stub,
     unpack_y_to_class_labels,
 )
+from model.task_bn import frozen_running_stats
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 from utils.class_weighted_loss import classification_cross_entropy
@@ -321,6 +321,47 @@ class Net(ReplayInputMixin, nn.Module):
         )
         return output
 
+    def _store_past_task_gradients(self) -> None:
+        """Backprop each previously observed task's memory and store its gradient.
+
+        Fills ``self.grads`` with one column per past task, which the GEM
+        projection below then constrains the current gradient against.
+
+        These forwards carry old-task data while the current task is active, so
+        the whole loop runs under :func:`~model.task_bn.frozen_running_stats`:
+        the replay batches are normalized with their own statistics but must not
+        be folded into the current task's per-task BatchNorm running statistics.
+        """
+        with frozen_running_stats(self):
+            for tt in range(len(self.observed_tasks) - 1):
+                self.zero_grad()
+                past_task = self.observed_tasks[tt]
+                offset1, offset2 = compute_offsets(
+                    past_task, self.classes_per_task, self.is_cifar
+                )
+                filled = int(self.task_mem_filled[past_task].item())
+                if filled == 0:
+                    continue  # nothing stored for this task yet
+
+                # replay batch (shape already in memory)
+                mem_x = Variable(
+                    self.memory_data[past_task, :filled]
+                )  # (mem, F) or (mem, 2, L)
+                mem_y_flat = self.memory_labs[past_task, :filled]
+                logits_replay = self.forward(mem_x, past_task)[:, offset1:offset2]
+                targets_replay = mem_y_flat - offset1
+                ptloss = classification_cross_entropy(
+                    logits_replay,
+                    targets_replay,
+                    class_weighted_ce=self.class_weighted_ce,
+                )
+                ptloss.backward()
+                if self.cfg.grad_clip_norm:
+                    torch.nn.utils.clip_grad_norm_(
+                        self.net.parameters(), self.cfg.grad_clip_norm
+                    )
+                store_grad(self._ll_params, self.grads, self.grad_dims, past_task)
+
     def observe(self, x, y, t):
         """
         One optimization step on batch (x,y,t), with GEM constraints and inner_steps.
@@ -371,42 +412,7 @@ class Net(ReplayInputMixin, nn.Module):
 
             # gradients on past tasks (replay)
             if len(self.observed_tasks) > 1:
-                for tt in range(len(self.observed_tasks) - 1):
-                    self.zero_grad()
-                    past_task = self.observed_tasks[tt]
-                    offset1, offset2 = compute_offsets(
-                        past_task, self.classes_per_task, self.is_cifar
-                    )
-                    filled = int(self.task_mem_filled[past_task].item())
-                    if filled == 0:
-                        continue  # nothing stored for this task yet
-
-                    # replay batch (shape already in memory)
-                    mem_x = Variable(
-                        self.memory_data[past_task, :filled]
-                    )  # (mem, F) or (mem, 2, L)
-                    mem_y_flat = self.memory_labs[past_task, :filled]
-                    if filled > 0:
-                        logits_replay = self.forward(mem_x, past_task)[
-                            :, offset1:offset2
-                        ]
-                        targets_replay = mem_y_flat - offset1
-                        ptloss = classification_cross_entropy(
-                            logits_replay,
-                            targets_replay,
-                            class_weighted_ce=self.class_weighted_ce,
-                        )
-                    else:
-                        logits_replay = self.forward(mem_x[:1], past_task)[
-                            :, offset1:offset2
-                        ]
-                        ptloss = classification_loss_zero_stub(logits_replay)
-                    ptloss.backward()
-                    if self.cfg.grad_clip_norm:
-                        torch.nn.utils.clip_grad_norm_(
-                            self.net.parameters(), self.cfg.grad_clip_norm
-                        )
-                    store_grad(self._ll_params, self.grads, self.grad_dims, past_task)
+                self._store_past_task_gradients()
 
             # current batch
             self.zero_grad()

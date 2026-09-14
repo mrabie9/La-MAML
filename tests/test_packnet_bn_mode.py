@@ -1,10 +1,15 @@
-"""PackNet bn_mode option: shared vs task_specific BatchNorm handling."""
+"""PackNet bn_mode option: shared vs task_specific BatchNorm handling.
+
+Per-task BatchNorm statistics moved out of ``model/packnet.py`` into the shared
+:mod:`model.task_bn` module, which ``main`` installs once per run. These tests
+cover PackNet's remaining responsibility (validating ``bn_mode``) and the
+conversion behaviour it now delegates.
+"""
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 import torch
@@ -14,6 +19,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import parser as file_parser  # noqa: E402
+from model import task_bn  # noqa: E402
 from model.packnet import Net  # noqa: E402
 
 
@@ -55,55 +61,64 @@ def test_invalid_bn_mode_rejected() -> None:
         Net(2 * 32, 4, 2, args)
 
 
-def test_task_specific_snapshots_and_restores_bn_per_task() -> None:
-    model = _build_model("task_specific")
-    assert model.bn_mode == "task_specific"
+def test_task_specific_keeps_per_task_stats() -> None:
+    args = _tiny_args("task_specific")
+    torch.manual_seed(0)
+    model = Net(2 * 32, 4, 2, args)
+    layers = task_bn.install(model, args, num_tasks=2)
+    assert layers, "packnet's resnet1d backbone should expose BatchNorm1d layers"
 
     x0 = torch.randn(4, 2, 32)
     y0 = torch.randint(0, 2, (4,))
+    x1 = torch.randn(4, 2, 32) * 5.0 - 3.0
+    y1 = torch.randint(2, 4, (4,))
+
+    task_bn.set_active_task(model, 0)
     for _ in range(3):
         model.observe(x0, y0, 0)
-
     model.finalize_task_after_training(train_loader=None)
-    assert 0 in model._bn_task_stats
-    assert 0 in model._bn_task_affine
+    task0_mean = layers[0].task_running_mean[0].detach().clone()
 
-    # Switching to an unseen task resets BN running stats to defaults.
-    model._restore_bn_stats(1)
-    bn = model._bn_modules[0]
-    assert torch.allclose(bn.running_mean, torch.zeros_like(bn.running_mean))
-    assert torch.allclose(bn.running_var, torch.ones_like(bn.running_var))
+    task_bn.set_active_task(model, 1)
+    for _ in range(3):
+        model.observe(x1, y1, 1)
 
-    # Restoring task 0 brings back its snapshot exactly.
-    snapshot_mean, snapshot_var, _ = model._bn_task_stats[0][0]
-    model._restore_bn_stats(0)
-    assert torch.allclose(bn.running_mean, snapshot_mean)
-    assert torch.allclose(bn.running_var, snapshot_var)
+    # Task 0's statistics are untouched by task 1's training, and the two rows
+    # have genuinely diverged.
+    assert torch.equal(layers[0].task_running_mean[0], task0_mean)
+    assert not torch.allclose(
+        layers[0].task_running_mean[0], layers[0].task_running_mean[1]
+    )
 
-    # observe() and finalize() actively call the snapshot/restore helpers.
-    model._restore_bn_stats = MagicMock(wraps=model._restore_bn_stats)
-    model.observe(x0, y0, 1)
-    assert model._restore_bn_stats.called
+    # Evaluating task 1 does not disturb task 0's row (the old snapshot/restore
+    # implementation left the last-evaluated task's stats live).
+    model.eval()
+    task_bn.set_active_task(model, 1)
+    model.forward(x1, 1)
+    assert torch.equal(layers[0].task_running_mean[0], task0_mean)
 
 
-def test_shared_bn_never_snapshots_or_restores() -> None:
-    model = _build_model("shared")
+def test_shared_bn_leaves_backbone_unconverted() -> None:
+    args = _tiny_args("shared")
+    torch.manual_seed(0)
+    model = Net(2 * 32, 4, 2, args)
     assert model.bn_mode == "shared"
-    model._restore_bn_stats = MagicMock(wraps=model._restore_bn_stats)
-    model._snapshot_bn_stats = MagicMock(wraps=model._snapshot_bn_stats)
 
+    layers = task_bn.install(model, args, num_tasks=2)
+    assert layers == []
+    assert task_bn.task_bn_layers(model) == []
+
+    # Training still runs, on a single shared set of running statistics.
     x0 = torch.randn(4, 2, 32)
     y0 = torch.randint(0, 2, (4,))
     for _ in range(3):
         model.observe(x0, y0, 0)
     model.finalize_task_after_training(train_loader=None)
+    model.observe(x0, y0, 1)
 
-    x1 = torch.randn(4, 2, 32)
-    y1 = torch.randint(0, 2, (4,))
-    model.observe(x1, y1, 1)
-    model.forward(x0, 0)
 
-    model._restore_bn_stats.assert_not_called()
-    model._snapshot_bn_stats.assert_not_called()
-    assert model._bn_task_stats == {}
-    assert model._bn_task_affine == {}
+def test_build_model_helper_still_constructs() -> None:
+    """Both modes construct a usable PackNet without task_bn installed."""
+    for bn_mode in ("task_specific", "shared"):
+        model = _build_model(bn_mode)
+        assert model.bn_mode == bn_mode

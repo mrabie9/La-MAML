@@ -6,6 +6,7 @@ from typing import Any, Tuple
 
 import torch
 
+from model import task_bn
 from utils import misc_utils
 
 
@@ -26,6 +27,11 @@ def model_forward_for_metric_loop(
     not nearest-mean ``forward``. This matches training for TIL and CIL runs,
     because ``observe`` always passes ``cil_all_seen_upto_task=task_index``.
 
+    **Task-specific BatchNorm:** when the run uses per-task running statistics
+    (see :mod:`model.task_bn`), ``task_index`` selects them for the duration of
+    the forward and the previously active task is restored afterwards, so a
+    mid-epoch validation pass does not leave the training task deselected.
+
     Args:
         model: Continual-learning module with ``forward(x, task_index, ...)``.
         x: Input batch on the correct device.
@@ -37,6 +43,30 @@ def model_forward_for_metric_loop(
 
     Usage:
         logits = model_forward_for_metric_loop(model, batch_x, task_id, args)
+    """
+    previous_task = task_bn.get_active_task(model)
+    if previous_task is not None:
+        task_bn.set_active_task(model, task_index)
+    try:
+        return _dispatch_metric_forward(model, x, task_index, args)
+    finally:
+        if previous_task is not None:
+            task_bn.set_active_task(model, previous_task)
+
+
+def _dispatch_metric_forward(
+    model: object, x: torch.Tensor, task_index: int, args: object
+) -> torch.Tensor:
+    """Route a metric-loop forward to the right entry point for this model.
+
+    Args:
+        model: Continual-learning module.
+        x: Input batch on the correct device.
+        task_index: Zero-based continual task id.
+        args: Experiment arguments (``loader``, ``model`` id).
+
+    Returns:
+        Classifier logits tensor.
     """
     forward_kw: dict[str, Any] = {}
     if getattr(args, "loader", "") == "class_incremental_loader":

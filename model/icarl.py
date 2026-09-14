@@ -19,6 +19,7 @@ from model.replay_utils import (
     ReplayInputMixin,
     unpack_y_to_class_labels,
 )
+from model.task_bn import frozen_running_stats
 
 from utils.training_metrics import macro_recall
 from utils import misc_utils
@@ -187,6 +188,12 @@ class Net(ReplayInputMixin, torch.nn.Module):
 
         This avoids large one-shot forwards over full class tensors during
         iCaRL exemplar construction.
+
+        Exemplar construction runs inside ``observe`` with the backbone in train
+        mode, and ``torch.no_grad`` does not stop BatchNorm from updating its
+        running statistics -- so the forwards also run under
+        :func:`~model.task_bn.frozen_running_stats`. Herding is inference, not a
+        training step, and must not move any task's statistics.
         """
         if x.numel() == 0:
             return x.new_zeros((0, self.n_feat))
@@ -197,7 +204,7 @@ class Net(ReplayInputMixin, torch.nn.Module):
         effective_chunk_size = max(effective_chunk_size, 1)
         target_device = next(self.net.parameters()).device
         chunks: list[torch.Tensor] = []
-        with torch.no_grad():
+        with torch.no_grad(), frozen_running_stats(self):
             for start in range(0, int(x.size(0)), effective_chunk_size):
                 stop = min(start + effective_chunk_size, int(x.size(0)))
                 batch_x = x[start:stop].to(target_device, non_blocking=True)
@@ -380,11 +387,15 @@ class Net(ReplayInputMixin, torch.nn.Module):
                     target_device = next(self.net.parameters()).device
                     inp_dist = inp_dist.to(target_device, non_blocking=True)
                     target_dist = target_dist.to(target_device, non_blocking=True)
-                    # Add distillation loss
+                    # Add distillation loss. ``inp_dist`` holds exemplars from
+                    # earlier tasks, so it must not write the current task's
+                    # per-task BatchNorm running statistics.
+                    with frozen_running_stats(self):
+                        dist_logits = self.netforward(inp_dist)[:, offset1:offset2]
                     loss += (
                         self.reg
                         * self.kl(
-                            self.lsm(self.netforward(inp_dist)[:, offset1:offset2]),
+                            self.lsm(dist_logits),
                             self.sm(target_dist[:, offset1:offset2]),
                         )
                         * task_classes
@@ -493,15 +504,20 @@ class Net(ReplayInputMixin, torch.nn.Module):
                     # update memory with exemplars
                     self.mem_class_x[label.item()] = exemplars.clone()
 
-                # recompute outputs for distillation purposes
-                for cc in self.mem_class_x.keys():
-                    self.mem_class_x[cc] = self.mem_class_x[cc][: self.num_exemplars]
-                    logits = self.netforward(
-                        self.mem_class_x[cc].to(
-                            next(self.net.parameters()).device, non_blocking=True
-                        )
-                    ).detach()
-                    self.mem_class_y[cc] = logits.cpu().clone()
+                # recompute outputs for distillation purposes. ``mem_class_x``
+                # spans every class seen so far, so these forwards belong to no
+                # single task and must not write running statistics.
+                with frozen_running_stats(self):
+                    for cc in self.mem_class_x.keys():
+                        self.mem_class_x[cc] = self.mem_class_x[cc][
+                            : self.num_exemplars
+                        ]
+                        logits = self.netforward(
+                            self.mem_class_x[cc].to(
+                                next(self.net.parameters()).device, non_blocking=True
+                            )
+                        ).detach()
+                        self.mem_class_y[cc] = logits.cpu().clone()
                 del feat_cdata, model_output, selected_feature_sum
                 if self.gpu and torch.cuda.is_available():
                     torch.cuda.empty_cache()
