@@ -168,6 +168,22 @@ def get_parser():
         ),
     )
     parser.add_argument(
+        "--eval_bn_stats",
+        type=str,
+        default="batch",
+        choices=["batch", "running"],
+        help=(
+            "BatchNorm statistics read by evaluation forwards (metric loops and "
+            "LwF's frozen teacher) in task-incremental runs with --bn_mode "
+            "shared. 'batch' (default) normalizes each eval batch with its own "
+            "statistics without writing any buffer; eval loaders are per task, "
+            "so this is task-conditional, which TIL allows. 'running' reads the "
+            "shared running statistics, which track the most recently trained "
+            "task and so misnormalize every earlier one. Class-incremental runs "
+            "always use running statistics."
+        ),
+    )
+    parser.add_argument(
         "--no_class_weighted_ce",
         dest="class_weighted_ce",
         action="store_false",

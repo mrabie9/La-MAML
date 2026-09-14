@@ -11,6 +11,7 @@ seen tasks via a frozen teacher snapshot.
 from __future__ import annotations
 
 import copy
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -18,6 +19,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from model import task_bn
 from model.resnet1d import ResNet1D
 from model.replay_utils import (
     ReplayInputMixin,
@@ -214,7 +216,15 @@ class Net(ReplayInputMixin, nn.Module):
             prev_class_ids, dtype=torch.long, device=student_logits.device
         )
         student_prev = student_logits.index_select(1, idx)
-        with torch.no_grad():
+        # The teacher is in eval mode, so its BatchNorm would read running stats
+        # left by the previous task while the student normalizes this batch with
+        # its own; match the evaluation policy instead.
+        normalization = (
+            task_bn.batch_statistics(self.teacher)
+            if task_bn.eval_uses_batch_statistics(self.args)
+            else nullcontext()
+        )
+        with torch.no_grad(), normalization:
             teacher_logits = self.teacher(x).index_select(1, idx)
             teacher_probs = F.softmax(teacher_logits / self.temperature, dim=1)
 

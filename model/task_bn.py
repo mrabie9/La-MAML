@@ -372,6 +372,88 @@ def frozen_running_stats(model: object) -> Iterator[None]:
 
 
 # ----------------------------------------------------------------------
+EVAL_BN_STATS = frozenset({"batch", "running"})
+
+
+def _batch_statistics_forward(
+    self: nn.modules.batchnorm._BatchNorm, input: Tensor
+) -> Tensor:
+    """Normalize ``input`` with its own statistics, leaving every buffer untouched."""
+    self._check_input_dim(input)
+    return F.batch_norm(input, None, None, self.weight, self.bias, True, 0.0, self.eps)
+
+
+@contextmanager
+def batch_statistics(root: object) -> Iterator[None]:
+    """Normalize every BatchNorm layer in ``root`` with batch statistics.
+
+    Inside the block each layer (plain ``BatchNorm1d``, :class:`TaskSpecificBatchNorm1d`
+    and ``AdaB1N`` alike) ignores its running statistics and its train/eval
+    flag: it normalizes with the current batch's mean/variance and writes no
+    buffer, so an evaluation pass stays side-effect free.
+
+    Under ``--bn_mode shared`` the running statistics track whichever task was
+    trained last, so reading them at evaluation normalizes every earlier task
+    with the wrong mean/variance; LwF old-task recall fell from 0.66 to 0.44
+    with the same weights. Evaluation loaders are per task, so batch statistics
+    are task-conditional, which TIL permits because the task id is given.
+
+    Args:
+        root: Module whose BatchNorm layers are switched (non-modules: no-op).
+
+    Usage:
+        >>> with batch_statistics(model):  # doctest: +SKIP
+        ...     logits = model(x, t)
+    """
+    if not isinstance(root, nn.Module):
+        yield
+        return
+    layers = [
+        m for m in root.modules() if isinstance(m, nn.modules.batchnorm._BatchNorm)
+    ]
+    previous = [layer.__dict__.get("forward") for layer in layers]
+    for layer in layers:
+        layer.forward = _batch_statistics_forward.__get__(layer)
+    try:
+        yield
+    finally:
+        for layer, forward in zip(layers, previous):
+            if forward is None:
+                del layer.forward
+            else:
+                layer.forward = forward
+
+
+def eval_uses_batch_statistics(args: object) -> bool:
+    """Report whether evaluation forwards should normalize with batch statistics.
+
+    True for task-incremental runs with ``--eval_bn_stats batch`` (the default)
+    and ``--bn_mode shared``. ``task_specific`` keeps reading its per-task rows,
+    and class-incremental runs keep running statistics, since batch statistics
+    over a single-task eval batch would leak the task id there.
+
+    Args:
+        args: Experiment arguments (``eval_bn_stats``, ``bn_mode``, ``loader``).
+
+    Returns:
+        ``True`` when :func:`batch_statistics` should wrap evaluation forwards.
+
+    Raises:
+        ValueError: If ``args.eval_bn_stats`` is not one of :data:`EVAL_BN_STATS`.
+    """
+    mode = str(getattr(args, "eval_bn_stats", "batch")).lower()
+    if mode not in EVAL_BN_STATS:
+        raise ValueError(
+            f"Unsupported eval_bn_stats {getattr(args, 'eval_bn_stats', None)!r}; "
+            f"expected one of {sorted(EVAL_BN_STATS)}."
+        )
+    if mode != "batch":
+        return False
+    if str(getattr(args, "loader", "")) != "task_incremental_loader":
+        return False
+    return str(getattr(args, "bn_mode", "shared")).lower() == "shared"
+
+
 def task_bn_enabled(args: object) -> bool:
     """Report whether this run should use task-specific BatchNorm statistics.
 
@@ -454,9 +536,12 @@ def install(
 
 __all__ = [
     "BN_MODES",
+    "EVAL_BN_STATS",
     "EXCLUDED_MODELS",
     "TaskSpecificBatchNorm1d",
+    "batch_statistics",
     "convert_batchnorm_to_task_specific",
+    "eval_uses_batch_statistics",
     "frozen_running_stats",
     "get_active_task",
     "install",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from typing import Any, Tuple
 
 import torch
@@ -32,6 +33,11 @@ def model_forward_for_metric_loop(
     the forward and the previously active task is restored afterwards, so a
     mid-epoch validation pass does not leave the training task deselected.
 
+    **Shared BatchNorm (TIL):** with ``--bn_mode shared`` and
+    ``--eval_bn_stats batch`` the forward normalizes with batch statistics
+    (see :func:`model.task_bn.batch_statistics`), because the shared running
+    statistics describe only the most recently trained task.
+
     Args:
         model: Continual-learning module with ``forward(x, task_index, ...)``.
         x: Input batch on the correct device.
@@ -47,8 +53,14 @@ def model_forward_for_metric_loop(
     previous_task = task_bn.get_active_task(model)
     if previous_task is not None:
         task_bn.set_active_task(model, task_index)
+    normalization = (
+        task_bn.batch_statistics(model)
+        if task_bn.eval_uses_batch_statistics(args)
+        else nullcontext()
+    )
     try:
-        return _dispatch_metric_forward(model, x, task_index, args)
+        with normalization:
+            return _dispatch_metric_forward(model, x, task_index, args)
     finally:
         if previous_task is not None:
             task_bn.set_active_task(model, previous_task)
