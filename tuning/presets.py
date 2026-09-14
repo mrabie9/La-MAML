@@ -136,22 +136,6 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
-                "lr": {
-                    "kind": "float",
-                    "factors": (0.3, 1.0, 3.0),
-                    "min": 1e-5,
-                    "fallback": 1e-3,
-                    "values": [
-                        0.03,
-                        0.01,
-                        0.003,
-                        0.001,
-                        0.0003,
-                        0.0001,
-                        0.00003,
-                        0.00001,
-                    ],
-                },
                 "memory_loss_lambda": {
                     "kind": "float",
                     "factors": (0.5, 1.0, 2.0),
@@ -169,35 +153,19 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
-                "lr": {
-                    "kind": "float",
-                    "factors": (0.3, 1.0, 3.0),
-                    "min": 1e-5,
-                    "fallback": 1e-3,
-                    "values": [
-                        0.03,
-                        0.01,
-                        0.003,
-                        0.001,
-                        0.0003,
-                        0.0001,
-                        0.00003,
-                        0.00001,
-                    ],
-                },  # "values":[0.001]},
                 "memory_strength": {
                     "kind": "float",
                     "factors": (0.5, 1.0, 2.0),
                     "min": 0.1,
                     "fallback": 1.0,
-                    "values": [1, 10, 100, 1000, 10000],
+                    "values": [0.1, 0.5, 1, 5, 10, 50, 100, 500],
                 },
                 "beta": {
                     "kind": "float",
                     "factors": (0.5, 1.0, 2.0),
                     "min": 0.1,
                     "fallback": 1.0,
-                    "values": [0.3, 1.0, 3.0, 10.0, 30.0],
+                    "values": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
                 },
             }
         ),
@@ -209,33 +177,19 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
-                "lr": {
-                    "kind": "float",
-                    "factors": (0.5, 1.0, 2.0),
-                    "min": 1e-4,
-                    "fallback": 0.01,
-                    "values": [0.03, 0.01, 0.003, 0.001],
-                },  # ,0.0003,0.0001,0.00003,0.00001]},#"values":[0.003]},
                 "ctx_lr": {
                     "kind": "float",
                     "factors": (0.5, 1.0, 2.0),
                     "min": 1e-4,
                     "fallback": 0.05,
-                    "values": [0.03, 0.01, 0.003, 0.001],
-                },  # ,0.0003,0.0001,0.00003,0.00001]},
-                "task_emb": {
-                    "kind": "int",
-                    "factors": (0.5, 1.0, 2.0),
-                    "min": 16,
-                    "fallback": 64,
-                    "values": [16, 32, 64, 128],
+                    "values": [0.3, 0.1, 0.03, 0.01, 0.003, 0.001, 0.0003, 0.0001],
                 },
                 "memory_strength": {
                     "kind": "float",
                     "factors": (0.3, 1.0, 3.0),
                     "min": 1.0,
                     "fallback": 100.0,
-                    "values": [0.1, 0.5, 1, 5, 10, 50, 100],
+                    "values": [0.1, 0.5, 1, 5, 10, 50, 100, 500],
                 },
             }
         ),
@@ -247,22 +201,6 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
-                "lr": {
-                    "kind": "float",
-                    "factors": (0.3, 1.0, 3.0),
-                    "min": 1e-5,
-                    "fallback": 1e-2,
-                    "values": [
-                        0.03,
-                        0.01,
-                        0.003,
-                        0.001,
-                        0.0003,
-                        0.0001,
-                        0.00003,
-                        0.00001,
-                    ],
-                },
                 "memory_loss_lambda": {
                     "kind": "float",
                     "factors": (0.5, 1.0, 2.0),
@@ -280,28 +218,12 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
-                "lr": {
-                    "kind": "float",
-                    "factors": (0.3, 1.0, 3.0),
-                    "min": 1e-5,
-                    "fallback": 1e-2,
-                    "values": [
-                        0.03,
-                        0.01,
-                        0.003,
-                        0.001,
-                        0.0003,
-                        0.0001,
-                        0.00003,
-                        0.00001,
-                    ],
-                },  # "values":[0.01]},
                 "distill_lambda": {
                     "kind": "float",
                     "factors": (0.5, 1.0, 2.0),
                     "min": 4.0,
                     "fallback": 10.0,
-                    "values": [0.1, 1.0, 5.0, 10.0],
+                    "values": [0.1, 0.5, 1, 5, 10, 50, 100, 500],
                 },
             }
         ),
@@ -313,22 +235,6 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
-                "lr": {
-                    "kind": "float",
-                    "factors": (0.3, 1.0, 3.0),
-                    "min": 1e-5,
-                    "fallback": 1e-2,
-                    "values": [
-                        0.03,
-                        0.01,
-                        0.003,
-                        0.001,
-                        0.0003,
-                        0.0001,
-                        0.00003,
-                        0.00001,
-                    ],
-                },
                 "memory_loss_lambda": {
                     "kind": "float",
                     "factors": (0.5, 1.0, 2.0),
@@ -346,28 +252,12 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
-                "lr": {
-                    "kind": "float",
-                    "factors": (0.5, 1.0, 2.0),
-                    "min": 1e-5,
-                    "fallback": 3e-2,
-                    "values": [
-                        0.03,
-                        0.01,
-                        0.003,
-                        0.001,
-                        0.0003,
-                        0.0001,
-                        0.00003,
-                        0.00001,
-                    ],
-                },
                 "lamb": {
                     "kind": "float",
                     "factors": (0.3, 1.0, 3.0),
                     "min": 1e-2,
                     "fallback": 1.0,
-                    "values": [1, 10, 100, 1000, 10000],
+                    "values": [1, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6],
                 },
             }
         ),
@@ -379,22 +269,6 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
-                "lr": {
-                    "kind": "float",
-                    "factors": (0.3, 1.0, 3.0),
-                    "min": 1e-5,
-                    "fallback": 1e-2,
-                    "values": [
-                        0.03,
-                        0.01,
-                        0.003,
-                        0.001,
-                        0.0003,
-                        0.0001,
-                        0.00003,
-                        0.00001,
-                    ],
-                },  # "values":[0.03]},
                 "memory_strength": {
                     "kind": "float",
                     "factors": (0.5, 1.0, 2.0),
@@ -412,22 +286,6 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
-                "lr": {
-                    "kind": "float",
-                    "factors": (0.3, 1.0, 3.0),
-                    "min": 1e-5,
-                    "fallback": 1e-2,
-                    "values": [
-                        0.03,
-                        0.01,
-                        0.003,
-                        0.001,
-                        0.0003,
-                        0.0001,
-                        0.00003,
-                        0.00001,
-                    ],
-                },
                 "smax": {
                     "kind": "int",
                     "factors": (0.5, 1.0, 2.0),
@@ -452,28 +310,12 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
-                "lr": {
-                    "kind": "float",
-                    "factors": (0.3, 1.0, 3.0),
-                    "min": 1e-5,
-                    "fallback": 1e-2,
-                    "values": [
-                        0.03,
-                        0.01,
-                        0.003,
-                        0.001,
-                        0.0003,
-                        0.0001,
-                        0.00003,
-                        0.00001,
-                    ],
-                },  # "values":[0.01]},
                 "memory_strength": {
                     "kind": "float",
                     "factors": (0.5, 1.0, 2.0),
                     "min": 0.1,
                     "fallback": 0.5,
-                    "values": [0.1, 0.5, 1, 5, 10, 50],
+                    "values": [0.1, 0.5, 1, 5, 10, 50, 100, 500],
                 },
             }
         ),
@@ -491,14 +333,14 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                     "min": 1e-5,
                     "fallback": 1e-2,
                     "values": [
+                        0.3,
+                        0.1,
                         0.03,
                         0.01,
                         0.003,
                         0.001,
                         0.0003,
                         0.0001,
-                        0.00003,
-                        0.00001,
                     ],
                 },
             }
@@ -517,14 +359,14 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                     "min": 1e-5,
                     "fallback": 1e-2,
                     "values": [
+                        0.3,
+                        0.1,
                         0.03,
                         0.01,
                         0.003,
                         0.001,
                         0.0003,
                         0.0001,
-                        0.00003,
-                        0.00001,
                     ],
                 },
                 "opt_lr": {
@@ -533,14 +375,14 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                     "min": 1e-5,
                     "fallback": 1e-2,
                     "values": [
+                        0.3,
+                        0.1,
                         0.03,
                         0.01,
                         0.003,
                         0.001,
                         0.0003,
                         0.0001,
-                        0.00003,
-                        0.00001,
                     ],
                 },
             }
@@ -558,21 +400,48 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                     "factors": (0.5, 1.0, 2.0),
                     "min": 1e-4,
                     "fallback": 0.1,
-                    "values": [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3],
+                    "values": [
+                        0.3,
+                        0.1,
+                        0.03,
+                        0.01,
+                        0.003,
+                        0.001,
+                        0.0003,
+                        0.0001,
+                    ],
                 },
                 "opt_lr": {
                     "kind": "float",
                     "factors": (0.5, 1.0, 2.0),
                     "min": 1e-4,
                     "fallback": 0.1,
-                    "values": [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3],
+                    "values": [
+                        0.3,
+                        0.1,
+                        0.03,
+                        0.01,
+                        0.003,
+                        0.001,
+                        0.0003,
+                        0.0001,
+                    ],
                 },
                 "opt_wt": {
                     "kind": "float",
                     "factors": (0.5, 1.0, 2.0),
                     "min": 1e-4,
                     "fallback": 0.1,
-                    "values": [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3],
+                    "values": [
+                        0.3,
+                        0.1,
+                        0.03,
+                        0.01,
+                        0.003,
+                        0.001,
+                        0.0003,
+                        0.0001,
+                    ],
                 },
             }
         ),
@@ -589,14 +458,32 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                     "factors": (0.5, 1.0, 2.0),
                     "min": 1e-4,
                     "fallback": 0.1,
-                    "values": [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3],
+                    "values": [
+                        0.3,
+                        0.1,
+                        0.03,
+                        0.01,
+                        0.003,
+                        0.001,
+                        0.0003,
+                        0.0001,
+                    ],
                 },
                 "opt_wt": {
                     "kind": "float",
                     "factors": (0.5, 1.0, 2.0),
                     "min": 1e-4,
                     "fallback": 0.1,
-                    "values": [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3],
+                    "values": [
+                        0.3,
+                        0.1,
+                        0.03,
+                        0.01,
+                        0.003,
+                        0.001,
+                        0.0003,
+                        0.0001,
+                    ],
                 },
             }
         ),
@@ -614,15 +501,22 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                     "min": 1e-5,
                     "fallback": 1e-2,
                     "values": [
+                        0.3,
+                        0.1,
                         0.03,
                         0.01,
                         0.003,
                         0.001,
                         0.0003,
                         0.0001,
-                        0.00003,
-                        0.00001,
                     ],
+                },
+                "memory_loss_lambda": {
+                    "kind": "float",
+                    "factors": (0.5, 1.0, 2.0),
+                    "min": 0.1,
+                    "fallback": 1.0,
+                    "values": [0.1, 0.5, 1, 5, 10, 50, 100, 500],
                 },
             }
         ),
@@ -634,20 +528,17 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
-                "lr": {
+                "prune_perc": {
                     "kind": "float",
                     "factors": (0.3, 1.0, 3.0),
                     "min": 1e-5,
                     "fallback": 1e-3,
                     "values": [
-                        0.03,
-                        0.01,
-                        0.003,
-                        0.001,
-                        0.0003,
-                        0.0001,
-                        0.00003,
-                        0.00001,
+                        0.5,
+                        0.6,
+                        0.7,
+                        0.8,
+                        0.9,
                     ],
                 },
             }
@@ -660,35 +551,12 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
-                "lr": {
-                    "kind": "float",
-                    "factors": (0.5, 1.0, 2.0),
-                    "min": 1e-5,
-                    "fallback": 1e-3,
-                    "values": [
-                        0.03,
-                        0.01,
-                        0.003,
-                        0.001,
-                        0.0003,
-                        0.0001,
-                        0.00003,
-                        0.00001,
-                    ],
-                },
                 "lamb": {
                     "kind": "float",
                     "factors": (0.5, 1.0, 2.0),
                     "min": 1e-2,
                     "fallback": 1.0,
-                    "values": [0.1, 1, 10, 100, 1000],
-                },
-                "alpha": {
-                    "kind": "float",
-                    "factors": (0.5, 1.0, 1.5),
-                    "min": 0.1,
-                    "fallback": 0.9,
-                    "values": [0.1, 0.3, 0.5, 0.7, 0.9],
+                    "values": [1, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6],
                 },
             }
         ),
@@ -700,28 +568,12 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
-                "lr": {
-                    "kind": "float",
-                    "factors": (0.5, 1.0, 2.0),
-                    "min": 1e-5,
-                    "fallback": 1e-3,
-                    "values": [
-                        0.03,
-                        0.01,
-                        0.003,
-                        0.001,
-                        0.0003,
-                        0.0001,
-                        0.00003,
-                        0.00001,
-                    ],
-                },
                 "si_c": {
                     "kind": "float",
                     "factors": (0.5, 1.0, 2.0),
                     "min": 0.01,
                     "fallback": 0.1,
-                    "values": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+                    "values": [0.5, 1, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6],
                 },
             }
         ),
@@ -733,22 +585,6 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
-                "lr": {
-                    "kind": "float",
-                    "factors": (0.5, 1.0, 2.0),
-                    "min": 1e-5,
-                    "fallback": 1e-3,
-                    "values": [
-                        0.03,
-                        0.01,
-                        0.003,
-                        0.001,
-                        0.0003,
-                        0.0001,
-                        0.00003,
-                        0.00001,
-                    ],  #
-                },
                 "ratio": {
                     "kind": "float",
                     "factors": (0.5, 1.0, 2.0),
@@ -763,20 +599,12 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                     "fallback": 2e-4,
                     "values": [
                         0.0001,
-                        0.0002,
                         0.001,
                         0.002,
                         0.01,
                         0.02,
-                        # 0.05,
-                        # 0.1,
-                        # 0.2,
-                        # 0,
-                        # 1,
-                        # 5,
-                        # 10,
-                        # 50,
-                        # 100
+                        0.03,
+                        0.05,
                     ],
                 },
                 "lr_rho": {
