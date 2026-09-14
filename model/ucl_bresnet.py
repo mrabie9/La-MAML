@@ -351,6 +351,7 @@ class UCLConfig:
 
     split: bool = True
     eval_samples: int = 1
+    clipgrad: float = 10.0
     class_weighted_ce: bool = True
 
     @staticmethod

@@ -36,6 +36,7 @@ class RWalkConfig:
     eps: float = 0.01
 
     optimizer: str = "sgd"
+    clipgrad: Optional[float] = 100.0
     cls_lambda: float = 1.0
 
     @staticmethod
