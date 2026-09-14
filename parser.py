@@ -152,16 +152,19 @@ def get_parser():
     parser.add_argument(
         "--bn_mode",
         type=str,
-        default="task_specific",
+        default="shared",
         choices=["task_specific", "shared"],
         help=(
             "BatchNorm statistics policy for task-incremental runs. "
-            "'task_specific' (default) gives every task its own running "
+            "'shared' (default) trains a single BatchNorm instance continuously "
+            "across all tasks. 'task_specific' gives every task its own running "
             "mean/variance, selected by task id at train and eval time (see "
             "model/task_bn.py); the affine weight/bias stay shared across "
-            "tasks. 'shared' trains a single BatchNorm instance continuously "
-            "across all tasks (the pre-2026-09-14 behaviour). Ignored for "
-            "class_incremental_loader runs and for norm_type groupnorm/adab1n."
+            "tasks. Not recommended: a task's statistics freeze at its task "
+            "boundary while shared weights keep drifting, so old tasks collapse "
+            "to chance for any method that does not freeze old-task weights. "
+            "Ignored for class_incremental_loader runs and for norm_type "
+            "groupnorm/adab1n."
         ),
     )
     parser.add_argument(

@@ -389,7 +389,7 @@ def task_bn_enabled(args: object) -> bool:
         >>> task_bn_enabled(args)  # doctest: +SKIP
         True
     """
-    if str(getattr(args, "bn_mode", "task_specific")).lower() != "task_specific":
+    if str(getattr(args, "bn_mode", "shared")).lower() != "task_specific":
         return False
     if str(getattr(args, "loader", "")) != "task_incremental_loader":
         return False
@@ -425,7 +425,7 @@ def install(
     Usage:
         >>> install(model, args, n_tasks)  # doctest: +SKIP
     """
-    bn_mode = str(getattr(args, "bn_mode", "task_specific")).lower()
+    bn_mode = str(getattr(args, "bn_mode", "shared")).lower()
     if bn_mode not in BN_MODES:
         raise ValueError(
             f"Unsupported bn_mode {getattr(args, 'bn_mode', None)!r}; "

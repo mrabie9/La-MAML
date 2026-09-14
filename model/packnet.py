@@ -39,10 +39,10 @@ class PackNetConfig:
     # Extra SGD passes on task data after packing; gradients only on owner==task.
     post_prune_epochs: int = 0
     clipgrad: Optional[float] = 0.0
-    # "task_specific": snapshot/restore BN running stats + affine params per task
-    # (default, matches PackNet's per-task BN freezing). "shared": a single BN
-    # instance is trained continuously across all tasks, never snapshotted.
-    bn_mode: str = "task_specific"
+    # "shared" (default): a single BN instance trained across all tasks, as for
+    # every other method. "task_specific": per-task running stats via
+    # model/task_bn.py (affine params shared).
+    bn_mode: str = "shared"
 
     @staticmethod
     def from_args(args: object) -> "PackNetConfig":
