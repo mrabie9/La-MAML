@@ -35,7 +35,7 @@ class AgemConfig:
     n_hiddens: int = 100
     dataset: str = "tinyimagenet"
     cuda: bool = True
-    grad_clip_norm: Optional[float] = 100.0
+    grad_clip_norm: Optional[float] = 0.0
     input_channels: int = 1
     cls_lambda: float = 1.0
     memory_loss_lambda: float = 1.0

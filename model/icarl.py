@@ -37,7 +37,7 @@ class IcarlConfig:
     n_memories: int = 5120
     inner_steps: int = 1
 
-    grad_clip_norm: Optional[float] = 100.0
+    grad_clip_norm: Optional[float] = 0.0
     arch: str = "resnet1d"
     dataset: str = "tinyimagenet"
     cuda: bool = True

@@ -12,7 +12,11 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 from torch.func import functional_call
+from model.adab1n import AdaB1N
 from utils.iq_features import append_iq_augmented_features
+
+# Ceiling for AdaB1N's per-task concentration logits, not an exact task count.
+ADAB1N_MAX_TASKS = 20
 
 
 class BasicBlock1D(nn.Module):
@@ -391,12 +395,22 @@ class ResNet1D(nn.Module):
         self,
         x: torch.Tensor,
         vars=None,
-        bn_training: bool = True,
+        bn_training: bool | None = None,
         classify_feats=False,
         ret_feats=False,
     ) -> torch.Tensor:
+        """Run the backbone.
+
+        Args:
+            bn_training: Overrides the normalisation layers' train/eval mode for
+                this call, for meta-learning inner loops that need to suppress or
+                force running-stat updates. ``None`` (the default) leaves the
+                ambient mode alone, so ``eval()`` normalises with the tracked
+                running statistics instead of the current batch's.
+        """
         prev = self.model.training
-        self.model.train(bn_training)
+        if bn_training is not None:
+            self.model.train(bn_training)
         try:
             if not classify_feats:
                 # print(f"Input shape: {tuple(x.shape)}")
@@ -418,16 +432,17 @@ class ResNet1D(nn.Module):
                     {"return_features": ret_feats, "classify_feats": classify_feats},
                 )
         finally:
-            self.model.train(prev)
+            if bn_training is not None:
+                self.model.train(prev)
         return out
 
     def forward_features(
-        self, x: torch.Tensor, vars=None, bn_training: bool = True
+        self, x: torch.Tensor, vars=None, bn_training: bool | None = None
     ) -> torch.Tensor:
         return self.forward(x, vars=vars, bn_training=bn_training, ret_feats=True)
 
     def forward_classifier(
-        self, feats: torch.Tensor, vars=None, bn_training: bool = True
+        self, feats: torch.Tensor, vars=None, bn_training: bool | None = None
     ) -> torch.Tensor:
         return self.forward(
             feats, vars=vars, bn_training=bn_training, classify_feats=True
@@ -502,6 +517,18 @@ class ResNet1D(nn.Module):
 
     # ------------------------------------------------------------------
     def _build_norm_factory(self, args):
+        """Build the per-channel normalization layer factory for this backbone.
+
+        Selected via ``args.norm_type`` (``"batchnorm"`` (default),
+        ``"groupnorm"``, or ``"adab1n"``); ``args.use_groupnorm`` remains
+        supported as a legacy alias for ``norm_type="groupnorm"``.
+
+        Args:
+            args: Experiment arguments, or ``None`` for the BatchNorm1d default.
+
+        Returns:
+            A callable mapping a channel count to a fresh normalization module.
+        """
         if args is None:
             return lambda channels: nn.BatchNorm1d(channels)
 
@@ -523,7 +550,37 @@ class ResNet1D(nn.Module):
 
             return gn_factory
 
+        if norm_type in {"adab1n", "ada_b1n", "adab2n"}:
+            return self._build_adab1n_factory(args)
+
         return lambda c: nn.BatchNorm1d(c)
+
+    def _build_adab1n_factory(self, args):
+        """Build an :class:`~model.adab1n.AdaB1N` factory sized from ``args``.
+
+        Args:
+            args: Experiment arguments; reads ``n_tasks``, ``kappa`` and
+                ``adab1n_init_weight`` when present.
+
+        Returns:
+            A callable mapping a channel count to a fresh ``AdaB1N`` module.
+        """
+        # num_tasks only needs to be a ceiling: unused ``task_weight`` entries are
+        # sliced out of the forward and never receive gradient, so over-allocating
+        # is numerically inert, while under-allocating makes end_task() raise.
+        num_tasks = max(ADAB1N_MAX_TASKS, int(getattr(args, "n_tasks", 1) or 1))
+        kappa = float(getattr(args, "kappa", 1.0) or 1.0)
+        init_weight = float(getattr(args, "adab1n_init_weight", 0.0) or 0.0)
+
+        def adab1n_factory(channels: int):
+            return AdaB1N(
+                channels,
+                num_tasks=num_tasks,
+                kappa=kappa,
+                init_weight=init_weight,
+            )
+
+        return adab1n_factory
 
 
 __all__ = ["ResNet1D"]

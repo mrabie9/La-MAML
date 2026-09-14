@@ -10,7 +10,7 @@ classes_per_it: 6
 val_rate: 1000
 iterations: 5000
 workers: 0
-validation: 0.5
+validation: 0
 class_order: random
 increment: 5
 # Keep small for GPU eval; 100000 causes OOM on large tasks (e.g. 100k samples × (3,1024))
@@ -34,7 +34,9 @@ memories: 5120
 replay_batch_size: 128
 temperature: 5.0
 alpha_init: 0.001
-grad_clip_norm: 5.0
+# 0 disables gradient clipping for every model (both the grad_clip_norm and
+# clipgrad knobs); set a positive norm to re-enable it.
+grad_clip_norm: 0
 optimizer: sgd
 bgd_optimizer: sgd
 

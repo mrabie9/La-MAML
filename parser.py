@@ -52,6 +52,34 @@ def get_parser():
         action="store_true",
         help="Use GroupNorm in compatible backbones instead of BatchNorm.",
     )
+    parser.add_argument(
+        "--norm_type",
+        type=str,
+        default="batchnorm",
+        choices=["batchnorm", "groupnorm", "adab1n"],
+        help=(
+            "Normalization layer used by compatible backbones (currently "
+            "resnet1d). 'adab1n' is a task-aware adaptive BatchNorm1d "
+            "(see model/adab1n.py); --use_groupnorm remains a legacy alias "
+            "for norm_type=groupnorm."
+        ),
+    )
+    parser.add_argument(
+        "--kappa",
+        type=float,
+        default=1.0,
+        help=(
+            "AdaB1N running-stat momentum schedule exponent in [0, 1]: 0 is a "
+            "cumulative average, 1 matches ordinary BatchNorm's fixed "
+            "momentum. Ignored unless norm_type=adab1n."
+        ),
+    )
+    parser.add_argument(
+        "--adab1n_init_weight",
+        type=float,
+        default=0.0,
+        help="Initial value of AdaB1N's per-task concentration logits.",
+    )
 
     # optimizer parameters influencing all models
     parser.add_argument(
@@ -119,6 +147,17 @@ def get_parser():
         help=(
             "PackNet: full passes over the task train loader after packing for optional finetune; "
             "gradients only on weights newly assigned to that task. 0 disables."
+        ),
+    )
+    parser.add_argument(
+        "--bn_mode",
+        type=str,
+        default="task_specific",
+        choices=["task_specific", "shared"],
+        help=(
+            "PackNet: 'task_specific' snapshots/restores BN running stats and affine "
+            "params per task (default); 'shared' trains a single BN instance "
+            "continuously across all tasks."
         ),
     )
     parser.add_argument(
@@ -420,8 +459,8 @@ def get_parser():
     parser.add_argument(
         "--grad_clip_norm",
         type=float,
-        default=2.0,
-        help="Clip the gradients by this value",
+        default=0.0,
+        help="Clip gradients to this norm. 0 disables clipping (the default).",
     )
     parser.add_argument(
         "--meta_batches",

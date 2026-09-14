@@ -41,7 +41,7 @@ class GemConfig:
     dataset: str = "tinyimagenet"
     cuda: bool = True
     alpha_init: float = 1e-3
-    grad_clip_norm: Optional[float] = 100.0
+    grad_clip_norm: Optional[float] = 0.0
     input_channels: int = 2
     cls_lambda: float = 1.0
 
