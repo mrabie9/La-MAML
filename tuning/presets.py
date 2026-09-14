@@ -49,6 +49,9 @@ COMMON_TYPE_HINTS: Dict[str, type] = {
     "optimizer": str,
     "smax": float,
     "memory_loss_lambda": float,
+    "norm_type": str,
+    "kappa": float,
+    "adab1n_init_weight": float,
 }
 
 
@@ -793,6 +796,68 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                     "fallback": 0.3,
                     "values": [1, 2, 5, 10, 20, 50],
                 },
+            }
+        ),
+    ),
+    # AdaB1N is a norm layer rather than a learner, so these presets keep the
+    # host model in ``model_name`` (which drives --model, the config chain and
+    # the output dir) and sweep the norm-layer knobs on top of it. The dict key
+    # is independent of ``model_name``, so no harness change is needed.
+    "adab1n_eralg4": TuningPreset(
+        model_name="eralg4",
+        description=(
+            "Sweep AdaB1N norm-layer hyperparameters on the ER-Alg4 host, where "
+            "replay batches mix tasks so the per-task reweighting is active."
+        ),
+        default_output_root="logs/tuning/adab1n_eralg4",
+        type_hints=COMMON_TYPE_HINTS,
+        grid_factory=make_grid_factory(
+            {
+                # Pinned, not tuned: records the norm layer in the results table
+                # without needing a separate config fragment.
+                "norm_type": {"values": ["adab1n"]},
+                # kappa=1.0 reproduces ordinary BatchNorm momentum, so it doubles
+                # as the in-sweep control arm. Only affects running stats, hence
+                # only visible in the val_macro_f1 objective, not train loss.
+                "kappa": {"values": [0.0, 0.25, 0.5, 0.75, 1.0]},
+                # concentration = exp(task_weight) + per-task row counts, so the
+                # init only competes with the counts (order 10-100) once it is
+                # around exp(3); 0 starts row-proportional, 4 starts task-balanced.
+                "adab1n_init_weight": {"values": [0.0, 2.0, 4.0]},
+            }
+        ),
+    ),
+    "adab1n_ft": TuningPreset(
+        model_name="eralg4",
+        description=(
+            "Sweep AdaB1N norm-layer hyperparameters on a naive fine-tuning arm: "
+            "the ER-Alg4 host with memories=0, so no replay is drawn and no "
+            "continual-learning mechanism is active."
+        ),
+        default_output_root="logs/tuning/adab1n_ft",
+        type_hints=COMMON_TYPE_HINTS,
+        grid_factory=make_grid_factory(
+            {
+                "norm_type": {"values": ["adab1n"]},
+                "kappa": {"values": [0.0, 0.25, 0.5, 0.75, 1.0]},
+                # adab1n_init_weight is deliberately absent: with one task per
+                # batch the reweighting branch never runs, so it cannot matter.
+            }
+        ),
+    ),
+    "adab1n_iid2": TuningPreset(
+        model_name="iid2",
+        description=(
+            "Sweep AdaB1N norm-layer hyperparameters on the IID2 host. Note the "
+            "harness routes iid2 through the single-round pipeline, so this is a "
+            "joint-training upper bound with one combined task, not a CL run."
+        ),
+        default_output_root="logs/tuning/adab1n_iid2",
+        type_hints=COMMON_TYPE_HINTS,
+        grid_factory=make_grid_factory(
+            {
+                "norm_type": {"values": ["adab1n"]},
+                "kappa": {"values": [0.0, 0.25, 0.5, 0.75, 1.0]},
             }
         ),
     ),
