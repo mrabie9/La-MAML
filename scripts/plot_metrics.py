@@ -204,11 +204,14 @@ def plot_per_task_curves(
 
     for task_idx, task in enumerate(tasks):
         steps = np.arange(len(task["losses"]))
-        acc_values = task.get("cls_tr_rec")
+        acc_values = extract_metric(task, "tr_macro_rec")
         if acc_values is None:
             acc_values = task.get("tr_acc")
         if acc_values is None:
-            raise KeyError("Neither 'cls_tr_rec' nor 'tr_acc' found in task metrics.")
+            raise KeyError(
+                "Neither 'tr_macro_rec' (or legacy 'cls_tr_rec') nor 'tr_acc' "
+                "found in task metrics."
+            )
         c = get_task_color(task_idx, task_names)
         axes[0].plot(
             steps, task["losses"], label=f"Task {task_idx}", color=c, alpha=0.8
@@ -254,11 +257,14 @@ def plot_per_epoch_curves(
 
     for task_idx, task in enumerate(tasks):
         loss_ep = _aggregate_per_epoch(task["losses"], n_epochs)
-        acc_values = task.get("cls_tr_rec")
+        acc_values = extract_metric(task, "tr_macro_rec")
         if acc_values is None:
             acc_values = task.get("tr_acc")
         if acc_values is None:
-            raise KeyError("Neither 'cls_tr_rec' nor 'tr_acc' found in task metrics.")
+            raise KeyError(
+                "Neither 'tr_macro_rec' (or legacy 'cls_tr_rec') nor 'tr_acc' "
+                "found in task metrics."
+            )
         acc_ep = _aggregate_per_epoch(np.asarray(acc_values, dtype=float), n_epochs)
         epochs = np.arange(len(loss_ep))
         c = get_task_color(task_idx, task_names)

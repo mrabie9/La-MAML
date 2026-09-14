@@ -5,6 +5,7 @@ from model.replay_utils import (
     ReplayInputMixin,
     unpack_y_to_class_labels,
 )
+from model.task_bn import frozen_running_stats
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 
@@ -64,13 +65,22 @@ class Net(ReplayInputMixin, BaseNet):  # noqa: F405
 
         The two blocks are also *scored* separately, as eralg4 does -- see
         ``_combine_replay_current_loss``.
+
+        The replay block additionally runs under ``frozen_running_stats``: its
+        rows span several old tasks, so they must not be folded into the current
+        task's per-task BatchNorm running statistics.
         """
 
-        if replay_count is not None and 0 < int(replay_count) < x.size(0):
-            rc = int(replay_count)
-            replay_raw = self.net.forward(x[:rc], fast_weights)
+        rc = None if replay_count is None else int(replay_count)
+        if rc is not None and 0 < rc < x.size(0):
+            with frozen_running_stats(self):
+                replay_raw = self.net.forward(x[:rc], fast_weights)
             current_raw = self.net.forward(x[rc:], fast_weights)
             raw = torch.cat([replay_raw, current_raw], dim=0)
+        elif rc is not None and rc >= x.size(0) > 0:
+            # Whole meta batch is replay.
+            with frozen_running_stats(self):
+                raw = self.net.forward(x, fast_weights)
         else:
             raw = self.net.forward(x, fast_weights)
         logits = self._mask_logits_for_sample_tasks(raw, bt)

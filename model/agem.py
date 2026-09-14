@@ -17,6 +17,7 @@ from model.replay_utils import (
     ReplayInputMixin,
     unpack_y_to_class_labels,
 )
+from model.task_bn import frozen_running_stats
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 from utils.class_weighted_loss import classification_cross_entropy
@@ -35,7 +36,7 @@ class AgemConfig:
     n_hiddens: int = 100
     dataset: str = "tinyimagenet"
     cuda: bool = True
-    grad_clip_norm: Optional[float] = 100.0
+    grad_clip_norm: Optional[float] = 0.0
     input_channels: int = 1
     cls_lambda: float = 1.0
     memory_loss_lambda: float = 1.0
@@ -298,7 +299,9 @@ class Net(ReplayInputMixin, nn.Module):
 
         Mixed-task reference batches span several tasks at once, so the single
         ``task_index`` TIL mask in :meth:`forward` does not apply; per-sample
-        masking is done separately by :meth:`_mask_logits_per_sample`.
+        masking is done separately by :meth:`_mask_logits_per_sample`. For the
+        same reason the batch must not update per-task BatchNorm running
+        statistics -- it belongs to no single task.
         """
         if self.cfg.dataset == "tinyimagenet":
             x = x.view(-1, 3, 64, 64)
@@ -306,7 +309,8 @@ class Net(ReplayInputMixin, nn.Module):
             x = x.view(-1, 3, 32, 32)
         elif self.is_iq:
             x = self._ensure_iq_shape(x)
-        return self.net.forward(x)
+        with frozen_running_stats(self):
+            return self.net.forward(x)
 
     def _mask_logits_per_sample(self, logits, task_ids):
         """Restrict each row's logits to its own task's signal-class block.

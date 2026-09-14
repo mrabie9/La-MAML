@@ -5,3 +5,6 @@ prune_perc: 0.75
 # Optional SGD epochs on this task's train data after packing; grads only on
 # weights newly assigned to the task (owner == task). 0 disables finetune.
 post_prune_epochs: 2
+# "task_specific" snapshots/restores BN running stats + affine params per
+# task (default); "shared" trains a single BN instance across all tasks.
+bn_mode: task_specific

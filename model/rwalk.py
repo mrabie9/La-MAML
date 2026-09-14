@@ -36,7 +36,7 @@ class RWalkConfig:
     eps: float = 0.01
 
     optimizer: str = "sgd"
-    clipgrad: Optional[float] = 100.0
+    clipgrad: Optional[float] = 0.0
     cls_lambda: float = 1.0
 
     @staticmethod
@@ -162,7 +162,7 @@ class Net(ReplayInputMixin, nn.Module):
             loss = self.cls_lambda * loss_ce + self.lamb * self._regulariser()
             loss.backward()
 
-            if self.clipgrad is not None:
+            if self.clipgrad is not None and self.clipgrad > 0:
                 torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.clipgrad)
             self.opt.step()
             self._update_running_statistics()

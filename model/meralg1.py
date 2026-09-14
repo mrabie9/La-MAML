@@ -37,7 +37,7 @@ class MerAlgConfig:
     beta: float = 1.0
     gamma: float = 0.0
     cuda: bool = True
-    grad_clip_norm: Optional[float] = 2.0
+    grad_clip_norm: Optional[float] = 0.0
     input_channels: int = 1
 
     @staticmethod

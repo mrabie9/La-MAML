@@ -47,7 +47,7 @@ class MetaBgdConfig:
     memories: int = 5120
     replay_batch_size: int = 20
     use_old_task_memory: bool = False
-    grad_clip_norm: Optional[float] = 2.0
+    grad_clip_norm: Optional[float] = 0.0
     meta_batches: int = 3
     cifar_batches: int = 1
 

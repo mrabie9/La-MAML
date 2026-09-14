@@ -15,6 +15,7 @@ from model.replay_utils import (
     ReplayInputMixin,
     unpack_y_to_class_labels,
 )
+from model.task_bn import frozen_running_stats
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
@@ -425,7 +426,10 @@ class Net(ReplayInputMixin, torch.nn.Module):
                 sampled = self.memory_sampling(t)
                 if sampled is not None:
                     xx, yy, feat, mask, list_t, class_sizes = sampled
-                    pred_ = self.net(xx, list_t)
+                    # ``list_t`` spans earlier tasks: keep these rows out of the
+                    # current task's BatchNorm running statistics.
+                    with frozen_running_stats(self):
+                        pred_ = self.net(xx, list_t)
                     replay_pred = torch.gather(pred_, 1, mask)
                     for row, size in enumerate(class_sizes):
                         if size < replay_pred.size(1):
@@ -471,7 +475,8 @@ class Net(ReplayInputMixin, torch.nn.Module):
                 )
             else:
                 xval, yval, feat, mask, list_t, class_sizes_val = sampled_validation
-                pred_ = self.net(xval, list_t)
+                with frozen_running_stats(self):
+                    pred_ = self.net(xval, list_t)
                 pred = torch.gather(pred_, 1, mask)
                 for row, size in enumerate(class_sizes_val):
                     if size < pred.size(1):
