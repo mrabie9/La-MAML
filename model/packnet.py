@@ -37,6 +37,11 @@ class PackNetConfig:
     prune_perc: float = 0.75  # fraction of currently used weights to prune
     # Extra SGD passes on task data after packing; gradients only on owner==task.
     post_prune_epochs: int = 0
+    clipgrad: Optional[float] = 100.0
+    # "task_specific": snapshot/restore BN running stats + affine params per task
+    # (default, matches PackNet's per-task BN freezing). "shared": a single BN
+    # instance is trained continuously across all tasks, never snapshotted.
+    bn_mode: str = "task_specific"
 
     @staticmethod
     def from_args(args: object) -> "PackNetConfig":
@@ -60,6 +65,11 @@ class Net(nn.Module):
 
         self.args = args
         self.cfg = PackNetConfig.from_args(args)
+        self.bn_mode = str(self.cfg.bn_mode).lower()
+        if self.bn_mode not in {"task_specific", "shared"}:
+            raise ValueError(
+                f"Unsupported bn_mode {self.cfg.bn_mode!r}; expected 'task_specific' or 'shared'."
+            )
         self.n_outputs = n_outputs
         self.n_tasks = n_tasks
         self.classes_per_task = misc_utils.build_task_class_list(
@@ -89,8 +99,10 @@ class Net(nn.Module):
         self._param_to_buffers: Dict[str, Tuple[str, str]] = {}
         self._init_masks_and_frozen()
 
-        # BatchNorm handling: keep separate running stats per task to avoid
-        # cross-task interference while allowing task-specific affine params.
+        # BatchNorm handling: in "task_specific" mode, keep separate running
+        # stats/affine params per task to avoid cross-task interference; in
+        # "shared" mode these dicts stay empty and BN behaves like a single
+        # continuously-trained instance (see self.bn_mode).
         self._bn_modules: List[_BatchNorm] = [
             m for m in self.net.modules() if isinstance(m, _BatchNorm)
         ]
@@ -103,11 +115,24 @@ class Net(nn.Module):
         self._bn_task_affine: Dict[
             int, List[Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]]
         ] = {}
+        if self._bn_modules:
+            print(
+                f"PackNet BatchNorm mode: {self.bn_mode} ({len(self._bn_modules)} BN layers)."
+            )
+        else:
+            print(
+                f"PackNet bn_mode={self.bn_mode} has no effect: backbone has no "
+                "BatchNorm layers (e.g. norm_type=groupnorm)."
+            )
 
     # ------------------------------------------------------------------
     def forward(self, x: torch.Tensor, t: int, **kwargs) -> torch.Tensor:
         # Ensure BN stats for the queried task are active (important for eval).
-        if self._bn_modules and t in self._bn_task_stats:
+        if (
+            self.bn_mode == "task_specific"
+            and self._bn_modules
+            and t in self._bn_task_stats
+        ):
             self._restore_bn_stats(t)
 
         allow_free = self.current_task is None or t >= self.current_task
@@ -132,12 +157,14 @@ class Net(nn.Module):
     ) -> Tuple[float, float, torch.Tensor | None]:
         if self.current_task is None:
             self.current_task = t
-            self._restore_bn_stats(t)
+            if self.bn_mode == "task_specific":
+                self._restore_bn_stats(t)
         elif t != self.current_task:
             # Packing and BN snapshot for the previous task run in
             # ``finalize_task_after_training`` at the end of that task.
             self.current_task = t
-            self._restore_bn_stats(t)
+            if self.bn_mode == "task_specific":
+                self._restore_bn_stats(t)
 
         self.net.train()
         metric_logits = None
@@ -212,7 +239,7 @@ class Net(nn.Module):
             )
 
         self._pack_current_task()
-        if self._bn_modules:
+        if self.bn_mode == "task_specific" and self._bn_modules:
             self._snapshot_bn_stats(task_id)
 
         epochs = int(self.cfg.post_prune_epochs)

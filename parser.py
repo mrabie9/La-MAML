@@ -150,6 +150,17 @@ def get_parser():
         ),
     )
     parser.add_argument(
+        "--bn_mode",
+        type=str,
+        default="task_specific",
+        choices=["task_specific", "shared"],
+        help=(
+            "PackNet: 'task_specific' snapshots/restores BN running stats and affine "
+            "params per task (default); 'shared' trains a single BN instance "
+            "continuously across all tasks."
+        ),
+    )
+    parser.add_argument(
         "--no_class_weighted_ce",
         dest="class_weighted_ce",
         action="store_false",
