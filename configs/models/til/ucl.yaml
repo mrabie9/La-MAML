@@ -1,6 +1,5 @@
 model: ucl_bresnet
 loader: task_incremental_loader
-lr: 0.01
 lr_rho: 0.001
 beta: 0.02
 alpha: 20
