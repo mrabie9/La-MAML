@@ -17,6 +17,7 @@ from tqdm import tqdm
 import numpy as np
 import torch
 from torch.autograd import Variable
+from torch.utils.data import ConcatDataset, DataLoader, Dataset
 
 import parser as file_parser
 from metrics.metrics import confusion_matrix, signal_class_f1_summary
@@ -572,6 +573,38 @@ def _save_task_checkpoint(
     return checkpoint_path
 
 
+def _cumulative_train_loader(
+    seen_train_datasets: List[Dataset], task_train_loader: DataLoader
+) -> DataLoader:
+    """Return a shuffled loader over this task's training set and all earlier ones.
+
+    Args:
+        seen_train_datasets: Training datasets of earlier tasks; the current
+            task's dataset is appended in place.
+        task_train_loader: The loader ``new_task()`` built for the current task;
+            its batch size and worker count are reused.
+
+    Returns:
+        A loader over the union of every task seen so far. It is shuffled
+        because the concatenation is otherwise ordered task by task.
+
+    Usage:
+        train_loader = _cumulative_train_loader(seen, train_loader)
+    """
+    seen_train_datasets.append(task_train_loader.dataset)
+    print(
+        "Maximal replay: training on {} task(s), {} samples.".format(
+            len(seen_train_datasets), sum(len(d) for d in seen_train_datasets)
+        )
+    )
+    return DataLoader(
+        ConcatDataset(seen_train_datasets),
+        batch_size=task_train_loader.batch_size,
+        shuffle=True,
+        num_workers=task_train_loader.num_workers,
+    )
+
+
 def life_experience(model, inc_loader, args):
     result_val_a = []
     result_test_a = []
@@ -597,6 +630,10 @@ def life_experience(model, inc_loader, args):
     # that task's training set), which grew host memory as new tasks began
     # training without ever being read. Keep only the per-task local below.
     test_task_loaders = []
+    # Maximal-replay models (``cumulative_replay``, e.g. iid2) are the exception:
+    # they train task t on tasks 0..t, so every task's training set is retained.
+    cumulative_replay = bool(getattr(model, "cumulative_replay", False))
+    seen_train_datasets = []
     evaluator = eval_tasks
     if args.loader == "class_incremental_loader":
         evaluator = eval_class_tasks
@@ -634,6 +671,8 @@ def life_experience(model, inc_loader, args):
         result_acc_tr = []
         task_info, train_loader, _, test_loader = inc_loader.new_task()
         test_task_loaders.append(test_loader)
+        if cumulative_replay:
+            train_loader = _cumulative_train_loader(seen_train_datasets, train_loader)
         current_task = task_info["task"]
         task_n_epochs = task_epoch_schedule.get(current_task, base_n_epochs)
         args.n_epochs = task_n_epochs
@@ -1929,51 +1968,34 @@ def main():
         args.state_logging,
         "Model initialized on device {}".format(next(model.parameters()).device),
     )
-    # run model on loader
-    if args.model == "iid2":
-        # `iid2` is handled by the single-round entrypoint; delegate so we
-        # never depend on `main_multi_task.py`.
-        #
-        # We preserve CLI compatibility by forwarding the original argv.
-        import subprocess
+    # run model on loader (iid2 included: it is the maximal-replay upper bound)
+    log_state(args.state_logging, "Invoking continual life experience flow")
+    (
+        result_val_t,
+        result_val_a,
+        result_val_prec,
+        result_test_t,
+        result_test_a,
+        spent_time,
+    ) = life_experience(model, loader, args)
 
-        log_state(
-            args.state_logging,
-            "Delegating iid2 to main_single_round.py (no main_multi_task).",
-        )
-        exit_code = subprocess.call(
-            [sys.executable, "main_single_round.py"] + sys.argv[1:]
-        )
-        raise SystemExit(exit_code)
-    else:
-        # for all the CL baselines
-        log_state(args.state_logging, "Invoking continual life experience flow")
-        (
-            result_val_t,
-            result_val_a,
-            result_val_prec,
-            result_test_t,
-            result_test_a,
-            spent_time,
-        ) = life_experience(model, loader, args)
+    spent_time_hours = spent_time / 3600.0
 
-        spent_time_hours = spent_time / 3600.0
-
-        # save results in files or print on terminal
-        save_results(
-            args,
-            result_val_t,
-            result_val_a,
-            result_val_prec,
-            result_test_t,
-            result_test_a,
-            model,
-            spent_time,
-        )
-        log_state(
-            args.state_logging,
-            "Results saved; total runtime {:.2f}h".format(spent_time_hours),
-        )
+    # save results in files or print on terminal
+    save_results(
+        args,
+        result_val_t,
+        result_val_a,
+        result_val_prec,
+        result_test_t,
+        result_test_a,
+        model,
+        spent_time,
+    )
+    log_state(
+        args.state_logging,
+        "Results saved; total runtime {:.2f}h".format(spent_time_hours),
+    )
 
     # Print and append total runtime for this experiment.
     print("Total runtime: {:.2f} hours".format(spent_time / 3600.0))

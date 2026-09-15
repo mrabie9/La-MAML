@@ -676,9 +676,8 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
     "adab1n_iid2": TuningPreset(
         model_name="iid2",
         description=(
-            "Sweep AdaB1N norm-layer hyperparameters on the IID2 host. Note the "
-            "harness routes iid2 through the single-round pipeline, so this is a "
-            "joint-training upper bound with one combined task, not a CL run."
+            "Sweep AdaB1N norm-layer hyperparameters on the IID2 host, the "
+            "maximal-replay upper bound (task t trains on tasks 0..t combined)."
         ),
         default_output_root="logs/tuning/adab1n_iid2",
         type_hints=COMMON_TYPE_HINTS,

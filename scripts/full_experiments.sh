@@ -75,7 +75,7 @@ while [ $# -gt 0 ]; do
             echo "                   and skips host schedule JSON (models run serially on this host)."
             echo "  --one-shot       force main.py runs to use --n_epochs 1 --inner_steps 2."
             echo "  --rerun-probe   regenerate host schedule split (serial timings cached)."
-            echo "  unknown args are forwarded to main.py/main_single_round.py."
+            echo "  unknown args are forwarded to main.py."
             exit 0
             ;;
         *)
@@ -409,9 +409,6 @@ run_job_sync() {
   log_msg "--- Dispatching: base + $name + $(basename "$model_yaml") (job log: $JOB_LOG_FILE) ---"
   echo "[$(date -Iseconds)] START $name" >>"$LOG_FILE"
   local entrypoint="main.py"
-  if [ "$name" = "iid2" ]; then
-    entrypoint="main_single_round.py"
-  fi
   local run_args=("${PASSTHROUGH_ARGS[@]}")
   if [ "$ONE_SHOT" -eq 1 ] && [ "$entrypoint" = "main.py" ]; then
     run_args+=(--n_epochs 1 --inner_steps 2)
@@ -466,9 +463,6 @@ run_job_bg() {
 
   (
     local entrypoint="main.py"
-    if [ "$name" = "iid2" ]; then
-      entrypoint="main_single_round.py"
-    fi
     run_args=("${PASSTHROUGH_ARGS[@]}")
     if [ "$ONE_SHOT" -eq 1 ] && [ "$entrypoint" = "main.py" ]; then
       run_args+=(--n_epochs 1 --inner_steps 2)
@@ -611,9 +605,6 @@ else
 
     (
       entrypoint="main.py"
-      if [ "$a" = "iid2" ]; then
-        entrypoint="main_single_round.py"
-      fi
       run_args=("${PASSTHROUGH_ARGS[@]}")
       if [ "$ONE_SHOT" -eq 1 ] && [ "$entrypoint" = "main.py" ]; then
         run_args+=(--n_epochs 1 --inner_steps 2)
@@ -631,9 +622,6 @@ else
 
     (
       entrypoint="main.py"
-      if [ "$b" = "iid2" ]; then
-        entrypoint="main_single_round.py"
-      fi
       run_args=("${PASSTHROUGH_ARGS[@]}")
       if [ "$ONE_SHOT" -eq 1 ] && [ "$entrypoint" = "main.py" ]; then
         run_args+=(--n_epochs 1 --inner_steps 2)

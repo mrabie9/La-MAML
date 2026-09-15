@@ -17,8 +17,8 @@ Hosts:
     continual-learning-specific is active. Batches are single-task, the
     reweighting cannot engage, and only ``kappa`` is swept.
 ``iid2``
-    Joint-training upper bound. The harness routes iid2 through the single-round
-    pipeline, so this is one combined task rather than a CL run.
+    Maximal-replay upper bound: the continual schedule, with task ``t`` trained
+    on tasks ``0..t`` combined.
 
 Each host supplies its own config chain: the host fragment first (for its tuned
 learning rate), then an AdaB1N fragment. Order matters — the harness writes the
