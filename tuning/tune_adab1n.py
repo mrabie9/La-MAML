@@ -56,7 +56,7 @@ HOSTS = {
     ),
     "iid2": (
         "adab1n_iid2",
-        "configs/models/iid2.yaml",
+        "configs/models/til/iid2.yaml",
         "configs/models/til/adab1n_iid2.yaml",
     ),
 }

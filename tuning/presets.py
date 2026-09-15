@@ -323,6 +323,32 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
             }
         ),
     ),
+    "ft": TuningPreset(
+        model_name="ft",
+        description="Run grid or random search over fine-tuning hyperparameters.",
+        default_output_root="logs/tuning/ft",
+        type_hints=COMMON_TYPE_HINTS,
+        grid_factory=make_grid_factory(
+            {
+                "lr": {
+                    "kind": "float",
+                    "factors": (0.3, 1.0, 3.0),
+                    "min": 1e-5,
+                    "fallback": 1e-2,
+                    "values": [
+                        0.3,
+                        0.1,
+                        0.03,
+                        0.01,
+                        0.003,
+                        0.001,
+                        0.0003,
+                        0.0001,
+                    ],
+                },
+            }
+        ),
+    ),
     "iid2": TuningPreset(
         model_name="iid2",
         description="Run grid or random search over IID2 hyperparameters.",

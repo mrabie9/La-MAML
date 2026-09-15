@@ -1,0 +1,3 @@
+model: iid2
+loader: task_incremental_loader
+lr: 0.01
