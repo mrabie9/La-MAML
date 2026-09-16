@@ -5,12 +5,13 @@ import datetime
 import argparse
 import atexit
 import json
+import math
 import time
 import os
 import sys
 from contextlib import nullcontext
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 from tqdm import tqdm
 
@@ -821,6 +822,8 @@ def life_experience(model, inc_loader, args):
     result_test_t = []
 
     last_tr_cls_rec = last_tr_cls_prec = last_tr_cls_f1 = None
+    # (rec, prec, f1) from each task's final training epoch, in training order.
+    final_epoch_tr_metrics: List[Tuple[float, float, float]] = []
     base_n_epochs = int(args.n_epochs)
     force_global_n_epochs_legacy = bool(LEGACY_USE_GLOBAL_N_EPOCHS)
     task_epoch_schedule = (
@@ -1181,6 +1184,12 @@ def life_experience(model, inc_loader, args):
                         avg_eval_recall,
                     )
                 )
+        if last_tr_cls_rec is not None:
+            final_epoch_tr_metrics.append(
+                (last_tr_cls_rec, last_tr_cls_prec, last_tr_cls_f1)
+            )
+            last_tr_cls_rec = last_tr_cls_prec = last_tr_cls_f1 = None
+
         finalize_fn = getattr(model, "finalize_task_after_training", None)
         if callable(finalize_fn):
             finalize_fn(train_loader)
@@ -1326,6 +1335,10 @@ def life_experience(model, inc_loader, args):
         )
     )
 
+    def _nan_mean(values):
+        finite = [float(v) for v in values if v is not None and not math.isnan(v)]
+        return sum(finite) / len(finite) if finite else None
+
     def _mean(x):
         if x is None or (isinstance(x, (list, tuple)) and len(x) == 0):
             return None
@@ -1344,14 +1357,14 @@ def life_experience(model, inc_loader, args):
         "tr_macro_f1": None,
     }
 
-    if (
-        last_tr_cls_rec is not None
-        or last_tr_cls_prec is not None
-        or last_tr_cls_f1 is not None
-    ):
-        tr_rec = float(last_tr_cls_rec) if last_tr_cls_rec is not None else None
-        tr_prec = float(last_tr_cls_prec) if last_tr_cls_prec is not None else None
-        tr_f1 = float(last_tr_cls_f1) if last_tr_cls_f1 is not None else None
+    if final_epoch_tr_metrics:
+        # CIL scores training in the global class space, so the last task's
+        # final epoch already speaks for the run. TIL scores each task in its
+        # own label space, so average every task's final epoch instead.
+        tr_rows = final_epoch_tr_metrics[-1:] if cil_mode else final_epoch_tr_metrics
+        tr_rec, tr_prec, tr_f1 = (
+            _nan_mean([row[col] for row in tr_rows]) for col in range(3)
+        )
         headline["tr_macro_rec"] = tr_rec
         headline["tr_macro_prec"] = tr_prec
         headline["tr_macro_f1"] = tr_f1
