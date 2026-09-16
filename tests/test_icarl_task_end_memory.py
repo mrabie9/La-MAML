@@ -19,7 +19,9 @@ from model.icarl import Net as IcarlNet
 LENGTH = 32
 
 
-def _make_args(loader: str = "task_incremental_loader") -> object:
+def _make_args(
+    loader: str = "task_incremental_loader", eval_bn_stats: str = "batch"
+) -> object:
     args = type("Args", (), {})()
     args.classes_per_task = [2, 2]
     args.nc_per_task_list = ""
@@ -36,7 +38,7 @@ def _make_args(loader: str = "task_incremental_loader") -> object:
     args.dataset = "iq"
     args.loader = loader
     args.bn_mode = "shared"
-    args.eval_bn_stats = "batch"
+    args.eval_bn_stats = eval_bn_stats
     args.class_weighted_ce = False
     args.grad_clip_norm = 0.0
     args.icarl_feature_chunk_size = 4
@@ -116,7 +118,11 @@ def test_second_task_keeps_head_of_old_rankings() -> None:
 
 def test_distillation_targets_replace_old_units_on_every_row() -> None:
     torch.manual_seed(0)
-    args = _make_args(loader="class_incremental_loader")
+    # Running statistics keep the expectation a plain forward: this asserts the
+    # target math, not the BatchNorm policy (iCaRL follows evaluation, which is
+    # batch statistics for both loaders since 2026-09-16, and reads its features
+    # in randomly ordered chunks there).
+    args = _make_args(loader="class_incremental_loader", eval_bn_stats="running")
     model = IcarlNet(2 * LENGTH, 4, 2, args)
     _train(model, tasks=1)
 
@@ -157,7 +163,8 @@ def test_til_forward_is_nearest_mean_within_task() -> None:
 
 def test_class_means_are_normalised_means_of_normalised_features() -> None:
     torch.manual_seed(0)
-    args = _make_args(loader="class_incremental_loader")
+    # Running statistics, as above: the assertion is about the mean math.
+    args = _make_args(loader="class_incremental_loader", eval_bn_stats="running")
     model = IcarlNet(2 * LENGTH, 4, 2, args)
     _train(model, tasks=1)
     model.eval()

@@ -427,10 +427,18 @@ def batch_statistics(root: object) -> Iterator[None]:
 def eval_uses_batch_statistics(args: object) -> bool:
     """Report whether evaluation forwards should normalize with batch statistics.
 
-    True for task-incremental runs with ``--eval_bn_stats batch`` (the default)
-    and ``--bn_mode shared``. ``task_specific`` keeps reading its per-task rows,
-    and class-incremental runs keep running statistics, since batch statistics
-    over a single-task eval batch would leak the task id there.
+    True with ``--eval_bn_stats batch`` (the default) and ``--bn_mode shared``,
+    for both loaders. ``task_specific`` keeps reading its per-task rows.
+
+    Class-incremental runs were previously excluded, on the grounds that batch
+    statistics over a single-task eval batch leak the task id. That reasoning
+    holds for the task-incremental sets, which are per task, but not for the
+    class-incremental ones: set ``j`` holds every task up to ``j``, shuffled, so
+    its batches span tasks and carry no task id to leak. Running statistics
+    describe only the most recently trained task, which is what motivated batch
+    statistics in the first place, so both loaders now follow the same policy
+    (user decision, 2026-09-16). Note this makes evaluation transductive: a
+    prediction depends on the other rows sharing its batch.
 
     Args:
         args: Experiment arguments (``eval_bn_stats``, ``bn_mode``, ``loader``).
@@ -448,8 +456,6 @@ def eval_uses_batch_statistics(args: object) -> bool:
             f"expected one of {sorted(EVAL_BN_STATS)}."
         )
     if mode != "batch":
-        return False
-    if str(getattr(args, "loader", "")) != "task_incremental_loader":
         return False
     return str(getattr(args, "bn_mode", "shared")).lower() == "shared"
 

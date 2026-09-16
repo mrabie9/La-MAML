@@ -113,7 +113,12 @@ def test_batch_statistics_restores_forward_on_error() -> None:
         ({}, True),
         ({"eval_bn_stats": "running"}, False),
         ({"bn_mode": "task_specific"}, False),
-        ({"loader": "class_incremental_loader"}, False),
+        # Both loaders follow the same policy since 2026-09-16; the CIL
+        # exclusion assumed single-task eval batches, but CIL eval sets are
+        # cumulative and shuffled, so their batches span tasks.
+        ({"loader": "class_incremental_loader"}, True),
+        ({"loader": "class_incremental_loader", "eval_bn_stats": "running"}, False),
+        ({"loader": "class_incremental_loader", "bn_mode": "task_specific"}, False),
     ],
 )
 def test_eval_uses_batch_statistics_gate(overrides, expected) -> None:
