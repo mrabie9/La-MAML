@@ -433,20 +433,31 @@ def compute_mean(values: Sequence[float]) -> float:
     return float(sum(values) / len(values)) if values else float("nan")
 
 
-def extract_macro_f1_mean_from_trial_logs(log_dir: str | Path, num_tasks: int) -> float:
-    """Extract the final mean macro F1 from the latest trial metrics file.
+def extract_macro_f1_mean_from_trial_logs(
+    log_dir: str | Path, num_tasks: int, cil_mode: bool = False
+) -> float:
+    """Extract the final macro F1 from the latest trial metrics file.
 
     Reads the latest ``task*.npz`` produced by a training run and resolves the
-    stored validation macro F1 to a single run-level score, taking the last
-    ``num_tasks`` entries when the array holds every per-epoch evaluation.
+    stored validation macro F1 to a single run-level score.
+
+    Under TIL, ``val_macro_f1`` holds one column per task-pure loader; the
+    final evaluation is the last ``num_tasks`` entries of that flattened
+    per-eval array, averaged. Under CIL, that same array instead holds
+    per-task *columns* sliced from one pooled pass (see
+    :func:`main.eval_cil_pooled`) and averaging them mixes in tasks the model
+    has since forgotten -- the run-level score is the *headline*, i.e. the
+    macro F1 over every class seen so far, stored separately as
+    ``cil_union_macro_f1`` with its last entry being the final task's value.
 
     Args:
         log_dir: Trial output directory containing ``task*.npz`` files.
         num_tasks: Number of continual tasks in the run, used to slice the
-            final evaluation out of a flattened per-eval array.
+            final evaluation out of a flattened per-eval array (TIL only).
+        cil_mode: Whether the trial was run under class-incremental scoring.
 
     Returns:
-        Final mean macro F1, or NaN when it cannot be recovered.
+        Final macro F1, or NaN when it cannot be recovered.
 
     Usage:
         f1_score = extract_macro_f1_mean_from_trial_logs("/tmp/run", 3)
@@ -462,6 +473,16 @@ def extract_macro_f1_mean_from_trial_logs(log_dir: str | Path, num_tasks: int) -
         return float("nan")
 
     latest_metrics = np.load(task_files[-1], allow_pickle=False)
+
+    if cil_mode:
+        union_f1_values = extract_metric(latest_metrics, "cil_union_macro_f1")
+        if union_f1_values is None:
+            return float("nan")
+        union_f1_array = np.asarray(union_f1_values, dtype=float).reshape(-1)
+        if union_f1_array.size == 0:
+            return float("nan")
+        return float(union_f1_array[-1])
+
     macro_f1_values = extract_metric(latest_metrics, "val_macro_f1")
     if macro_f1_values is None:
         return float("nan")
@@ -560,8 +581,11 @@ def run_single_trial(
     val_scores = extract_final_scores(result_val_a)
     test_scores = extract_final_scores(result_test_a)
 
+    cil_mode = args.loader == "class_incremental_loader"
     val_mean = compute_mean(val_scores)
-    val_macro_f1_mean = extract_macro_f1_mean_from_trial_logs(log_dir, len(val_scores))
+    val_macro_f1_mean = extract_macro_f1_mean_from_trial_logs(
+        log_dir, len(val_scores), cil_mode=cil_mode
+    )
     if np.isnan(val_macro_f1_mean):
         print(
             "[WARN] Trial {} has no usable macro F1 in {}. Falling back to val_mean ({:.4f}) for tuning score.".format(
