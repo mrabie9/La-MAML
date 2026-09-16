@@ -172,9 +172,39 @@ class Net(ReplayInputMixin, nn.Module):
             if self.clipgrad is not None and self.clipgrad > 0:
                 torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.clipgrad)
             self.opt.step()
-            metric_logits = current_logits.detach()
+            metric_logits = self._metric_logits_global(current_logits, class_ids)
 
         return float(loss.item()), cls_tr_rec, metric_logits
+
+    def _metric_logits_global(
+        self, current_logits: torch.Tensor, class_ids: List[int]
+    ) -> torch.Tensor:
+        """Scatter task-local logits back to global class columns.
+
+        ``current_logits`` holds one column per class of the current task, in
+        ``class_ids`` (first-seen) order, while ``life_experience`` scores
+        ``argmax`` against **global** labels. Returning the local slice made
+        every task after the first report exactly 0.00 train recall/precision/F1,
+        since local indices ``0..C_t-1`` and global labels are disjoint there
+        (task 0 escaped because the two coincide).
+
+        Args:
+            current_logits: ``(batch, len(class_ids))`` task-local logits.
+            class_ids: Global class id of each column of ``current_logits``.
+
+        Returns:
+            ``(batch, n_outputs)`` logits: this task's classes at their global
+            columns, every other class masked out.
+        """
+        full = torch.full(
+            (current_logits.size(0), self.n_outputs),
+            -1e9,
+            device=current_logits.device,
+            dtype=current_logits.dtype,
+        )
+        idx = torch.as_tensor(class_ids, dtype=torch.long, device=current_logits.device)
+        full[:, idx] = current_logits
+        return full.detach()
 
     # ------------------------------------------------------------------
     def _build_backbone(self, n_inputs: int, n_outputs: int, args: object) -> nn.Module:
