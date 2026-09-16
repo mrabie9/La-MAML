@@ -311,17 +311,9 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         description="Run grid or random search over iCaRL hyperparameters.",
         default_output_root="logs/tuning/icarl",
         type_hints=COMMON_TYPE_HINTS,
-        grid_factory=make_grid_factory(
-            {
-                "memory_strength": {
-                    "kind": "float",
-                    "factors": (0.5, 1.0, 2.0),
-                    "min": 0.1,
-                    "fallback": 0.5,
-                    "values": [0.1, 0.5, 1, 5, 10, 50, 100, 500],
-                },
-            }
-        ),
+        # iCaRL has no method hyperparameters (its loss has no weights), and lr
+        # is shared across methods: a single trial at the base config.
+        grid_factory=make_grid_factory({}),
     ),
     "ft": TuningPreset(
         model_name="ft",

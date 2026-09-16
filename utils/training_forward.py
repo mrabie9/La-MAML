@@ -8,7 +8,6 @@ from typing import Any, Tuple
 import torch
 
 from model import task_bn
-from utils import misc_utils
 
 
 def model_forward_for_metric_loop(
@@ -22,11 +21,8 @@ def model_forward_for_metric_loop(
     task-incremental loaders, no extra keyword is passed (per-task masking
     only).
 
-    **iCaRL:** Metrics use ``netforward`` logits plus the same
-    :func:`utils.misc_utils.apply_task_incremental_logit_mask` call as
-    :meth:`model.icarl.Net.observe` (``cil_all_seen_upto_task=task_index``),
-    not nearest-mean ``forward``. This matches training for TIL and CIL runs,
-    because ``observe`` always passes ``cil_all_seen_upto_task=task_index``.
+    **iCaRL:** ``forward`` is the nearest-mean-of-exemplars classifier; see
+    :meth:`model.icarl.Net.forward`.
 
     **Task-specific BatchNorm:** when the run uses per-task running statistics
     (see :mod:`model.task_bn`), ``task_index`` selects them for the duration of
@@ -85,16 +81,6 @@ def _dispatch_metric_forward(
         forward_kw["cil_all_seen_upto_task"] = task_index
     if getattr(args, "model", "") == "anml":
         return model(x, fast_weights=None)  # type: ignore[operator]
-    if getattr(args, "model", "") == "icarl":
-        raw_logits = model.netforward(x)  # type: ignore[attr-defined]
-        return misc_utils.apply_task_incremental_logit_mask(
-            raw_logits,
-            task_index,
-            model.classes_per_task,  # type: ignore[attr-defined]
-            model.n_classes,  # type: ignore[attr-defined]
-            cil_all_seen_upto_task=task_index,
-            loader=getattr(args, "loader", None),
-        )
     try:
         return model(x, task_index, **forward_kw)  # type: ignore[operator]
     except TypeError:

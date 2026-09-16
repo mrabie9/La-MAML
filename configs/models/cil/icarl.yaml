@@ -1,5 +1,2 @@
-# Model-specific overrides for icarl.
 model: icarl
 loader: class_incremental_loader
-
-memory_strength: 1
