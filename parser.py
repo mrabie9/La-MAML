@@ -357,9 +357,12 @@ def get_parser():
         type=int,
         default=None,
         help=(
-            "When set, randomly permute task presentation order after resolving "
-            "--task-order-files / default alphabetical order, using this seed via "
-            "numpy.random.Generator (independent of --seed). Omit for the base order."
+            "Seed for permuting task presentation order, applied after resolving "
+            "--task-order-files / default alphabetical order via a private "
+            "numpy.random.Generator. Omit (the default) to derive it from --seed, "
+            "so sweeping seeds sweeps task order too. Set an integer to pin the "
+            "order while --seed varies, which isolates training noise from "
+            "task-order effects."
         ),
     )
     parser.add_argument(

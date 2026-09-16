@@ -159,12 +159,13 @@ class Net(ReplayInputMixin, nn.Module):
             #     loss_ce = cls_logits.new_zeros(1)
             #     cls_tr_rec = 0.0
 
-            loss = self.cls_lambda * loss_ce + self.lamb * self._regulariser()
-            loss.backward()
+            (self.cls_lambda * loss_ce).backward()
 
             if self.clipgrad is not None and self.clipgrad > 0:
                 torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.clipgrad)
             self.opt.step()
+            penalty = self._anchor_to_consolidated()
+            loss = self.cls_lambda * loss_ce.detach() + penalty
             self._update_running_statistics()
             metric_logits = logits_for_loss.detach()
 
@@ -205,11 +206,20 @@ class Net(ReplayInputMixin, nn.Module):
             self.param_star[name] = param.detach().clone().to(device)
 
     # ------------------------------------------------------------------
-    def _regulariser(self) -> torch.Tensor:
-        if self.tasks_trained == 0:
-            return torch.zeros(1, device=self._device())
+    def _anchor_to_consolidated(self) -> torch.Tensor:
+        """Pull parameters towards ``param_star`` with the closed-form RWalk proximal step.
 
-        penalty = torch.zeros(1, device=self._device())
+        The penalty ``lamb * (F + s) * (p - p_star)^2`` has stiffness
+        ``2 * lamb * (F + s)``; negative path-integral scores are clamped to zero.
+
+        Returns:
+            The RWalk penalty evaluated at the pre-anchoring parameters.
+        """
+        penalty = torch.zeros((), device=self._device())
+        if self.tasks_trained == 0:
+            return penalty
+
+        step_size = float(self.opt.param_groups[0]["lr"])
         for name, param in self.net.named_parameters():
             if not param.requires_grad:
                 continue
@@ -219,8 +229,9 @@ class Net(ReplayInputMixin, nn.Module):
             star = self.param_star.get(name)
             if fisher is None or s_term is None or star is None:
                 continue
-            diff = param - star
-            penalty = penalty + ((fisher + s_term) * diff.pow(2)).sum()
+            penalty = penalty + misc_utils.proximal_anchor_(
+                param, star, 2.0 * self.lamb * (fisher + s_term), step_size
+            )
         return penalty
 
     # ------------------------------------------------------------------

@@ -145,18 +145,19 @@ class Net(ReplayInputMixin, nn.Module):
             preds = torch.argmax(logits_for_loss, dim=1)
             cls_tr_rec = macro_recall(preds, y_cls.long())
             self.opt.zero_grad()
-            if True:
-                torch.autograd.set_detect_anomaly(True)
-                loss_ce.backward(retain_graph=True)
-                self._accumulate_fisher(int(y_cls.size(0)))
-
-            loss = self.cls_lambda * loss_ce + 0.5 * self.lamb * self._ewc_penalty()
-            loss.backward()
+            loss_ce.backward()
+            self._accumulate_fisher(int(y_cls.size(0)))
+            if self.cls_lambda != 1.0:
+                for param in self.net.parameters():
+                    if param.grad is not None:
+                        param.grad.mul_(self.cls_lambda)
 
             if self.clipgrad is not None:
                 torch.nn.utils.clip_grad_norm_(self.parameters(), self.clipgrad)
 
             self.opt.step()
+            penalty = self._anchor_to_consolidated()
+            loss = self.cls_lambda * loss_ce.detach() + penalty
             metric_logits = logits_for_loss.detach()
 
         return float(loss.item()), cls_tr_rec, metric_logits
@@ -228,16 +229,27 @@ class Net(ReplayInputMixin, nn.Module):
         self._reset_fisher_accum()
 
     # ------------------------------------------------------------------
-    def _ewc_penalty(self) -> torch.Tensor:
+    def _anchor_to_consolidated(self) -> torch.Tensor:
+        """Pull parameters towards ``param_star`` with the closed-form EWC proximal step.
+
+        The penalty ``lamb / 2 * F * (p - p_star)^2`` has stiffness ``lamb * F``.
+
+        Returns:
+            The EWC penalty evaluated at the pre-anchoring parameters.
+        """
+        penalty = torch.zeros((), device=self._device())
         if not self.fisher:
-            return torch.zeros(1, device=self._device())
-        penalty = torch.zeros(1, device=self._device())
+            return penalty
+        step_size = float(self.opt.param_groups[0]["lr"])
         for name, param in self.net.named_parameters():
             if name not in self.fisher:
                 continue
-            penalty += (
-                self.fisher[name] * (param - self.param_star[name]).pow(2)
-            ).sum()
+            penalty = penalty + misc_utils.proximal_anchor_(
+                param,
+                self.param_star[name],
+                self.lamb * self.fisher[name],
+                step_size,
+            )
         return penalty
 
     # ------------------------------------------------------------------

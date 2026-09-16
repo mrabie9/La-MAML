@@ -13,7 +13,7 @@ import traceback
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Sequence
+from typing import Any, Callable, Dict, Final, List, Sequence
 
 import numpy as np
 import torch
@@ -29,6 +29,12 @@ from utils.metric_keys import extract_metric
 Grid = Dict[str, List[Any]]
 TypeHints = Dict[str, type]
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+# Tuning trials run on a single seed that is deliberately distinct from the
+# 0/39/55 seeds used by the full experiments. Since the training seed also
+# drives task presentation order, this keeps hyperparameter selection from
+# being fitted to any task order that later appears in a reported result.
+TUNING_DEFAULT_SEED: Final[int] = 99
 
 
 def _default_config_chain(model_name: str, preset_default: str | None) -> List[str]:
@@ -127,6 +133,16 @@ def build_cli(preset: TuningPreset) -> argparse.ArgumentParser:
         help="Evaluate at most this many trials (after sampling/shuffling).",
     )
     parser.add_argument(
+        "--base-seed",
+        type=int,
+        default=TUNING_DEFAULT_SEED,
+        help=(
+            "Training seed used by every trial. Also determines task presentation "
+            f"order, so the default ({TUNING_DEFAULT_SEED}) keeps tuning off the "
+            "0/39/55 orders used by the full experiments. Overridden by --seeds."
+        ),
+    )
+    parser.add_argument(
         "--seed-offset",
         type=int,
         default=0,
@@ -144,12 +160,17 @@ def build_cli(preset: TuningPreset) -> argparse.ArgumentParser:
         metavar="S1,S2,...",
         help="Comma-separated seeds to average each trial over (e.g. 0,39,55)."
         " When set, every trial is run once per seed and the metrics are"
-        " averaged; --vary-seed and --seed-offset are ignored.",
+        " averaged; --base-seed, --vary-seed and --seed-offset are ignored."
+        " Each seed also selects its own task presentation order.",
     )
     parser.add_argument(
         "--avg-seeds",
         action="store_true",
-        help="Shortcut for --seeds 0,39,55.",
+        help=(
+            "Shortcut for --seeds 0,39,55. Note those seeds also select three "
+            "different task orders, and are the same ones used by the full "
+            "experiments."
+        ),
     )
     parser.add_argument(
         "--output-root",
@@ -492,6 +513,9 @@ def run_single_trial(
     if seed_override is not None:
         trial_timestamp = f"{trial_timestamp}-seed{args.seed}"
 
+    # Task presentation order follows the trial seed unless --task-order-seed pins it.
+    misc_utils.resolve_task_order_seed(args)
+
     misc_utils.init_seed(args.seed)
     log_dir, tf_dir = misc_utils.log_dir(args, trial_timestamp, model_name)
     args.log_dir = log_dir
@@ -814,6 +838,10 @@ def run_tuning(preset: TuningPreset) -> None:
     if getattr(base_args, "model", preset.model_name) != preset.model_name:
         base_args.model = preset.model_name
 
+    # Override the config's `seed:` so trials use the tuning seed rather than a
+    # seed (and therefore a task order) that also appears in reported results.
+    base_args.seed = int(getattr(cli, "base_seed", TUNING_DEFAULT_SEED))
+
     constant_overrides = parse_override_specs(
         cli.override, base_args, preset.type_hints
     )
@@ -1069,7 +1097,13 @@ def run_tuning(preset: TuningPreset) -> None:
         yaml_update_error: str | None = None
         if cli.config:
             target_yaml = resolve_cli_config_path(cli.config[-1])
-            values_to_write = dict(best.get("trial_params") or {})
+            # ``trial_params`` holds only the winning trial's own stage; earlier
+            # hierarchical / lr-first winners ride along in ``params``.
+            values_to_write = {
+                key: value
+                for key, value in (best.get("params") or {}).items()
+                if key in full_search_space
+            }
             if values_to_write:
                 try:
                     updated_yaml_values = write_best_params_to_yaml(

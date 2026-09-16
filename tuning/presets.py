@@ -139,13 +139,9 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
-                "memory_loss_lambda": {
-                    "kind": "float",
-                    "factors": (0.5, 1.0, 2.0),
-                    "min": 0.1,
-                    "fallback": 1.0,
-                    "values": [0.1, 0.5, 1, 5, 10, 50, 100, 500],
-                },
+                # Scaling the reference gradient cannot change A-GEM's projection,
+                # so this weight is a no-op; pinned to 1 rather than tuned.
+                "memory_loss_lambda": {"values": [1.0]},
             }
         ),
     ),
@@ -204,13 +200,8 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
-                "memory_loss_lambda": {
-                    "kind": "float",
-                    "factors": (0.5, 1.0, 2.0),
-                    "min": 0.1,
-                    "fallback": 1.0,
-                    "values": [0.1, 0.5, 1, 5, 10, 50, 100, 500],
-                },
+                # Standard ER weights replay and current losses equally.
+                "memory_loss_lambda": {"values": [1.0]},
             }
         ),
     ),
@@ -238,13 +229,8 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
-                "memory_loss_lambda": {
-                    "kind": "float",
-                    "factors": (0.5, 1.0, 2.0),
-                    "min": 0.1,
-                    "fallback": 1.0,
-                    "values": [0.1, 0.5, 1, 5, 10, 50, 100, 500],
-                },
+                # Standard ER weights replay and current losses equally.
+                "memory_loss_lambda": {"values": [1.0]},
             }
         ),
     ),
@@ -260,7 +246,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                     "factors": (0.3, 1.0, 3.0),
                     "min": 1e-2,
                     "fallback": 1.0,
-                    "values": [1, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6],
+                    "values": [1, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9],
                 },
             }
         ),
@@ -294,7 +280,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                     "factors": (0.5, 1.0, 2.0),
                     "min": 32,
                     "fallback": 256,
-                    "values": [25, 50, 100, 200, 400, 800],
+                    "values": [5,10,15,25, 50, 100, 200, 400, 800],
                 },
                 "gamma": {
                     "kind": "float",
@@ -611,37 +597,25 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                     "factors": (0.5, 1.0, 2.0),
                     "min": 1e-5,
                     "fallback": 1e-3,
-                    "values": [0.1, 0.25, 0.5],  #
+                    "values": [0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5],
                 },
                 "beta": {
                     "kind": "float",
                     "factors": (0.5, 1.0, 2.0),
                     "min": 1e-5,
                     "fallback": 2e-4,
-                    "values": [
-                        0.0001,
-                        0.001,
-                        0.002,
-                        0.01,
-                        0.02,
-                        0.03,
-                        0.05,
-                    ],
+                    "values": [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 10],
                 },
                 "lr_rho": {
                     "kind": "float",
                     "factors": (0.5, 1.0, 2.0),
                     "min": 1e-5,
                     "fallback": 1e-3,
-                    "values": [0.005, 0.001, 0.02, 0.05],  #
+                    "values": [1e-4, 3e-4, 1e-3, 3e-3, 1e-2, 3e-2, 1e-1],
                 },
-                "alpha": {
-                    "kind": "float",
-                    "factors": (0.5, 1.0, 2.0),
-                    "min": 0.05,
-                    "fallback": 0.3,
-                    "values": [1, 2, 5, 10, 20, 50],
-                },
+                # alpha is not tuned: it only weights the first task's pull towards
+                # the initial weights (the reference fixes it to 1 afterwards); the
+                # configs pin it to 1.
             }
         ),
     ),

@@ -690,14 +690,19 @@ class IncrementalLoader:
         base_task_labels = [os.path.splitext(f)[0] for f in data_files]
         task_order_seed = getattr(self._opt, "task_order_seed", None)
         data_files, task_perm = permute_task_sequence(data_files, task_order_seed)
-        if task_perm is not None:
-            presentation_labels = [os.path.splitext(f)[0] for f in data_files]
-            print(
-                f"[task_order] task_order_seed={task_order_seed} "
-                f"base_order={base_task_labels} "
-                f"presentation_slot_to_base_index={task_perm.tolist()} "
-                f"presentation_order={presentation_labels}"
-            )
+        presentation_labels = [os.path.splitext(f)[0] for f in data_files]
+        slot_to_base = (
+            task_perm.tolist()
+            if task_perm is not None
+            else list(range(len(data_files)))
+        )
+        print(
+            f"[task_order] task_order_seed={task_order_seed} "
+            f"source={getattr(self._opt, 'task_order_seed_source', 'unset')} "
+            f"base_order={base_task_labels} "
+            f"presentation_slot_to_base_index={slot_to_base} "
+            f"presentation_order={presentation_labels}"
+        )
         raw_datasets: list[tuple] = []
         labels_offset = 0
 

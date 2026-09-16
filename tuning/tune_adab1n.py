@@ -5,7 +5,7 @@ AdaB1N replaces BatchNorm1d inside the shared ResNet1D backbone, so it is tuned
 on a host learner rather than on its own. Pick the host with ``--host``::
 
     python tuning/tune_adab1n.py --host eralg4
-    python tuning/tune_adab1n.py --host ft --seeds 0,39,55
+    python tuning/tune_adab1n.py --host ft --seeds 0,39,55  # averages 3 seeds AND 3 task orders
 
 Hosts:
 

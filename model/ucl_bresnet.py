@@ -4,8 +4,8 @@ This variant mirrors the behaviour of :mod:`model.ucl` but replaces the
 deterministic ``ResNet1D`` feature extractor with a fully Bayesian
 counterpart.  All convolutional layers now maintain Gaussian posteriors over
 their weights, enabling epistemic uncertainty estimation deeper in the
-network while keeping the multi-head Bayesian linear classifiers used for
-task-specific outputs.
+network. Task heads are deterministic linear layers, and the regulariser follows
+the reference UCL ``custom_regularization``.
 """
 
 from __future__ import annotations
@@ -313,6 +313,31 @@ class BayesianResNet1D(nn.Module):
             )
         return layers
 
+    def ucl_regularisation_chain(self) -> List[Tuple[BayesianConv1d, Optional[int]]]:
+        """List every Bayesian conv with the index of the conv feeding its input.
+
+        UCL's node-wise L2 strength takes, per weight, the max of its output
+        node's strength and its input node's strength (the feeding layer's output
+        node). The reference implementation used a plain sequential net; here a
+        block's input is taken from the previous block's main-path ``conv2``, and
+        the downsample conv shares its block's input. The stem conv has no
+        feeding layer (``None``), matching the reference's zero initial strength.
+
+        Returns:
+            ``(layer, feeding_index)`` pairs in forward order.
+        """
+        chain: List[Tuple[BayesianConv1d, Optional[int]]] = [(self.conv1, None)]
+        block_input = 0
+        for stage in (self.layer1, self.layer2, self.layer3, self.layer4):
+            for block in stage:
+                chain.append((block.conv1, block_input))
+                chain.append((block.conv2, len(chain) - 1))
+                main_path_output = len(chain) - 1
+                if block.downsample is not None:
+                    chain.append((block.downsample.conv, block_input))
+                block_input = main_path_output
+        return chain
+
     def _forward_layer(
         self, layer: nn.ModuleList, x: torch.Tensor, sample: bool
     ) -> torch.Tensor:
@@ -361,6 +386,7 @@ class UCLConfig:
         for field in cfg.__dataclass_fields__:
             if hasattr(args, field):
                 setattr(cfg, field, getattr(args, field))
+        print(f"Configs: {cfg}")
         return cfg
 
 
@@ -384,7 +410,12 @@ def _infer_ucl_split_from_loader(args: object, cfg: UCLConfig) -> None:
 
 
 class BayesianClassifier(nn.Module):
-    """Bayesian ResNet feature extractor followed by per-task Bayesian heads."""
+    """Bayesian ResNet feature extractor with a split or single-head classifier.
+
+    Mirrors the reference UCL networks: ``split`` uses deterministic per-task
+    heads, otherwise one Bayesian output layer spans all classes and is part of
+    the regularised network.
+    """
 
     def __init__(
         self,
@@ -420,14 +451,30 @@ class BayesianClassifier(nn.Module):
         )
         self.feature_dim = self.feature_net.feature_dim
 
-        self.heads = nn.ModuleList(
-            [
-                BayesianLinear(self.feature_dim, c, ratio=cfg.ratio)
-                for c in classes_per_task
-            ]
-        )
-
         self.split = cfg.split
+        if self.split:
+            # Deterministic task heads, as in the reference split network (``self.last``).
+            self.heads = nn.ModuleList(
+                [nn.Linear(self.feature_dim, c) for c in classes_per_task]
+            )
+        else:
+            self.output = BayesianLinear(self.feature_dim, n_outputs, ratio=cfg.ratio)
+
+    def ucl_regularisation_chain(self) -> List[Tuple[BayesianLayer, Optional[int]]]:
+        """Regularised layers in forward order with their feeding-layer indices.
+
+        Returns:
+            The feature-net chain, plus the single-head output layer (fed by the
+            last main-path conv) when not ``split``.
+        """
+        chain: List[Tuple[BayesianLayer, Optional[int]]] = list(
+            self.feature_net.ucl_regularisation_chain()
+        )
+        if not self.split:
+            last_conv = self.feature_net.layer4[-1].conv2
+            feeding = next(i for i, (layer, _) in enumerate(chain) if layer is last_conv)
+            chain.append((self.output, feeding))
+        return chain
 
     def forward(
         self, x: torch.Tensor, sample: bool = False
@@ -451,10 +498,9 @@ class BayesianClassifier(nn.Module):
                 feature_type=self.iq_aug_feature_type,
             )
         feats = self.feature_net(x, sample=sample, ret_feats=True)
-        outputs = [head(feats, sample=sample) for head in self.heads]
         if self.split:
-            return outputs
-        return torch.cat(outputs, dim=1)
+            return [head(feats) for head in self.heads]
+        return self.output(feats, sample=sample)
 
 
 class Net(nn.Module):
@@ -489,11 +535,8 @@ class Net(nn.Module):
 
         mu_params: List[nn.Parameter] = []
         rho_params: List[nn.Parameter] = []
-
-        for module in self._iter_bayesian_modules(self.model):
-            mu_params.extend(module.mu_parameters())
-            rho_params.extend(module.rho_parameters())
-        mu_params.extend(self.model.input_adapter.parameters())
+        for name, param in self.model.named_parameters():
+            (rho_params if name.endswith("weight_rho") else mu_params).append(param)
 
         self.optimizer = torch.optim.SGD(
             [
@@ -634,10 +677,13 @@ class Net(nn.Module):
         self, x: torch.Tensor, y: torch.Tensor, t: int
     ) -> Tuple[float, float, torch.Tensor | None]:
         y_cls_glob = unpack_y_to_class_labels(y).long()
-        if (self.current_task is None) or (t != self.current_task):
-            if self.current_task is not None:
-                self.model_old = self._snapshot_model()
-                self.saved = True
+        if self.current_task is None:
+            # The reference regularises the first task towards the initial weights.
+            self.model_old = self._snapshot_model()
+            self.current_task = t
+        elif t != self.current_task:
+            self.model_old = self._snapshot_model()
+            self.saved = True
             self.current_task = t
 
         device = self._device()
@@ -666,7 +712,19 @@ class Net(nn.Module):
         metric_logits = None
         for _ in range(self.cfg.inner_steps):
             outputs = self.model(x_cls, sample=True)
-            logits = outputs[t] if self.split else outputs
+            if self.split:
+                logits = outputs[t]
+            else:
+                # Not in the reference (its single head shares labels across tasks):
+                # unseen-class rows would otherwise be pushed down, then anchored there.
+                logits = misc_utils.apply_task_incremental_logit_mask(
+                    outputs,
+                    t,
+                    self.classes_per_task,
+                    self.n_outputs,
+                    cil_all_seen_upto_task=t,
+                    loader=self.incremental_loader_name,
+                )
 
             preds = torch.argmax(logits, dim=1)
             cls_tr_rec = macro_recall(preds, y_cls_filtered)
@@ -764,178 +822,96 @@ class Net(nn.Module):
             param.requires_grad_(False)
         return clone
 
-    def _compute_layer_regularisation_terms(
-        self,
-        old_layer: BayesianLayer,
-        new_layer: BayesianLayer,
-        eps: float,
-    ) -> Tuple[
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        int,
-    ]:
-        """Compute UCL regularisation terms for a Bayesian layer pair.
-
-        Args:
-            old_layer: Frozen layer snapshot from the previous task.
-            new_layer: Trainable layer for the current task.
-            eps: Small constant for numerical stability.
-
-        Returns:
-            A tuple containing sigma_weight_reg, sigma_weight_normal_reg,
-            mu_weight_reg, mu_bias_reg, l1_mu_weight_reg, and l1_mu_bias_reg.
-        """
-        trainer_weight_mu = new_layer.weight_mu
-        saver_weight_mu = old_layer.weight_mu
-        trainer_weight_sigma = new_layer.weight_sigma
-        saver_weight_sigma = old_layer.weight_sigma
-        safe_saver_weight_sigma = saver_weight_sigma.clamp_min(eps)
-
-        fan_in, _ = _calculate_fan_in_and_fan_out(trainer_weight_mu)
-        std_init = math.sqrt((2.0 / fan_in) * self.cfg.ratio)
-
-        curr_strength = std_init / safe_saver_weight_sigma
-        saver_strength_flat = curr_strength.view(curr_strength.size(0), -1)
-        bias_strength = saver_strength_flat.mean(dim=1)
-
-        mu_weight_reg = (
-            (curr_strength * (trainer_weight_mu - saver_weight_mu)) ** 2
-        ).sum()
-        l1_mu_weight_reg = (
-            (saver_weight_mu.pow(2) / safe_saver_weight_sigma.pow(2))
-            * (trainer_weight_mu - saver_weight_mu).abs()
-        ).sum() * (std_init**2)
-
-        mu_bias_reg = torch.zeros_like(mu_weight_reg)
-        l1_mu_bias_reg = torch.zeros_like(mu_weight_reg)
-        # Node/channel tying collapses weight_sigma.numel() from out*in to out,
-        # which would roughly halve the normaliser and double the effective
-        # strength of every reg term. Count the sigma contribution at the full
-        # per-weight resolution (weight_mu.numel()) to preserve the pre-tying
-        # meaning of cfg.alpha and cfg.beta.
-        regularized_parameter_count = 2 * trainer_weight_mu.numel()
-        trainer_bias = getattr(new_layer, "bias", None)
-        saver_bias = getattr(old_layer, "bias", None)
-        if trainer_bias is not None and saver_bias is not None:
-            mu_bias_reg = ((bias_strength * (trainer_bias - saver_bias)) ** 2).sum()
-            saver_sigma_flat = saver_weight_sigma.view(saver_weight_sigma.size(0), -1)
-            l1_mu_bias_reg = (
-                (saver_bias.pow(2) / saver_sigma_flat.mean(dim=1).clamp_min(eps).pow(2))
-                * (trainer_bias - saver_bias).abs()
-            ).sum() * (std_init**2)
-            regularized_parameter_count += trainer_bias.numel()
-
-        weight_sigma_ratio = trainer_weight_sigma.pow(2) / (
-            safe_saver_weight_sigma.pow(2)
-        )
-        sigma_weight_reg = (
-            weight_sigma_ratio - torch.log(weight_sigma_ratio + eps)
-        ).sum()
-        sigma_weight_normal_reg = (
-            trainer_weight_sigma.pow(2) - torch.log(trainer_weight_sigma.pow(2) + eps)
-        ).sum()
-        return (
-            sigma_weight_reg,
-            sigma_weight_normal_reg,
-            mu_weight_reg,
-            mu_bias_reg,
-            l1_mu_weight_reg,
-            l1_mu_bias_reg,
-            regularized_parameter_count,
-        )
-
     def _apply_regularisation(
         self, base_loss: torch.Tensor, batch_size: int
     ) -> torch.Tensor:
-        """Apply UCL regularisation against the previous-task posterior snapshot.
+        """Add the UCL regulariser, following the reference ``custom_regularization``.
+
+        During the first task ``model_old`` holds the initial weights and ``alpha``
+        is ``cfg.alpha``; once a task has been consolidated ``alpha`` is 1 and the
+        L1 term switches on. Terms are summed over layers and scaled only by the
+        minibatch size. Split task heads are deterministic and not regularised;
+        the single-head output layer is.
 
         Args:
-            base_loss: Current task classification loss.
+            base_loss: Mean classification loss of the current minibatch.
             batch_size: Current minibatch size.
 
         Returns:
             The total loss including UCL regularisation.
         """
-        if not self.saved or self.model_old is None:
-            return base_loss
+        alpha = 1.0 if self.saved else float(self.cfg.alpha)
 
-        sigma_weight_reg = torch.zeros_like(base_loss)
-        sigma_weight_normal_reg = torch.zeros_like(base_loss)
-        mu_weight_reg = torch.zeros_like(base_loss)
-        mu_bias_reg = torch.zeros_like(base_loss)
-        l1_mu_weight_reg = torch.zeros_like(base_loss)
-        l1_mu_bias_reg = torch.zeros_like(base_loss)
-        regularized_parameter_count = 0
-        eps = 1e-8
+        mu_reg = base_loss.new_zeros(())
+        l1_mu_reg = base_loss.new_zeros(())
+        sigma_weight_reg = base_loss.new_zeros(())
+        sigma_weight_normal_reg = base_loss.new_zeros(())
 
-        for old_layer, new_layer in zip(
-            self._iter_bayesian_modules(self.model_old.feature_net),
-            self._iter_bayesian_modules(self.model.feature_net),
+        saver_strengths: List[torch.Tensor] = []
+        for (saver_layer, feeding_index), (trainer_layer, _) in zip(
+            self.model_old.ucl_regularisation_chain(),
+            self.model.ucl_regularisation_chain(),
         ):
-            (
-                sigma_term,
-                sigma_normal_term,
-                mu_weight_term,
-                mu_bias_term,
-                l1_weight_term,
-                l1_bias_term,
-                param_count,
-            ) = self._compute_layer_regularisation_terms(old_layer, new_layer, eps)
-            sigma_weight_reg = sigma_weight_reg + sigma_term
-            sigma_weight_normal_reg = sigma_weight_normal_reg + sigma_normal_term
-            mu_weight_reg = mu_weight_reg + mu_weight_term
-            mu_bias_reg = mu_bias_reg + mu_bias_term
-            l1_mu_weight_reg = l1_mu_weight_reg + l1_weight_term
-            l1_mu_bias_reg = l1_mu_bias_reg + l1_bias_term
-            regularized_parameter_count += param_count
+            trainer_weight_mu = trainer_layer.weight_mu
+            saver_weight_mu = saver_layer.weight_mu
+            trainer_weight_sigma = trainer_layer.weight_sigma
+            saver_weight_sigma = saver_layer.weight_sigma
 
-        current_task_index = (
-            int(self.current_task) if self.current_task is not None else 0
-        )
-        for head_index in range(min(current_task_index, len(self.model.heads))):
-            old_head = self.model_old.heads[head_index]
-            new_head = self.model.heads[head_index]
-            (
-                sigma_term,
-                sigma_normal_term,
-                mu_weight_term,
-                mu_bias_term,
-                l1_weight_term,
-                l1_bias_term,
-                param_count,
-            ) = self._compute_layer_regularisation_terms(old_head, new_head, eps)
-            sigma_weight_reg = sigma_weight_reg + sigma_term
-            sigma_weight_normal_reg = sigma_weight_normal_reg + sigma_normal_term
-            mu_weight_reg = mu_weight_reg + mu_weight_term
-            mu_bias_reg = mu_bias_reg + mu_bias_term
-            l1_mu_weight_reg = l1_mu_weight_reg + l1_weight_term
-            l1_mu_bias_reg = l1_mu_bias_reg + l1_bias_term
-            regularized_parameter_count += param_count
+            # The reference uses fan_in for linear layers and fan_out for convolutions.
+            fan_in, fan_out = _calculate_fan_in_and_fan_out(trainer_weight_mu)
+            is_linear = isinstance(trainer_layer, BayesianLinear)
+            std_init = math.sqrt(
+                (2.0 / (fan_in if is_linear else fan_out)) * self.cfg.ratio
+            )
 
-        normaliser = max(1, regularized_parameter_count)
-        sigma_weight_reg = sigma_weight_reg / normaliser
-        sigma_weight_normal_reg = sigma_weight_normal_reg / normaliser
-        mu_weight_reg = mu_weight_reg / normaliser
-        mu_bias_reg = mu_bias_reg / normaliser
-        l1_mu_weight_reg = l1_mu_weight_reg / normaliser
-        l1_mu_bias_reg = l1_mu_bias_reg / normaliser
+            saver_weight_strength = std_init / saver_weight_sigma
+            saver_strengths.append(saver_weight_strength)
+            l2_strength = saver_weight_strength
+            if feeding_index is not None:
+                # One strength per feeding output node, repeated over the input
+                # features it produces (the reference's conv -> linear flatten).
+                feeding_strength = saver_strengths[feeding_index]
+                in_features = trainer_weight_mu.size(1)
+                prev_strength = (
+                    feeding_strength.reshape(feeding_strength.size(0), 1)
+                    .expand(-1, in_features // feeding_strength.size(0))
+                    .reshape(1, in_features, *([1] * (trainer_weight_mu.dim() - 2)))
+                )
+                l2_strength = torch.max(saver_weight_strength, prev_strength)
+
+            delta_mu = trainer_weight_mu - saver_weight_mu
+            mu_reg = mu_reg + (l2_strength * delta_mu).pow(2).sum()
+            l1_mu_reg = l1_mu_reg + (
+                (saver_weight_mu.pow(2) / saver_weight_sigma.pow(2)) * delta_mu
+            ).abs().sum() * (std_init**2)
+
+            trainer_bias = getattr(trainer_layer, "bias", None)
+            if trainer_bias is not None:
+                saver_bias = saver_layer.bias
+                delta_bias = trainer_bias - saver_bias
+                bias_strength = saver_weight_strength.reshape(-1)
+                bias_sigma = saver_weight_sigma.reshape(-1)
+                mu_reg = mu_reg + (bias_strength * delta_bias).pow(2).sum()
+                l1_mu_reg = l1_mu_reg + (
+                    (saver_bias.pow(2) / bias_sigma.pow(2)) * delta_bias
+                ).abs().sum() * (std_init**2)
+
+            weight_sigma = trainer_weight_sigma.pow(2) / saver_weight_sigma.pow(2)
+            normal_weight_sigma = trainer_weight_sigma.pow(2)
+            sigma_weight_reg = sigma_weight_reg + (
+                weight_sigma - torch.log(weight_sigma)
+            ).sum()
+            sigma_weight_normal_reg = sigma_weight_normal_reg + (
+                normal_weight_sigma - torch.log(normal_weight_sigma)
+            ).sum()
 
         loss = base_loss
-        loss = loss + self.cfg.alpha * (mu_weight_reg + mu_bias_reg) / (2 * batch_size)
-        loss = loss + self.saved * (l1_mu_weight_reg + l1_mu_bias_reg) / batch_size
+        loss = loss + alpha * mu_reg / (2 * batch_size)
+        loss = loss + float(self.saved) * l1_mu_reg / batch_size
         loss = loss + self.cfg.beta * (sigma_weight_reg + sigma_weight_normal_reg) / (
             2 * batch_size
         )
         return loss
-
-    def _iter_bayesian_modules(self, module: nn.Module) -> Iterable[BayesianLayer]:
-        for sub in module.modules():
-            if isinstance(sub, BayesianLayer):
-                yield sub
 
     @torch.no_grad()
     def mc_epistemic_classification(self, x, t, S=20, temperature=1.0, clamp_eps=1e-8):

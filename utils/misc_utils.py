@@ -265,6 +265,44 @@ def find_latest_checkpoint(folder_path):
     return files[0]
 
 
+def resolve_task_order_seed(args) -> int:
+    """Resolve the effective task-order seed and record where it came from.
+
+    Task presentation order is permuted with its own RNG stream, seeded either by
+    the training seed (the default, so that varying ``--seed`` varies task order
+    too) or by an explicit ``--task-order-seed``. Passing an explicit value keeps
+    the order fixed while ``--seed`` varies, which is how the two effects are
+    isolated from one another.
+
+    Must be called before :func:`log_dir`, which snapshots ``vars(args)`` into
+    ``training_parameters.json``.
+
+    Args:
+        args: Parsed argument namespace. ``args.task_order_seed`` is replaced by
+            the resolved integer and ``args.task_order_seed_source`` is set to
+            ``"seed"`` or ``"explicit"``.
+
+    Returns:
+        The resolved task-order seed.
+
+    Usage:
+        >>> import argparse
+        >>> args = argparse.Namespace(seed=39, task_order_seed=None)
+        >>> resolve_task_order_seed(args)
+        39
+        >>> args.task_order_seed_source
+        'seed'
+    """
+    raw = getattr(args, "task_order_seed", None)
+    if raw is None or (isinstance(raw, str) and len(raw.strip()) == 0):
+        args.task_order_seed = int(args.seed)
+        args.task_order_seed_source = "seed"
+    else:
+        args.task_order_seed = int(raw)
+        args.task_order_seed_source = "explicit"
+    return args.task_order_seed
+
+
 def init_seed(seed):
     """
     Disable cudnn to maximize reproducibility
@@ -375,3 +413,37 @@ def scale_learning_rate_for_batch_size(
         return float(base_lr)
     scale = float(batch_size) / float(reference_batch_size)
     return float(base_lr) * scale
+
+
+@torch.no_grad()
+def proximal_anchor_(
+    param: torch.Tensor,
+    anchor: torch.Tensor,
+    stiffness: torch.Tensor,
+    step_size: float,
+) -> torch.Tensor:
+    """Apply the closed-form proximal step for a quadratic anchor, in place.
+
+    Solves ``argmin_p ||p - param||^2 / (2 * step_size) + sum(stiffness / 2 * (p - anchor)^2)``,
+    i.e. ``p = (param + step_size * stiffness * anchor) / (1 + step_size * stiffness)``.
+    Unlike an explicit gradient step on the penalty, this never overshoots the
+    anchor, so it stays stable for any stiffness. Negative stiffness is clamped
+    to zero because the proximal operator is only defined for a convex penalty.
+
+    Args:
+        param: Parameter tensor already updated by the task-loss step.
+        anchor: Consolidated parameter values to pull towards.
+        stiffness: Per-element curvature ``k`` of the penalty ``k / 2 * (p - anchor)^2``.
+        step_size: Learning rate of the task-loss step.
+
+    Returns:
+        The penalty ``sum(k / 2 * (param - anchor)^2)`` evaluated before anchoring.
+
+    Usage:
+        penalty = proximal_anchor_(p, p_star, lamb * fisher, lr)
+    """
+    stiffness = stiffness.clamp(min=0)
+    penalty = 0.5 * (stiffness * (param - anchor).pow(2)).sum()
+    rate = step_size * stiffness
+    param.add_(rate * anchor).div_(1.0 + rate)
+    return penalty

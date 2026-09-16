@@ -135,12 +135,12 @@ class Net(ReplayInputMixin, nn.Module):
             preds = torch.argmax(logits_for_loss, dim=1)
             cls_tr_rec = macro_recall(preds, y_cls.long())
 
-            loss = self.cls_lambda * loss_ce + self.si_c * self._surrogate_loss()
-
-            loss.backward()
+            (self.cls_lambda * loss_ce).backward()
             if self.clipgrad is not None and self.clipgrad > 0:
                 torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.clipgrad)
             self.opt.step()
+            penalty = self._anchor_to_consolidated()
+            loss = self.cls_lambda * loss_ce.detach() + penalty
             self._update_path_integral()
             metric_logits = logits_for_loss.detach()
 
@@ -211,17 +211,27 @@ class Net(ReplayInputMixin, nn.Module):
             getattr(self, f"{key}_si_p_old").copy_(param.detach())
 
     # ------------------------------------------------------------------
-    def _surrogate_loss(self) -> torch.Tensor:
-        device = self._device()
-        loss = torch.zeros(1, device=device)
+    def _anchor_to_consolidated(self) -> torch.Tensor:
+        """Pull parameters towards ``si_prev`` with the closed-form SI proximal step.
+
+        The surrogate ``si_c * omega * (p - p_prev)^2`` has stiffness
+        ``2 * si_c * omega``; negative importances are clamped to zero.
+
+        Returns:
+            The SI penalty evaluated at the pre-anchoring parameters.
+        """
+        penalty = torch.zeros((), device=self._device())
+        step_size = float(self.opt.param_groups[0]["lr"])
         for name, param in self.net.named_parameters():
             if not param.requires_grad:
                 continue
             key = self._param_to_key[name]
             omega = getattr(self, f"{key}_si_omega")
             prev = getattr(self, f"{key}_si_prev")
-            loss = loss + (omega * (param - prev).pow(2)).sum()
-        return loss
+            penalty = penalty + misc_utils.proximal_anchor_(
+                param, prev, 2.0 * self.si_c * omega, step_size
+            )
+        return penalty
 
     # ------------------------------------------------------------------
     def _compute_offsets(self, task: int) -> Tuple[int, int]:

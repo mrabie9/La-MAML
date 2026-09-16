@@ -518,6 +518,10 @@ def main() -> None:
         ),
     )
 
+    # Task presentation order follows the training seed unless --task-order-seed
+    # pins it. Resolved before the loader reads it and before log_dir() records it.
+    misc_utils.resolve_task_order_seed(args)
+
     misc_utils.init_seed(args.seed)
 
     Loader = importlib.import_module("dataloaders." + args.loader)
