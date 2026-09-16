@@ -71,7 +71,10 @@ class AdcIqAdapter(nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
-        self.weight = nn.Parameter(torch.ones(2, 3))
+        # Single ADC mixing vector shared by both the I and Q channels: the
+        # same linear combination of ADC0/ADC1/ADC2 is applied to whichever
+        # channel it sees, rather than learning separate per-channel mixes.
+        self.weight = nn.Parameter(torch.ones(3))
         # The adapter's effective bias is always forced to 0 in `forward`.
         self.bias = nn.Parameter(torch.zeros(2), requires_grad=False)
         # Used by the 3D path: (B, 3, L) -> (B, 2, L). The 4D path uses
@@ -101,7 +104,8 @@ class AdcIqAdapter(nn.Module):
         on the default random initialization.
 
         Args:
-            weight_4d: Optional weight for the 4D path with shape (2, 3).
+            weight_4d: Optional weight for the 4D path with shape (3,), shared
+                across the I and Q channels.
             bias_4d: Optional bias for the 4D path with shape (2,).
             weight_3d: Optional weight for the 3D Conv1d path. Accepts either
                 a tensor of shape (2, 3) or (2, 3, 1); the latter will be
@@ -167,15 +171,13 @@ class AdcIqAdapter(nn.Module):
                 param.requires_grad = False
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Enforce row-stochastic mixing: each output row sums to 1.
-        row_sums = self.weight.sum(dim=1, keepdim=True)  # (2, 1)
-        zero_row_mask = row_sums.abs() <= 1e-12
-        denom = torch.where(zero_row_mask, torch.ones_like(row_sums), row_sums)
-        normalized_weight = self.weight / denom  # (2, 3)
-        uniform = torch.full_like(self.weight, 1.0 / self.weight.size(1))
-        normalized_weight = torch.where(
-            zero_row_mask.expand_as(normalized_weight), uniform, normalized_weight
-        )
+        # Enforce a stochastic mix: the (shared) weight vector sums to 1.
+        weight_sum = self.weight.sum()
+        zero_sum_mask = weight_sum.abs() <= 1e-12
+        denom = torch.where(zero_sum_mask, torch.ones_like(weight_sum), weight_sum)
+        normalized_weight = self.weight / denom  # (3,)
+        uniform = torch.full_like(self.weight, 1.0 / self.weight.size(0))
+        normalized_weight = torch.where(zero_sum_mask, uniform, normalized_weight)
 
         # Bias is always 0 (and does not receive gradients).
         self.bias.data.zero_()
@@ -217,8 +219,8 @@ class AdcIqAdapter(nn.Module):
         zero_adc_rows = x[:, 1:, :, :].abs().amax(dim=(1, 2, 3)) == 0
         # (B, 3, 2, L) -> (B, 2, 3, L)
         permuted = x.permute(0, 2, 1, 3)
-        # Mix ADCs per IQ channel: (B, 2, 3, L) x (2, 3) -> (B, 2, L)
-        y = torch.einsum("bial,ia->bil", permuted, normalized_weight)
+        # Mix ADCs with the same weights for both I and Q: (B, 2, 3, L) x (3,) -> (B, 2, L)
+        y = torch.einsum("bial,a->bil", permuted, normalized_weight)
         y = y + self.bias.view(1, 2, 1)
         return torch.where(zero_adc_rows.view(-1, 1, 1), x[:, 0, :, :], y)
 
