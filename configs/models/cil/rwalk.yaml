@@ -1,6 +1,4 @@
-# Model-specific overrides for rwalk.
 model: rwalk
 loader: class_incremental_loader
-
-lamb: 1000
+lamb: 100000.0
 alpha: 0.3

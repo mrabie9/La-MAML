@@ -1,5 +1,4 @@
 model: lwf
 loader: class_incremental_loader
-
-distill_lambda: 1.0
-use_groupnorm: False
+distill_lambda: 1
+use_groupnorm: false

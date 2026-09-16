@@ -1,5 +1,3 @@
-# Model-specific overrides for gem.
 model: gem
 loader: class_incremental_loader
-
-memory_strength: 1.0
+memory_strength: 1
