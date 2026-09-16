@@ -204,16 +204,23 @@ class AdcIqAdapter(nn.Module):
             raise ValueError(
                 f"ADC adapter expects (B, 3, 2, L) or (B, 3, L); got shape {tuple(x.shape)}."
             )
-        # If ADC1/ADC2 are padded with exact zeros (e.g. IID2 mixing 2-channel
-        # and 3-channel datasets), short-circuit and return ADC0's I/Q
-        # channels without applying the learned 3->2 mixing weights.
-        if torch.all(x[:, 1:, :, :] == 0).item():
-            return x[:, 0, :, :]
+        # Rows whose ADC1/ADC2 are padded with exact zeros (e.g. a 2-channel
+        # dataset batched alongside a 3-channel one) keep ADC0's I/Q channels
+        # instead of the learned 3->2 mixing, which would merely rescale them.
+        #
+        # This is decided per row. Deciding it for the whole batch made a
+        # sample's output depend on which other samples shared its batch: one
+        # genuine 3-ADC row switched every padded row in the batch onto the
+        # mixing path, scaling it by the ADC0 weight (~0.5 in trained runs).
+        # Training and batch-statistic evaluation hid this, because BatchNorm
+        # cancels a uniform scale, but running-statistic evaluation did not.
+        zero_adc_rows = x[:, 1:, :, :].abs().amax(dim=(1, 2, 3)) == 0
         # (B, 3, 2, L) -> (B, 2, 3, L)
-        x = x.permute(0, 2, 1, 3)
+        permuted = x.permute(0, 2, 1, 3)
         # Mix ADCs per IQ channel: (B, 2, 3, L) x (2, 3) -> (B, 2, L)
-        y = torch.einsum("bial,ia->bil", x, normalized_weight)
-        return y + self.bias.view(1, 2, 1)
+        y = torch.einsum("bial,ia->bil", permuted, normalized_weight)
+        y = y + self.bias.view(1, 2, 1)
+        return torch.where(zero_adc_rows.view(-1, 1, 1), x[:, 0, :, :], y)
 
 
 class _ResNet1D(nn.Module):
