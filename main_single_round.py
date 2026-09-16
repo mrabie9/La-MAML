@@ -257,6 +257,7 @@ def run_single_round_training(
     train_loader: DataLoader,
     test_loader: DataLoader,
     args,
+    task_index: int = 0,
 ) -> Tuple[torch.Tensor, torch.Tensor, float, Dict[str, np.ndarray]]:
     """Run a non-lifelong single-round training loop for ``n_epochs``.
 
@@ -268,6 +269,11 @@ def run_single_round_training(
         train_loader: Combined training DataLoader.
         test_loader: Combined test/validation DataLoader.
         args: Parsed experiment arguments / configuration.
+        task_index: Task id passed to ``model.observe``/eval for head and CIL
+            logit-mask selection. Callers combining multiple tasks (the
+            default) must pass the highest task index among the combined set
+            so class-incremental masking covers every combined class instead
+            of collapsing to task 0's block alone.
 
     Returns:
         Tuple of:
@@ -277,7 +283,7 @@ def run_single_round_training(
         - time_spent: Total wall-clock time spent in seconds.
 
     Usage:
-        result_val_t, result_val_a, time_spent = run_single_round_training(model, train_loader, test_loader, args)
+        result_val_t, result_val_a, time_spent = run_single_round_training(model, train_loader, test_loader, args, task_index=3)
     """
     device = torch.device(
         "cuda" if getattr(args, "cuda", False) and torch.cuda.is_available() else "cpu"
@@ -300,7 +306,7 @@ def run_single_round_training(
 
     time_start = time.time()
 
-    current_task_index = 0
+    current_task_index = task_index
 
     for epoch in range(args.n_epochs):
         model.real_epoch = epoch
@@ -364,9 +370,13 @@ def run_single_round_training(
                 )
             )
 
-        # Validation at end of epoch on the combined test loader.
+        # Validation at end of epoch on the combined test loader. Passing
+        # cil_mask_upto_task keeps class-incremental masking scoped to every
+        # combined task's classes, not just current_task_index's own block.
         val_loaders = [test_loader]
-        val_outputs = eval_tasks(model, val_loaders, args)
+        val_outputs = eval_tasks(
+            model, val_loaders, args, cil_mask_upto_task=current_task_index
+        )
         val_acc, val_prec, val_f1 = _split_eval_output(val_outputs)
         if isinstance(val_acc, (list, tuple)):
             val_acc_values = [float(v) for v in val_acc]
@@ -388,7 +398,11 @@ def run_single_round_training(
                 cur_val_prec = float(val_prec)
 
         result_val_a.append(val_acc_values)
-        result_val_t.append(current_task_index)
+        # Single-round training is one logical round regardless of the CIL
+        # mask width (current_task_index): metrics.transfer_stats derives its
+        # task count from result_val_t.max()+1, so it must stay a constant 0
+        # here or the confusion-matrix reduction indexes out of bounds.
+        result_val_t.append(0)
 
         avg_loss = float(np.mean(epoch_losses)) if epoch_losses else float("nan")
         avg_rec = float(np.mean(epoch_recalls)) if epoch_recalls else float("nan")
@@ -560,9 +574,10 @@ def main() -> None:
         args, loader
     )
     print("Single-round using task indices:", selected_indices)
+    combined_task_index = max(selected_indices)
 
     result_val_t, result_val_a, time_spent, metrics_payload = run_single_round_training(
-        model, train_loader, test_loader, args
+        model, train_loader, test_loader, args, task_index=combined_task_index
     )
 
     def _safe_last(values: np.ndarray | None) -> float | None:

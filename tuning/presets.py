@@ -353,6 +353,36 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
             }
         ),
     ),
+    "iid2_single_round": TuningPreset(
+        model_name="iid2",
+        description=(
+            "Run grid or random search over the learning rate for the"
+            " main_single_round.py (one-pass, no task boundaries) IID2 run."
+        ),
+        default_output_root="logs/tuning/iid2_single_round",
+        type_hints=COMMON_TYPE_HINTS,
+        single_round=True,
+        grid_factory=make_grid_factory(
+            {
+                "lr": {
+                    "kind": "float",
+                    "factors": (0.3, 1.0, 3.0),
+                    "min": 1e-5,
+                    "fallback": 1e-2,
+                    "values": [
+                        0.3,
+                        0.1,
+                        0.03,
+                        0.01,
+                        0.003,
+                        0.001,
+                        0.0003,
+                        0.0001,
+                    ],
+                },
+            }
+        ),
+    ),
     "lamaml": TuningPreset(
         model_name="lamaml_cifar",
         description="Run grid or random search over La-MAML hyperparameters.",

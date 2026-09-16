@@ -23,6 +23,7 @@ import yaml
 sys.path.append("/home/lunet/wsmr11/repos/La-MAML")  # to import from parent directory
 import parser as file_parser
 from main import life_experience
+from main_single_round import build_single_round_loaders, run_single_round_training
 from utils import misc_utils
 from utils.metric_keys import extract_metric
 
@@ -66,6 +67,9 @@ class TuningPreset:
     default_grid: Grid | None = None
     type_hints: TypeHints = field(default_factory=dict)
     grid_factory: Callable[[argparse.Namespace], Grid] | None = None
+    # When set, trials run through main_single_round.py's non-lifelong training
+    # loop (run_single_round_trial) instead of main.life_experience.
+    single_round: bool = False
 
     def resolve_description(self) -> str:
         if self.description:
@@ -586,6 +590,140 @@ def run_single_trial(
     }
 
 
+def run_single_round_trial(
+    base_args: argparse.Namespace,
+    constant_overrides: Dict[str, Any],
+    trial_overrides: Dict[str, Any],
+    trial_idx: int,
+    session_timestamp: str,
+    runs_root: Path,
+    seed_offset: int,
+    vary_seed: bool,
+    keep_expt_name: bool,
+    model_name: str,
+    seed_override: int | None = None,
+) -> Dict[str, Any]:
+    """Run one trial through main_single_round.py's non-lifelong training loop.
+
+    Mirrors :func:`run_single_trial`, but drives the single-round (no task
+    boundaries, no replay) training path used by ``main_single_round.py``
+    instead of ``main.life_experience``.
+
+    Usage:
+        outcome = run_single_round_trial(base_args, {}, {"lr": 0.01}, 0, ts, root, 0, False, False, "iid2")
+    """
+    args = deepcopy(base_args)
+    merged = dict(constant_overrides)
+    merged.update(trial_overrides)
+    for key, value in merged.items():
+        setattr(args, key, value)
+
+    args.model = model_name
+
+    args.log_dir = str(runs_root)
+    if seed_override is not None:
+        args.seed = int(seed_override)
+    else:
+        seed_base = int(getattr(base_args, "seed", 0) + seed_offset)
+        args.seed = seed_base + (trial_idx if vary_seed else 0)
+
+    trial_slug = slugify_params(trial_overrides)
+    if not keep_expt_name:
+        base_name = getattr(base_args, "expt_name", model_name)
+        seed_tag = f"_seed{args.seed}" if seed_override is not None else ""
+        args.expt_name = f"{base_name}_tune_{trial_idx:03d}_{trial_slug}{seed_tag}"[
+            :120
+        ]
+
+    trial_timestamp = f"{session_timestamp}-trial{trial_idx:03d}"
+    if seed_override is not None:
+        trial_timestamp = f"{trial_timestamp}-seed{args.seed}"
+
+    misc_utils.resolve_task_order_seed(args)
+
+    misc_utils.init_seed(args.seed)
+    log_dir, tf_dir = misc_utils.log_dir(args, trial_timestamp, model_name)
+    args.log_dir = log_dir
+    args.tf_dir = tf_dir
+    if hasattr(args, "data_path"):
+        data_path = Path(args.data_path).expanduser()
+        if not data_path.is_absolute() and not data_path.exists():
+            candidate = REPO_ROOT / data_path
+            if candidate.exists():
+                args.data_path = str(candidate)
+
+    loader_mod = importlib.import_module(f"dataloaders.{args.loader}")
+    loader = loader_mod.IncrementalLoader(args, seed=args.seed)
+    n_inputs, n_outputs, n_tasks = loader.get_dataset_info()
+    args.get_samples_per_task = getattr(loader, "get_samples_per_task", None)
+    args.classes_per_task = getattr(loader, "classes_per_task", None)
+
+    model_mod = importlib.import_module(f"model.{args.model}")
+    model = model_mod.Net(n_inputs, n_outputs, n_tasks, args)
+
+    if getattr(args, "cuda", False) and torch.cuda.is_available():
+        model = model.cuda()
+
+    try:
+        train_loader, test_loader, selected_indices = build_single_round_loaders(
+            args, loader
+        )
+        (
+            _result_val_t,
+            result_val_a,
+            spent,
+            metrics_payload,
+        ) = run_single_round_training(
+            model,
+            train_loader,
+            test_loader,
+            args,
+            task_index=max(selected_indices),
+        )
+    finally:
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    metrics_dir = Path(log_dir) / "metrics"
+    metrics_dir.mkdir(parents=True, exist_ok=True)
+    np.savez(metrics_dir / "task0.npz", **metrics_payload)
+
+    val_scores = extract_final_scores(result_val_a)
+    val_mean = compute_mean(val_scores)
+
+    val_macro_f1_per_epoch = np.asarray(
+        metrics_payload.get("val_macro_f1_per_epoch", []), dtype=float
+    )
+    finite_f1 = val_macro_f1_per_epoch[~np.isnan(val_macro_f1_per_epoch)]
+    val_macro_f1_mean = float(finite_f1[-1]) if finite_f1.size else float("nan")
+    if np.isnan(val_macro_f1_mean):
+        print(
+            "[WARN] Trial {} has no usable macro F1 in {}. Falling back to val_mean ({:.4f}) for tuning score.".format(
+                trial_idx, log_dir, val_mean
+            )
+        )
+        score = val_mean
+    else:
+        score = val_macro_f1_mean
+
+    return {
+        "status": "ok",
+        "trial": trial_idx,
+        "log_dir": log_dir,
+        "tf_dir": tf_dir,
+        "params": merged,
+        "trial_params": dict(trial_overrides),
+        "fixed_params": dict(constant_overrides),
+        "val_per_task": val_scores,
+        "val_mean": val_mean,
+        "val_macro_f1_mean": val_macro_f1_mean,
+        "test_per_task": [],
+        "test_mean": float("nan"),
+        "score": score,
+        "duration_sec": float(spent),
+    }
+
+
 def _mean_per_task(lists: Sequence[Sequence[float]]) -> List[float]:
     """Elementwise-average per-task score lists, truncating to the shortest."""
     non_empty = [list(lst) for lst in lists if lst]
@@ -672,15 +810,19 @@ def run_trial_over_seeds(
     keep_expt_name: bool,
     model_name: str,
     seeds: Sequence[int],
+    trial_runner: Callable[..., Dict[str, Any]] = run_single_trial,
 ) -> Dict[str, Any]:
     """Run one trial, optionally averaging its metrics over several seeds.
 
     When ``seeds`` is empty the behaviour is identical to a single
-    ``run_single_trial`` call. Otherwise the trial is run once per seed and the
+    ``trial_runner`` call. Otherwise the trial is run once per seed and the
     results are combined with :func:`aggregate_seed_results`.
 
     Args:
         seeds: Seeds to average over; empty for single-seed behaviour.
+        trial_runner: The single-trial function to invoke (``run_single_trial``
+            for the lifelong path, ``run_single_round_trial`` for the
+            ``main_single_round.py`` path).
         (Remaining args mirror :func:`run_single_trial`.)
 
     Returns:
@@ -690,7 +832,7 @@ def run_trial_over_seeds(
         record = run_trial_over_seeds(..., seeds=[0, 39, 55])
     """
     if not seeds:
-        return run_single_trial(
+        return trial_runner(
             base_args,
             constant_overrides,
             trial_overrides,
@@ -705,7 +847,7 @@ def run_trial_over_seeds(
 
     per_seed_results: List[Dict[str, Any]] = []
     for seed in seeds:
-        outcome = run_single_trial(
+        outcome = trial_runner(
             base_args,
             constant_overrides,
             trial_overrides,
@@ -952,6 +1094,8 @@ def run_tuning(preset: TuningPreset) -> None:
     runs_root = session_dir / "runs"
     runs_root.mkdir(parents=True, exist_ok=True)
 
+    trial_runner = run_single_round_trial if preset.single_round else run_single_trial
+
     results: List[Dict[str, Any]] = []
 
     def run_trials(
@@ -976,6 +1120,7 @@ def run_tuning(preset: TuningPreset) -> None:
                     cli.keep_expt_name,
                     preset.model_name,
                     seeds,
+                    trial_runner=trial_runner,
                 )
             except Exception as exc:  # pylint: disable=broad-except
                 trace = traceback.format_exc()
@@ -1153,6 +1298,8 @@ __all__ = [
     "run_tuning",
     "make_main",
     "parse_seeds",
+    "run_single_trial",
+    "run_single_round_trial",
     "run_trial_over_seeds",
     "aggregate_seed_results",
 ]
