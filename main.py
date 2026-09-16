@@ -20,7 +20,7 @@ from torch.autograd import Variable
 from torch.utils.data import ConcatDataset, DataLoader, Dataset
 
 import parser as file_parser
-from metrics.metrics import confusion_matrix, signal_class_f1_summary
+from metrics.metrics import append_metric_block, confusion_matrix
 from model import task_bn
 from utils import misc_utils
 from utils.training_metrics import (
@@ -427,7 +427,100 @@ def _maybe_print_train_metric_debug(
     )
 
 
-def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
+def _evaluate_one_loader(
+    model, loader, task_index, args, class_counts, cil_mask_upto_task=None
+):
+    """Score one dataloader, returning ``(macro_rec, macro_prec, macro_f1)``.
+
+    Metrics are computed per batch and averaged over batches, which is the
+    convention the whole repo's numbers are on; changing it would invalidate
+    every stored result.
+
+    Runs under ``torch.no_grad()``: the metric loop never backpropagates, but it
+    used to build an autograd graph for every evaluation batch anyway. No model
+    needs gradients in ``forward`` (every ``backward``/``autograd.grad`` call
+    sits in a training path), so this is numerically identical and only changes
+    peak memory and speed.
+
+    Args:
+        model: Continual-learning module (already in ``eval()`` mode).
+        loader: Dataloader yielding ``(x, y)`` or ``(x, y, t)`` batches.
+        task_index: Task id used for head/BN selection and label offsets.
+        args: Experiment arguments.
+        class_counts: Per-task class counts, or ``None`` to fall back to args.
+        cil_mask_upto_task: CIL logit-space bound; defaults to ``task_index``.
+
+    Returns:
+        Tuple of three floats.
+    """
+    device = torch.device(
+        "cuda" if getattr(args, "cuda", False) and torch.cuda.is_available() else "cpu"
+    )
+    recalls = []
+    precisions = []
+    f1s = []
+    eval_debug_predictions: List[torch.Tensor] = []
+    eval_debug_targets: List[torch.Tensor] = []
+    with torch.no_grad():
+        for batch in loader:
+            if isinstance(batch, (list, tuple)) and len(batch) == 3:
+                xb, yb, _ = batch
+            else:
+                xb, yb = batch
+            xb = xb.to(device)
+            if getattr(args, "arch", "").lower() == "linear":
+                xb = xb.view(xb.size(0), -1)
+            if not torch.is_tensor(yb):
+                yb = torch.as_tensor(yb)
+
+            logits = model_forward_for_metric_loop(
+                model, xb, task_index, args, cil_mask_upto_task=cil_mask_upto_task
+            )
+            pb = torch.argmax(logits, dim=1).cpu()
+            yb_cls_for_metrics = yb.detach().cpu()
+            # Task-incremental learners (UCL and any model exposing ``split``)
+            # emit task-local logits; shift global labels the same way as the
+            # training metric loop in ``life_experience``
+            # (``model.compute_offsets``).
+            if getattr(model, "split", False):
+                compute_offsets_fn = getattr(model, "compute_offsets", None)
+                if callable(compute_offsets_fn):
+                    offset1, _ = compute_offsets_fn(task_index)
+                else:
+                    offset1, _ = misc_utils.compute_offsets(
+                        task_index,
+                        class_counts if class_counts is not None else args.nc_per_task,
+                    )
+                yb_cls_for_metrics = yb_cls_for_metrics - offset1
+
+            eval_debug_predictions.append(pb)
+            eval_debug_targets.append(yb_cls_for_metrics)
+
+            recalls.append(macro_recall(pb, yb_cls_for_metrics))
+            precisions.append(macro_precision(pb, yb_cls_for_metrics))
+            f1s.append(macro_f1(pb, yb_cls_for_metrics))
+
+    _maybe_print_eval_prediction_debug(
+        task_index=task_index,
+        all_predictions=eval_debug_predictions,
+        all_targets=eval_debug_targets,
+    )
+
+    return (
+        sum(recalls) / len(recalls) if recalls else 0.0,
+        sum(precisions) / len(precisions) if precisions else 0.0,
+        sum(f1s) / len(f1s) if f1s else 0.0,
+    )
+
+
+def eval_tasks(
+    model,
+    tasks,
+    args,
+    specific_task=None,
+    eval_epistemic=False,
+    cil_mask_upto_task=None,
+):
     """Evaluate per-task macro recall, precision and F1 over signal classes.
 
     Args:
@@ -436,6 +529,9 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
         args: Experiment arguments (``cuda``, ``arch``, ``loader``, ...).
         specific_task: Evaluate only this task id when not ``None``.
         eval_epistemic: Accepted for call-site compatibility; unused.
+        cil_mask_upto_task: CIL logit-space bound shared by every entry; see
+            :func:`utils.training_forward.model_forward_for_metric_loop`.
+            ``None`` keeps each entry masked to its own index.
 
     Returns:
         Tuple of three per-task lists: macro recall, macro precision, macro F1.
@@ -444,9 +540,6 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
         rec, prec, f1 = eval_tasks(model, test_task_loaders, args)
     """
     model.eval()
-    device = torch.device(
-        "cuda" if getattr(args, "cuda", False) and torch.cuda.is_available() else "cpu"
-    )
     results = []
     prec_results = []
     f1_results = []
@@ -464,56 +557,17 @@ def eval_tasks(model, tasks, args, specific_task=None, eval_epistemic=False):
         task_ids = list(range(len(tasks)))
 
     for task_position, task in enumerate(tasks):
-        t = task_ids[task_position]
-        recalls = []
-        precisions = []
-        f1s = []
-        eval_debug_predictions: List[torch.Tensor] = []
-        eval_debug_targets: List[torch.Tensor] = []
-        for batch in task:
-            if isinstance(batch, (list, tuple)) and len(batch) == 3:
-                xb, yb, _ = batch
-            else:
-                xb, yb = batch
-            xb = xb.to(device)
-            if getattr(args, "arch", "").lower() == "linear":
-                xb = xb.view(xb.size(0), -1)
-            if not torch.is_tensor(yb):
-                yb = torch.as_tensor(yb)
-
-            logits = model_forward_for_metric_loop(model, xb, t, args)
-            pb = torch.argmax(logits, dim=1).cpu()
-            yb_cls_for_metrics = yb.detach().cpu()
-            # Task-incremental learners (UCL and any model exposing ``split``) emit
-            # task-local logits; shift global labels the same way as the training
-            # metric loop in ``life_experience`` (``model.compute_offsets``).
-            if getattr(model, "split", False):
-                compute_offsets_fn = getattr(model, "compute_offsets", None)
-                if callable(compute_offsets_fn):
-                    offset1, _ = compute_offsets_fn(t)
-                else:
-                    offset1, _ = misc_utils.compute_offsets(
-                        t,
-                        class_counts if class_counts is not None else args.nc_per_task,
-                    )
-                yb_cls_for_metrics = yb_cls_for_metrics - offset1
-
-            eval_debug_predictions.append(pb)
-            eval_debug_targets.append(yb_cls_for_metrics)
-
-            recalls.append(macro_recall(pb, yb_cls_for_metrics))
-            precisions.append(macro_precision(pb, yb_cls_for_metrics))
-            f1s.append(macro_f1(pb, yb_cls_for_metrics))
-
-        results.append(sum(recalls) / len(recalls) if recalls else 0.0)
-        prec_results.append(sum(precisions) / len(precisions) if precisions else 0.0)
-        f1_results.append(sum(f1s) / len(f1s) if f1s else 0.0)
-
-        _maybe_print_eval_prediction_debug(
-            task_index=t,
-            all_predictions=eval_debug_predictions,
-            all_targets=eval_debug_targets,
+        rec, prec, f1 = _evaluate_one_loader(
+            model,
+            task,
+            task_ids[task_position],
+            args,
+            class_counts,
+            cil_mask_upto_task=cil_mask_upto_task,
         )
+        results.append(rec)
+        prec_results.append(prec)
+        f1_results.append(f1)
 
     return results, prec_results, f1_results
 
@@ -525,7 +579,8 @@ def eval_class_tasks(model, tasks, args, **kwargs):
         model: Continual-learning module to evaluate.
         tasks: Sequence of per-task dataloaders.
         args: Experiment arguments.
-        **kwargs: ``specific_task`` / ``eval_epistemic`` passthrough.
+        **kwargs: ``specific_task`` / ``eval_epistemic`` / ``cil_mask_upto_task``
+            passthrough.
 
     Returns:
         Tuple of three per-task lists: macro recall, macro precision, macro F1.
@@ -540,7 +595,158 @@ def eval_class_tasks(model, tasks, args, **kwargs):
         args,
         specific_task=kwargs.get("specific_task"),
         eval_epistemic=kwargs.get("eval_epistemic", False),
+        cil_mask_upto_task=kwargs.get("cil_mask_upto_task"),
     )
+
+
+def _global_label_to_task(class_counts, n_labels):
+    """Map each global class label to the task that owns it."""
+    counts = [int(c) for c in class_counts] if class_counts is not None else []
+    mapping = torch.zeros(
+        max(int(n_labels), sum(counts) if counts else 0), dtype=torch.long
+    )
+    start = 0
+    for task_index, count in enumerate(counts):
+        stop = min(start + count, mapping.numel())
+        if start < stop:
+            mapping[start:stop] = task_index
+        start += count
+    return mapping
+
+
+def eval_cil_pooled(model, union_loader, current_task, args):
+    """One pass over the pooled tasks ``0..current_task`` test set.
+
+    Returns both CIL numbers from the *same* forward passes:
+
+    * the **headline** -- macro rec/prec/F1 over every class seen so far, which
+      must be measured on mixed batches because
+      :func:`utils.training_metrics.macro_f1` macro-averages over the labels
+      present in each batch;
+    * the **per-task columns** -- the same predictions sliced by the task that
+      owns each sample's true label.
+
+    Scoring the columns from task-pure loaders instead looks equivalent but is
+    not, whenever ``--eval_bn_stats batch`` is in play: BatchNorm then
+    normalises with the current batch's statistics, so a task-pure batch and a
+    mixed batch yield *different predictions for the same sample*. Models whose
+    training batches mix tasks (iid2's cumulative replay, and every replay
+    method) are then scored under a distribution they never trained on, and the
+    columns measure that mismatch on top of forgetting -- for iid2 it dragged
+    mean per-task recall from 0.68 to 0.28. Slicing one pooled pass keeps the
+    columns and the headline on identical forward passes, and costs one pass
+    instead of ``current_task + 2``.
+
+    Args:
+        model: Continual-learning module to evaluate.
+        union_loader: Shuffled loader over the pooled tasks ``0..current_task``.
+        current_task: Task just trained; also the CIL logit-space bound.
+        args: Experiment arguments.
+
+    Returns:
+        ``((col_rec, col_prec, col_f1), (rec, prec, f1))`` -- per-task lists of
+        length ``current_task + 1``, then the three headline floats.
+    """
+    model.eval()
+    device = torch.device(
+        "cuda" if getattr(args, "cuda", False) and torch.cuda.is_available() else "cpu"
+    )
+    task_index = int(current_task)
+    class_counts = getattr(args, "classes_per_task", None)
+
+    recalls = []
+    precisions = []
+    f1s = []
+    pooled_preds = []
+    pooled_metric_targets = []
+    pooled_raw_targets = []
+    with torch.no_grad():
+        for batch in union_loader:
+            if isinstance(batch, (list, tuple)) and len(batch) == 3:
+                xb, yb, _ = batch
+            else:
+                xb, yb = batch
+            xb = xb.to(device)
+            if getattr(args, "arch", "").lower() == "linear":
+                xb = xb.view(xb.size(0), -1)
+            if not torch.is_tensor(yb):
+                yb = torch.as_tensor(yb)
+
+            logits = model_forward_for_metric_loop(
+                model, xb, task_index, args, cil_mask_upto_task=task_index
+            )
+            pb = torch.argmax(logits, dim=1).cpu()
+            raw_targets = yb.detach().cpu()
+            metric_targets = raw_targets
+            # UCL (``split``) emits task-local logits. A pooled batch spans many
+            # tasks, so a single offset is already ill-defined here; keep the
+            # pre-existing behaviour rather than change it silently.
+            if getattr(model, "split", False):
+                compute_offsets_fn = getattr(model, "compute_offsets", None)
+                if callable(compute_offsets_fn):
+                    offset1, _ = compute_offsets_fn(task_index)
+                else:
+                    offset1, _ = misc_utils.compute_offsets(
+                        task_index,
+                        class_counts if class_counts is not None else args.nc_per_task,
+                    )
+                metric_targets = metric_targets - offset1
+
+            recalls.append(macro_recall(pb, metric_targets))
+            precisions.append(macro_precision(pb, metric_targets))
+            f1s.append(macro_f1(pb, metric_targets))
+
+            pooled_preds.append(pb)
+            pooled_metric_targets.append(metric_targets)
+            pooled_raw_targets.append(raw_targets)
+
+    headline = (
+        sum(recalls) / len(recalls) if recalls else 0.0,
+        sum(precisions) / len(precisions) if precisions else 0.0,
+        sum(f1s) / len(f1s) if f1s else 0.0,
+    )
+
+    col_rec = []
+    col_prec = []
+    col_f1 = []
+    if pooled_preds:
+        preds = torch.cat(pooled_preds)
+        metric_targets = torch.cat(pooled_metric_targets)
+        raw_targets = torch.cat(pooled_raw_targets)
+        label_task = _global_label_to_task(
+            class_counts, int(raw_targets.max().item()) + 1
+        )
+        owning_task = label_task[raw_targets.clamp(min=0)]
+        for t in range(task_index + 1):
+            selected = owning_task == t
+            if bool(selected.any()):
+                col_rec.append(macro_recall(preds[selected], metric_targets[selected]))
+                col_prec.append(
+                    macro_precision(preds[selected], metric_targets[selected])
+                )
+                col_f1.append(macro_f1(preds[selected], metric_targets[selected]))
+            else:
+                col_rec.append(0.0)
+                col_prec.append(0.0)
+                col_f1.append(0.0)
+
+    return (col_rec, col_prec, col_f1), headline
+
+
+def _evaluate_validation(
+    model, test_task_loaders, cil_union_loader, current_task, args, cil_mode
+):
+    """Per-task validation columns, plus the CIL headline when in CIL mode.
+
+    CIL slices one pooled pass (see :func:`eval_cil_pooled`); TIL scores each
+    task's own loader, where task-pure batches match how TIL models train.
+
+    Returns:
+        ``((rec, prec, f1), headline)`` with ``headline`` ``None`` under TIL.
+    """
+    if cil_mode and cil_union_loader is not None:
+        return eval_cil_pooled(model, cil_union_loader, current_task, args)
+    return eval_tasks(model, test_task_loaders, args), None
 
 
 def _save_task_checkpoint(
@@ -634,9 +840,13 @@ def life_experience(model, inc_loader, args):
     # they train task t on tasks 0..t, so every task's training set is retained.
     cumulative_replay = bool(getattr(model, "cumulative_replay", False))
     seen_train_datasets = []
-    evaluator = eval_tasks
-    if args.loader == "class_incremental_loader":
-        evaluator = eval_class_tasks
+    # Validation routing lives in ``_evaluate_validation``: CIL slices one pooled
+    # pass, TIL scores each task's own loader.
+    cil_mode = args.loader == "class_incremental_loader"
+    # CIL headline per task: macro rec/prec/f1 on the pooled tasks 0..t test set.
+    cil_union_rec: list[float] = []
+    cil_union_prec: list[float] = []
+    cil_union_f1: list[float] = []
 
     interactive_terminal = sys.stdout.isatty()
     amp_dtype = (
@@ -670,10 +880,20 @@ def life_experience(model, inc_loader, args):
         result_acc_val = []
         result_acc_tr = []
         task_info, train_loader, _, test_loader = inc_loader.new_task()
-        test_task_loaders.append(test_loader)
+        current_task = task_info["task"]
+        # Under the CIL loader ``new_task`` hands back the *pooled* tasks 0..t
+        # test set. Keeping that as column t made every column a nested prefix,
+        # so the per-task retention the BWT/forgetting/FWT machinery expects was
+        # never measured (and the mean over columns counted early tasks up to
+        # n_tasks times). Columns are the per-task splits; the pooled loader is
+        # scored separately as the CIL headline.
+        cil_union_loader = test_loader if cil_mode else None
+        if cil_mode:
+            test_task_loaders.append(inc_loader.get_tasks("test")[current_task])
+        else:
+            test_task_loaders.append(test_loader)
         if cumulative_replay:
             train_loader = _cumulative_train_loader(seen_train_datasets, train_loader)
-        current_task = task_info["task"]
         task_n_epochs = task_epoch_schedule.get(current_task, base_n_epochs)
         args.n_epochs = task_n_epochs
 
@@ -681,7 +901,9 @@ def life_experience(model, inc_loader, args):
             args.state_logging,
             "Task {}: zero-shot validation (pre-train)".format(current_task),
         )
-        zero_shot_raw = evaluator(model, test_task_loaders, args)
+        zero_shot_raw, _ = _evaluate_validation(
+            model, test_task_loaders, cil_union_loader, current_task, args, cil_mode
+        )
         zs_rec, zs_prec, zs_f1 = _split_eval_output(zero_shot_raw)
         num_tasks_now = len(test_task_loaders)
         current_task_idx = task_info["task"]
@@ -831,7 +1053,14 @@ def life_experience(model, inc_loader, args):
                         current_task, ep + 1, task_n_epochs
                     ),
                 )
-                val_acc = evaluator(model, test_task_loaders, args)
+                val_acc, _ = _evaluate_validation(
+                    model,
+                    test_task_loaders,
+                    cil_union_loader,
+                    current_task,
+                    args,
+                    cil_mode,
+                )
                 val_acc, val_prec, val_f1 = _split_eval_output(val_acc)
                 epoch_eval_time += time.time() - eval_start
                 result_acc_val.append(val_acc)
@@ -959,7 +1188,9 @@ def life_experience(model, inc_loader, args):
             args.state_logging,
             "Task {}: running final validation.".format(current_task),
         )
-        val_acc = evaluator(model, test_task_loaders, args)
+        val_acc, val_headline = _evaluate_validation(
+            model, test_task_loaders, cil_union_loader, current_task, args, cil_mode
+        )
         val_acc, val_prec, val_f1 = _split_eval_output(val_acc)
         result_val_a.append(val_acc)
         if val_prec is not None:
@@ -967,6 +1198,18 @@ def life_experience(model, inc_loader, args):
         if val_f1 is not None:
             result_val_f1.append(val_f1)
         result_val_t.append(task_info["task"])
+
+        if val_headline is not None:
+            union_rec, union_prec, union_f1 = val_headline
+            cil_union_rec.append(union_rec)
+            cil_union_prec.append(union_prec)
+            cil_union_f1.append(union_f1)
+            print(
+                "---- CIL all-seen-classes (tasks 0..{}): macro_rec {:.4f} | "
+                "macro_prec {:.4f} | macro_f1 {:.4f} ----".format(
+                    current_task, union_rec, union_prec, union_f1
+                )
+            )
 
         losses = np.array(result_epoch_loss)
         result_acc_tr = np.array(
@@ -1008,6 +1251,15 @@ def life_experience(model, inc_loader, args):
         }
         if result_val_f1_flat is not None:
             save_payload["val_macro_f1"] = result_val_f1_flat
+        if cil_mode and cil_union_f1:
+            # One entry per task completed so far: the CIL score over every class
+            # seen up to that task. Element -1 is this task's headline; the whole
+            # vector is the decay curve to plot.
+            save_payload["cil_union_macro_rec"] = np.asarray(cil_union_rec, dtype=float)
+            save_payload["cil_union_macro_prec"] = np.asarray(
+                cil_union_prec, dtype=float
+            )
+            save_payload["cil_union_macro_f1"] = np.asarray(cil_union_f1, dtype=float)
         # Optional: per-epoch training metrics for this task.
         if per_epoch_train_cls_rec:
             save_payload["train_macro_rec"] = np.asarray(
@@ -1046,7 +1298,9 @@ def life_experience(model, inc_loader, args):
             f_task_order.write(str(task_name) + "\n")
 
         if args.calc_test_accuracy:
-            test_acc = evaluator(model, test_task_loaders, args)
+            test_acc, _ = _evaluate_validation(
+                model, test_task_loaders, cil_union_loader, current_task, args, cil_mode
+            )
             test_acc, test_prec, test_f1 = _split_eval_output(test_acc)
             result_test_a.append(test_acc)
             result_test_t.append(task_info["task"])
@@ -1079,10 +1333,16 @@ def life_experience(model, inc_loader, args):
             return sum(float(v) for v in x) / len(x)
         return float(x)
 
-    # Headline macro F1 values, stashed on args so main() can record them for
-    # the cross-seed sweep summary. Both default to None.
-    args.final_val_macro_f1 = None
-    args.final_tr_macro_f1 = None
+    # Headline macro metrics after the last task, returned so main() can
+    # record them for the cross-seed sweep summary. Missing values stay None.
+    headline = {
+        "val_macro_rec": None,
+        "val_macro_prec": None,
+        "val_macro_f1": None,
+        "tr_macro_rec": None,
+        "tr_macro_prec": None,
+        "tr_macro_f1": None,
+    }
 
     if (
         last_tr_cls_rec is not None
@@ -1092,7 +1352,9 @@ def life_experience(model, inc_loader, args):
         tr_rec = float(last_tr_cls_rec) if last_tr_cls_rec is not None else None
         tr_prec = float(last_tr_cls_prec) if last_tr_cls_prec is not None else None
         tr_f1 = float(last_tr_cls_f1) if last_tr_cls_f1 is not None else None
-        args.final_tr_macro_f1 = tr_f1
+        headline["tr_macro_rec"] = tr_rec
+        headline["tr_macro_prec"] = tr_prec
+        headline["tr_macro_f1"] = tr_f1
         parts = []
         if tr_rec is not None:
             parts.append("macro_rec={:.4f}".format(tr_rec))
@@ -1104,10 +1366,19 @@ def life_experience(model, inc_loader, args):
             print("SUMMARY_TR " + " ".join(parts))
 
     if result_val_a:
-        te_rec = _mean(result_val_a[-1])
-        te_prec = _mean(result_val_prec[-1]) if result_val_prec else None
-        te_f1 = _mean(result_val_f1[-1]) if result_val_f1 else None
-        args.final_val_macro_f1 = te_f1
+        if cil_mode and cil_union_f1:
+            # CIL headline is the score over every class seen after the last
+            # task, not the mean of the per-task columns.
+            te_rec = cil_union_rec[-1]
+            te_prec = cil_union_prec[-1]
+            te_f1 = cil_union_f1[-1]
+        else:
+            te_rec = _mean(result_val_a[-1])
+            te_prec = _mean(result_val_prec[-1]) if result_val_prec else None
+            te_f1 = _mean(result_val_f1[-1]) if result_val_f1 else None
+        headline["val_macro_rec"] = float(te_rec)
+        headline["val_macro_prec"] = float(te_prec) if te_prec is not None else None
+        headline["val_macro_f1"] = float(te_f1) if te_f1 is not None else None
         parts = ["macro_rec={:.4f}".format(te_rec)]
         if te_prec is not None:
             parts.append("macro_prec={:.4f}".format(te_prec))
@@ -1178,9 +1449,11 @@ def life_experience(model, inc_loader, args):
         torch.Tensor(result_val_t),
         _pad_results(result_val_a),
         _pad_results(result_val_prec),
+        _pad_results(result_val_f1),
         torch.Tensor(result_test_t),
         _pad_results(result_test_a),
         time_spent,
+        headline,
     )
 
 
@@ -1405,11 +1678,22 @@ def save_results(
     result_val_t,
     result_val_a,
     result_val_prec,
+    result_val_f1,
     result_test_t,
     result_test_a,
     model,
     spent_time,
 ):
+    """Write results.txt / results.pt for one seed.
+
+    results.txt holds the recall task matrix (written by ``confusion_matrix``,
+    kept first so older parsers still find the zero-shot row and ``Backward:``),
+    then the precision and F1 matrices, then a per-metric summary table.
+
+    Returns:
+        ``(val_stats, test_stats, val_bwt)`` where ``val_bwt`` maps ``rec``,
+        ``prec`` and ``f1`` to the mean validation BWT (None if unavailable).
+    """
     fname = os.path.join(args.log_dir, "results")
     log_state(args.state_logging, "Saving results to {}".format(fname))
 
@@ -1451,28 +1735,51 @@ def save_results(
         )
         one_liner += " # test: " + " ".join(["%.3f" % stat for stat in test_stats])
 
-    # Append signal-class F1 (from cls_rec and cls_prec) and its BWT to results.txt.
-    f1_summary = signal_class_f1_summary(result_val_t, result_val_a, result_val_prec)
-    if f1_summary is not None:
-        reduced_f1, final_f1, bwt_f1 = f1_summary
-        results_path = os.path.join(args.log_dir, "results.txt")
-        try:
-            with open(results_path, "a", encoding="utf-8") as results_file:
-                print("", file=results_file)
+    # Append precision and F1 task matrices plus a per-metric summary table.
+    results_path = os.path.join(args.log_dir, "results.txt")
+    metric_stats = {
+        "rec": {
+            "diag": float(val_stats[0]),
+            "final": float(val_stats[1]),
+            "bwt": float(val_stats[2]),
+            "fwt": float(val_stats[3]),
+        },
+        "prec": append_metric_block(
+            results_path, "Precision", result_val_t, result_val_prec
+        ),
+        "f1": append_metric_block(results_path, "F1", result_val_t, result_val_f1),
+    }
+    try:
+        with open(results_path, "a", encoding="utf-8") as results_file:
+            print("", file=results_file)
+            print("Summary (validation):", file=results_file)
+            print(
+                "{:<10} {:>8} {:>8} {:>8} {:>8}".format(
+                    "metric", "diagonal", "final", "bwt", "fwt"
+                ),
+                file=results_file,
+            )
+            for key, label in (("rec", "recall"), ("prec", "precision"), ("f1", "f1")):
+                stats = metric_stats[key]
+                if stats is None:
+                    continue
                 print(
-                    "Signal-class F1 (harmonic mean of cls_rec and cls_prec):",
+                    "{:<10} {:>8.4f} {:>8.4f} {:>8.4f} {:>8.4f}".format(
+                        label, stats["diag"], stats["final"], stats["bwt"], stats["fwt"]
+                    ),
                     file=results_file,
                 )
-                for row in range(reduced_f1.size(0)):
-                    print(
-                        " ".join(["%.4f" % value for value in reduced_f1[row]]),
-                        file=results_file,
-                    )
-                print("Final Signal-class F1: %.4f" % final_f1, file=results_file)
-                print("Backward Signal-class F1: %.4f" % bwt_f1, file=results_file)
-        except OSError:
-            pass
-        one_liner += " # signal_f1: final={:.4f} bwt={:.4f}".format(final_f1, bwt_f1)
+    except OSError:
+        pass
+
+    val_bwt = {
+        key: (stats["bwt"] if stats is not None else None)
+        for key, stats in metric_stats.items()
+    }
+    one_liner += " # bwt: " + " ".join(
+        "{}={}".format(key, "n/a" if value is None else "{:.4f}".format(value))
+        for key, value in val_bwt.items()
+    )
 
     one_liner += " # sizes: model_gb={:.4f} mem_gb={:.4f}".format(size_gb, buffer_gb)
     one_liner += " # state_gb: {} total={:.4f}".format(
@@ -1508,7 +1815,7 @@ def save_results(
         fname + ".pt",
         pickle_protocol=4,
     )
-    return val_stats, test_stats
+    return val_stats, test_stats, val_bwt
 
 
 def _default_main_config_chain() -> List[str]:
@@ -1533,26 +1840,42 @@ def _parse_seed_list(raw: str) -> List[int]:
     return seeds
 
 
-# Classification F1 fields recorded per seed, paired with display labels.
-SWEEP_F1_FIELDS = [
+# Final macro metrics recorded per seed, paired with display labels.
+SWEEP_FINAL_FIELDS = [
+    ("val_macro_rec", "Validation macro_rec"),
+    ("val_macro_prec", "Validation macro_prec"),
     ("val_macro_f1", "Validation macro_f1"),
+    ("tr_macro_rec", "Training macro_rec"),
+    ("tr_macro_prec", "Training macro_prec"),
     ("tr_macro_f1", "Training macro_f1"),
 ]
 
+# Per-metric validation backward transfer recorded per seed.
+SWEEP_BWT_FIELDS = [
+    ("val_bwt_rec", "Validation BWT rec"),
+    ("val_bwt_prec", "Validation BWT prec"),
+    ("val_bwt_f1", "Validation BWT f1"),
+]
 
-def _write_seed_metrics(args, spent_time):
+
+def _write_seed_metrics(args, spent_time, headline, val_bwt):
     """Write a small machine-readable metrics file into the seed's log dir.
 
-    Records the headline classification F1 (cls_f1) values stashed on ``args``
-    by life_experience. The multi-seed launcher reads these back to build the
+    Records the headline macro recall/precision/F1 returned by
+    ``life_experience`` and the per-metric validation BWT returned by
+    ``save_results``. The multi-seed launcher reads these back to build the
     cross-seed summary.
     """
     payload = {
         "seed": args.seed,
-        "val_macro_f1": getattr(args, "final_val_macro_f1", None),
-        "tr_macro_f1": getattr(args, "final_tr_macro_f1", None),
-        "runtime_seconds": float(spent_time),
+        "task_order_seed": getattr(args, "task_order_seed", None),
+        "task_order_seed_source": getattr(args, "task_order_seed_source", None),
     }
+    for field, _label in SWEEP_FINAL_FIELDS:
+        payload[field] = headline.get(field)
+    for key in ("rec", "prec", "f1"):
+        payload["val_bwt_" + key] = val_bwt.get(key)
+    payload["runtime_seconds"] = float(spent_time)
     path = os.path.join(args.log_dir, "seed_metrics.json")
     try:
         with open(path, "w", encoding="utf-8") as f:
@@ -1562,10 +1885,11 @@ def _write_seed_metrics(args, spent_time):
 
 
 def _write_sweep_summary(experiment_root, seeds):
-    """Aggregate per-seed cls_f1 into a cross-seed results.txt summary.
+    """Aggregate per-seed metrics into a cross-seed results.txt summary.
 
-    Reads each seed's seed_metrics.json and writes mean +/- std of the
-    classification F1 (and runtime) to ``<experiment_root>/results.txt``.
+    Reads each seed's seed_metrics.json and writes mean +/- std of the final
+    macro recall/precision/F1, their validation BWT, and the runtime to
+    ``<experiment_root>/results.txt``.
     """
     per_seed = []
     for seed in seeds:
@@ -1590,22 +1914,26 @@ def _write_sweep_summary(experiment_root, seeds):
         else:
             std = 0.0
         per_seed_str = ", ".join("{:.4f}".format(x) for x in vals)
-        return "  {:<20} (n={}): {:.4f} +/- {:.4f}   [{}]".format(
+        return "  {:<22} (n={}): {:.4f} +/- {:.4f}   [{}]".format(
             label, len(vals), mean, std, per_seed_str
         )
 
     lines = [
-        "Seed-sweep summary (classification F1)",
+        "Seed-sweep summary (classification metrics)",
         "Seeds: {}".format(", ".join(str(s) for s in seeds)),
         "Runs:  {}".format(len(seeds)),
-        "",
-        "cls_f1 mean +/- std:",
     ]
 
-    for field, label in SWEEP_F1_FIELDS:
-        line = _summary_line(field, label)
-        if line is not None:
-            lines.append(line)
+    for title, fields in (
+        ("Final macro metrics mean +/- std:", SWEEP_FINAL_FIELDS),
+        ("Backward transfer (BWT) mean +/- std:", SWEEP_BWT_FIELDS),
+    ):
+        lines.append("")
+        lines.append(title)
+        for field, label in fields:
+            line = _summary_line(field, label)
+            if line is not None:
+                lines.append(line)
     lines.append("")
 
     runtimes = [
@@ -1874,6 +2202,10 @@ def main():
     # Single-seed run: ensure args.seed reflects the resolved seed.
     args.seed = seeds[0]
 
+    # Task presentation order follows the training seed unless --task-order-seed
+    # pins it. Resolved here so log_dir() records both the value and its origin.
+    misc_utils.resolve_task_order_seed(args)
+
     # Scale learning rate based on batch size (reference batch size = 128).
     # This applies uniformly across all models that rely on args.lr.
     args.lr = misc_utils.scale_learning_rate_for_batch_size(args.lr, args.batch_size)
@@ -1974,19 +2306,22 @@ def main():
         result_val_t,
         result_val_a,
         result_val_prec,
+        result_val_f1,
         result_test_t,
         result_test_a,
         spent_time,
+        headline,
     ) = life_experience(model, loader, args)
 
     spent_time_hours = spent_time / 3600.0
 
     # save results in files or print on terminal
-    save_results(
+    _, _, val_bwt = save_results(
         args,
         result_val_t,
         result_val_a,
         result_val_prec,
+        result_val_f1,
         result_test_t,
         result_test_a,
         model,
@@ -2007,8 +2342,8 @@ def main():
         # If results.txt cannot be written, fail silently to avoid breaking experiments.
         pass
 
-    # Emit a machine-readable per-seed cls_f1 file for the sweep summary.
-    _write_seed_metrics(args, spent_time)
+    # Emit a machine-readable per-seed metrics file for the sweep summary.
+    _write_seed_metrics(args, spent_time, headline, val_bwt)
 
 
 if __name__ == "__main__":

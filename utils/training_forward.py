@@ -11,7 +11,11 @@ from model import task_bn
 
 
 def model_forward_for_metric_loop(
-    model: object, x: torch.Tensor, task_index: int, args: object
+    model: object,
+    x: torch.Tensor,
+    task_index: int,
+    args: object,
+    cil_mask_upto_task: int | None = None,
 ) -> torch.Tensor:
     """Run ``model`` forward for metric computation (validation, test, or train probe).
 
@@ -20,6 +24,13 @@ def model_forward_for_metric_loop(
     model code with the **cumulative** class boundary (true CIL inference). For
     task-incremental loaders, no extra keyword is passed (per-task masking
     only).
+
+    ``cil_mask_upto_task`` separates *which* task's data is being scored
+    (``task_index``, used for head/BN selection) from *how wide* the CIL logit
+    space is. Scoring task ``j`` in isolation after training through task ``i``
+    must keep all classes ``0..i`` active, otherwise the classes learned since
+    task ``j`` are hidden and the score is a task-incremental one. Defaults to
+    ``task_index`` when not given, which is the cumulative-loader case.
 
     **iCaRL:** ``forward`` is the nearest-mean-of-exemplars classifier; see
     :meth:`model.icarl.Net.forward`.
@@ -39,6 +50,7 @@ def model_forward_for_metric_loop(
         x: Input batch on the correct device.
         task_index: Zero-based continual task id (same as ``task_info['task']``).
         args: Experiment arguments (``loader``, ``model`` id).
+        cil_mask_upto_task: CIL logit-space bound; defaults to ``task_index``.
 
     Returns:
         Classifier logits tensor.
@@ -56,14 +68,20 @@ def model_forward_for_metric_loop(
     )
     try:
         with normalization:
-            return _dispatch_metric_forward(model, x, task_index, args)
+            return _dispatch_metric_forward(
+                model, x, task_index, args, cil_mask_upto_task=cil_mask_upto_task
+            )
     finally:
         if previous_task is not None:
             task_bn.set_active_task(model, previous_task)
 
 
 def _dispatch_metric_forward(
-    model: object, x: torch.Tensor, task_index: int, args: object
+    model: object,
+    x: torch.Tensor,
+    task_index: int,
+    args: object,
+    cil_mask_upto_task: int | None = None,
 ) -> torch.Tensor:
     """Route a metric-loop forward to the right entry point for this model.
 
@@ -72,13 +90,16 @@ def _dispatch_metric_forward(
         x: Input batch on the correct device.
         task_index: Zero-based continual task id.
         args: Experiment arguments (``loader``, ``model`` id).
+        cil_mask_upto_task: CIL logit-space bound; defaults to ``task_index``.
 
     Returns:
         Classifier logits tensor.
     """
     forward_kw: dict[str, Any] = {}
     if getattr(args, "loader", "") == "class_incremental_loader":
-        forward_kw["cil_all_seen_upto_task"] = task_index
+        forward_kw["cil_all_seen_upto_task"] = (
+            task_index if cil_mask_upto_task is None else int(cil_mask_upto_task)
+        )
     if getattr(args, "model", "") == "anml":
         return model(x, fast_weights=None)  # type: ignore[operator]
     try:
