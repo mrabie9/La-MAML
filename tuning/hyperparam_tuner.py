@@ -519,9 +519,11 @@ def run_single_trial(
             result_val_t,
             result_val_a,
             _result_val_prec,
+            _result_val_f1,
             result_test_t,
             result_test_a,
             spent,
+            _headline,
         ) = life_experience(model, loader, args)
     finally:
         if torch.cuda.is_available():

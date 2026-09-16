@@ -616,9 +616,10 @@ def main() -> None:
 
     dummy_test_t = torch.empty((0,), dtype=torch.long)
     dummy_test_a = torch.empty((0, 0), dtype=torch.float)
-    # Single-round training tracks precision per epoch, not per task, so the
-    # per-task precision matrix ``save_results`` expects is empty here.
+    # Single-round training tracks precision and F1 per epoch, not per task, so
+    # the per-task matrices ``save_results`` expects are empty here.
     dummy_val_prec = torch.empty((0, 0), dtype=torch.float)
+    dummy_val_f1 = torch.empty((0, 0), dtype=torch.float)
     _ = confusion_matrix(
         result_val_t, result_val_a, args.log_dir, "results_single_round.txt"
     )
@@ -627,6 +628,7 @@ def main() -> None:
         result_val_t,
         result_val_a,
         dummy_val_prec,
+        dummy_val_f1,
         dummy_test_t,
         dummy_test_a,
         model,
