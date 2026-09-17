@@ -47,16 +47,38 @@ def get_parser():
         help="Debug mode with more frequent logging and smaller data splits",
     )
     parser.add_argument(
-        "--use_detector_arch",
-        default=False,
-        action="store_true",
-        help="Enable the detector architecture; when disabled, treat -1 class labels as an extra task class.",
-    )
-    parser.add_argument(
         "--use_groupnorm",
         default=False,
         action="store_true",
         help="Use GroupNorm in compatible backbones instead of BatchNorm.",
+    )
+    parser.add_argument(
+        "--norm_type",
+        type=str,
+        default="batchnorm",
+        choices=["batchnorm", "groupnorm", "adab1n"],
+        help=(
+            "Normalization layer used by compatible backbones (currently "
+            "resnet1d). 'adab1n' is a task-aware adaptive BatchNorm1d "
+            "(see model/adab1n.py); --use_groupnorm remains a legacy alias "
+            "for norm_type=groupnorm."
+        ),
+    )
+    parser.add_argument(
+        "--kappa",
+        type=float,
+        default=1.0,
+        help=(
+            "AdaB1N running-stat momentum schedule exponent in [0, 1]: 0 is a "
+            "cumulative average, 1 matches ordinary BatchNorm's fixed "
+            "momentum. Ignored unless norm_type=adab1n."
+        ),
+    )
+    parser.add_argument(
+        "--adab1n_init_weight",
+        type=float,
+        default=0.0,
+        help="Initial value of AdaB1N's per-task concentration logits.",
     )
 
     # optimizer parameters influencing all models
@@ -125,6 +147,40 @@ def get_parser():
         help=(
             "PackNet: full passes over the task train loader after packing for optional finetune; "
             "gradients only on weights newly assigned to that task. 0 disables."
+        ),
+    )
+    parser.add_argument(
+        "--bn_mode",
+        type=str,
+        default="shared",
+        choices=["task_specific", "shared"],
+        help=(
+            "BatchNorm statistics policy for task-incremental runs. "
+            "'shared' (default) trains a single BatchNorm instance continuously "
+            "across all tasks. 'task_specific' gives every task its own running "
+            "mean/variance, selected by task id at train and eval time (see "
+            "model/task_bn.py); the affine weight/bias stay shared across "
+            "tasks. Not recommended: a task's statistics freeze at its task "
+            "boundary while shared weights keep drifting, so old tasks collapse "
+            "to chance for any method that does not freeze old-task weights. "
+            "Ignored for class_incremental_loader runs and for norm_type "
+            "groupnorm/adab1n."
+        ),
+    )
+    parser.add_argument(
+        "--eval_bn_stats",
+        type=str,
+        default="batch",
+        choices=["batch", "running"],
+        help=(
+            "BatchNorm statistics read by evaluation forwards (metric loops and "
+            "LwF's frozen teacher) in task-incremental runs with --bn_mode "
+            "shared. 'batch' (default) normalizes each eval batch with its own "
+            "statistics without writing any buffer; eval loaders are per task, "
+            "so this is task-conditional, which TIL allows. 'running' reads the "
+            "shared running statistics, which track the most recently trained "
+            "task and so misnormalize every earlier one. Class-incremental runs "
+            "always use running statistics."
         ),
     )
     parser.add_argument(
@@ -301,9 +357,12 @@ def get_parser():
         type=int,
         default=None,
         help=(
-            "When set, randomly permute task presentation order after resolving "
-            "--task-order-files / default alphabetical order, using this seed via "
-            "numpy.random.Generator (independent of --seed). Omit for the base order."
+            "Seed for permuting task presentation order, applied after resolving "
+            "--task-order-files / default alphabetical order via a private "
+            "numpy.random.Generator. Omit (the default) to derive it from --seed, "
+            "so sweeping seeds sweeps task order too. Set an integer to pin the "
+            "order while --seed varies, which isolates training noise from "
+            "task-order effects."
         ),
     )
     parser.add_argument(
@@ -426,8 +485,8 @@ def get_parser():
     parser.add_argument(
         "--grad_clip_norm",
         type=float,
-        default=2.0,
-        help="Clip the gradients by this value",
+        default=0.0,
+        help="Clip gradients to this norm. 0 disables clipping (the default).",
     )
     parser.add_argument(
         "--meta_batches",
@@ -456,6 +515,12 @@ def get_parser():
         help="total replay-buffer capacity across all tasks",
     )
     parser.add_argument(
+        "--gamma",
+        default=0,
+        type=float,
+        help="GEM/GEM-R: margin added to the dual QP constraint (gamma in the paper)",
+    )
+    parser.add_argument(
         "--memory_strength",
         default=0,
         type=float,
@@ -471,11 +536,16 @@ def get_parser():
         "--steps_per_sample", default=1, type=int, help="training steps per batch"
     )
 
+    parser.add_argument(
+        "--beta",
+        type=float,
+        default=1.0,
+        help="beta learning rate parameter (bcl_dual meta update weight)",
+    )
+
     # # parameters specific to MER
     # parser.add_argument('--gamma', type=float, default=1.0,
     #                     help='gamma learning rate parameter')
-    # parser.add_argument('--beta', type=float, default=1.0,
-    #                     help='beta learning rate parameter')
     # parser.add_argument('--s', type=float, default=1,
     #                     help='current example learning rate multiplier (s)')
     # parser.add_argument('--batches_per_example', type=float, default=1,
@@ -578,7 +648,15 @@ def _expanded_config_paths(config_sources: Sequence[str] | None) -> List[Path]:
 def _apply_config_overrides(
     args: argparse.Namespace, config_paths: Iterable[Path]
 ) -> argparse.Namespace:
-    """Apply YAML overrides from the provided config files to the namespace."""
+    """Apply YAML overrides from the provided config files to the namespace.
+
+    Every key is applied, including keys with no ``get_parser`` argument.
+    Model-specific hyper-parameters (``lamb``, ``si_c``, ``distill_lambda``,
+    ``smax``, ...) are read by each model's config dataclass through
+    ``hasattr(args, field)`` and have no CLI flag, so filtering on the parser's
+    namespace used to drop them silently and every model ran on its dataclass
+    defaults instead of the tuned YAML values.
+    """
 
     for path in config_paths:
         with path.open("r", encoding="utf-8") as handle:
@@ -590,8 +668,7 @@ def _apply_config_overrides(
             if key == "update_steps":
                 setattr(args, "inner_steps", value)
                 continue
-            if hasattr(args, key):
-                setattr(args, key, value)
+            setattr(args, key, value)
     return args
 
 

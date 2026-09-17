@@ -1,9 +1,9 @@
 # Baseline configuration used when sweeping hyperparameters.
-expt_name: tuning_sweep_CIL
+expt_name: tuning_sweep
 arch: resnet1d
 loader: task_incremental_loader
 
-data_path: data/rff/radar_det_cls/hpt
+data_path: data/rff/radar/hpt
 dataset: iq
 data_scaling: normalize
 classes_per_it: 6
@@ -16,7 +16,7 @@ samples_per_task: -1
 val_rate: 10
 
 cuda: true
-seed: 0
+seed: 99
 log_every: 50
 log_dir: logs/tuning/individual
 tf_dir: ""
@@ -30,8 +30,9 @@ n_epochs: 5
 optimizer: sgd
 batch_size: 256
 replay_batch_size: 128
-clipgrad: 5.0
-grad_clip_norm: 5.0
+# 0 disables gradient clipping; set a positive norm to re-enable it.
+clipgrad: 0
+grad_clip_norm: 0
 
 # La-MAML parameters
 opt_lr: 0.1                          # learning rate for LRs

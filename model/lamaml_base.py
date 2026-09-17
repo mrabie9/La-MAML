@@ -3,7 +3,7 @@ import torch
 from dataclasses import dataclass
 from typing import Optional
 from model.resnet1d import ResNet1D
-from model.detection_replay import noise_label_from_args, unpack_y_to_class_labels
+from model.replay_utils import unpack_y_to_class_labels
 from utils import misc_utils
 from utils.class_weighted_loss import classification_cross_entropy
 
@@ -26,7 +26,7 @@ class LamamlBaseConfig:
     meta_batches: int = 3
     arch: str = "resnet1d"
     dataset: str = "tinyimagenet"
-    grad_clip_norm: Optional[float] = 2.0
+    grad_clip_norm: Optional[float] = 0.0
     n_layers: int = 2
     n_hiddens: int = 100
     input_channels: int = 1
@@ -120,7 +120,6 @@ class BaseNet(torch.nn.Module):
             classes_per_task=getattr(args, "classes_per_task", None),
         )
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
-        self.noise_label: int | None = noise_label_from_args(args)
 
     def _classification_loss(
         self, logits: torch.Tensor, targets: torch.Tensor

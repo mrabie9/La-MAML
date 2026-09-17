@@ -15,10 +15,8 @@ import torch
 import torch.nn as nn
 
 from model.resnet1d import ResNet1D
-from model.detection_replay import (
-    DetectionReplayMixin,
-    noise_label_from_args,
-    signal_mask_exclude_noise,
+from model.replay_utils import (
+    ReplayInputMixin,
     unpack_y_to_class_labels,
 )
 from utils.training_metrics import macro_recall
@@ -36,11 +34,8 @@ class SiConfig:
     si_epsilon: float = 0.01
 
     optimizer: str = "sgd"
-    clipgrad: Optional[float] = 100.0
-    det_lambda: float = 1.0
+    clipgrad: Optional[float] = 0.0
     cls_lambda: float = 1.0
-    det_memories: int = 2000
-    det_replay_batch: int = 64
 
     @staticmethod
     def from_args(args: object) -> "SiConfig":
@@ -51,7 +46,7 @@ class SiConfig:
         return cfg
 
 
-class Net(DetectionReplayMixin, nn.Module):
+class Net(ReplayInputMixin, nn.Module):
     """Synaptic Intelligence continual learner built on ``ResNet1D``."""
 
     def __init__(
@@ -77,20 +72,13 @@ class Net(DetectionReplayMixin, nn.Module):
 
         self.net = ResNet1D(n_outputs, args)
         self.class_weighted_ce = bool(getattr(args, "class_weighted_ce", True))
-        self.noise_label: int | None = noise_label_from_args(args)
         self.incremental_loader_name = getattr(args, "loader", None)
         self.opt = self._build_optimizer()
 
         self.si_c = float(self.cfg.si_c)
         self.epsilon = float(self.cfg.si_epsilon)
         self.clipgrad = self.cfg.clipgrad
-        self.det_lambda = float(self.cfg.det_lambda)
         self.cls_lambda = float(self.cfg.cls_lambda)
-        self._init_det_replay(
-            self.cfg.det_memories,
-            self.cfg.det_replay_batch,
-            enabled=bool(getattr(args, "use_detector_arch", False)),
-        )
 
         self.current_task: Optional[int] = None
         self._param_to_key: Dict[str, str] = {}
@@ -108,7 +96,6 @@ class Net(DetectionReplayMixin, nn.Module):
             self.classes_per_task,
             self.n_outputs,
             cil_all_seen_upto_task=cil,
-            global_noise_label=self.noise_label,
             loader=self.incremental_loader_name,
         )
 
@@ -124,24 +111,11 @@ class Net(DetectionReplayMixin, nn.Module):
 
         self.net.train()
 
-        # class_counts = getattr(self, "classes_per_task", None)
-        # noise_label = None
-        # if class_counts is not None:
-        #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
-        #     noise_label = offset2 - 1
-        # y_cls, y_det = self._unpack_labels(
-        #     y,
-        #     noise_label=noise_label,
-        #     use_detector_arch=bool(getattr(self, "det_enabled", False)),
-        # )
-        # if y_det is not None and self.det_memories > 0:
-        #     self._update_det_memory(x, y_det)
         metric_logits = None
         for _ in range(self.cfg.inner_steps):
             self.opt.zero_grad()
             y_cls = unpack_y_to_class_labels(y)
-            cls_logits = self.net.forward_heads(x)[1]
-            signal_mask = signal_mask_exclude_noise(y_cls, self.noise_label)
+            cls_logits = self.net(x)
             logits_for_loss = cls_logits
             if self.is_task_incremental:
                 logits_for_loss = misc_utils.apply_task_incremental_logit_mask(
@@ -150,7 +124,6 @@ class Net(DetectionReplayMixin, nn.Module):
                     self.classes_per_task,
                     self.n_outputs,
                     cil_all_seen_upto_task=t,
-                    global_noise_label=self.noise_label,
                     loader=self.incremental_loader_name,
                 )
             targets_for_loss = y_cls.long()
@@ -159,29 +132,15 @@ class Net(DetectionReplayMixin, nn.Module):
                 targets_for_loss,
                 class_weighted_ce=self.class_weighted_ce,
             )
-            if signal_mask.any():
-                preds = torch.argmax(logits_for_loss[signal_mask], dim=1)
-                cls_tr_rec = macro_recall(preds, y_cls[signal_mask].long())
-            else:
-                cls_tr_rec = 0.0
-            # det_loss = self.det_loss(det_logits, y_det.float())
-            # det_replay = self._sample_det_memory()
-            # if det_replay is not None:
-            #     mem_x, mem_y = det_replay
-            #     mem_det_logits, _ = self.net.forward_heads(mem_x)
-            #     mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-            #     det_loss = 0.5 * (det_loss + mem_loss)
+            preds = torch.argmax(logits_for_loss, dim=1)
+            cls_tr_rec = macro_recall(preds, y_cls.long())
 
-            loss = (
-                self.cls_lambda * loss_ce
-                # + self.det_lambda * det_loss
-                + self.si_c * self._surrogate_loss()
-            )
-
-            loss.backward()
-            if self.clipgrad is not None:
+            (self.cls_lambda * loss_ce).backward()
+            if self.clipgrad is not None and self.clipgrad > 0:
                 torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.clipgrad)
             self.opt.step()
+            penalty = self._anchor_to_consolidated()
+            loss = self.cls_lambda * loss_ce.detach() + penalty
             self._update_path_integral()
             metric_logits = logits_for_loss.detach()
 
@@ -212,8 +171,6 @@ class Net(DetectionReplayMixin, nn.Module):
         for name, param in self.net.named_parameters():
             if not param.requires_grad:
                 continue
-            if name.startswith("det_head"):
-                continue
             key = name.replace(".", "__")
             self._param_to_key[name] = key
             initial = param.detach().clone()
@@ -226,8 +183,6 @@ class Net(DetectionReplayMixin, nn.Module):
     def _update_path_integral(self) -> None:
         for name, param in self.net.named_parameters():
             if not param.requires_grad:
-                continue
-            if name.startswith("det_head"):
                 continue
             grad = param.grad
             if grad is None:
@@ -245,8 +200,6 @@ class Net(DetectionReplayMixin, nn.Module):
         for name, param in self.net.named_parameters():
             if not param.requires_grad:
                 continue
-            if name.startswith("det_head"):
-                continue
             key = self._param_to_key[name]
             prev = getattr(self, f"{key}_si_prev")
             omega = getattr(self, f"{key}_si_omega")
@@ -258,19 +211,27 @@ class Net(DetectionReplayMixin, nn.Module):
             getattr(self, f"{key}_si_p_old").copy_(param.detach())
 
     # ------------------------------------------------------------------
-    def _surrogate_loss(self) -> torch.Tensor:
-        device = self._device()
-        loss = torch.zeros(1, device=device)
+    def _anchor_to_consolidated(self) -> torch.Tensor:
+        """Pull parameters towards ``si_prev`` with the closed-form SI proximal step.
+
+        The surrogate ``si_c * omega * (p - p_prev)^2`` has stiffness
+        ``2 * si_c * omega``; negative importances are clamped to zero.
+
+        Returns:
+            The SI penalty evaluated at the pre-anchoring parameters.
+        """
+        penalty = torch.zeros((), device=self._device())
+        step_size = float(self.opt.param_groups[0]["lr"])
         for name, param in self.net.named_parameters():
             if not param.requires_grad:
-                continue
-            if name.startswith("det_head"):
                 continue
             key = self._param_to_key[name]
             omega = getattr(self, f"{key}_si_omega")
             prev = getattr(self, f"{key}_si_prev")
-            loss = loss + (omega * (param - prev).pow(2)).sum()
-        return loss
+            penalty = penalty + misc_utils.proximal_anchor_(
+                param, prev, 2.0 * self.si_c * omega, step_size
+            )
+        return penalty
 
     # ------------------------------------------------------------------
     def _compute_offsets(self, task: int) -> Tuple[int, int]:

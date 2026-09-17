@@ -1,26 +1,21 @@
 import math
 import torch
 from model.lamaml_base import *  # noqa: F403
-from model.detection_replay import (
-    DetectionReplayMixin,
+from model.replay_utils import (
+    ReplayInputMixin,
     unpack_y_to_class_labels,
 )
+from model.task_bn import frozen_running_stats
 from utils.training_metrics import macro_recall
 from utils import misc_utils
 
 
-class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
+class Net(ReplayInputMixin, BaseNet):  # noqa: F405
 
     def __init__(self, n_inputs, n_outputs, n_tasks, args):
         super(Net, self).__init__(n_inputs, n_outputs, n_tasks, args)
         self.nc_per_task = misc_utils.max_task_class_count(self.classes_per_task)
-        self.det_lambda = float(getattr(args, "det_lambda", 1.0))
         self.cls_lambda = float(getattr(args, "cls_lambda", 1.0))
-        self._init_det_replay(
-            getattr(args, "det_memories", 2000),
-            getattr(args, "det_replay_batch", 64),
-            enabled=bool(getattr(args, "use_detector_arch", False)),
-        )
 
     def take_loss(self, _t, logits, y):
         # Full CIL logits (including global noise class); targets are global indices.
@@ -30,8 +25,9 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
     def take_multitask_loss(self, bt, t, logits, y):
         """Batched CE over global labels on per-sample task-masked logits.
 
-        ``meta_loss`` masks each row to its own task's classes before calling
-        this, so one batched call over the mixed replay+current batch is exact.
+        ``meta_loss`` masks the rows first (own task's classes under TIL, tasks
+        ``0..t`` under CIL; see :func:`utils.misc_utils.mask_replay_logits`), so
+        one batched call over the mixed replay+current batch is exact.
         The per-row loop this replaces fed single-element batches through the
         weighted CE, where inverse-frequency weights collapse to 1.0 — it
         silently trained unweighted. The batched call makes
@@ -50,7 +46,6 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
             self.classes_per_task,
             self.n_outputs,
             cil_all_seen_upto_task=cil_all_seen_upto_task,
-            global_noise_label=self.noise_label,
             fill_value=-10e10,
             loader=self.incremental_loader_name,
         )
@@ -71,16 +66,32 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
 
         The two blocks are also *scored* separately, as eralg4 does -- see
         ``_combine_replay_current_loss``.
+
+        The replay block additionally runs under ``frozen_running_stats``: its
+        rows span several old tasks, so they must not be folded into the current
+        task's per-task BatchNorm running statistics.
         """
 
-        if replay_count is not None and 0 < int(replay_count) < x.size(0):
-            rc = int(replay_count)
-            replay_raw = self.net.forward(x[:rc], fast_weights)
+        rc = None if replay_count is None else int(replay_count)
+        if rc is not None and 0 < rc < x.size(0):
+            with frozen_running_stats(self):
+                replay_raw = self.net.forward(x[:rc], fast_weights)
             current_raw = self.net.forward(x[rc:], fast_weights)
             raw = torch.cat([replay_raw, current_raw], dim=0)
+        elif rc is not None and rc >= x.size(0) > 0:
+            # Whole meta batch is replay.
+            with frozen_running_stats(self):
+                raw = self.net.forward(x, fast_weights)
         else:
             raw = self.net.forward(x, fast_weights)
-        logits = self._mask_logits_for_sample_tasks(raw, bt)
+        logits = misc_utils.mask_replay_logits(
+            raw,
+            bt,
+            t,
+            self.classes_per_task,
+            self.n_outputs,
+            loader=self.incremental_loader_name,
+        )
         loss_q = self._combine_replay_current_loss(bt, t, logits, y, replay_count)
 
         return loss_q, logits
@@ -113,36 +124,6 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
         current_loss = self.take_multitask_loss(bt[rc:], t, logits[rc:], y[rc:])
         return current_loss + float(self.cfg.memory_loss_lambda) * replay_loss
 
-    def _mask_logits_for_sample_tasks(
-        self, raw_logits: torch.Tensor, sample_task_indices: torch.Tensor
-    ) -> torch.Tensor:
-        """Apply TIL/CIL masking per replay sample task id.
-
-        Args:
-            raw_logits: Unmasked logits for the replay/meta batch.
-            sample_task_indices: Task index per sample in ``raw_logits``.
-
-        Returns:
-            Logits masked according to each sample's task id.
-        """
-        if sample_task_indices.numel() == 0:
-            return raw_logits
-        masked_logits = raw_logits.clone()
-        for task_id in torch.unique(sample_task_indices).tolist():
-            row_selector = sample_task_indices == int(task_id)
-            if not torch.any(row_selector):
-                continue
-            masked_logits[row_selector] = misc_utils.apply_task_incremental_logit_mask(
-                raw_logits[row_selector],
-                int(task_id),
-                self.classes_per_task,
-                self.n_outputs,
-                cil_all_seen_upto_task=int(task_id),
-                global_noise_label=self.noise_label,
-                loader=self.incremental_loader_name,
-            )
-        return masked_logits
-
     def inner_update(self, x, fast_weights, y, t):
         # Ensure we have a concrete, non-empty list of tensors
         if not fast_weights:  # handles None or []
@@ -159,7 +140,6 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
             self.classes_per_task,
             self.n_outputs,
             cil_all_seen_upto_task=t,
-            global_noise_label=self.noise_label,
             loader=self.incremental_loader_name,
         )
         loss = self.take_loss(t, logits, y)
@@ -216,41 +196,7 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
                 y = tuple(yi[perm] if yi is not None else None for yi in y)
             else:
                 y = y[perm]
-            # noise_label = None
-            # if class_counts is not None:
-            #     _, offset2 = misc_utils.compute_offsets(t, class_counts)
-            #     noise_label = offset2 - 1
-            # y_cls, y_det = self._unpack_labels(
-            #     y,
-            #     noise_label=noise_label,
-            #     use_detector_arch=bool(getattr(self, "det_enabled", False)),
-            # )
-            # y_cls = y_cls[perm]
-            # y_det = y_det[perm]
-            # if y_det is not None and self.det_memories > 0:
-            #     self._update_det_memory(x, y_det)
-            # signal_mask = (y_det == 1) & (y_cls >= 0)
-            # if not signal_mask.any():
-            #     if not getattr(self, "det_enabled", True):
-            #         return 0.0, 0.0
-            #     self.zero_grads()
-            #     det_logits, _ = self.net.forward_heads(x)
-            #     det_loss = self.det_loss(det_logits, y_det.float())
-            #     det_replay = self._sample_det_memory()
-            #     if det_replay is not None:
-            #         mem_x, mem_y = det_replay
-            #         mem_det_logits, _ = self.net.forward_heads(mem_x)
-            #         mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-            #         det_loss = 0.5 * (det_loss + mem_loss)
-            #     det_loss = self.det_lambda * det_loss
-            #     det_loss.backward()
-            #     self.opt_wt.step()
-            #     return float(det_loss.item()), 0.0
 
-            # x_det = x
-            # x = x[signal_mask]
-            # y = y_cls[signal_mask]
-            # Train with differentiable canonicalized inputs; use detached tensors for replay writes.
             x_train = self._canonicalize_input(x, detach=False)
             x_for_storage = self._input_for_replay(x)
             x = x_train
@@ -340,11 +286,7 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
                     masked = logits.masked_fill(~valid, float("-inf"))
                     preds = masked.argmax(dim=1) - o1
                     targets = by_dev - o1
-                    keep = torch.ones_like(by_dev, dtype=torch.bool)
-                    if self.noise_label is not None:
-                        keep &= by_dev != self.noise_label
-                    if keep.any():
-                        cls_tr_rec.append(macro_recall(preds[keep], targets[keep]))
+                    cls_tr_rec.append(macro_recall(preds, targets))
 
                 meta_losses[i] += meta_loss
 
@@ -373,20 +315,6 @@ class Net(DetectionReplayMixin, BaseNet):  # noqa: F405
 
             self.net.zero_grad()
             self.net.alpha_lr.zero_grad()
-
-            # if getattr(self, "det_enabled", True):
-            #     det_logits, _ = self.net.forward_heads(x_det)
-            #     det_loss = self.det_loss(det_logits, y_det.float())
-            #     det_replay = self._sample_det_memory()
-            #     if det_replay is not None:
-            #         mem_x, mem_y = det_replay
-            #         mem_det_logits, _ = self.net.forward_heads(mem_x)
-            #         mem_loss = self.det_loss(mem_det_logits, mem_y.float())
-            #         det_loss = 0.5 * (det_loss + mem_loss)
-            #     self.opt_wt.zero_grad()
-            #     det_loss = self.det_lambda * det_loss
-            #     det_loss.backward()
-            #     self.opt_wt.step()
 
         avg_cls_tr_rec = sum(cls_tr_rec) / len(cls_tr_rec) if cls_tr_rec else 0.0
         return meta_loss.item(), avg_cls_tr_rec, None
