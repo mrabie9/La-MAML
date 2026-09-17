@@ -39,7 +39,7 @@ from utils.training_metrics import macro_recall
 class GemRConfig:
     """Hyperparameters for GEM-R, populated from the global args namespace."""
 
-    memory_strength: float = 0.0
+    gamma: float = 0.0  # margin added to the dual QP constraint (gamma in the GEM paper)
     memory_loss_lambda: float = 1.0
     ema_decay: float = 0.0
     inner_steps: int = 1
@@ -75,7 +75,7 @@ class Net(ReplayInputMixin, nn.Module):
     def __init__(self, n_inputs: int, n_outputs: int, n_tasks: int, args: object):
         super(Net, self).__init__()
         self.cfg = GemRConfig.from_args(args)
-        self.margin = self.cfg.memory_strength
+        self.margin = self.cfg.gamma
         self.replay_lambda = float(self.cfg.memory_loss_lambda)
         self.ema_decay = float(self.cfg.ema_decay)
 

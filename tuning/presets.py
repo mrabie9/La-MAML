@@ -258,12 +258,12 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
         type_hints=COMMON_TYPE_HINTS,
         grid_factory=make_grid_factory(
             {
-                "memory_strength": {
+                "gamma": {
                     "kind": "float",
                     "factors": (0.5, 1.0, 2.0),
                     "min": 0.1,
                     "fallback": 0.5,
-                    "values": [0.1, 0.5, 1, 5, 10, 50, 100, 500],
+                    "values": [0,0.2,0.4,0.6,0.8,1.0],
                 },
             }
         ),

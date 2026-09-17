@@ -33,7 +33,7 @@ from utils.class_weighted_loss import classification_cross_entropy
 
 @dataclass
 class GemConfig:
-    memory_strength: float = 0.0  # lambda in the paper
+    gamma: float = 0.0  # margin added to the dual QP constraint (gamma in the paper)
     inner_steps: int = 1
     lr: float = 1e-3
     n_memories: int = 0
@@ -141,7 +141,7 @@ class Net(ReplayInputMixin, nn.Module):
     def __init__(self, n_inputs, n_outputs, n_tasks, args):
         super(Net, self).__init__()
         self.cfg = GemConfig.from_args(args)
-        self.margin = self.cfg.memory_strength
+        self.margin = self.cfg.gamma
         self.is_cifar = (self.cfg.dataset == "cifar100") or (
             self.cfg.dataset == "tinyimagenet"
         )

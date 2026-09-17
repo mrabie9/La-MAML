@@ -515,6 +515,12 @@ def get_parser():
         help="total replay-buffer capacity across all tasks",
     )
     parser.add_argument(
+        "--gamma",
+        default=0,
+        type=float,
+        help="GEM/GEM-R: margin added to the dual QP constraint (gamma in the paper)",
+    )
+    parser.add_argument(
         "--memory_strength",
         default=0,
         type=float,
