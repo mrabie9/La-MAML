@@ -216,7 +216,7 @@ def get_date():
 
 
 def get_date_time():
-    return datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[:-2]
+    return datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
 
 def log_dir(opt, timestamp=None, config_name=None):
@@ -227,14 +227,14 @@ def log_dir(opt, timestamp=None, config_name=None):
     dir_name = config_name if config_name else opt.model
     logdir = opt.log_dir + "/%s/%s-%s/%s" % (
         dir_name,
-        opt.expt_name,
         timestamp,
+        opt.expt_name,
         opt.seed,
     )
     tfdir = opt.log_dir + "/%s/%s-%s/%s/%s" % (
         dir_name,
-        opt.expt_name,
         timestamp,
+        opt.expt_name,
         opt.seed,
         "tfdir",
     )
