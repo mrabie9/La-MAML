@@ -2180,7 +2180,7 @@ def main():
         sweep_config_name = Path(config_chain[-1]).stem if config_chain else None
         dir_name = sweep_config_name if sweep_config_name else args.model
         experiment_root = os.path.join(
-            args.log_dir, dir_name, "{}-{}".format(shared_timestamp, args.expt_name)
+            args.log_dir, dir_name, "{}_{}".format(shared_timestamp, args.expt_name)
         )
         base_argv = _strip_argv_flags(
             sys.argv[1:],

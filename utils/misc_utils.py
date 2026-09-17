@@ -225,13 +225,13 @@ def log_dir(opt, timestamp=None, config_name=None):
 
     rand_num = str(random.randint(1, 1001))
     dir_name = config_name if config_name else opt.model
-    logdir = opt.log_dir + "/%s/%s-%s/%s" % (
+    logdir = opt.log_dir + "/%s/%s_%s/%s" % (
         dir_name,
         timestamp,
         opt.expt_name,
         opt.seed,
     )
-    tfdir = opt.log_dir + "/%s/%s-%s/%s/%s" % (
+    tfdir = opt.log_dir + "/%s/%s_%s/%s/%s" % (
         dir_name,
         timestamp,
         opt.expt_name,
