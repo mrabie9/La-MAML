@@ -263,7 +263,7 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                     "factors": (0.5, 1.0, 2.0),
                     "min": 0.1,
                     "fallback": 0.5,
-                    "values": [0,0.2,0.4,0.6,0.8,1.0],
+                    "values": [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0],
                 },
             }
         ),
@@ -595,6 +595,13 @@ TUNING_PRESETS: Dict[str, TuningPreset] = {
                     "fallback": 1.0,
                     "values": [1, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6],
                 },
+                "alpha": {
+                    "kind": "float",
+                    "factors": (0.5, 1.0, 2.0),
+                    "min": 1e-2,
+                    "fallback": 1.0,
+                    "values": [0.1,0.3,0.5,0.7,0.9],
+                }
             }
         ),
     ),

@@ -25,7 +25,7 @@ state_logging: true
 samples_per_task: -1
 
 # Optimizer defaults
-lr: 0.01
+lr: 0.03
 n_meta: 1
 inner_steps: 1
 n_epochs: 5

@@ -1,4 +1,4 @@
 model: rwalk
 loader: task_incremental_loader
 lamb: 10000.0
-alpha: 0.9
+alpha: 0.7
