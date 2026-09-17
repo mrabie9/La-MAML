@@ -79,7 +79,13 @@ def test_model_yaml_values_reach_config_dataclass(config_path: Path) -> None:
     args = file_parser.parse_args_from_yaml([str(config_path)])
     cfg = config_cls.from_args(args)
     fields = {f.name for f in dataclasses.fields(config_cls)}
-    checked = {key: value for key, value in data.items() if key in fields}
+    # Deliberately inert keys (see parser.INTENTIONALLY_UNUSED_CONFIG_KEYS) are
+    # decided elsewhere, so the dataclass is not expected to echo them.
+    checked = {
+        key: value
+        for key, value in data.items()
+        if key in fields and key not in file_parser.INTENTIONALLY_UNUSED_CONFIG_KEYS
+    }
     mismatched = {
         key: (value, getattr(cfg, key))
         for key, value in checked.items()
