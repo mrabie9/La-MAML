@@ -144,3 +144,68 @@ def test_seed_metrics_feed_sweep_summary(tmp_path: Path) -> None:
     assert "Training macro_f1" not in summary
     assert "Validation BWT f1" not in summary
     assert "Backward transfer (BWT) mean +/- std:" in summary
+
+
+HEADLINE = {"val_macro_rec": 0.55, "val_macro_prec": 0.33, "val_macro_f1": 0.22}
+
+
+def _save_with_headline(log_dir: Path, loader: str) -> str:
+    """Run ``save_results`` with a headline dict and return results.txt."""
+    args = SimpleNamespace(
+        log_dir=str(log_dir),
+        state_logging=False,
+        calc_test_accuracy=False,
+        loader=loader,
+    )
+    save_results(
+        args,
+        RESULT_T,
+        RECALL,
+        PRECISION,
+        F1_MATRIX,
+        torch.empty((0,)),
+        torch.empty((0, 0)),
+        torch.nn.Linear(2, 2),
+        1.0,
+        headline=HEADLINE,
+    )
+    return (log_dir / "results.txt").read_text()
+
+
+def test_summary_keeps_row_mean_and_adds_headline(tmp_path: Path) -> None:
+    """final stays the row mean (bwt = final - diag); the headline sits beside it."""
+    text = _save_with_headline(tmp_path, "class_incremental_loader")
+    row_mean = (0.6 + 0.8 + 0.9) / 3
+    assert "Final Accuracy: {:.4f}".format(row_mean) in text
+    assert "Backward: -0.1000" in text
+    summary = text.split("Summary (validation):", 1)[1].splitlines()
+    assert summary[1].split() == [
+        "metric",
+        "diagonal",
+        "final",
+        "bwt",
+        "fwt",
+        "headline",
+    ]
+    rows = {line.split()[0]: line.split()[1:] for line in summary[2:5]}
+    diag, final, bwt, _, headline = rows["recall"]
+    assert float(final) == pytest.approx(row_mean, abs=1e-4)
+    assert float(bwt) == pytest.approx(float(final) - float(diag), abs=1e-4)
+    assert headline == "0.5500"
+    assert rows["precision"][4] == "0.3300"
+    assert rows["f1"][4] == "0.2200"
+
+    bundle = torch.load(tmp_path / "results.pt", weights_only=False)
+    assert float(bundle[3][1]) == pytest.approx(row_mean)
+    assert "# val: 0.867 0.767 -0.100" in bundle[4]
+    assert "# headline: rec=0.5500 prec=0.3300 f1=0.2200" in bundle[4]
+
+
+def test_summary_without_headline_marks_it_missing(tmp_path: Path) -> None:
+    """Callers that pass no headline (main_single_round) get n/a, no one-liner field."""
+    _save_synthetic_results(tmp_path)
+    text = (tmp_path / "results.txt").read_text()
+    recall_row = next(x for x in text.splitlines() if x.startswith("recall "))
+    assert recall_row.split()[-1] == "n/a"
+    bundle = torch.load(tmp_path / "results.pt", weights_only=False)
+    assert "# headline:" not in bundle[4]

@@ -1696,12 +1696,24 @@ def save_results(
     result_test_a,
     model,
     spent_time,
+    headline=None,
 ):
     """Write results.txt / results.pt for one seed.
 
     results.txt holds the recall task matrix (written by ``confusion_matrix``,
     kept first so older parsers still find the zero-shot row and ``Backward:``),
     then the precision and F1 matrices, then a per-metric summary table.
+
+    ``final`` is the mean of the last matrix row, so ``bwt = final - diagonal``
+    exactly. When ``headline`` is given, the headline macro metrics are recorded
+    beside it (summary table ``headline`` column and the one-liner). Under CIL
+    the headline is scored over every seen class at once and differs from the
+    row mean, which weights classes unequally when tasks differ in size; under
+    TIL it equals the row mean.
+
+    Args:
+        headline: Dict from :func:`life_experience` with ``val_macro_rec``,
+            ``val_macro_prec`` and ``val_macro_f1``.
 
     Returns:
         ``(val_stats, test_stats, val_bwt)`` where ``val_bwt`` maps ``rec``,
@@ -1732,6 +1744,10 @@ def save_results(
             state_breakdown_text, total_state_gb
         )
     )
+
+    headline_scores = {
+        key: (headline or {}).get("val_macro_" + key) for key in ("rec", "prec", "f1")
+    }
 
     # save confusion matrix and print one line of stats
     val_stats = confusion_matrix(
@@ -1767,8 +1783,8 @@ def save_results(
             print("", file=results_file)
             print("Summary (validation):", file=results_file)
             print(
-                "{:<10} {:>8} {:>8} {:>8} {:>8}".format(
-                    "metric", "diagonal", "final", "bwt", "fwt"
+                "{:<10} {:>8} {:>8} {:>8} {:>8} {:>8}".format(
+                    "metric", "diagonal", "final", "bwt", "fwt", "headline"
                 ),
                 file=results_file,
             )
@@ -1776,12 +1792,27 @@ def save_results(
                 stats = metric_stats[key]
                 if stats is None:
                     continue
+                headline_value = headline_scores[key]
                 print(
-                    "{:<10} {:>8.4f} {:>8.4f} {:>8.4f} {:>8.4f}".format(
-                        label, stats["diag"], stats["final"], stats["bwt"], stats["fwt"]
+                    "{:<10} {:>8.4f} {:>8.4f} {:>8.4f} {:>8.4f} {:>8}".format(
+                        label,
+                        stats["diag"],
+                        stats["final"],
+                        stats["bwt"],
+                        stats["fwt"],
+                        (
+                            "n/a"
+                            if headline_value is None
+                            else "{:.4f}".format(headline_value)
+                        ),
                     ),
                     file=results_file,
                 )
+            print(
+                "final = mean of the last row (bwt = final - diagonal); "
+                "headline = macro score over every seen class.",
+                file=results_file,
+            )
     except OSError:
         pass
 
@@ -1793,6 +1824,12 @@ def save_results(
         "{}={}".format(key, "n/a" if value is None else "{:.4f}".format(value))
         for key, value in val_bwt.items()
     )
+
+    if any(value is not None for value in headline_scores.values()):
+        one_liner += " # headline: " + " ".join(
+            "{}={}".format(key, "n/a" if value is None else "{:.4f}".format(value))
+            for key, value in headline_scores.items()
+        )
 
     one_liner += " # sizes: model_gb={:.4f} mem_gb={:.4f}".format(size_gb, buffer_gb)
     one_liner += " # state_gb: {} total={:.4f}".format(
@@ -2339,6 +2376,7 @@ def main():
         result_test_a,
         model,
         spent_time,
+        headline=headline,
     )
     log_state(
         args.state_logging,
