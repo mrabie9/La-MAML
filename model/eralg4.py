@@ -136,48 +136,35 @@ class Net(ReplayInputMixin, nn.Module):
         for name, param in self.net.named_parameters():
             yield param
 
-    def take_multitask_loss(self, bt, logits, y):
+    def take_multitask_loss(self, bt, t, logits, y):
         """Batched CE over global labels, per-sample task-masked by default.
 
-        Masking (``eralg4_masked_loss``, default on) confines each row's softmax
-        to its own task's classes, matching er_ring / lamaml_cifar; the legacy
-        unmasked global softmax (cross-task interference) is kept only as an
-        ablation (`--eralg4_unmasked_loss`). Class weights are inverse-frequency
-        over this batch (``class_weighted_ce``) — the historical per-row loop
-        collapsed them to 1.0, so weighting only became effective with the
-        batched call.
+        Masking (``eralg4_masked_loss``, default on) goes through
+        :func:`utils.misc_utils.mask_replay_logits`: under TIL each row's softmax
+        is confined to its own task's classes; under CIL every row, replayed or
+        not, sees all classes of tasks ``0..t``. The legacy unmasked global
+        softmax (cross-task interference) is kept only as an ablation
+        (`--eralg4_unmasked_loss`). Class weights are inverse-frequency over this
+        batch (``class_weighted_ce``) — the historical per-row loop collapsed
+        them to 1.0, so weighting only became effective with the batched call.
         """
         if logits.size(0) == 0:
             return torch.zeros((), device=logits.device, dtype=logits.dtype)
         if self.cfg.eralg4_masked_loss:
-            logits = self._mask_logits_for_sample_tasks(logits, bt)
+            logits = misc_utils.mask_replay_logits(
+                logits,
+                bt,
+                t,
+                self.classes_per_task,
+                self.n_outputs,
+                loader=self.incremental_loader_name,
+                fill_value=-10e10,
+            )
         return classification_cross_entropy(
             logits,
             y.long(),
             class_weighted_ce=self.class_weighted_ce,
         )
-
-    def _mask_logits_for_sample_tasks(
-        self, raw_logits: torch.Tensor, sample_task_indices: torch.Tensor
-    ) -> torch.Tensor:
-        """Apply TIL/CIL masking per sample task id (mirrors lamaml_cifar.meta_loss)."""
-        if sample_task_indices.numel() == 0:
-            return raw_logits
-        masked_logits = raw_logits.clone()
-        for task_id in torch.unique(sample_task_indices).tolist():
-            row_selector = sample_task_indices == int(task_id)
-            if not torch.any(row_selector):
-                continue
-            masked_logits[row_selector] = misc_utils.apply_task_incremental_logit_mask(
-                raw_logits[row_selector],
-                int(task_id),
-                self.classes_per_task,
-                self.n_outputs,
-                cil_all_seen_upto_task=int(task_id),
-                fill_value=-10e10,
-                loader=self.incremental_loader_name,
-            )
-        return masked_logits
 
     def forward(self, x, t, *, cil_all_seen_upto_task=None):
         output = self.net.forward(x)
@@ -253,15 +240,16 @@ class Net(ReplayInputMixin, nn.Module):
         labels: torch.Tensor,
         tasks: torch.Tensor,
         replay_count: int,
+        t: int,
     ) -> torch.Tensor:
         replay_count = max(0, min(int(replay_count), logits.size(0)))
         replay_loss = torch.zeros((), device=logits.device, dtype=logits.dtype)
         if replay_count > 0:
             replay_loss = self.take_multitask_loss(
-                tasks[:replay_count], logits[:replay_count], labels[:replay_count]
+                tasks[:replay_count], t, logits[:replay_count], labels[:replay_count]
             )
         current_loss = self.take_multitask_loss(
-            tasks[replay_count:], logits[replay_count:], labels[replay_count:]
+            tasks[replay_count:], t, logits[replay_count:], labels[replay_count:]
         )
         return current_loss + (self.memory_loss_lambda * replay_loss)
 
@@ -393,7 +381,7 @@ class Net(ReplayInputMixin, nn.Module):
             # to uniform here; the replay batch below is where it does work.
             set_batch_task_counts(self._adab1n, current_t)
             current_logits = self.net.forward(x)
-            current_loss = self.take_multitask_loss(current_t, current_logits, y)
+            current_loss = self.take_multitask_loss(current_t, t, current_logits, y)
 
             # Replay minibatch: pre-canonicalized rows from the buffer.
             replay = self._sample_replay(x.device)
@@ -405,7 +393,7 @@ class Net(ReplayInputMixin, nn.Module):
                 with frozen_running_stats(self):
                     replay_logits = self.net.forward(replay_x)
                 replay_loss = self.take_multitask_loss(
-                    replay_t, replay_logits, replay_y
+                    replay_t, t, replay_logits, replay_y
                 )
             else:
                 replay_loss = torch.zeros(
@@ -582,7 +570,7 @@ class Net(ReplayInputMixin, nn.Module):
                 with frozen_running_stats(self):
                     prediction = self.net.forward(bx, fast_weights)
                 meta_loss = self._weighted_multitask_loss(
-                    prediction, by, bt, replay_count
+                    prediction, by, bt, replay_count, t
                 )
                 meta_losses[i] += meta_loss
 
@@ -619,13 +607,13 @@ class Net(ReplayInputMixin, nn.Module):
             )
             current_logits = self.net.forward(x_live)
             current_loss = self.take_multitask_loss(
-                current_t, current_logits, current_labels
+                current_t, t, current_logits, current_labels
             )
             if replay_count > 0:
                 with frozen_running_stats(self):
                     replay_logits = self.net.forward(bx[:replay_count])
                 replay_loss = self.take_multitask_loss(
-                    bt[:replay_count], replay_logits, by[:replay_count]
+                    bt[:replay_count], t, replay_logits, by[:replay_count]
                 )
             else:
                 replay_loss = torch.zeros(

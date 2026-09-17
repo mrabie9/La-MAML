@@ -316,8 +316,14 @@ class Net(ReplayInputMixin, nn.Module):
             self.task_mem_filled[t] = min(task_capacity, filled_before_update + effbsz)
         self.task_mem_ptr[t] = 0 if endcnt == task_capacity else endcnt
 
-    def _compute_past_task_grads(self) -> None:
-        """Compute and store replay gradients for every previously seen task."""
+    def _compute_past_task_grads(self, current_task: int) -> None:
+        """Compute and store replay gradients for every previously seen task.
+
+        Under CIL the memory loss covers every class of tasks
+        ``0..current_task`` with global labels; under TIL it is the past task's
+        own class block.
+        """
+        cil = self.incremental_loader_name == "class_incremental_loader"
         for tt in range(len(self.observed_tasks) - 1):
             self.zero_grad()
             past_task = self.observed_tasks[tt]
@@ -330,7 +336,16 @@ class Net(ReplayInputMixin, nn.Module):
 
             mem_x = self.memory_data[past_task, :filled]
             mem_y_flat = self.memory_labs[past_task, :filled]
-            if filled > 0:
+            if filled > 0 and cil:
+                logits_replay = self.forward(
+                    mem_x, current_task, cil_all_seen_upto_task=current_task
+                )
+                ptloss = classification_cross_entropy(
+                    logits_replay,
+                    mem_y_flat,
+                    class_weighted_ce=self.class_weighted_ce,
+                )
+            elif filled > 0:
                 logits_replay = self.forward(mem_x, past_task)[:, offset1:offset2]
                 targets_replay = mem_y_flat - offset1
                 ptloss = classification_cross_entropy(
@@ -402,7 +417,7 @@ class Net(ReplayInputMixin, nn.Module):
                 self._store_current_batch(x, y_work, t)
 
             if len(self.observed_tasks) > 1:
-                self._compute_past_task_grads()
+                self._compute_past_task_grads(t)
 
             self.zero_grad()
             logits_full = self.forward(x, t, cil_all_seen_upto_task=t)

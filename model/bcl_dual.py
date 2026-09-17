@@ -294,7 +294,8 @@ class Net(ReplayInputMixin, torch.nn.Module):
             dtype=torch.long,
         )
         xx = mem_x[t_idx, s_idx]
-        yy = mem_y[t_idx, s_idx] - offsets[:, 0]
+        yy_global = mem_y[t_idx, s_idx]
+        yy = yy_global - offsets[:, 0]
         feat = mem_feat[t_idx, s_idx]
         mask = torch.zeros(xx.size(0), self.nc_per_task, device=xx.device)
         for j in range(mask.size(0)):
@@ -304,7 +305,30 @@ class Net(ReplayInputMixin, torch.nn.Module):
             )
         mask = mask.long()
         sizes = (offsets[:, 1] - offsets[:, 0]).long()
-        return xx, yy, feat, mask, t_idx.tolist(), sizes
+        return xx, yy, feat, mask, t_idx, sizes, yy_global
+
+    def _replay_ce(self, pred_full, gathered, yy, yy_global, t_idx, t):
+        """CE on replayed rows in the space the current batch is trained in.
+
+        CIL: full logits masked to tasks ``0..t`` with global labels, so old
+        rows compete with newer classes. TIL: the row's own class block
+        (``gathered``) with task-local labels.
+        """
+        if self.incremental_loader_name == "class_incremental_loader":
+            logits = misc_utils.mask_replay_logits(
+                pred_full,
+                t_idx,
+                t,
+                self.classes_per_task,
+                self.n_outputs,
+                loader=self.incremental_loader_name,
+            )
+            return classification_cross_entropy(
+                logits, yy_global, class_weighted_ce=self.class_weighted_ce
+            )
+        return classification_cross_entropy(
+            gathered, yy, class_weighted_ce=self.class_weighted_ce
+        )
 
     def observe(self, x, y, t):
         if self.current_task is None:
@@ -407,7 +431,7 @@ class Net(ReplayInputMixin, torch.nn.Module):
             if t > 0:
                 sampled = self.memory_sampling(t)
                 if sampled is not None:
-                    xx, yy, feat, mask, list_t, class_sizes = sampled
+                    xx, yy, feat, mask, t_idx, class_sizes, yy_global = sampled
                     # Replay rows span earlier tasks: keep them out of the
                     # current task's BatchNorm running statistics.
                     with frozen_running_stats(self):
@@ -416,9 +440,7 @@ class Net(ReplayInputMixin, torch.nn.Module):
                     for row, size in enumerate(class_sizes):
                         if size < pred.size(1):
                             pred[row, size:] = -1e9
-                    loss2 = classification_cross_entropy(
-                        pred, yy, class_weighted_ce=self.class_weighted_ce
-                    )
+                    loss2 = self._replay_ce(pred_, pred, yy, yy_global, t_idx, t)
                     loss3 = self.reg * self.kl(
                         F.log_softmax(pred / self.temp, dim=1), feat
                     )
@@ -431,15 +453,23 @@ class Net(ReplayInputMixin, torch.nn.Module):
             self.inner_opt.step()
             sampled_validation = self.memory_sampling(tt, valid=True)
             if sampled_validation is not None:
-                xval, yval, _, mask_val, list_t, class_sizes_val = sampled_validation
+                (
+                    xval,
+                    yval,
+                    _,
+                    mask_val,
+                    t_idx_val,
+                    class_sizes_val,
+                    yval_global,
+                ) = sampled_validation
                 with frozen_running_stats(self):
                     pred_ = self.net(xval)
                 pred = torch.gather(pred_, 1, mask_val)
                 for row, size in enumerate(class_sizes_val):
                     if size < pred.size(1):
                         pred[row, size:] = -1e9
-                outer_loss = classification_cross_entropy(
-                    pred, yval, class_weighted_ce=self.class_weighted_ce
+                outer_loss = self._replay_ce(
+                    pred_, pred, yval, yval_global, t_idx_val, t
                 )
             else:
                 x_train = self._canonicalize_input(raw_x_train, detach=False)

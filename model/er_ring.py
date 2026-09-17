@@ -193,7 +193,8 @@ class Net(ReplayInputMixin, torch.nn.Module):
             device=self.memx.device,
         )
         xx = self.memx[t_idx, s_idx]
-        yy = self.memy[t_idx, s_idx] - offsets[:, 0]
+        yy_global = self.memy[t_idx, s_idx]
+        yy = yy_global - offsets[:, 0]
         feat = self.mem_feat[t_idx, s_idx]
         mask = torch.zeros(xx.size(0), self.nc_per_task, device=self.memx.device)
         for j in range(mask.size(0)):
@@ -202,7 +203,7 @@ class Net(ReplayInputMixin, torch.nn.Module):
                 offsets[j][0], offsets[j][1], device=self.memx.device
             )
         sizes = (offsets[:, 1] - offsets[:, 0]).long()
-        return xx, yy, feat, mask.long(), sizes
+        return xx, yy, feat, mask.long(), sizes, t_idx, yy_global
 
     def observe(self, x, y, t):
         # t = info[0]
@@ -255,15 +256,29 @@ class Net(ReplayInputMixin, torch.nn.Module):
             if t > 0:
                 sampled = self.memory_sampling(t)
                 if sampled is not None:
-                    xx, yy, target, mask, class_sizes = sampled
+                    xx, yy, target, mask, class_sizes, t_idx, yy_global = sampled
                     # Replay rows come from earlier tasks: normalize with this
                     # batch's statistics without writing task ``t``'s buffers.
                     with frozen_running_stats(self):
                         pred_ = self.net(xx)
-                    pred = torch.gather(pred_, 1, mask)
-                    for row, size in enumerate(class_sizes):
-                        if size < pred.size(1):
-                            pred[row, size:] = -1e9
+                    if self.incremental_loader_name == "class_incremental_loader":
+                        # CIL: replayed rows compete with every class seen so
+                        # far, as the current batch does; a per-task block would
+                        # never push them away from newer classes.
+                        pred = misc_utils.mask_replay_logits(
+                            pred_,
+                            t_idx,
+                            t,
+                            self.classes_per_task,
+                            self.n_outputs,
+                            loader=self.incremental_loader_name,
+                        )
+                        yy = yy_global
+                    else:
+                        pred = torch.gather(pred_, 1, mask)
+                        for row, size in enumerate(class_sizes):
+                            if size < pred.size(1):
+                                pred[row, size:] = -1e9
                     if yy.min() < 0 or yy.max() >= pred.size(1):
                         raise ValueError(
                             f"Replay target out of range: min={int(yy.min())}, max={int(yy.max())}, "

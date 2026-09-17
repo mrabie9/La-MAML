@@ -25,8 +25,9 @@ class Net(ReplayInputMixin, BaseNet):  # noqa: F405
     def take_multitask_loss(self, bt, t, logits, y):
         """Batched CE over global labels on per-sample task-masked logits.
 
-        ``meta_loss`` masks each row to its own task's classes before calling
-        this, so one batched call over the mixed replay+current batch is exact.
+        ``meta_loss`` masks the rows first (own task's classes under TIL, tasks
+        ``0..t`` under CIL; see :func:`utils.misc_utils.mask_replay_logits`), so
+        one batched call over the mixed replay+current batch is exact.
         The per-row loop this replaces fed single-element batches through the
         weighted CE, where inverse-frequency weights collapse to 1.0 — it
         silently trained unweighted. The batched call makes
@@ -83,7 +84,14 @@ class Net(ReplayInputMixin, BaseNet):  # noqa: F405
                 raw = self.net.forward(x, fast_weights)
         else:
             raw = self.net.forward(x, fast_weights)
-        logits = self._mask_logits_for_sample_tasks(raw, bt)
+        logits = misc_utils.mask_replay_logits(
+            raw,
+            bt,
+            t,
+            self.classes_per_task,
+            self.n_outputs,
+            loader=self.incremental_loader_name,
+        )
         loss_q = self._combine_replay_current_loss(bt, t, logits, y, replay_count)
 
         return loss_q, logits
@@ -115,35 +123,6 @@ class Net(ReplayInputMixin, BaseNet):  # noqa: F405
         replay_loss = self.take_multitask_loss(bt[:rc], t, logits[:rc], y[:rc])
         current_loss = self.take_multitask_loss(bt[rc:], t, logits[rc:], y[rc:])
         return current_loss + float(self.cfg.memory_loss_lambda) * replay_loss
-
-    def _mask_logits_for_sample_tasks(
-        self, raw_logits: torch.Tensor, sample_task_indices: torch.Tensor
-    ) -> torch.Tensor:
-        """Apply TIL/CIL masking per replay sample task id.
-
-        Args:
-            raw_logits: Unmasked logits for the replay/meta batch.
-            sample_task_indices: Task index per sample in ``raw_logits``.
-
-        Returns:
-            Logits masked according to each sample's task id.
-        """
-        if sample_task_indices.numel() == 0:
-            return raw_logits
-        masked_logits = raw_logits.clone()
-        for task_id in torch.unique(sample_task_indices).tolist():
-            row_selector = sample_task_indices == int(task_id)
-            if not torch.any(row_selector):
-                continue
-            masked_logits[row_selector] = misc_utils.apply_task_incremental_logit_mask(
-                raw_logits[row_selector],
-                int(task_id),
-                self.classes_per_task,
-                self.n_outputs,
-                cil_all_seen_upto_task=int(task_id),
-                loader=self.incremental_loader_name,
-            )
-        return masked_logits
 
     def inner_update(self, x, fast_weights, y, t):
         # Ensure we have a concrete, non-empty list of tensors

@@ -183,6 +183,65 @@ def apply_task_incremental_logit_mask(
     return masked
 
 
+def mask_replay_logits(
+    logits: torch.Tensor,
+    sample_tasks: torch.Tensor,
+    current_task: int,
+    nc_per_task,
+    n_outputs: int,
+    *,
+    loader: str | None,
+    fill_value: float = -1e9,
+) -> torch.Tensor:
+    """Training-time logit mask for a batch whose rows may come from past tasks.
+
+    **CIL:** every row, replayed or not, sees all classes of tasks
+    ``0..current_task``. Bounding a replayed row by its *own* task instead
+    never pushes it away from classes introduced later, while current-task
+    rows are pushed away from every old class; the model then learns to
+    predict only the newest task (old-task CIL recall ~0).
+
+    **TIL:** each row sees only its own task's class block.
+
+    Args:
+        logits: Unmasked logits ``(batch, n_classes)``.
+        sample_tasks: Task id per row, shape ``(batch,)``.
+        current_task: Task currently being trained (CIL bound).
+        nc_per_task: Per-task class counts or scalar (see :func:`compute_offsets`).
+        n_outputs: Logit width.
+        loader: ``args.loader``; only ``"class_incremental_loader"`` selects CIL.
+        fill_value: Value written into masked logits.
+
+    Returns:
+        Masked logits (clone); targets stay global class indices.
+
+    Usage:
+        logits = mask_replay_logits(raw, bt, t, [5, 6], 11, loader=args.loader)
+    """
+    if loader == "class_incremental_loader":
+        return apply_task_incremental_logit_mask(
+            logits,
+            int(current_task),
+            nc_per_task,
+            n_outputs,
+            cil_all_seen_upto_task=int(current_task),
+            fill_value=fill_value,
+            loader=loader,
+        )
+    masked = logits.clone()
+    for task_id in torch.unique(sample_tasks).tolist():
+        rows = sample_tasks == int(task_id)
+        masked[rows] = apply_task_incremental_logit_mask(
+            logits[rows],
+            int(task_id),
+            nc_per_task,
+            n_outputs,
+            fill_value=fill_value,
+            loader=loader,
+        )
+    return masked
+
+
 def to_onehot(targets, n_classes):
     onehot = torch.zeros(targets.shape[0], n_classes).to(targets.device)
     onehot.scatter_(dim=1, index=targets.long().view(-1, 1), value=1.0)

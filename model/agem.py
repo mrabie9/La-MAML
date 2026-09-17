@@ -312,13 +312,26 @@ class Net(ReplayInputMixin, nn.Module):
         with frozen_running_stats(self):
             return self.net.forward(x)
 
-    def _mask_logits_per_sample(self, logits, task_ids):
-        """Restrict each row's logits to its own task's signal-class block.
+    def _mask_logits_per_sample(self, logits, task_ids, current_task):
+        """Mask a mixed-task reference batch for the memory loss.
 
-        Mirrors the ``[:, offset1:offset2]`` slice the per-task path used, but
-        vectorised across a batch whose rows belong to different tasks so a
-        single forward/backward can cover the whole reference batch.
+        Under CIL every row sees all classes of tasks ``0..current_task``, the
+        same space the current batch is trained in (see
+        :func:`utils.misc_utils.mask_replay_logits`). Under TIL each row is
+        restricted to its own task's signal-class block, mirroring the
+        ``[:, offset1:offset2]`` slice the per-task path used, vectorised across
+        a batch whose rows belong to different tasks.
         """
+        if self.incremental_loader_name == "class_incremental_loader":
+            return misc_utils.mask_replay_logits(
+                logits,
+                task_ids,
+                current_task,
+                self.classes_per_task,
+                self.n_outputs,
+                loader=self.incremental_loader_name,
+                fill_value=-10e10,
+            )
         offset1 = self._task_offset1[task_ids].unsqueeze(1)
         offset2 = self._task_offset2[task_ids].unsqueeze(1)
         cols = torch.arange(logits.size(1), device=logits.device).unsqueeze(0)
@@ -437,7 +450,7 @@ class Net(ReplayInputMixin, nn.Module):
                     ref_x, ref_y, ref_tasks = reference_batch
                     self.zero_grad()
                     ref_logits = self._mask_logits_per_sample(
-                        self._forward_features_no_mask(ref_x), ref_tasks
+                        self._forward_features_no_mask(ref_x), ref_tasks, t
                     )
                     memory_loss = classification_cross_entropy(
                         ref_logits,

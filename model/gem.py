@@ -321,11 +321,17 @@ class Net(ReplayInputMixin, nn.Module):
         )
         return output
 
-    def _store_past_task_gradients(self) -> None:
+    def _store_past_task_gradients(self, current_task: int) -> None:
         """Backprop each previously observed task's memory and store its gradient.
 
         Fills ``self.grads`` with one column per past task, which the GEM
         projection below then constrains the current gradient against.
+
+        Under CIL the memory loss is scored over every class of tasks
+        ``0..current_task`` with global labels, the space the current batch is
+        trained in; scoring it on the past task's own block would never
+        constrain old samples against newer classes. Under TIL it is the past
+        task's own block, as before.
 
         These forwards carry old-task data while the current task is active, so
         the whole loop runs under :func:`~model.task_bn.frozen_running_stats`:
@@ -348,8 +354,14 @@ class Net(ReplayInputMixin, nn.Module):
                     self.memory_data[past_task, :filled]
                 )  # (mem, F) or (mem, 2, L)
                 mem_y_flat = self.memory_labs[past_task, :filled]
-                logits_replay = self.forward(mem_x, past_task)[:, offset1:offset2]
-                targets_replay = mem_y_flat - offset1
+                if self.incremental_loader_name == "class_incremental_loader":
+                    logits_replay = self.forward(
+                        mem_x, current_task, cil_all_seen_upto_task=current_task
+                    )
+                    targets_replay = mem_y_flat
+                else:
+                    logits_replay = self.forward(mem_x, past_task)[:, offset1:offset2]
+                    targets_replay = mem_y_flat - offset1
                 ptloss = classification_cross_entropy(
                     logits_replay,
                     targets_replay,
@@ -412,7 +424,7 @@ class Net(ReplayInputMixin, nn.Module):
 
             # gradients on past tasks (replay)
             if len(self.observed_tasks) > 1:
-                self._store_past_task_gradients()
+                self._store_past_task_gradients(t)
 
             # current batch
             self.zero_grad()
