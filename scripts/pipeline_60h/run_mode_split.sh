@@ -1,16 +1,20 @@
 #!/bin/bash
 # Split the 60h pipeline across two servers, balanced by measured cpu-hours
 # per (experiment, mode) bucket, with exp1 seed_ext widened from 3 new seeds
-# to the full 6-seed sweep. exp5 (runtime pass) is intentionally excluded
-# from both servers.
+# to the full 6-seed sweep. exp5 (runtime pass) is included too, but kept out
+# of the concurrent bucket queue: it's model-list-split in half (LPT-balanced
+# from its own measured per-model timings) and run serially (MAX_JOBS=1,
+# matching its GPU-contention-free intent) before the main queue on each
+# server, so it neither races itself nor overlaps the GPU-heavy bucket jobs.
 #
 # Bucket cpu-hours (seed_ext doubled for 6 seeds):
 #   seedext-til 83.9  seedext-cil 43.7  memsweep-til 30.4  memsweep-cil 10.7
 #   taskorder-til 7.2 taskorder-cil 2.5 snr-til 82.1       snr-cil 43.4
+#   runtime pass (10+10 models, serial): ~30.4 min per server, negligible
 #
-#   Server A (~148 cpu-h, ~37h wall @ MAX_JOBS=4):
+#   Server A (~148 cpu-h, ~37h wall @ MAX_JOBS=4, +~30min serial runtime pass):
 #     seedext-til, memsweep-cil, taskorder-til, taskorder-cil, snr-cil
-#   Server B (~156 cpu-h, ~39h wall @ MAX_JOBS=4):
+#   Server B (~156 cpu-h, ~39h wall @ MAX_JOBS=4, +~30min serial runtime pass):
 #     seedext-cil, memsweep-til, snr-til
 #
 # Usage:
@@ -47,6 +51,7 @@ case "$SERVER" in
             "exp3_task_order.sh:cil"
             "exp4_snr_sweep.sh:cil"
         )
+        RUNTIME_MODELS="ctn lamaml cmaml bcl_dual ucl agem icarl rwalk si ft"
         ;;
     B)
         BUCKETS=(
@@ -54,6 +59,7 @@ case "$SERVER" in
             "exp2_mem_sweep.sh:til"
             "exp4_snr_sweep.sh:til"
         )
+        RUNTIME_MODELS="iid2 gem smaml la-er packnet lwf er_ring eralg4 hat ewc"
         ;;
     *)
         echo "Usage: $0 {A|B} [--list]" >&2
@@ -70,6 +76,11 @@ export DONE_FILE="${DONE_FILE:-${PIPELINE_LOG_ROOT}/done.txt}"
 
 # shellcheck disable=SC1091
 source "${PIPELINE_DIR}/lib_queue.sh"
+# exp5 runs as a separate subprocess below (its own MAX_JOBS=1, its own
+# done_runtime.txt); export PIPELINE_DATE so it resolves to the same
+# date-stamped output root as this shell instead of recomputing "today"
+# independently.
+export PIPELINE_DATE
 
 emit_fn_for_script() {
     case "$1" in
@@ -105,9 +116,16 @@ collect_bucket_specs() {
 
 if [ "$LIST_ONLY" = "1" ]; then
     collect_bucket_specs
+    TIL_MODELS="$RUNTIME_MODELS" "${PIPELINE_DIR}/exp5_runtime_single_pass.sh" --list
     exit 0
 fi
 
 mkdir -p "$PIPELINE_LOG_ROOT"
+
+# Runtime pass first, serially (its own MAX_JOBS=1 and done_runtime.txt,
+# both set inside exp5_runtime_single_pass.sh), so its GPU-timing
+# measurements aren't distorted by the concurrent bucket queue below.
+TIL_MODELS="$RUNTIME_MODELS" "${PIPELINE_DIR}/exp5_runtime_single_pass.sh"
+
 mapfile -t SPECS < <(collect_bucket_specs)
 run_job_queue "${SPECS[@]}"
