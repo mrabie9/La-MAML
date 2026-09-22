@@ -103,7 +103,7 @@ ALGORITHM_DISPLAY_NAMES: Dict[str, str] = {
     "gem": "GEM",
     "hat": "HAT",
     "icarl": "iCaRL",
-    "iid2": "IID2",
+    "iid2": "JT",
     "la-er": "La-ER",
     "lamaml": "La-MAML",
     "lwf": "LwF",
