@@ -2,19 +2,20 @@
 # Split the 60h pipeline across two servers, balanced by measured cpu-hours
 # per (experiment, mode) bucket, with exp1 seed_ext widened from 3 new seeds
 # to the full 6-seed sweep. exp5 (runtime pass) is included too, but kept out
-# of the concurrent bucket queue: it's model-list-split in half (LPT-balanced
-# from its own measured per-model timings) and run serially (MAX_JOBS=1,
-# matching its GPU-contention-free intent) before the main queue on each
-# server, so it neither races itself nor overlaps the GPU-heavy bucket jobs.
+# of the concurrent bucket queue and NOT split between servers: all 20
+# models run serially (MAX_JOBS=1, matching its GPU-contention-free intent)
+# in a single pass on Server A only, before Server A's main queue. Server B
+# does not run exp5 at all, so the timing measurements come from one
+# uncontended run rather than two.
 #
 # Bucket cpu-hours (seed_ext doubled for 6 seeds):
 #   seedext-til 83.9  seedext-cil 43.7  memsweep-til 30.4  memsweep-cil 10.7
 #   taskorder-til 7.2 taskorder-cil 2.5 snr-til 82.1       snr-cil 43.4
-#   runtime pass (10+10 models, serial): ~30.4 min per server, negligible
+#   runtime pass (20 models, serial, Server A only): ~1h, negligible
 #
-#   Server A (~148 cpu-h, ~37h wall @ MAX_JOBS=4, +~30min serial runtime pass):
+#   Server A (~148 cpu-h, ~37h wall @ MAX_JOBS=4, +~1h serial runtime pass):
 #     seedext-til, memsweep-cil, taskorder-til, taskorder-cil, snr-cil
-#   Server B (~156 cpu-h, ~39h wall @ MAX_JOBS=4, +~30min serial runtime pass):
+#   Server B (~156 cpu-h, ~39h wall @ MAX_JOBS=4, no runtime pass):
 #     seedext-cil, memsweep-til, snr-til
 #
 # Usage:
@@ -51,7 +52,7 @@ case "$SERVER" in
             "exp3_task_order.sh:cil"
             "exp4_snr_sweep.sh:cil"
         )
-        RUNTIME_MODELS="ctn lamaml cmaml bcl_dual ucl agem icarl rwalk si ft"
+        RUN_RUNTIME_PASS=1
         ;;
     B)
         BUCKETS=(
@@ -59,7 +60,7 @@ case "$SERVER" in
             "exp2_mem_sweep.sh:til"
             "exp4_snr_sweep.sh:til"
         )
-        RUNTIME_MODELS="iid2 gem smaml la-er packnet lwf er_ring eralg4 hat ewc"
+        RUN_RUNTIME_PASS=0
         ;;
     *)
         echo "Usage: $0 {A|B} [--list]" >&2
@@ -116,7 +117,7 @@ collect_bucket_specs() {
 
 if [ "$LIST_ONLY" = "1" ]; then
     collect_bucket_specs
-    TIL_MODELS="$RUNTIME_MODELS" "${PIPELINE_DIR}/exp5_runtime_single_pass.sh" --list
+    [ "$RUN_RUNTIME_PASS" = "1" ] && "${PIPELINE_DIR}/exp5_runtime_single_pass.sh" --list
     exit 0
 fi
 
@@ -124,8 +125,10 @@ mkdir -p "$PIPELINE_LOG_ROOT"
 
 # Runtime pass first, serially (its own MAX_JOBS=1 and done_runtime.txt,
 # both set inside exp5_runtime_single_pass.sh), so its GPU-timing
-# measurements aren't distorted by the concurrent bucket queue below.
-TIL_MODELS="$RUNTIME_MODELS" "${PIPELINE_DIR}/exp5_runtime_single_pass.sh"
+# measurements aren't distorted by the concurrent bucket queue below. Runs
+# on Server A only, over its full default model list (unsplit) -- see the
+# header comment.
+[ "$RUN_RUNTIME_PASS" = "1" ] && "${PIPELINE_DIR}/exp5_runtime_single_pass.sh"
 
 mapfile -t SPECS < <(collect_bucket_specs)
 run_job_queue "${SPECS[@]}"
