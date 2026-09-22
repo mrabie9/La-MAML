@@ -498,8 +498,11 @@ class ResNet1D(nn.Module):
                         f"Expected even length for 3-ADC IQ input; got shape {tuple(x.shape)}."
                     )
                 seq_len = x.shape[2] // 2
-                x = x.view(x.shape[0], 3, 2, seq_len)
-                return x
+                # ADC rows interleave I and Q, so the I/Q axis comes from the
+                # stride-2 pairs. Splitting the row in half instead would pair
+                # each I sample with a Q sample from elsewhere in the burst.
+                x = x.view(x.shape[0], 3, seq_len, 2).permute(0, 1, 3, 2)
+                return x.contiguous()
             if x.shape[1] not in (1, 2):
                 raise ValueError(
                     f"Unexpected channel dimension (expected 1, 2, or 3); got shape {tuple(x.shape)}."
