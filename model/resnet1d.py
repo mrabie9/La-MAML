@@ -13,6 +13,7 @@ import torch
 import torch.nn as nn
 from torch.func import functional_call
 from model.adab1n import AdaB1N
+from utils.misc_utils import deinterleave_iq_last_axis
 from utils.iq_features import append_iq_augmented_features
 
 # Ceiling for AdaB1N's per-task concentration logits, not an exact task count.
@@ -485,8 +486,7 @@ class ResNet1D(nn.Module):
                     f"Ambiguous flat input shape: features={features} divisible by both 2 and 3."
                 )
             if features % 2 == 0 and features % 3 != 0:
-                seq_len = features // 2
-                x = x.view(batch, 2, seq_len)
+                x = deinterleave_iq_last_axis(x)
             else:
                 x = x.unsqueeze(1)
         elif x.dim() == 3:
@@ -497,12 +497,10 @@ class ResNet1D(nn.Module):
                     raise ValueError(
                         f"Expected even length for 3-ADC IQ input; got shape {tuple(x.shape)}."
                     )
-                seq_len = x.shape[2] // 2
                 # ADC rows interleave I and Q, so the I/Q axis comes from the
                 # stride-2 pairs. Splitting the row in half instead would pair
                 # each I sample with a Q sample from elsewhere in the burst.
-                x = x.view(x.shape[0], 3, seq_len, 2).permute(0, 1, 3, 2)
-                return x.contiguous()
+                return deinterleave_iq_last_axis(x)
             if x.shape[1] not in (1, 2):
                 raise ValueError(
                     f"Unexpected channel dimension (expected 1, 2, or 3); got shape {tuple(x.shape)}."
