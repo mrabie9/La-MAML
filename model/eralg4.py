@@ -52,7 +52,7 @@ class ErAlgConfig:
     second_order: bool = False
     meta_batches: int = 3
     eralg4_masked_loss: bool = True
-    use_old_task_memory: bool = False
+    use_old_task_memory: bool = True
 
     arch: str = "resnet1d"
     dataset: str = "tinyimagenet"
