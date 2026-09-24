@@ -454,16 +454,15 @@ class Net(ReplayInputMixin, torch.nn.Module):
                 with torch.no_grad():
                     param.add_(grad, alpha=-self.inner_lr)
 
-            # Fast-step `autograd.grad` freed the graph; rebuild before meta forward.
-            x_train = self._canonicalize_input(raw_x_train, detach=False)
-            if rotated_validation_sample_for_meta is not None:
-                x_train = torch.cat(
-                    [x_train, rotated_validation_sample_for_meta], dim=0
-                )
-            logits = self.forward(x_train, t, cil_all_seen_upto_task=t)
-
             sampled_validation = self.memory_sampling(t + 1, valid=True)
             if sampled_validation is None:
+                # Fast-step `autograd.grad` freed the graph; rebuild before meta forward.
+                x_train = self._canonicalize_input(raw_x_train, detach=False)
+                if rotated_validation_sample_for_meta is not None:
+                    x_train = torch.cat(
+                        [x_train, rotated_validation_sample_for_meta], dim=0
+                    )
+                logits = self.forward(x_train, t, cil_all_seen_upto_task=t)
                 outer_loss = classification_cross_entropy(
                     logits,
                     targets,
